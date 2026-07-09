@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,9 +34,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.R
 import com.markleaf.app.data.settings.ReaderSettings
+import com.markleaf.app.highlight.CodeHighlighter
 import com.markleaf.app.markdown.MarkdownBlock
 import com.markleaf.app.search.SearchMatch
-import com.markleaf.app.search.highlightPlainText
 
 @Composable
 fun CodeBlockView(
@@ -46,7 +48,6 @@ fun CodeBlockView(
 ) {
     val context = LocalContext.current
     val shape = RoundedCornerShape(10.dp)
-    // Slightly deeper than page in light mode; slightly lighter in dark (surfaceVariant).
     val bg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
     val toolbarBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
     val codeSize = ReaderTypography.codeBlockSize(settings.fontScale)
@@ -54,13 +55,16 @@ fun CodeBlockView(
     val languageLabel = formatLanguageLabel(block.language)
     val copiedMsg = stringResource(R.string.code_copied)
     val failedMsg = stringResource(R.string.code_copy_failed)
+    val isDark = isSystemInDarkTheme()
 
-    val codeAnnotated = highlightPlainText(
-        text = block.code.ifEmpty { " " },
-        activeStart = activeMatch?.matchStart,
-        activeEnd = activeMatch?.matchEnd,
-        highlightColor = searchFragmentHighlightColor(),
-    )
+    // Syntax highlight only; search uses block-level highlight (no stacked fragment highlight).
+    val codeAnnotated = remember(block.code, block.language, isDark) {
+        CodeHighlighter.highlightCode(
+            code = block.code.ifEmpty { " " },
+            language = block.language,
+            isDarkTheme = isDark,
+        )
+    }
 
     Column(
         modifier = modifier
@@ -70,7 +74,6 @@ fun CodeBlockView(
             .clip(shape)
             .background(bg),
     ) {
-        // Toolbar: language + copy
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -113,7 +116,6 @@ fun CodeBlockView(
             }
         }
 
-        // Code body — width constrained by parent; long lines scroll horizontally only.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -128,6 +130,7 @@ fun CodeBlockView(
                     lineHeight = codeLine,
                     fontWeight = FontWeight.Normal,
                 ),
+                // Default color used only for unstyled spans; highlighter sets per-span colors.
                 color = MaterialTheme.colorScheme.onSurface,
                 softWrap = false,
             )
@@ -140,9 +143,6 @@ private fun formatLanguageLabel(language: String?): String {
     return if (trimmed.isEmpty()) "code" else trimmed.lowercase()
 }
 
-/**
- * Copy plain text to the system clipboard. No permissions required.
- */
 private fun copyCodeToClipboard(
     context: Context,
     code: String,
