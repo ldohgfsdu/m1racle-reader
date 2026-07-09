@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
                     MarkLeafNavGraph(
                         navController = navController,
                         repository = app.documentRepository,
+                        readerSettingsRepository = app.readerSettingsRepository,
                     )
                 }
             }

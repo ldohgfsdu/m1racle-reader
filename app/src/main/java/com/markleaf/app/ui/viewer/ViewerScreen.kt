@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -37,18 +38,24 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.markleaf.app.R
+import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.TocItem
 import com.markleaf.app.ui.viewer.components.MarkdownBlockView
+import com.markleaf.app.ui.viewer.components.ReaderSettingsSheet
+import com.markleaf.app.ui.viewer.components.ReaderTypography
 import com.markleaf.app.ui.viewer.components.TocDrawerContent
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
@@ -64,10 +71,9 @@ fun ViewerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // Top bar: file displayName only (never long H1) — single line + ellipsis in Scaffold.
     val title = when (val state = uiState) {
-        is ViewerUiState.Success ->
-            state.document.title?.takeIf { it.isNotBlank() }
-                ?: state.document.displayName
+        is ViewerUiState.Success -> state.document.displayName
         is ViewerUiState.Error ->
             state.displayName ?: stringResource(R.string.viewer_title_fallback)
         ViewerUiState.Loading -> stringResource(R.string.viewer_loading)
@@ -90,6 +96,8 @@ fun ViewerScreen(
                 onBack = onBack,
                 tocEnabled = false,
                 onOpenToc = {},
+                settingsEnabled = false,
+                onOpenSettings = {},
                 modifier = modifier,
             ) { innerPadding ->
                 Box(
@@ -117,6 +125,8 @@ fun ViewerScreen(
                 onBack = onBack,
                 tocEnabled = false,
                 onOpenToc = {},
+                settingsEnabled = false,
+                onOpenSettings = {},
                 modifier = modifier,
             ) { innerPadding ->
                 Box(
@@ -159,6 +169,9 @@ private fun ViewerSuccessScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val hasToc = state.toc.isNotEmpty()
+    val readerSettings by viewModel.readerSettings.collectAsStateWithLifecycle()
+    var showSettings by remember { mutableStateOf(false) }
+    val contentPadding = readerSettings.contentPaddingLevel.horizontalDp
     /*
      * Index coordinate system (MUST stay consistent):
      * - Room lastScrollIndex / LazyListState use ABSOLUTE list item indices
@@ -273,13 +286,15 @@ private fun ViewerSuccessScreen(
                     scope.launch { drawerState.open() }
                 }
             },
+            settingsEnabled = true,
+            onOpenSettings = { showSettings = true },
         ) { innerPadding ->
             if (state.blocks.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
-                        .padding(horizontal = 24.dp),
+                        .padding(horizontal = contentPadding),
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -305,8 +320,8 @@ private fun ViewerSuccessScreen(
                         .fillMaxSize()
                         .padding(innerPadding),
                     contentPadding = PaddingValues(
-                        start = 22.dp,
-                        end = 22.dp,
+                        start = contentPadding,
+                        end = contentPadding,
                         top = 8.dp,
                         bottom = 32.dp,
                     ),
@@ -332,10 +347,24 @@ private fun ViewerSuccessScreen(
                         items = state.blocks,
                         key = { index, block -> "${block::class.simpleName}-$index" },
                     ) { _, block ->
-                        MarkdownBlockView(block = block)
+                        MarkdownBlockView(
+                            block = block,
+                            settings = readerSettings,
+                        )
                     }
                 }
             }
+        }
+
+        if (showSettings) {
+            ReaderSettingsSheet(
+                settings = readerSettings,
+                onFontScale = viewModel::setFontScale,
+                onLineHeightScale = viewModel::setLineHeightScale,
+                onPaddingLevel = viewModel::setContentPaddingLevel,
+                onReset = viewModel::resetReaderSettings,
+                onDismiss = { showSettings = false },
+            )
         }
     }
 }
@@ -347,6 +376,8 @@ private fun ViewerScaffold(
     onBack: () -> Unit,
     tocEnabled: Boolean,
     onOpenToc: () -> Unit,
+    settingsEnabled: Boolean,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -357,6 +388,10 @@ private fun ViewerScaffold(
                 title = {
                     Text(
                         text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = ReaderTypography.topBarTitleSize,
+                            fontWeight = FontWeight.Medium,
+                        ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -370,6 +405,15 @@ private fun ViewerScaffold(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = onOpenSettings,
+                        enabled = settingsEnabled,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = stringResource(R.string.reader_settings_open),
+                        )
+                    }
                     IconButton(
                         onClick = onOpenToc,
                         enabled = tocEnabled,

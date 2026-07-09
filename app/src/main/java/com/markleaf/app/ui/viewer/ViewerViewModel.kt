@@ -6,14 +6,19 @@ import androidx.lifecycle.viewModelScope
 import com.markleaf.app.data.local.DocumentEntity
 import com.markleaf.app.data.repository.DocumentReadException
 import com.markleaf.app.data.repository.DocumentRepository
+import com.markleaf.app.data.settings.ContentPaddingLevel
+import com.markleaf.app.data.settings.ReaderSettings
+import com.markleaf.app.data.settings.ReaderSettingsRepository
 import com.markleaf.app.markdown.MarkdownBlock
 import com.markleaf.app.markdown.MarkdownParser
 import com.markleaf.app.markdown.TocItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -38,10 +43,18 @@ sealed class ViewerUiState {
 class ViewerViewModel(
     private val documentId: String,
     private val repository: DocumentRepository,
+    private val readerSettingsRepository: ReaderSettingsRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ViewerUiState>(ViewerUiState.Loading)
     val uiState: StateFlow<ViewerUiState> = _uiState.asStateFlow()
+
+    val readerSettings: StateFlow<ReaderSettings> = readerSettingsRepository.settingsFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = ReaderSettings.Default,
+        )
 
     init {
         load()
@@ -49,6 +62,46 @@ class ViewerViewModel(
 
     fun retry() {
         load()
+    }
+
+    fun setFontScale(scale: Float) {
+        viewModelScope.launch {
+            try {
+                readerSettingsRepository.updateFontScale(scale)
+            } catch (_: Exception) {
+                // Ignore persistence errors.
+            }
+        }
+    }
+
+    fun setLineHeightScale(scale: Float) {
+        viewModelScope.launch {
+            try {
+                readerSettingsRepository.updateLineHeightScale(scale)
+            } catch (_: Exception) {
+                // Ignore persistence errors.
+            }
+        }
+    }
+
+    fun setContentPaddingLevel(level: ContentPaddingLevel) {
+        viewModelScope.launch {
+            try {
+                readerSettingsRepository.updateContentPaddingLevel(level)
+            } catch (_: Exception) {
+                // Ignore persistence errors.
+            }
+        }
+    }
+
+    fun resetReaderSettings() {
+        viewModelScope.launch {
+            try {
+                readerSettingsRepository.resetToDefaults()
+            } catch (_: Exception) {
+                // Ignore persistence errors.
+            }
+        }
     }
 
     /**
@@ -107,7 +160,6 @@ class ViewerViewModel(
                             MarkdownParser.parse(preview.text)
                         }
                     } catch (_: Exception) {
-                        // Parser must not crash the app — show raw text preview instead.
                         parseFallback = true
                         MarkdownParser.ParseResult(
                             blocks = if (preview.text.isBlank()) {
@@ -170,11 +222,16 @@ class ViewerViewModel(
     class Factory(
         private val documentId: String,
         private val repository: DocumentRepository,
+        private val readerSettingsRepository: ReaderSettingsRepository,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ViewerViewModel::class.java)) {
-                return ViewerViewModel(documentId, repository) as T
+                return ViewerViewModel(
+                    documentId = documentId,
+                    repository = repository,
+                    readerSettingsRepository = readerSettingsRepository,
+                ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
         }

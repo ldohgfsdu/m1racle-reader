@@ -3,6 +3,7 @@ package com.markleaf.app
 import android.app.Application
 import com.markleaf.app.data.local.AppDatabase
 import com.markleaf.app.data.repository.DocumentRepository
+import com.markleaf.app.data.settings.ReaderSettingsRepository
 
 class MarkLeafApplication : Application() {
 
@@ -15,5 +16,9 @@ class MarkLeafApplication : Application() {
             context = this,
             documentDao = database.documentDao(),
         )
+    }
+
+    val readerSettingsRepository: ReaderSettingsRepository by lazy {
+        ReaderSettingsRepository(this)
     }
 }

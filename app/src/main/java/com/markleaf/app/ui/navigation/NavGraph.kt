@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.markleaf.app.data.repository.DocumentRepository
+import com.markleaf.app.data.settings.ReaderSettingsRepository
 import com.markleaf.app.ui.home.HomeScreen
 import com.markleaf.app.ui.home.HomeViewModel
 import com.markleaf.app.ui.viewer.ViewerScreen
@@ -25,6 +26,7 @@ object Routes {
 fun MarkLeafNavGraph(
     navController: NavHostController,
     repository: DocumentRepository,
+    readerSettingsRepository: ReaderSettingsRepository,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -57,6 +59,7 @@ fun MarkLeafNavGraph(
                 factory = ViewerViewModel.Factory(
                     documentId = documentId,
                     repository = repository,
+                    readerSettingsRepository = readerSettingsRepository,
                 ),
             )
             ViewerScreen(

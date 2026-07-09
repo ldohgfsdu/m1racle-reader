@@ -15,16 +15,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
 
 @Composable
 fun CodeBlockView(
     block: MarkdownBlock.CodeBlock,
+    settings: ReaderSettings,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(12.dp)
     val bg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    val codeSize = ReaderTypography.codeBlockSize(settings.fontScale)
+    val codeLine = ReaderTypography.codeBlockLine(settings.fontScale, settings.lineHeightScale)
 
     Column(
         modifier = modifier
@@ -43,7 +46,6 @@ fun CodeBlockView(
                 modifier = Modifier.padding(bottom = 8.dp),
             )
         }
-        // Horizontal scroll owns width; Text must NOT fillMaxWidth or long lines blow layout.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -53,8 +55,8 @@ fun CodeBlockView(
                 text = block.code.ifEmpty { " " },
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
+                    fontSize = codeSize,
+                    lineHeight = codeLine,
                 ),
                 color = MaterialTheme.colorScheme.onSurface,
                 softWrap = false,

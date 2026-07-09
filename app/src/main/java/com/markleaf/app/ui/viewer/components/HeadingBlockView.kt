@@ -8,52 +8,56 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
+import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
 
 @Composable
 fun HeadingBlockView(
     block: MarkdownBlock.Heading,
+    settings: ReaderSettings,
     modifier: Modifier = Modifier,
 ) {
+    val fs = settings.fontScale
     val style = when (block.level) {
         1 -> MaterialTheme.typography.headlineMedium.copy(
             fontWeight = FontWeight.Bold,
-            fontSize = 28.sp,
-            lineHeight = 36.sp,
+            fontSize = ReaderTypography.h1Size.scaled(fs),
+            lineHeight = ReaderTypography.h1LineHeight.scaled(fs),
         )
         2 -> MaterialTheme.typography.headlineSmall.copy(
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 22.sp,
-            lineHeight = 30.sp,
+            fontWeight = FontWeight.Bold,
+            fontSize = ReaderTypography.h2Size.scaled(fs),
+            lineHeight = ReaderTypography.h2LineHeight.scaled(fs),
         )
         3 -> MaterialTheme.typography.titleLarge.copy(
             fontWeight = FontWeight.SemiBold,
-            fontSize = 18.sp,
-            lineHeight = 26.sp,
+            fontSize = ReaderTypography.h3Size.scaled(fs),
+            lineHeight = ReaderTypography.h3LineHeight.scaled(fs),
         )
         4 -> MaterialTheme.typography.titleMedium.copy(
-            fontWeight = FontWeight.Medium,
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = ReaderTypography.h4Size.scaled(fs),
+            lineHeight = ReaderTypography.h4LineHeight.scaled(fs),
         )
         else -> MaterialTheme.typography.titleSmall.copy(
             fontWeight = FontWeight.Medium,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+            fontSize = ReaderTypography.h56Size.scaled(fs),
+            lineHeight = ReaderTypography.h56LineHeight.scaled(fs),
         )
     }
 
     val top = when (block.level) {
-        1 -> 28.dp
-        2 -> 22.dp
-        3 -> 18.dp
+        1 -> 20.dp
+        2 -> 18.dp
+        3 -> 14.dp
         else -> 12.dp
     }
     val bottom = when (block.level) {
         1 -> 12.dp
         2 -> 10.dp
-        else -> 8.dp
+        3 -> 8.dp
+        else -> 6.dp
     }
 
     Text(

@@ -25,4 +25,19 @@
     <string name="toc_untitled">（无标题）</string>
     <string name="error_file_missing">文件可能已被移动或删除</string>
     <string name="error_permission_lost">文件访问权限已失效，请重新导入</string>
+    <string name="reader_settings_open">阅读显示设置</string>
+    <string name="reader_settings_title">显示设置</string>
+    <string name="reader_settings_font_size">字号</string>
+    <string name="reader_settings_font_small">小</string>
+    <string name="reader_settings_font_default">默认</string>
+    <string name="reader_settings_font_large">大</string>
+    <string name="reader_settings_line_height">行高</string>
+    <string name="reader_settings_line_compact">紧凑</string>
+    <string name="reader_settings_line_default">默认</string>
+    <string name="reader_settings_line_relaxed">宽松</string>
+    <string name="reader_settings_padding">页面边距</string>
+    <string name="reader_settings_padding_compact">紧凑</string>
+    <string name="reader_settings_padding_standard">标准</string>
+    <string name="reader_settings_padding_relaxed">宽松</string>
+    <string name="reader_settings_reset">重置默认</string>
 </resources>
