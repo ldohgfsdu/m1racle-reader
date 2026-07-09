@@ -28,6 +28,16 @@ object DocumentSearch {
                         collectMatches(item, blockIndex, listItemIndex = itemIndex, query, matches)
                     }
                 }
+                is MarkdownBlock.Table -> {
+                    block.headers.forEach { cell ->
+                        collectMatches(cell, blockIndex, listItemIndex = -1, query, matches)
+                    }
+                    block.rows.forEach { row ->
+                        row.forEach { cell ->
+                            collectMatches(cell, blockIndex, listItemIndex = -1, query, matches)
+                        }
+                    }
+                }
                 MarkdownBlock.Divider -> Unit
             }
         }

@@ -2,7 +2,6 @@ package com.markleaf.app.markdown
 
 /**
  * Block-level Markdown model for LazyColumn rendering.
- * Inline styles (bold/italic/links) are out of scope for this step.
  */
 sealed class MarkdownBlock {
     data class Heading(
@@ -29,5 +28,20 @@ sealed class MarkdownBlock {
         val items: List<String>,
     ) : MarkdownBlock()
 
+    /**
+     * Pipe table (GFM-style). [alignments] size should match column count.
+     */
+    data class Table(
+        val headers: List<String>,
+        val rows: List<List<String>>,
+        val alignments: List<TableAlignment>,
+    ) : MarkdownBlock()
+
     data object Divider : MarkdownBlock()
+}
+
+enum class TableAlignment {
+    Start,
+    Center,
+    End,
 }

@@ -53,6 +53,12 @@ fun MarkdownBlockView(
             activeMatch = if (highlight) activeMatch else null,
             modifier = modifier,
         )
+        is MarkdownBlock.Table -> TableBlockView(
+            block = block,
+            settings = settings,
+            isCurrentSearchMatch = highlight,
+            modifier = modifier,
+        )
         MarkdownBlock.Divider -> {
             HorizontalDivider(
                 modifier = modifier

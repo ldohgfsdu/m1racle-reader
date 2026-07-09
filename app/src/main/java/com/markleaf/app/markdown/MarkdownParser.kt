@@ -18,6 +18,7 @@ object MarkdownParser {
     private val fenceOpenRegex = Regex("""^```(\S*)\s*$""")
     private val fenceCloseRegex = Regex("""^```\s*$""")
     private val dividerRegex = Regex("""^\s*([-*_])\1{2,}\s*$""")
+    private val separatorCellRegex = Regex("""^:?-{3,}:?$""")
 
     fun parse(source: String): ParseResult {
         val normalized = source
@@ -40,7 +41,7 @@ object MarkdownParser {
                 continue
             }
 
-            // Fenced code block.
+            // Fenced code block (pipes inside never become tables).
             val fenceMatch = fenceOpenRegex.matchEntire(trimmed)
             if (fenceMatch != null) {
                 val language = fenceMatch.groupValues[1].ifBlank { null }
@@ -56,9 +57,8 @@ object MarkdownParser {
                     codeLines.add(lines[i])
                     i++
                 }
-                // Unclosed fence: consume rest of file (no crash).
                 if (!closed) {
-                    // already consumed to end
+                    // Unclosed fence: consume rest of file (no crash).
                 }
                 blocks.add(
                     MarkdownBlock.CodeBlock(
@@ -97,11 +97,22 @@ object MarkdownParser {
                 continue
             }
 
-            // Divider.
+            // Divider (plain --- without pipe table separators).
             if (dividerRegex.matchEntire(trimmed) != null) {
                 blocks.add(MarkdownBlock.Divider)
                 i++
                 continue
+            }
+
+            // Pipe table: header + separator (+ optional body rows).
+            if (i + 1 < lines.size && looksLikeTableStart(trimmed, lines[i + 1].trim())) {
+                val consumed = parseTable(lines, i)
+                if (consumed != null) {
+                    blocks.add(consumed.table)
+                    i = consumed.nextIndex
+                    continue
+                }
+                // Fall through to paragraph on invalid table shape.
             }
 
             // Quote block (merge consecutive > lines).
@@ -175,6 +186,8 @@ object MarkdownParser {
                 val nextTrim = next.trim()
                 if (nextTrim.isEmpty()) break
                 if (isBlockStart(next, nextTrim)) break
+                // Don't swallow a table that starts on the next two lines.
+                if (i + 1 < lines.size && looksLikeTableStart(nextTrim, lines[i + 1].trim())) break
                 paraLines.add(next.trimEnd())
                 i++
             }
@@ -185,6 +198,127 @@ object MarkdownParser {
         }
 
         return ParseResult(blocks = blocks, toc = toc)
+    }
+
+    private data class TableParse(
+        val table: MarkdownBlock.Table,
+        val nextIndex: Int,
+    )
+
+    private fun looksLikeTableStart(headerLine: String, separatorLine: String): Boolean {
+        if (headerLine.isEmpty() || separatorLine.isEmpty()) return false
+        if (!headerLine.contains('|') && !separatorLine.contains('|')) return false
+        // Header must not be a separator-only row.
+        if (isTableSeparatorLine(headerLine)) return false
+        return isTableSeparatorLine(separatorLine)
+    }
+
+    private fun parseTable(lines: List<String>, start: Int): TableParse? {
+        return try {
+            val headerCells = splitTableCells(lines[start])
+            if (headerCells.isEmpty()) return null
+            val sepCells = splitTableCells(lines[start + 1])
+            if (sepCells.isEmpty() || !sepCells.all { isSeparatorCell(it) }) return null
+
+            val columnCount = maxOf(headerCells.size, sepCells.size).coerceAtLeast(1)
+            val headers = padCells(headerCells, columnCount)
+            val alignments = padAlignments(
+                sepCells.map { parseAlignment(it) },
+                columnCount,
+            )
+
+            val rows = mutableListOf<List<String>>()
+            var i = start + 2
+            while (i < lines.size) {
+                val raw = lines[i]
+                val trimmed = raw.trim()
+                if (trimmed.isEmpty()) break
+                if (isBlockStart(raw, trimmed) && !trimmed.contains('|')) break
+                // Stop if next section is clearly another table header (header+sep pair).
+                if (i + 1 < lines.size &&
+                    looksLikeTableStart(trimmed, lines[i + 1].trim()) &&
+                    isTableSeparatorLine(lines[i + 1].trim())
+                ) {
+                    // Body row that looks like table start is still a row if it's only one line;
+                    // only break when this is a NEW table (header + sep). So if current is header-like
+                    // and next is sep, break to let outer loop re-parse.
+                    if (!isTableSeparatorLine(trimmed)) {
+                        break
+                    }
+                }
+                if (!trimmed.contains('|') && splitTableCells(trimmed).size <= 1) {
+                    // A plain paragraph line without pipes ends the table.
+                    break
+                }
+                if (isTableSeparatorLine(trimmed)) {
+                    // Extra separator: ignore and stop.
+                    break
+                }
+                val cells = padCells(splitTableCells(trimmed), columnCount)
+                rows.add(cells)
+                i++
+            }
+
+            TableParse(
+                table = MarkdownBlock.Table(
+                    headers = headers,
+                    rows = rows,
+                    alignments = alignments,
+                ),
+                nextIndex = i,
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun isTableSeparatorLine(line: String): Boolean {
+        val cells = splitTableCells(line)
+        if (cells.isEmpty()) return false
+        return cells.all { isSeparatorCell(it) }
+    }
+
+    private fun isSeparatorCell(cell: String): Boolean =
+        separatorCellRegex.matches(cell.trim())
+
+    private fun parseAlignment(cell: String): TableAlignment {
+        val t = cell.trim()
+        val left = t.startsWith(':')
+        val right = t.endsWith(':')
+        return when {
+            left && right -> TableAlignment.Center
+            right -> TableAlignment.End
+            else -> TableAlignment.Start
+        }
+    }
+
+    /**
+     * Split a table row into cells. Supports optional leading/trailing pipes.
+     */
+    private fun splitTableCells(line: String): List<String> {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        if (!trimmed.contains('|')) {
+            // Single-column table rows are rare; treat as one cell only if separator-like or explicit.
+            return listOf(trimmed)
+        }
+        var s = trimmed
+        if (s.startsWith("|")) s = s.drop(1)
+        if (s.endsWith("|")) s = s.dropLast(1)
+        return s.split('|').map { it.trim() }
+    }
+
+    private fun padCells(cells: List<String>, count: Int): List<String> {
+        if (cells.size >= count) return cells
+        return cells + List(count - cells.size) { "" }
+    }
+
+    private fun padAlignments(
+        alignments: List<TableAlignment>,
+        count: Int,
+    ): List<TableAlignment> {
+        if (alignments.size >= count) return alignments.take(count)
+        return alignments + List(count - alignments.size) { TableAlignment.Start }
     }
 
     private fun isBlockStart(raw: String, trimmed: String): Boolean {
