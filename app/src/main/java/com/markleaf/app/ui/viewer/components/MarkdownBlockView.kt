@@ -59,6 +59,12 @@ fun MarkdownBlockView(
             isCurrentSearchMatch = highlight,
             modifier = modifier,
         )
+        is MarkdownBlock.Image -> ImageBlockView(
+            block = block,
+            settings = settings,
+            isCurrentSearchMatch = highlight,
+            modifier = modifier,
+        )
         MarkdownBlock.Divider -> {
             HorizontalDivider(
                 modifier = modifier

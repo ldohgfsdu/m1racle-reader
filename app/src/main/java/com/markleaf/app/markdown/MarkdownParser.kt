@@ -19,6 +19,10 @@ object MarkdownParser {
     private val fenceCloseRegex = Regex("""^```\s*$""")
     private val dividerRegex = Regex("""^\s*([-*_])\1{2,}\s*$""")
     private val separatorCellRegex = Regex("""^:?-{3,}:?$""")
+    /** Whole-line image only: ![alt](source) optional "title" */
+    private val imageLineRegex = Regex(
+        """^!\[([^]]*)]\((\S+?)(?:\s+"([^"]*)")?\s*\)$""",
+    )
 
     fun parse(source: String): ParseResult {
         val normalized = source
@@ -100,6 +104,31 @@ object MarkdownParser {
             // Divider (plain --- without pipe table separators).
             if (dividerRegex.matchEntire(trimmed) != null) {
                 blocks.add(MarkdownBlock.Divider)
+                i++
+                continue
+            }
+
+            // Standalone image line (not inside fenced code).
+            val imageMatch = imageLineRegex.matchEntire(trimmed)
+            if (imageMatch != null) {
+                val alt = imageMatch.groupValues[1]
+                val source = imageMatch.groupValues[2].trim()
+                val title = imageMatch.groupValues[3].ifBlank { null }
+                if (source.isEmpty()) {
+                    blocks.add(
+                        MarkdownBlock.Paragraph(
+                            text = if (alt.isNotBlank()) alt else "![ ]()",
+                        ),
+                    )
+                } else {
+                    blocks.add(
+                        MarkdownBlock.Image(
+                            alt = alt,
+                            source = source,
+                            title = title,
+                        ),
+                    )
+                }
                 i++
                 continue
             }
@@ -325,6 +354,7 @@ object MarkdownParser {
         if (fenceOpenRegex.matchEntire(trimmed) != null) return true
         if (headingRegex.matchEntire(trimmed) != null) return true
         if (dividerRegex.matchEntire(trimmed) != null) return true
+        if (imageLineRegex.matchEntire(trimmed) != null) return true
         if (quoteRegex.matchEntire(raw) != null) return true
         if (unorderedListRegex.matchEntire(trimmed) != null) return true
         if (orderedListRegex.matchEntire(trimmed) != null) return true

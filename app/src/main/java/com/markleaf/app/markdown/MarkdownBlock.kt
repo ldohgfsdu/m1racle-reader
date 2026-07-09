@@ -37,6 +37,15 @@ sealed class MarkdownBlock {
         val alignments: List<TableAlignment>,
     ) : MarkdownBlock()
 
+    /**
+     * Standalone image line: ![alt](source) or ![alt](source "title")
+     */
+    data class Image(
+        val alt: String,
+        val source: String,
+        val title: String? = null,
+    ) : MarkdownBlock()
+
     data object Divider : MarkdownBlock()
 }
 

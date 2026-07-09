@@ -164,6 +164,34 @@ title | String | 标题
 
 这不是表格 | 只有一行没有分隔行
 
+## 图片样例
+
+> **可实机验证：** 下面这条 `asset://` 使用 App 内置样例图，无需存储权限、不联网，应真实显示。
+
+![内置本地图片](asset://sample-image.png "本地加载验证")
+
+> 以下为安全降级占位（预期失败，不崩溃）：
+
+![本地 content 占位](content://replace-with-local-image)
+
+![file 无权限/不存在](file:///storage/emulated/0/Download/demo.png "Download demo")
+
+![相对路径图片](images/demo.png)
+
+![网络图片](https://example.com/demo.png)
+
+![](content://empty-alt-example)
+
+![空 source 会降级]()
+
+代码块内图片语法不应被解析成图片：
+
+```markdown
+![x](y)
+![network](https://example.com/a.png)
+![asset](asset://sample-image.png)
+```
+
 ---
 
 ## 分割线上方的内容

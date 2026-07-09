@@ -38,6 +38,13 @@ object DocumentSearch {
                         }
                     }
                 }
+                is MarkdownBlock.Image -> {
+                    collectMatches(block.alt, blockIndex, listItemIndex = -1, query, matches)
+                    block.title?.let {
+                        collectMatches(it, blockIndex, listItemIndex = -1, query, matches)
+                    }
+                    collectMatches(block.source, blockIndex, listItemIndex = -1, query, matches)
+                }
                 MarkdownBlock.Divider -> Unit
             }
         }
