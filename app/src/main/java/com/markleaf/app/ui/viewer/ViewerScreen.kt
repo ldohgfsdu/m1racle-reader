@@ -206,6 +206,8 @@ private fun ViewerSuccessScreen(
             .distinctUntilChanged()
             .debounce(750L)
             .collect { position ->
+                // Skip until LazyColumn has laid out; otherwise progress=0 wipes prior progress.
+                if (listState.layoutInfo.totalItemsCount <= 0) return@collect
                 viewModel.saveReadingPosition(
                     lastScrollIndex = position.index,
                     lastScrollOffset = position.offset,
@@ -217,7 +219,8 @@ private fun ViewerSuccessScreen(
     // Flush latest position when leaving the screen.
     DisposableEffect(state.document.id, listState) {
         onDispose {
-            if (totalListItems > 0) {
+            // Only persist when the list has real layout info (avoid zeroing progress on quick back).
+            if (totalListItems > 0 && listState.layoutInfo.totalItemsCount > 0) {
                 viewModel.saveReadingPosition(
                     lastScrollIndex = listState.firstVisibleItemIndex,
                     lastScrollOffset = listState.firstVisibleItemScrollOffset,
