@@ -28,6 +28,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -172,6 +174,7 @@ private fun ViewerSuccessScreen(
     val readerSettings by viewModel.readerSettings.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
     val contentPadding = readerSettings.contentPaddingLevel.horizontalDp
+    val snackbarHostState = remember { SnackbarHostState() }
     /*
      * Index coordinate system (MUST stay consistent):
      * - Room lastScrollIndex / LazyListState use ABSOLUTE list item indices
@@ -288,6 +291,7 @@ private fun ViewerSuccessScreen(
             },
             settingsEnabled = true,
             onOpenSettings = { showSettings = true },
+            snackbarHostState = snackbarHostState,
         ) { innerPadding ->
             if (state.blocks.isEmpty()) {
                 Box(
@@ -350,6 +354,11 @@ private fun ViewerSuccessScreen(
                         MarkdownBlockView(
                             block = block,
                             settings = readerSettings,
+                            onCopyMessage = { message ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(message)
+                                }
+                            },
                         )
                     }
                 }
@@ -378,11 +387,17 @@ private fun ViewerScaffold(
     onOpenToc: () -> Unit,
     settingsEnabled: Boolean,
     onOpenSettings: () -> Unit,
+    snackbarHostState: SnackbarHostState? = null,
     modifier: Modifier = Modifier,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        snackbarHost = {
+            if (snackbarHostState != null) {
+                SnackbarHost(hostState = snackbarHostState)
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {

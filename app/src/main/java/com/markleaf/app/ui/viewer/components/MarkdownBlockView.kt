@@ -14,6 +14,7 @@ import com.markleaf.app.markdown.MarkdownBlock
 fun MarkdownBlockView(
     block: MarkdownBlock,
     settings: ReaderSettings,
+    onCopyMessage: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     when (block) {
@@ -35,6 +36,7 @@ fun MarkdownBlockView(
         is MarkdownBlock.CodeBlock -> CodeBlockView(
             block = block,
             settings = settings,
+            onCopyMessage = onCopyMessage,
             modifier = modifier,
         )
         is MarkdownBlock.ListBlock -> ListBlockView(

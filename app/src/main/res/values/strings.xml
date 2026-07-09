@@ -40,4 +40,7 @@
     <string name="reader_settings_padding_standard">标准</string>
     <string name="reader_settings_padding_relaxed">宽松</string>
     <string name="reader_settings_reset">重置默认</string>
+    <string name="code_copy">复制代码</string>
+    <string name="code_copied">代码已复制</string>
+    <string name="code_copy_failed">复制失败</string>
 </resources>

@@ -54,6 +54,18 @@ line 2
 line 3
 ```
 
+### 空代码块与复制测试
+
+```kotlin
+fun main() {
+    val message = "Hello MarkLeaf"
+    println(message)
+}
+```
+
+```
+```
+
 ---
 
 ## 分割线上方的内容
