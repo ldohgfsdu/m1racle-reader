@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">墨阅 MarkLeaf</string>
+    <string name="app_subtitle">本地 Markdown 阅读器</string>
+    <string name="empty_title">还没有导入文档</string>
+    <string name="empty_subtitle">选择一个 Markdown 文件，开始本地阅读。</string>
+    <string name="import_file">导入文件</string>
+    <string name="delete_record">删除记录</string>
+    <string name="recent_reads">最近阅读</string>
+    <string name="error_unsupported_format">暂只支持 .md / .markdown / .txt 文件</string>
+    <string name="error_read_failed">无法读取该文件，请重新选择</string>
+    <string name="unknown_size">未知大小</string>
+    <string name="unnamed_document">未命名文档</string>
+    <string name="back">返回</string>
+    <string name="back_to_home">返回主页</string>
+    <string name="viewer_loading">加载中…</string>
+    <string name="viewer_title_fallback">阅读</string>
+    <string name="viewer_empty_document">这是一个空文档</string>
+    <string name="viewer_preview_notice">当前为长文预览模式，后续将继续优化完整长文渲染。</string>
+    <string name="viewer_parse_fallback_notice">Markdown 解析异常，已降级为原文预览。</string>
+    <string name="toc_disabled">目录（即将支持）</string>
+    <string name="toc_title">目录</string>
+    <string name="toc_open">打开目录</string>
+    <string name="toc_empty">本文档暂无目录</string>
+    <string name="toc_untitled">（无标题）</string>
+    <string name="error_file_missing">文件可能已被移动或删除</string>
+    <string name="error_permission_lost">文件访问权限已失效，请重新导入</string>
+</resources>
