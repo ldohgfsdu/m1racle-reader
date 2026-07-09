@@ -10,12 +10,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
+import com.markleaf.app.search.SearchMatch
+import com.markleaf.app.search.highlightPlainText
 import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
 
 @Composable
 fun HeadingBlockView(
     block: MarkdownBlock.Heading,
     settings: ReaderSettings,
+    activeMatch: SearchMatch? = null,
     modifier: Modifier = Modifier,
 ) {
     val fs = settings.fontScale
@@ -60,8 +63,19 @@ fun HeadingBlockView(
         else -> 6.dp
     }
 
+    val annotated = if (activeMatch != null) {
+        highlightPlainText(
+            text = block.text.ifBlank { " " },
+            activeStart = activeMatch.matchStart,
+            activeEnd = activeMatch.matchEnd,
+            highlightColor = searchFragmentHighlightColor(),
+        )
+    } else {
+        null
+    }
+
     Text(
-        text = block.text.ifBlank { " " },
+        text = annotated ?: androidx.compose.ui.text.AnnotatedString(block.text.ifBlank { " " }),
         style = style,
         color = if (block.level >= 5) {
             MaterialTheme.colorScheme.onSurfaceVariant
@@ -70,6 +84,7 @@ fun HeadingBlockView(
         },
         modifier = modifier
             .fillMaxWidth()
+            .searchBlockHighlight(activeMatch != null)
             .padding(top = top, bottom = bottom),
     )
 }

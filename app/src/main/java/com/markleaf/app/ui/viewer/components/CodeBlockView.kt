@@ -33,12 +33,15 @@ import androidx.compose.ui.unit.dp
 import com.markleaf.app.R
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
+import com.markleaf.app.search.SearchMatch
+import com.markleaf.app.search.highlightPlainText
 
 @Composable
 fun CodeBlockView(
     block: MarkdownBlock.CodeBlock,
     settings: ReaderSettings,
     onCopyMessage: (String) -> Unit,
+    activeMatch: SearchMatch? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -52,10 +55,18 @@ fun CodeBlockView(
     val copiedMsg = stringResource(R.string.code_copied)
     val failedMsg = stringResource(R.string.code_copy_failed)
 
+    val codeAnnotated = highlightPlainText(
+        text = block.code.ifEmpty { " " },
+        activeStart = activeMatch?.matchStart,
+        activeEnd = activeMatch?.matchEnd,
+        highlightColor = searchFragmentHighlightColor(),
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
+            .searchBlockHighlight(activeMatch != null)
             .clip(shape)
             .background(bg),
     ) {
@@ -110,7 +121,7 @@ fun CodeBlockView(
                 .horizontalScroll(rememberScrollState()),
         ) {
             Text(
-                text = block.code.ifEmpty { " " },
+                text = codeAnnotated,
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = FontFamily.Monospace,
                     fontSize = codeSize,

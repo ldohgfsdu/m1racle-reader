@@ -16,6 +16,7 @@ import com.markleaf.app.ui.viewer.components.ReaderTypography.scaledLineHeight
 fun ParagraphBlockView(
     block: MarkdownBlock.Paragraph,
     settings: ReaderSettings,
+    isCurrentSearchMatch: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     InlineMarkdownText(
@@ -29,6 +30,7 @@ fun ParagraphBlockView(
         ),
         modifier = modifier
             .fillMaxWidth()
+            .searchBlockHighlight(isCurrentSearchMatch)
             .padding(top = 2.dp, bottom = 12.dp),
     )
 }

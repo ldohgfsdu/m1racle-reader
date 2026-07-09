@@ -1,5 +1,6 @@
 package com.markleaf.app.ui.viewer
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,6 +60,7 @@ import com.markleaf.app.markdown.TocItem
 import com.markleaf.app.ui.viewer.components.MarkdownBlockView
 import com.markleaf.app.ui.viewer.components.ReaderSettingsSheet
 import com.markleaf.app.ui.viewer.components.ReaderTypography
+import com.markleaf.app.ui.viewer.components.SearchTopBar
 import com.markleaf.app.ui.viewer.components.TocDrawerContent
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
@@ -100,6 +103,13 @@ fun ViewerScreen(
                 onOpenToc = {},
                 settingsEnabled = false,
                 onOpenSettings = {},
+                searchEnabled = false,
+                onOpenSearch = {},
+                searchState = null,
+                onSearchQueryChange = {},
+                onCloseSearch = {},
+                onSearchPrevious = {},
+                onSearchNext = {},
                 modifier = modifier,
             ) { innerPadding ->
                 Box(
@@ -129,6 +139,13 @@ fun ViewerScreen(
                 onOpenToc = {},
                 settingsEnabled = false,
                 onOpenSettings = {},
+                searchEnabled = false,
+                onOpenSearch = {},
+                searchState = null,
+                onSearchQueryChange = {},
+                onCloseSearch = {},
+                onSearchPrevious = {},
+                onSearchNext = {},
                 modifier = modifier,
             ) { innerPadding ->
                 Box(
@@ -172,6 +189,7 @@ private fun ViewerSuccessScreen(
     val scope = rememberCoroutineScope()
     val hasToc = state.toc.isNotEmpty()
     val readerSettings by viewModel.readerSettings.collectAsStateWithLifecycle()
+    val searchState by viewModel.searchState.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
     val contentPadding = readerSettings.contentPaddingLevel.horizontalDp
     val snackbarHostState = remember { SnackbarHostState() }
@@ -243,7 +261,30 @@ private fun ViewerSuccessScreen(
                     readingProgress = readingProgressOf(listState),
                 )
             }
+            viewModel.closeSearch()
         }
+    }
+
+    // Scroll to current search match (absolute list index = header + blockIndex).
+    LaunchedEffect(searchState.currentIndex, searchState.matches) {
+        val match = searchState.currentMatch ?: return@LaunchedEffect
+        if (!searchState.isActive) return@LaunchedEffect
+        scrollToBlockIndex(
+            listState = listState,
+            blockIndex = match.blockIndex,
+            listHeaderCount = listHeaderCount,
+            blockCount = state.blocks.size,
+        )
+    }
+
+    // System back: close search first, then leave the viewer.
+    BackHandler(enabled = searchState.isActive) {
+        viewModel.closeSearch()
+    }
+
+    // Prefer closing the TOC drawer before leaving the screen.
+    BackHandler(enabled = drawerState.isOpen) {
+        scope.launch { drawerState.close() }
     }
 
     ModalNavigationDrawer(
@@ -291,6 +332,13 @@ private fun ViewerSuccessScreen(
             },
             settingsEnabled = true,
             onOpenSettings = { showSettings = true },
+            searchEnabled = true,
+            onOpenSearch = viewModel::openSearch,
+            searchState = searchState,
+            onSearchQueryChange = viewModel::onSearchQueryChange,
+            onCloseSearch = viewModel::closeSearch,
+            onSearchPrevious = viewModel::goToPreviousMatch,
+            onSearchNext = viewModel::goToNextMatch,
             snackbarHostState = snackbarHostState,
         ) { innerPadding ->
             if (state.blocks.isEmpty()) {
@@ -350,10 +398,16 @@ private fun ViewerSuccessScreen(
                     itemsIndexed(
                         items = state.blocks,
                         key = { index, block -> "${block::class.simpleName}-$index" },
-                    ) { _, block ->
+                    ) { index, block ->
+                        val current = searchState.currentMatch
+                        val isActiveMatch = searchState.isActive &&
+                            current != null &&
+                            current.blockIndex == index
                         MarkdownBlockView(
                             block = block,
                             settings = readerSettings,
+                            isSearchActive = isActiveMatch,
+                            activeMatch = if (isActiveMatch) current else null,
                             onCopyMessage = { message ->
                                 scope.launch {
                                     snackbarHostState.showSnackbar(message)
@@ -387,10 +441,18 @@ private fun ViewerScaffold(
     onOpenToc: () -> Unit,
     settingsEnabled: Boolean,
     onOpenSettings: () -> Unit,
+    searchEnabled: Boolean,
+    onOpenSearch: () -> Unit,
+    searchState: DocumentSearchUiState?,
+    onSearchQueryChange: (String) -> Unit,
+    onCloseSearch: () -> Unit,
+    onSearchPrevious: () -> Unit,
+    onSearchNext: () -> Unit,
     snackbarHostState: SnackbarHostState? = null,
     modifier: Modifier = Modifier,
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    val inSearch = searchState?.isActive == true
     Scaffold(
         modifier = modifier.fillMaxSize(),
         snackbarHost = {
@@ -399,54 +461,76 @@ private fun ViewerScaffold(
             }
         },
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = ReaderTypography.topBarTitleSize,
-                            fontWeight = FontWeight.Medium,
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
+            if (inSearch && searchState != null) {
+                SearchTopBar(
+                    query = searchState.query,
+                    matchLabel = searchState.counterLabel,
+                    hasMatches = searchState.matches.isNotEmpty(),
+                    onQueryChange = onSearchQueryChange,
+                    onClose = onCloseSearch,
+                    onPrevious = onSearchPrevious,
+                    onNext = onSearchNext,
+                )
+            } else {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = ReaderTypography.topBarTitleSize,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = onOpenSettings,
-                        enabled = settingsEnabled,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = stringResource(R.string.reader_settings_open),
-                        )
-                    }
-                    IconButton(
-                        onClick = onOpenToc,
-                        enabled = tocEnabled,
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
-                            contentDescription = if (tocEnabled) {
-                                stringResource(R.string.toc_open)
-                            } else {
-                                stringResource(R.string.toc_empty)
-                            },
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                            )
+                        }
+                    },
+                    actions = {
+                        // Order: search → settings → TOC
+                        IconButton(
+                            onClick = onOpenSearch,
+                            enabled = searchEnabled,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = stringResource(R.string.search_open),
+                            )
+                        }
+                        IconButton(
+                            onClick = onOpenSettings,
+                            enabled = settingsEnabled,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = stringResource(R.string.reader_settings_open),
+                            )
+                        }
+                        IconButton(
+                            onClick = onOpenToc,
+                            enabled = tocEnabled,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.List,
+                                contentDescription = if (tocEnabled) {
+                                    stringResource(R.string.toc_open)
+                                } else {
+                                    stringResource(R.string.toc_empty)
+                                },
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                )
+            }
         },
         content = content,
     )
@@ -512,8 +596,22 @@ private suspend fun scrollToTocItem(
     listHeaderCount: Int,
     blockCount: Int,
 ) {
+    scrollToBlockIndex(
+        listState = listState,
+        blockIndex = item.blockIndex,
+        listHeaderCount = listHeaderCount,
+        blockCount = blockCount,
+    )
+}
+
+private suspend fun scrollToBlockIndex(
+    listState: LazyListState,
+    blockIndex: Int,
+    listHeaderCount: Int,
+    blockCount: Int,
+) {
     if (blockCount <= 0) return
-    val target = listHeaderCount + item.blockIndex
+    val target = listHeaderCount + blockIndex
     val maxIndex = listHeaderCount + blockCount - 1
     if (target !in 0..maxIndex) return
     try {

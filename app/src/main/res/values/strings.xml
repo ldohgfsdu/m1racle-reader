@@ -43,4 +43,9 @@
     <string name="code_copy">复制代码</string>
     <string name="code_copied">代码已复制</string>
     <string name="code_copy_failed">复制失败</string>
+    <string name="search_open">搜索当前文档</string>
+    <string name="search_close">关闭搜索</string>
+    <string name="search_placeholder">搜索当前文档</string>
+    <string name="search_previous">上一个</string>
+    <string name="search_next">下一个</string>
 </resources>

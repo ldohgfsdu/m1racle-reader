@@ -25,6 +25,7 @@ import com.markleaf.app.ui.viewer.components.ReaderTypography.scaledLineHeight
 fun QuoteBlockView(
     block: MarkdownBlock.Quote,
     settings: ReaderSettings,
+    isCurrentSearchMatch: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(6.dp)
@@ -32,6 +33,7 @@ fun QuoteBlockView(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
+            .searchBlockHighlight(isCurrentSearchMatch)
             .height(IntrinsicSize.Min)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.16f))

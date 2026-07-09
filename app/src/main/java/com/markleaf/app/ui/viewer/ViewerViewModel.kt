@@ -12,13 +12,17 @@ import com.markleaf.app.data.settings.ReaderSettingsRepository
 import com.markleaf.app.markdown.MarkdownBlock
 import com.markleaf.app.markdown.MarkdownParser
 import com.markleaf.app.markdown.TocItem
+import com.markleaf.app.search.DocumentSearch
+import com.markleaf.app.search.SearchMatch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -40,6 +44,23 @@ sealed class ViewerUiState {
     ) : ViewerUiState()
 }
 
+data class DocumentSearchUiState(
+    val isActive: Boolean = false,
+    val query: String = "",
+    val matches: List<SearchMatch> = emptyList(),
+    val currentIndex: Int = 0,
+) {
+    val matchCount: Int get() = matches.size
+    val currentMatch: SearchMatch?
+        get() = matches.getOrNull(currentIndex)
+
+    val counterLabel: String
+        get() {
+            if (matches.isEmpty()) return "0 / 0"
+            return "${currentIndex + 1} / ${matches.size}"
+        }
+}
+
 class ViewerViewModel(
     private val documentId: String,
     private val repository: DocumentRepository,
@@ -48,6 +69,11 @@ class ViewerViewModel(
 
     private val _uiState = MutableStateFlow<ViewerUiState>(ViewerUiState.Loading)
     val uiState: StateFlow<ViewerUiState> = _uiState.asStateFlow()
+
+    private val _searchState = MutableStateFlow(DocumentSearchUiState())
+    val searchState: StateFlow<DocumentSearchUiState> = _searchState.asStateFlow()
+
+    private var searchJob: Job? = null
 
     val readerSettings: StateFlow<ReaderSettings> = readerSettingsRepository.settingsFlow
         .stateIn(
@@ -62,6 +88,56 @@ class ViewerViewModel(
 
     fun retry() {
         load()
+    }
+
+    fun openSearch() {
+        _searchState.value = DocumentSearchUiState(isActive = true)
+    }
+
+    fun closeSearch() {
+        searchJob?.cancel()
+        _searchState.value = DocumentSearchUiState()
+    }
+
+    fun onSearchQueryChange(query: String) {
+        _searchState.update { it.copy(query = query) }
+        val blocks = (_uiState.value as? ViewerUiState.Success)?.blocks.orEmpty()
+        searchJob?.cancel()
+        if (query.trim().isEmpty()) {
+            _searchState.update { it.copy(matches = emptyList(), currentIndex = 0) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            val matches = withContext(Dispatchers.Default) {
+                DocumentSearch.search(blocks, query)
+            }
+            _searchState.update {
+                it.copy(
+                    matches = matches,
+                    currentIndex = 0,
+                )
+            }
+        }
+    }
+
+    fun goToNextMatch() {
+        _searchState.update { state ->
+            if (state.matches.isEmpty()) return@update state
+            val next = (state.currentIndex + 1) % state.matches.size
+            state.copy(currentIndex = next)
+        }
+    }
+
+    fun goToPreviousMatch() {
+        _searchState.update { state ->
+            if (state.matches.isEmpty()) return@update state
+            val prev = if (state.currentIndex <= 0) {
+                state.matches.lastIndex
+            } else {
+                state.currentIndex - 1
+            }
+            state.copy(currentIndex = prev)
+        }
     }
 
     fun setFontScale(scale: Float) {
@@ -200,6 +276,11 @@ class ViewerViewModel(
                         isTruncated = preview.isTruncated,
                         isParseFallback = parseFallback,
                     )
+                    // Re-run search if user is already in search mode (rare race).
+                    val q = _searchState.value.query
+                    if (_searchState.value.isActive && q.trim().isNotEmpty()) {
+                        onSearchQueryChange(q)
+                    }
                 },
                 onFailure = { error ->
                     val message = when (error) {
