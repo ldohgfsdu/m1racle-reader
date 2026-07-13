@@ -13,3 +13,13 @@ Follow `docs/PRD.md`. MVP is local Markdown reading only.
 ## Inbox
 
 External files may appear under `/storage/emulated/0/inbox/MarkLeaf/`.
+
+## Agent startup / handoff
+
+Before implementing, read in order:
+
+1. `.memory/active_object.yaml` — current active object (id, priority, status, scope)
+2. `.memory/CURRENT_STATE.md` — project state, APK, last build, git notes
+3. If active object is PDF viewer stability: **`docs/PDF_VIEWER_HANDOFF.md`** (executable technical handoff)
+
+Do not expand beyond the active object scope. Do not migrate PDFium unless explicitly tasked.

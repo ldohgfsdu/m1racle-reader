@@ -1,0 +1,73 @@
+id: R7_P0C1_4_DECOUPLE_GESTURE_AND_RENDER_PIPELINE
+priority: P0
+status: device_accepted
+goal: >
+  Make gesture input a non-blocking viewport producer and make tile planning/rendering a
+  long-lived independent consumer that continues request, render and swap work while a pointer
+  remains down during drag, pinch, settle or fling.
+production_entry:
+  app/src/main/java/com/markleaf/app/ui/pdf/ContinuousDocumentViewport.kt
+pipeline_entry:
+  app/src/main/java/com/markleaf/app/pdf/PdfTilePipeline.kt
+queue_entry:
+  app/src/main/java/com/markleaf/app/pdf/TileWorkQueue.kt
+consumer_entry:
+  app/src/main/java/com/markleaf/app/ui/pdf/PdfViewerViewModel.kt
+current_sub_object: R7_P0C1_4_DECOUPLE_GESTURE_AND_RENDER_PIPELINE
+local_checkpoint: MARKLEAF_R7_P0C1_4_ACCEPTED_LOCAL_CHECKPOINT
+related_status:
+  p0c1_1_page_entry_visual_validation: pending
+  h1_horizontal_zoom_pan: device_fail_tuning_required
+  p0a_database_device_tests: pending_not_executed
+scope:
+  - lock-free conflated viewport snapshots from pointer/transform updates
+  - one long-lived 16ms render planner actor independent of pointer coroutines
+  - one ViewModel-lifetime serial PdfRenderer actor
+  - active-region hysteresis and in-flight duplicate suppression
+  - current focal/center/visible priority ahead of leading/near/page-ahead work
+  - gesture-phase-independent detail tile swap
+  - 16ms batched overlay-only state publication
+  - lifecycle and gesture-render health logging
+  - JVM and Compose/androidTest decoupling coverage
+out_of_scope:
+  - H1 horizontal resistance
+  - P0B2 persistence
+  - restore state machine
+  - Pointer Epoch behavior changes
+  - Room
+  - UI polish
+  - PDFium migration
+device_acceptance: passed
+device_evidence:
+  serial: db04f865
+  model: 25098PN5AC
+  scale: 2.5
+  pointer_down_planner_ticks: 4
+  pointer_down_requests: 37
+  pointer_down_ready: 37
+  pointer_down_swaps: 37
+  center_request_to_swap_p50_ms: 61
+  center_request_to_swap_p95_ms: 102
+  current_visible_request_to_swap_p50_ms: 55
+  current_visible_request_to_swap_p95_ms: 55
+  coverage: 0.6666667_to_1.0_before_release
+  worker_starts: 1
+  page_ahead: subordinate_to_current_visible
+blocked_by: []
+status_matrix:
+  tile_geometry: visual_sample_pass
+  gesture_render_decoupling: device_pass
+  current_page_tile_latency: device_pass
+  page_ahead_regression: device_pass
+next_step: >
+  The accepted P0C1.4 state is being captured in a local-only checkpoint. P0C1.1 page-entry
+  visual validation, H1 device tuning and P0A database device tests remain separate pending work.
+  Do not expand into them without a new active task.
+artifact:
+  path: dist/markleaf-debug-r7-p0c1-4-decoupled-render.apk
+  bytes: 74788598
+  timestamp: 2026-07-13T11:12:11.8029210+08:00
+  sha256: 432D835147ED64013DB2FF30F16B2F900D73E90011AC9CB777791604F34FE6DF
+handoff_doc: docs/R7_P0C1_4_DECOUPLE_GESTURE_AND_RENDER_PIPELINE_REPORT.md
+state_doc: .memory/CURRENT_STATE.md
+updated: 2026-07-13

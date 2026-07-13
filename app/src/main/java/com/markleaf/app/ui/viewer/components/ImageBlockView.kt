@@ -2,6 +2,7 @@ package com.markleaf.app.ui.viewer.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -32,30 +33,40 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.image.LocalImageLoader
 import com.markleaf.app.image.LocalImageState
 import com.markleaf.app.markdown.MarkdownBlock
-import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
-import com.markleaf.app.ui.viewer.components.ReaderTypography.scaledLineHeight
 import kotlinx.coroutines.CancellationException
+
+private val ImageCorner = 12.dp
+private val FailHeight = 140.dp
+/** Loading / unknown-size placeholder — stable list height before decode. */
+private const val PlaceholderAspect = 16f / 9f
 
 @Composable
 fun ImageBlockView(
     block: MarkdownBlock.Image,
     settings: ReaderSettings,
     isCurrentSearchMatch: Boolean = false,
+    /** Document entry URI (file:// for ZIP packages) for relative image paths. */
+    documentUri: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var state by remember(block.source) {
+    var state by remember(block.source, documentUri) {
         mutableStateOf<LocalImageState>(LocalImageState.Loading)
     }
 
-    LaunchedEffect(block.source) {
+    LaunchedEffect(block.source, documentUri) {
         state = LocalImageState.Loading
         try {
-            state = LocalImageLoader.load(context.applicationContext, block.source)
+            state = LocalImageLoader.load(
+                context.applicationContext,
+                block.source,
+                documentUri = documentUri,
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -63,34 +74,46 @@ fun ImageBlockView(
         }
     }
 
-    val shape = RoundedCornerShape(8.dp)
-    val placeholderBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(ImageCorner)
+
+    val loadingBg = scheme.surfaceContainerHigh
+    val failBg = scheme.surfaceContainerHigh
+    val failBorder = scheme.outlineVariant
+    val failIcon = scheme.onSurfaceVariant
+    val failTitle = scheme.onSurface
+    val failSupport = scheme.onSurfaceVariant
+
+    val captionSize = 14.sp
     val captionStyle = MaterialTheme.typography.bodySmall.copy(
-        fontSize = ReaderTypography.bodyFontSize.scaled(settings.fontScale * 0.85f),
-        lineHeight = ReaderTypography.bodyLineHeight.scaledLineHeight(settings.lineHeightScale),
+        fontSize = captionSize,
+        lineHeight = ReaderTypography.captionLineHeight(settings, captionSize.value),
         fontWeight = FontWeight.Normal,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = scheme.onSurfaceVariant,
     )
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .padding(vertical = 10.dp)
             .searchBlockHighlight(isCurrentSearchMatch),
     ) {
         when (val s = state) {
             LocalImageState.Loading -> {
+                // Fixed aspect placeholder so load completion does not jump list layout
+                // as hard as a fixed 140dp → natural height swap.
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .aspectRatio(PlaceholderAspect)
                         .clip(shape)
-                        .background(placeholderBg),
+                        .background(loadingBg),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(28.dp),
                         strokeWidth = 2.dp,
+                        color = failIcon,
                     )
                 }
             }
@@ -100,7 +123,7 @@ fun ImageBlockView(
                 val ratio = if (bmp.height > 0) {
                     bmp.width.toFloat() / bmp.height.toFloat()
                 } else {
-                    16f / 9f
+                    PlaceholderAspect
                 }
                 Image(
                     bitmap = bmp,
@@ -117,9 +140,10 @@ fun ImageBlockView(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
+                        .height(FailHeight)
                         .clip(shape)
-                        .background(placeholderBg)
+                        .background(failBg)
+                        .border(1.dp, failBorder, shape)
                         .padding(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -131,7 +155,7 @@ fun ImageBlockView(
                                 Icons.Outlined.BrokenImage
                             },
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = failIcon,
                             modifier = Modifier.size(28.dp),
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -139,8 +163,8 @@ fun ImageBlockView(
                             Text(
                                 text = block.alt,
                                 style = captionStyle.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Normal,
+                                    color = failTitle,
                                 ),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -149,7 +173,7 @@ fun ImageBlockView(
                         }
                         Text(
                             text = s.message,
-                            style = captionStyle,
+                            style = captionStyle.copy(color = failSupport),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -159,7 +183,7 @@ fun ImageBlockView(
         }
 
         val caption = buildCaption(block.alt, block.title)
-        if (caption != null) {
+        if (caption != null && state is LocalImageState.Success) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = caption,

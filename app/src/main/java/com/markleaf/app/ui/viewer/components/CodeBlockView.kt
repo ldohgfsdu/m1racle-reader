@@ -4,12 +4,13 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,17 +27,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.markleaf.app.R
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.highlight.CodeHighlighter
 import com.markleaf.app.markdown.MarkdownBlock
 import com.markleaf.app.search.SearchMatch
+
+private object CodeBlockChrome {
+    val corner = 12.dp
+    val headerMinHeight = 36.dp
+    val bodyMinHeightEmpty = 40.dp
+    val bodyPadH = 16.dp
+    val bodyPadV = 14.dp
+    const val MAX_FONT_SP = 15.5f
+}
 
 @Composable
 fun CodeBlockView(
@@ -47,38 +59,49 @@ fun CodeBlockView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val shape = RoundedCornerShape(10.dp)
-    val bg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
-    val toolbarBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
-    val codeSize = ReaderTypography.codeBlockSize(settings.fontScale)
-    val codeLine = ReaderTypography.codeBlockLine(settings.fontScale, settings.lineHeightScale)
+    val shape = RoundedCornerShape(CodeBlockChrome.corner)
+    val scheme = MaterialTheme.colorScheme
+    // Semantic surfaces — same roles light/dark, no isDark branching for chrome.
+    val headerBg = scheme.surfaceContainerHigh
+    val bodyBg = scheme.surfaceContainerLow
+    val border = scheme.outline
+    val labelColor = scheme.onSurfaceVariant
+    val iconColor = scheme.onSurfaceVariant
+    val plainCode = scheme.onSurface
+    // Highlighter still needs luminance; derive from background without scattering UI isDark.
+    val isDarkHighlight = scheme.background.luminance() < 0.5f
+
+    val codeSize = localCodeFontSize(settings.fontScale)
+    // Code keeps independent line height (not body line-height presets).
+    val codeLine = ReaderTypography.codeBlockLine(settings.fontScale)
     val languageLabel = formatLanguageLabel(block.language)
     val copiedMsg = stringResource(R.string.code_copied)
     val failedMsg = stringResource(R.string.code_copy_failed)
-    val isDark = isSystemInDarkTheme()
+    val isEmptyCode = block.code.isEmpty()
 
-    // Syntax highlight only; search uses block-level highlight (no stacked fragment highlight).
-    val codeAnnotated = remember(block.code, block.language, isDark) {
+    val codeAnnotated = remember(block.code, block.language, isDarkHighlight) {
         CodeHighlighter.highlightCode(
             code = block.code.ifEmpty { " " },
             language = block.language,
-            isDarkTheme = isDark,
+            isDarkTheme = isDarkHighlight,
         )
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .padding(vertical = 10.dp)
             .searchBlockHighlight(activeMatch != null)
             .clip(shape)
-            .background(bg),
+            .border(1.dp, border, shape)
+            .background(bodyBg),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(toolbarBg)
-                .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                .background(headerBg)
+                .defaultMinSize(minHeight = CodeBlockChrome.headerMinHeight)
+                .padding(start = 16.dp, end = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -86,8 +109,10 @@ fun CodeBlockView(
                 text = languageLabel,
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    letterSpacing = 0.2.sp,
                 ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = labelColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -105,13 +130,13 @@ fun CodeBlockView(
                         ),
                     )
                 },
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(36.dp),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.ContentCopy,
                     contentDescription = stringResource(R.string.code_copy),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
+                    tint = iconColor,
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
@@ -119,24 +144,40 @@ fun CodeBlockView(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .horizontalScroll(rememberScrollState()),
-        ) {
-            Text(
-                text = codeAnnotated,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = codeSize,
-                    lineHeight = codeLine,
-                    fontWeight = FontWeight.Normal,
+                .background(bodyBg)
+                .defaultMinSize(
+                    minHeight = if (isEmptyCode) CodeBlockChrome.bodyMinHeightEmpty else 0.dp,
+                )
+                .padding(
+                    horizontal = CodeBlockChrome.bodyPadH,
+                    vertical = CodeBlockChrome.bodyPadV,
                 ),
-                // Default color used only for unstyled spans; highlighter sets per-span colors.
-                color = MaterialTheme.colorScheme.onSurface,
-                softWrap = false,
-            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = codeAnnotated,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = codeSize,
+                        lineHeight = codeLine,
+                        fontWeight = FontWeight.Normal,
+                    ),
+                    color = plainCode,
+                    softWrap = false,
+                )
+            }
         }
     }
 }
+
+private fun localCodeFontSize(fontScale: Float) =
+    (ReaderTypography.codeBlockFontSize.value * fontScale)
+        .coerceAtMost(CodeBlockChrome.MAX_FONT_SP)
+        .sp
 
 private fun formatLanguageLabel(language: String?): String {
     val trimmed = language?.trim().orEmpty()

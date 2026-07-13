@@ -49,6 +49,24 @@ sealed class MarkdownBlock {
     data object Divider : MarkdownBlock()
 }
 
+/**
+ * Stable LazyColumn [contentType] tag for block recycling.
+ * Identity uses list index (document blocks are immutable after open).
+ */
+fun MarkdownBlock.blockContentType(): String = when (this) {
+    is MarkdownBlock.Heading -> "heading"
+    is MarkdownBlock.Paragraph -> "paragraph"
+    is MarkdownBlock.Quote -> "quote"
+    is MarkdownBlock.CodeBlock -> "code"
+    is MarkdownBlock.ListBlock -> "list"
+    is MarkdownBlock.Table -> "table"
+    is MarkdownBlock.Image -> "image"
+    MarkdownBlock.Divider -> "divider"
+}
+
+/** Session-stable LazyColumn key: blocks never reorder after parse. */
+fun MarkdownBlock.blockKey(index: Int): String = "${blockContentType()}-$index"
+
 enum class TableAlignment {
     Start,
     Center,

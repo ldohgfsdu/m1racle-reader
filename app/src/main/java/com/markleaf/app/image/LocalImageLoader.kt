@@ -3,11 +3,16 @@ package com.markleaf.app.image
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
+import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.markleaf.app.packageimport.ZipPackageImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.InputStream
 import java.util.Locale
 
@@ -18,23 +23,20 @@ sealed interface LocalImageState {
 }
 
 /**
- * Load local images only:
- * - asset://…  (app packaged assets, for offline demos)
- * - content://… (SAF / system content URIs, needs grant)
- * - file://…    (only if the process can open the stream)
- *
- * Never performs network I/O. Samples large bitmaps to reduce OOM risk.
+ * Load local images only (no network).
+ * Package-relative paths resolve against the Markdown entry file under packages/.
  */
 object LocalImageLoader {
 
+    private const val TAG = "MarkLeafImage"
     private const val MAX_EDGE_PX = 1600
     private const val ASSET_SCHEME = "asset://"
 
-    /**
-     * Classify source and load when allowed. Always returns a terminal Success/Error
-     * (caller may show Loading before invoking).
-     */
-    suspend fun load(context: Context, source: String): LocalImageState =
+    suspend fun load(
+        context: Context,
+        source: String,
+        documentUri: String? = null,
+    ): LocalImageState =
         withContext(Dispatchers.IO) {
             try {
                 val trimmed = source.trim()
@@ -47,7 +49,6 @@ object LocalImageLoader {
                         LocalImageState.Error("网络图片已禁用")
 
                     lower.startsWith(ASSET_SCHEME) -> {
-                        // Case-insensitive scheme; path after "://"
                         val path = trimmed.substringAfter("://", missingDelimiterValue = "")
                         decodeAsset(context, path)
                     }
@@ -55,21 +56,78 @@ object LocalImageLoader {
                     lower.startsWith("content://") ->
                         decodeUri(context, Uri.parse(trimmed))
 
-                    lower.startsWith("file://") ->
-                        decodeUri(context, Uri.parse(trimmed))
+                    lower.startsWith("file://") -> {
+                        val path = filePathFromUri(trimmed)
+                            ?: return@withContext LocalImageState.Error("图片无法读取")
+                        decodeFile(File(path))
+                    }
 
                     lower.startsWith("/") ->
-                        // Absolute path without scheme — no storage permission in MVP.
                         LocalImageState.Error("图片无法读取")
 
-                    else ->
-                        // Relative path like images/demo.png
-                        LocalImageState.Error("相对图片路径暂未支持")
+                    else -> {
+                        val docUri = documentUri?.trim().orEmpty()
+                        if (docUri.isEmpty()) {
+                            Log.d(TAG, "relative image without documentUri src=$trimmed")
+                            return@withContext LocalImageState.Error("相对图片路径暂未支持")
+                        }
+                        val entryPath = filePathFromUri(docUri)
+                        if (entryPath == null) {
+                            Log.d(TAG, "documentUri not file://: $docUri")
+                            return@withContext LocalImageState.Error("相对图片路径暂未支持")
+                        }
+                        val entryFile = File(entryPath)
+                        val packageRoot = ZipPackageImporter.findPackageRoot(entryFile)
+                        val resolved = ZipPackageImporter.resolvePackageImage(
+                            entryFile = entryFile,
+                            relativePath = trimmed,
+                            packageRoot = packageRoot,
+                        )
+                        Log.d(
+                            TAG,
+                            "entry=${entryFile.path} root=${packageRoot.path} " +
+                                "src=$trimmed target=${resolved?.path} " +
+                                "exists=${resolved?.isFile} readable=${resolved?.canRead()}",
+                        )
+                        if (resolved == null) {
+                            return@withContext LocalImageState.Error("图片路径越界或无效")
+                        }
+                        decodeFile(resolved)
+                    }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.d(TAG, "decode failed: ${e.javaClass.simpleName}: ${e.message}")
                 LocalImageState.Error("图片无法读取")
             }
         }
+
+    /**
+     * Resolve relative image against document entry URI (file://).
+     */
+    fun resolveRelativeImage(documentUri: String, relativePath: String): File? {
+        val path = filePathFromUri(documentUri) ?: return null
+        val entry = File(path)
+        val root = ZipPackageImporter.findPackageRoot(entry)
+        return ZipPackageImporter.resolvePackageImage(entry, relativePath, root)
+    }
+
+    fun filePathFromUri(documentUri: String): String? {
+        val t = documentUri.trim()
+        if (!t.lowercase(Locale.ROOT).startsWith("file:")) return null
+        var p = when {
+            t.startsWith("file://") -> t.removePrefix("file://")
+            t.startsWith("file:") -> t.removePrefix("file:")
+            else -> return null
+        }
+        // file:///abs → /abs ; keep leading slash
+        try {
+            p = java.net.URLDecoder.decode(p, Charsets.UTF_8.name())
+        } catch (_: Exception) {
+            p = p.replace("%20", " ")
+        }
+        if (p.isEmpty()) return null
+        return p
+    }
 
     private fun decodeAsset(context: Context, assetPath: String): LocalImageState {
         val path = assetPath.trim().trimStart('/')
@@ -77,7 +135,6 @@ object LocalImageLoader {
             return LocalImageState.Error("图片无法读取")
         }
         return try {
-            // Bounds pass
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.assets.open(path).use { stream ->
                 BitmapFactory.decodeStream(stream, null, bounds)
@@ -94,20 +151,114 @@ object LocalImageLoader {
                 BitmapFactory.decodeStream(stream, null, opts)
             } ?: return LocalImageState.Error("图片无法读取")
             LocalImageState.Success(bitmap.asImageBitmap())
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.d(TAG, "asset decode: ${e.javaClass.simpleName}")
             LocalImageState.Error("图片无法读取")
         }
     }
 
     private fun decodeUri(context: Context, uri: Uri): LocalImageState {
         return try {
+            if (uri.scheme?.lowercase(Locale.ROOT) == "file") {
+                val path = uri.path ?: return LocalImageState.Error("图片无法读取")
+                return decodeFile(File(path))
+            }
             decodeFromStreamFactory {
                 context.contentResolver.openInputStream(uri)
             }
-        } catch (_: SecurityException) {
+        } catch (e: Exception) {
+            Log.d(TAG, "uri decode: ${e.javaClass.simpleName}")
             LocalImageState.Error("图片无法读取")
-        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * Decode App-private real files via absolute path (not InputStream adapters).
+     * content:// still uses [decodeFromStreamFactory].
+     */
+    private fun decodeFile(file: File): LocalImageState {
+        val canonical = try {
+            file.canonicalFile
+        } catch (e: Exception) {
+            Log.d(TAG, "canonical failed: ${e.javaClass.simpleName}")
+            return LocalImageState.Error("图片无法读取")
+        }
+
+        Log.d(
+            TAG,
+            "decode file path=${canonical.absolutePath} " +
+                "exists=${canonical.exists()} " +
+                "isFile=${canonical.isFile} " +
+                "canRead=${canonical.canRead()} " +
+                "length=${canonical.length()}",
+        )
+
+        if (!canonical.isFile || !canonical.canRead() || canonical.length() <= 0L) {
+            return LocalImageState.Error("图片无法读取")
+        }
+
+        return try {
+            val bounds = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeFile(canonical.absolutePath, bounds)
+
+            Log.d(
+                TAG,
+                "bounds width=${bounds.outWidth} " +
+                    "height=${bounds.outHeight} mime=${bounds.outMimeType}",
+            )
+
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                return LocalImageState.Error("图片无法读取")
+            }
+
+            val sample = calculateInSampleSize(
+                bounds.outWidth,
+                bounds.outHeight,
+                MAX_EDGE_PX,
+            )
+
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+
+            val bitmap = BitmapFactory.decodeFile(
+                canonical.absolutePath,
+                options,
+            ) ?: decodeWithImageDecoder(canonical)
+
+            if (bitmap == null || bitmap.width <= 0 || bitmap.height <= 0) {
+                bitmap?.recycle()
+                LocalImageState.Error("图片无法读取")
+            } else {
+                LocalImageState.Success(bitmap.asImageBitmap())
+            }
+        } catch (e: Exception) {
+            Log.d(
+                TAG,
+                "file decode failed: ${e.javaClass.simpleName}: ${e.message}",
+            )
             LocalImageState.Error("图片无法读取")
+        }
+    }
+
+    /** Android 9+ fallback when BitmapFactory.decodeFile returns null. */
+    private fun decodeWithImageDecoder(file: File): Bitmap? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+
+        return try {
+            val source = ImageDecoder.createSource(file)
+            ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } catch (e: Exception) {
+            Log.d(
+                TAG,
+                "ImageDecoder failed: ${e.javaClass.simpleName}: ${e.message}",
+            )
+            null
         }
     }
 
@@ -130,6 +281,10 @@ object LocalImageLoader {
             BitmapFactory.decodeStream(stream, null, opts)
         } ?: return LocalImageState.Error("图片无法读取")
 
+        if (bitmap.width <= 0 || bitmap.height <= 0) {
+            bitmap.recycle()
+            return LocalImageState.Error("图片无法读取")
+        }
         return LocalImageState.Success(bitmap.asImageBitmap())
     }
 

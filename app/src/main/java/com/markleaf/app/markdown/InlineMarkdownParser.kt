@@ -17,16 +17,19 @@ import androidx.compose.ui.unit.sp
  * Colors should come from the current Material theme at the call site.
  */
 data class InlineMarkdownStyles(
-    val bold: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold),
+    // Emphasized spans only; surrounding body stays Normal.
+    val bold: SpanStyle = SpanStyle(fontWeight = FontWeight.SemiBold),
     val italic: SpanStyle = SpanStyle(fontStyle = FontStyle.Italic),
     val code: SpanStyle = SpanStyle(
         fontFamily = FontFamily.Monospace,
         fontSize = 14.5.sp,
+        fontWeight = FontWeight.Normal,
         background = Color(0x1A2F5D50),
     ),
     val link: SpanStyle = SpanStyle(
         color = Color(0xFF2F5D50),
         textDecoration = TextDecoration.Underline,
+        fontWeight = FontWeight.Normal,
     ),
 ) {
     companion object {
@@ -34,17 +37,24 @@ data class InlineMarkdownStyles(
             primary: Color,
             codeBackground: Color,
             codeFontSize: TextUnit = 14.5.sp,
+            /** When set, **strong** uses this color (e.g. near-black in quotes). */
+            boldColor: Color? = null,
         ): InlineMarkdownStyles = InlineMarkdownStyles(
+            bold = if (boldColor != null) {
+                SpanStyle(fontWeight = FontWeight.SemiBold, color = boldColor)
+            } else {
+                SpanStyle(fontWeight = FontWeight.SemiBold)
+            },
             code = SpanStyle(
                 fontFamily = FontFamily.Monospace,
                 fontSize = codeFontSize,
                 background = codeBackground,
-                // Keep chip flat so it does not inflate body line height.
                 fontWeight = FontWeight.Normal,
             ),
             link = SpanStyle(
                 color = primary,
                 textDecoration = TextDecoration.Underline,
+                fontWeight = FontWeight.Normal,
             ),
         )
     }
@@ -70,6 +80,156 @@ object InlineMarkdownParser {
             }
         } catch (_: Exception) {
             AnnotatedString(text)
+        }
+    }
+
+    /**
+     * Convert inline Markdown to plain text for list titles etc.
+     * Uses the same structure walk as [parse] (not a single mega-regex).
+     * - strong/em: inner text only
+     * - link: label only
+     * - code: code text only
+     * - image: non-empty alt only
+     * - soft/hard breaks → single space
+     */
+    fun toPlainText(text: String): String {
+        if (text.isEmpty()) return ""
+        return try {
+            buildString { appendPlain(text, 0, text.length) }
+        } catch (_: Exception) {
+            text
+        }
+    }
+
+    private fun StringBuilder.appendPlain(source: String, start: Int, end: Int) {
+        var i = start
+        while (i < end) {
+            when {
+                // Image: ![alt](url) — alt only if non-empty
+                source[i] == '!' && i + 1 < end && source[i + 1] == '[' -> {
+                    val link = tryParseLink(source, i + 1, end)
+                    if (link == null) {
+                        append('!')
+                        i++
+                    } else {
+                        val alt = source.substring(link.titleStart, link.titleEnd)
+                        val plainAlt = toPlainText(alt).trim()
+                        if (plainAlt.isNotEmpty()) append(plainAlt)
+                        i = link.endExclusive
+                    }
+                }
+
+                source[i] == '`' -> {
+                    val close = source.indexOf('`', i + 1)
+                    if (close == -1 || close >= end) {
+                        append('`')
+                        i++
+                    } else {
+                        append(source.substring(i + 1, close))
+                        i = close + 1
+                    }
+                }
+
+                source[i] == '[' -> {
+                    val link = tryParseLink(source, i, end)
+                    if (link == null) {
+                        append('[')
+                        i++
+                    } else {
+                        appendPlain(source, link.titleStart, link.titleEnd)
+                        i = link.endExclusive
+                    }
+                }
+
+                matchAt(source, i, end, "**") -> {
+                    val close = indexOfToken(source, i + 2, end, "**")
+                    if (close == -1) {
+                        append("**")
+                        i += 2
+                    } else {
+                        appendPlain(source, i + 2, close)
+                        i = close + 2
+                    }
+                }
+                matchAt(source, i, end, "__") -> {
+                    val close = indexOfToken(source, i + 2, end, "__")
+                    if (close == -1) {
+                        append("__")
+                        i += 2
+                    } else {
+                        appendPlain(source, i + 2, close)
+                        i = close + 2
+                    }
+                }
+
+                source[i] == '*' -> {
+                    val close = indexOfSingleDelimiter(source, i + 1, end, '*')
+                    if (close == -1) {
+                        append('*')
+                        i++
+                    } else {
+                        appendPlain(source, i + 1, close)
+                        i = close + 1
+                    }
+                }
+                source[i] == '_' -> {
+                    val close = indexOfSingleDelimiter(source, i + 1, end, '_')
+                    if (close == -1) {
+                        append('_')
+                        i++
+                    } else {
+                        appendPlain(source, i + 1, close)
+                        i = close + 1
+                    }
+                }
+
+                // Soft/hard break → space
+                source[i] == '\n' || source[i] == '\r' -> {
+                    append(' ')
+                    i++
+                }
+
+                // Escape: \X → X
+                source[i] == '\\' && i + 1 < end -> {
+                    append(source[i + 1])
+                    i += 2
+                }
+
+                // Skip crude HTML tags
+                source[i] == '<' -> {
+                    val close = source.indexOf('>', i + 1)
+                    if (close == -1 || close >= end) {
+                        append('<')
+                        i++
+                    } else {
+                        i = close + 1
+                    }
+                }
+
+                // Basic HTML entities
+                source[i] == '&' -> {
+                    val semi = source.indexOf(';', i + 1)
+                    if (semi != -1 && semi < end && semi - i < 10) {
+                        val ent = source.substring(i + 1, semi)
+                        val decoded = decodeHtmlEntity(ent)
+                        if (decoded != null) {
+                            append(decoded)
+                            i = semi + 1
+                        } else {
+                            append('&')
+                            i++
+                        }
+                    } else {
+                        append('&')
+                        i++
+                    }
+                }
+
+                else -> {
+                    append(source[i])
+                    i++
+                }
+            }
         }
     }
 
@@ -169,6 +329,20 @@ object InlineMarkdownParser {
                 }
             }
         }
+    }
+
+    private fun decodeHtmlEntity(ent: String): String? = when {
+        ent == "amp" -> "&"
+        ent == "lt" -> "<"
+        ent == "gt" -> ">"
+        ent == "quot" -> "\""
+        ent == "apos" -> "'"
+        ent == "nbsp" -> " "
+        ent.startsWith("#x") || ent.startsWith("#X") ->
+            ent.drop(2).toIntOrNull(16)?.let { String(Character.toChars(it)) }
+        ent.startsWith("#") ->
+            ent.drop(1).toIntOrNull()?.let { String(Character.toChars(it)) }
+        else -> null
     }
 
     private data class ParsedLink(

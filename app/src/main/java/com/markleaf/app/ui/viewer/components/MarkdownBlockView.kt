@@ -18,6 +18,7 @@ fun MarkdownBlockView(
     isSearchActive: Boolean = false,
     activeMatch: SearchMatch? = null,
     onCopyMessage: (String) -> Unit = {},
+    documentUri: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val highlight = isSearchActive && activeMatch != null
@@ -63,14 +64,16 @@ fun MarkdownBlockView(
             block = block,
             settings = settings,
             isCurrentSearchMatch = highlight,
+            documentUri = documentUri,
             modifier = modifier,
         )
         MarkdownBlock.Divider -> {
+            // 1dp solid hairline, content width, quiet vertical rhythm.
             HorizontalDivider(
                 modifier = modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                    .padding(vertical = 24.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
                 thickness = 1.dp,
             )
         }

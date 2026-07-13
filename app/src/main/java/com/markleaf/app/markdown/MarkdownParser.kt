@@ -25,7 +25,7 @@ object MarkdownParser {
     )
 
     fun parse(source: String): ParseResult {
-        val normalized = source
+        val normalized = stripHtmlComments(source)
             .replace("\r\n", "\n")
             .replace('\r', '\n')
         val lines = normalized.split('\n')
@@ -349,6 +349,18 @@ object MarkdownParser {
         if (alignments.size >= count) return alignments.take(count)
         return alignments + List(count - alignments.size) { TableAlignment.Start }
     }
+
+    /**
+     * Remove HTML comments so they never render as paragraphs.
+     * Non-greedy; supports multi-line comments. Code fences still parse after strip
+     * (comments inside fences are rare in packages; accepted MVP tradeoff).
+     */
+    fun stripHtmlComments(source: String): String {
+        if (!source.contains("<!--")) return source
+        return HTML_COMMENT_REGEX.replace(source, "")
+    }
+
+    private val HTML_COMMENT_REGEX = Regex("""<!--[\s\S]*?-->""")
 
     private fun isBlockStart(raw: String, trimmed: String): Boolean {
         if (fenceOpenRegex.matchEntire(trimmed) != null) return true

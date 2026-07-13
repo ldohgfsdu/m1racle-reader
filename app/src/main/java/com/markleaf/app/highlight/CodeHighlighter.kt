@@ -8,8 +8,25 @@ import androidx.compose.ui.text.withStyle
 /**
  * Lightweight syntax highlighter → [AnnotatedString].
  * Regex / scanner based; never throws to callers.
+ *
+ * Results are cached by (code, language, theme) so LazyColumn recycle / re-entry
+ * does not re-scan the same fence on the main thread.
  */
 object CodeHighlighter {
+
+    private const val CACHE_MAX = 48
+
+    private data class CacheKey(
+        val code: String,
+        val language: String?,
+        val isDarkTheme: Boolean,
+    )
+
+    /** LRU cache — access order; eldest evicted above [CACHE_MAX]. */
+    private val cache = object : LinkedHashMap<CacheKey, AnnotatedString>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, AnnotatedString>?): Boolean =
+            size > CACHE_MAX
+    }
 
     fun highlightCode(
         code: String,
@@ -17,7 +34,11 @@ object CodeHighlighter {
         isDarkTheme: Boolean,
     ): AnnotatedString {
         if (code.isEmpty()) return AnnotatedString("")
-        return try {
+        val key = CacheKey(code, language, isDarkTheme)
+        synchronized(cache) {
+            cache[key]?.let { return it }
+        }
+        val result = try {
             val lang = CodeLanguage.from(language)
             val theme = HighlightTheme.forTheme(isDarkTheme)
             when (lang) {
@@ -35,6 +56,10 @@ object CodeHighlighter {
         } catch (_: Exception) {
             AnnotatedString(code)
         }
+        synchronized(cache) {
+            cache[key] = result
+        }
+        return result
     }
 
     private fun keywordsFor(lang: CodeLanguage): Set<String> = when (lang) {

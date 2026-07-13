@@ -8,13 +8,18 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,20 +32,42 @@ import com.markleaf.app.markdown.TocItem
 fun TocDrawerContent(
     documentName: String,
     toc: List<TocItem>,
-    activeAnchor: String?,
+    /**
+     * When non-null with [listHeaderCount], active row is derived here so the
+     * reader body never subscribes to scroll index for TOC highlighting.
+     */
+    listState: LazyListState? = null,
+    listHeaderCount: Int = 0,
+    /** Fallback when [listState] is null (tests / static preview). */
+    activeAnchor: String? = null,
     onItemClick: (TocItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val derivedActiveAnchor by remember(toc, listHeaderCount, listState) {
+        derivedStateOf {
+            val state = listState
+            if (state == null || toc.isEmpty()) {
+                activeAnchor
+            } else {
+                val contentIndex =
+                    (state.firstVisibleItemIndex - listHeaderCount).coerceAtLeast(0)
+                (toc.lastOrNull { it.blockIndex <= contentIndex } ?: toc.first()).anchor
+            }
+        }
+    }
+    val resolvedActive = if (listState != null) derivedActiveAnchor else activeAnchor
+
     Column(
         modifier = modifier
             .fillMaxHeight()
             .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(vertical = 4.dp),
     ) {
         Text(
             text = stringResource(R.string.toc_title),
             style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
                 fontSize = 16.sp,
             ),
             color = MaterialTheme.colorScheme.onSurface,
@@ -77,10 +104,11 @@ fun TocDrawerContent(
                 items(
                     items = toc,
                     key = { "${it.anchor}-${it.blockIndex}" },
+                    contentType = { "toc" },
                 ) { item ->
                     TocRow(
                         item = item,
-                        selected = item.anchor == activeAnchor,
+                        selected = item.anchor == resolvedActive,
                         onClick = { onItemClick(item) },
                     )
                 }
@@ -96,15 +124,13 @@ private fun TocRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Indent: H2 ~15dp, H3 ~30dp from base.
     val startPadding = when (item.level) {
         1 -> 8.dp
-        2 -> 22.dp // 8 + 14
-        else -> 38.dp // 8 + 30
+        2 -> 22.dp
+        else -> 38.dp
     }
     val weight = when (item.level) {
-        1 -> FontWeight.SemiBold
-        2 -> FontWeight.Medium
+        1 -> FontWeight.Medium
         else -> FontWeight.Normal
     }
     val fontSize = when (item.level) {
@@ -112,16 +138,12 @@ private fun TocRow(
         2 -> ReaderTypography.tocH2Size
         else -> ReaderTypography.tocH3Size
     }
-    val shape = RoundedCornerShape(4.dp)
+    val shape = RoundedCornerShape(8.dp)
+    val scheme = MaterialTheme.colorScheme
     val bg = if (selected) {
-        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f)
+        scheme.surfaceContainerHighest
     } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val textColor = if (selected) {
-        MaterialTheme.colorScheme.onSecondaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurface
+        Color.Transparent
     }
 
     Text(
@@ -131,7 +153,7 @@ private fun TocRow(
             fontSize = fontSize,
             lineHeight = (fontSize.value * 1.3f).sp,
         ),
-        color = textColor,
+        color = scheme.onSurface,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier

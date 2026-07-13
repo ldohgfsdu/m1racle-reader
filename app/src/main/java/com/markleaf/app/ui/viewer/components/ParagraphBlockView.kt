@@ -5,12 +5,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
 import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
-import com.markleaf.app.ui.viewer.components.ReaderTypography.scaledLineHeight
 
 @Composable
 fun ParagraphBlockView(
@@ -19,18 +20,21 @@ fun ParagraphBlockView(
     isCurrentSearchMatch: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    // Dynamic lineHeight from settings — not a fixed sp constant.
+    val bodyStyle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = ReaderTypography.bodyFontSize.scaled(settings.fontScale),
+        lineHeight = ReaderTypography.bodyLineHeight(settings),
+        color = MaterialTheme.colorScheme.onBackground,
+    )
     InlineMarkdownText(
         text = block.text,
         settings = settings,
-        style = MaterialTheme.typography.bodyLarge.copy(
-            fontSize = ReaderTypography.bodyFontSize.scaled(settings.fontScale),
-            lineHeight = ReaderTypography.bodyLineHeight.scaledLineHeight(settings.lineHeightScale),
-            fontWeight = FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
-        ),
+        style = bodyStyle,
         modifier = modifier
             .fillMaxWidth()
             .searchBlockHighlight(isCurrentSearchMatch)
-            .padding(top = 2.dp, bottom = 12.dp),
+            .padding(top = 2.dp, bottom = 14.dp),
     )
 }

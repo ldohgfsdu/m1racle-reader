@@ -17,26 +17,28 @@ data class HighlightTheme(
     val plain: Color,
 ) {
     companion object {
+        /** GPT-style light code well — low-sat tokens on pale gray. */
         val Light = HighlightTheme(
-            keyword = Color(0xFF0550AE),
-            string = Color(0xFF0A3069),
-            number = Color(0xFF0550AE),
-            comment = Color(0xFF6E7781),
-            typeOrTag = Color(0xFF116329),
-            attribute = Color(0xFF953800),
-            punctuation = Color(0xFF24292F),
-            plain = Color(0xFF24292F),
+            keyword = Color(0xFF1677A3),
+            string = Color(0xFF275D8C),
+            number = Color(0xFFA13D63),
+            comment = Color(0xFF8A8A8A),
+            typeOrTag = Color(0xFFB5485D),
+            attribute = Color(0xFFB5485D),
+            punctuation = Color(0xFF666666),
+            plain = Color(0xFF1F1F1F),
         )
 
+        /** Soft / low-sat colors for dark code wells. */
         val Dark = HighlightTheme(
-            keyword = Color(0xFF79C0FF),
-            string = Color(0xFFA5D6FF),
-            number = Color(0xFF79C0FF),
+            keyword = Color(0xFF8AB4E8),
+            string = Color(0xFF9ECBFF),
+            number = Color(0xFF8AB4E8),
             comment = Color(0xFF8B949E),
-            typeOrTag = Color(0xFF7EE787),
-            attribute = Color(0xFFFFA657),
-            punctuation = Color(0xFFC9D1D9),
-            plain = Color(0xFFC9D1D9),
+            typeOrTag = Color(0xFF8FDB9A),
+            attribute = Color(0xFFE0B07A),
+            punctuation = Color(0xFFD4D4D4),
+            plain = Color(0xFFD4D4D4),
         )
 
         fun forTheme(isDark: Boolean): HighlightTheme =

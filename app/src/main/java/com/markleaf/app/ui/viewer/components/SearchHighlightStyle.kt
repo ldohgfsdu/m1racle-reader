@@ -10,11 +10,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** Soft block-level highlight for the current search match (P0). */
 @Composable
 fun Modifier.searchBlockHighlight(active: Boolean): Modifier {
     if (!active) return this
-    val color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f)
+    // tertiaryContainer is warm yellow (light) / muted gold well (dark) from fixed scheme.
+    val color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.72f)
     return this
         .clip(RoundedCornerShape(6.dp))
         .background(color)
@@ -22,5 +22,6 @@ fun Modifier.searchBlockHighlight(active: Boolean): Modifier {
 }
 
 @Composable
-fun searchFragmentHighlightColor(): Color =
-    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)
+fun searchFragmentHighlightColor(): Color {
+    return MaterialTheme.colorScheme.tertiaryContainer
+}

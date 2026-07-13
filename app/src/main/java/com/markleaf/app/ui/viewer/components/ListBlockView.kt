@@ -10,13 +10,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
 import com.markleaf.app.search.SearchMatch
 import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
-import com.markleaf.app.ui.viewer.components.ReaderTypography.scaledLineHeight
 
 @Composable
 fun ListBlockView(
@@ -25,11 +26,12 @@ fun ListBlockView(
     activeMatch: SearchMatch? = null,
     modifier: Modifier = Modifier,
 ) {
-    val itemStyle = MaterialTheme.typography.bodyLarge.copy(
-        fontSize = ReaderTypography.bodyFontSize.scaled(settings.fontScale),
-        lineHeight = ReaderTypography.bodyLineHeight.scaledLineHeight(settings.lineHeightScale),
+    val itemStyle = TextStyle(
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        color = MaterialTheme.colorScheme.onSurface,
+        fontSize = ReaderTypography.bodyFontSize.scaled(settings.fontScale),
+        lineHeight = ReaderTypography.bodyLineHeight(settings),
+        color = MaterialTheme.colorScheme.onBackground,
     )
     Column(
         modifier = modifier

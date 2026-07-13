@@ -6,36 +6,30 @@ import androidx.compose.ui.unit.sp
 import com.markleaf.app.data.settings.ReaderSettings
 
 /**
- * Default Chinese long-form reading density.
- * Prefer comfortable density over display-scale marketing typography.
- * User scales apply via [scaled] / [scaledLineHeight].
+ * GPT-style long-form reading density.
+ *
+ * Font size uses [ReaderSettings.fontScale].
+ * Line height uses [ReaderSettings.lineHeightScale] as **lh / fontSize ratio**
+ * (Compact 1.35 · Default 1.55 · Relaxed 1.75), not a mild multiplier of a fixed sp.
  */
 object ReaderTypography {
-    /** Body: normal reading weight, not heading-like. */
-    val bodyFontSize = 16.sp
-    val bodyLineHeight = 25.sp
+    /** Body ~16.5sp Regular */
+    val bodyFontSize = 16.5.sp
     val bodyWeight = FontWeight.Normal
-    val bodyParagraphBottom = 12 // dp applied at call site
+    val bodyParagraphBottom = 14 // dp applied at call site (paragraph gap, not line height)
 
-    val quoteFontSize = 15.sp
-    val quoteLineHeight = 24.sp
+    val quoteFontSize = 16.5.sp // match body metrics
 
-    /** Slightly under body so chips stay flat in the line. */
     val inlineCodeFontSize = 14.5.sp
-    val codeBlockFontSize = 13.sp
+    val codeBlockFontSize = 13.5.sp
     val codeBlockLineHeight = 20.sp
-    const val CODE_BLOCK_MAX_SP = 16f
+    const val CODE_BLOCK_MAX_SP = 15.5f
 
     val h1Size = 26.sp
-    val h1LineHeight = 34.sp
     val h2Size = 22.sp
-    val h2LineHeight = 30.sp
     val h3Size = 19.sp
-    val h3LineHeight = 26.sp
     val h4Size = 17.sp
-    val h4LineHeight = 24.sp
     val h56Size = 16.sp
-    val h56LineHeight = 22.sp
 
     val tocH1Size = 15.sp
     val tocH2Size = 14.sp
@@ -43,22 +37,52 @@ object ReaderTypography {
 
     val topBarTitleSize = 16.sp
 
+    /** Tablet reading column max width. */
+    val contentMaxWidthDp = 760
+
     fun TextUnit.scaled(fontScale: Float): TextUnit =
         (value * fontScale).sp
 
-    fun TextUnit.scaledLineHeight(lineHeightScale: Float): TextUnit =
-        (value * lineHeightScale).sp
+    /**
+     * Body / list / quote / table cell line height from settings.
+     * Example at fontScale=1: 16.5×1.35≈22.3sp · 16.5×1.55≈25.6sp · 16.5×1.75≈28.9sp
+     * (clear step between presets; ~6.6sp Compact→Relaxed).
+     */
+    fun bodyLineHeight(settings: ReaderSettings): TextUnit {
+        val size = bodyFontSize.scaled(settings.fontScale).value
+        val ratio = ReaderSettings.clampLineHeightScale(settings.lineHeightScale)
+        return (size * ratio).sp
+    }
+
+    fun quoteLineHeight(settings: ReaderSettings): TextUnit {
+        val size = quoteFontSize.scaled(settings.fontScale).value
+        val ratio = ReaderSettings.clampLineHeightScale(settings.lineHeightScale)
+        return (size * ratio).sp
+    }
+
+    /** Caption / secondary body under images. */
+    fun captionLineHeight(settings: ReaderSettings, fontSizeSp: Float): TextUnit {
+        val ratio = ReaderSettings.clampLineHeightScale(settings.lineHeightScale)
+        return (fontSizeSp * ratio).sp
+    }
+
+    /**
+     * Heading line height: same preset ratio as body (must change with line-height chips).
+     */
+    fun headingLineHeight(fontSize: TextUnit, settings: ReaderSettings): TextUnit {
+        val ratio = ReaderSettings.clampLineHeightScale(settings.lineHeightScale)
+        return (fontSize.value * ratio).sp
+    }
 
     fun codeBlockSize(fontScale: Float): TextUnit {
         val raw = codeBlockFontSize.value * fontScale
         return raw.coerceAtMost(CODE_BLOCK_MAX_SP).sp
     }
 
-    fun codeBlockLine(fontScale: Float, lineHeightScale: Float): TextUnit {
+    /** Code blocks keep independent fixed ratio (not body line-height settings). */
+    fun codeBlockLine(fontScale: Float): TextUnit {
         val size = codeBlockSize(fontScale).value
         val ratio = codeBlockLineHeight.value / codeBlockFontSize.value
-        return (size * ratio * lineHeightScale).sp
+        return (size * ratio).sp
     }
-
-    fun apply(settings: ReaderSettings) = settings
 }

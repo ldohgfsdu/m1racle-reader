@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
@@ -22,44 +23,43 @@ fun HeadingBlockView(
     modifier: Modifier = Modifier,
 ) {
     val fs = settings.fontScale
-    val style = when (block.level) {
-        1 -> MaterialTheme.typography.headlineMedium.copy(
-            fontWeight = FontWeight.Bold,
-            fontSize = ReaderTypography.h1Size.scaled(fs),
-            lineHeight = ReaderTypography.h1LineHeight.scaled(fs),
-        )
-        2 -> MaterialTheme.typography.headlineSmall.copy(
-            fontWeight = FontWeight.Bold,
-            fontSize = ReaderTypography.h2Size.scaled(fs),
-            lineHeight = ReaderTypography.h2LineHeight.scaled(fs),
-        )
-        3 -> MaterialTheme.typography.titleLarge.copy(
-            fontWeight = FontWeight.SemiBold,
-            fontSize = ReaderTypography.h3Size.scaled(fs),
-            lineHeight = ReaderTypography.h3LineHeight.scaled(fs),
-        )
-        4 -> MaterialTheme.typography.titleMedium.copy(
-            fontWeight = FontWeight.SemiBold,
-            fontSize = ReaderTypography.h4Size.scaled(fs),
-            lineHeight = ReaderTypography.h4LineHeight.scaled(fs),
-        )
-        else -> MaterialTheme.typography.titleSmall.copy(
-            fontWeight = FontWeight.Medium,
-            fontSize = ReaderTypography.h56Size.scaled(fs),
-            lineHeight = ReaderTypography.h56LineHeight.scaled(fs),
-        )
+    // SemiBold only for H1–H3; lineHeight follows line-height preset ratio.
+    val fontSize = when (block.level) {
+        1 -> ReaderTypography.h1Size.scaled(fs)
+        2 -> ReaderTypography.h2Size.scaled(fs)
+        3 -> ReaderTypography.h3Size.scaled(fs)
+        4 -> ReaderTypography.h4Size.scaled(fs)
+        else -> ReaderTypography.h56Size.scaled(fs)
     }
+    val lineHeight = ReaderTypography.headingLineHeight(fontSize, settings)
+    val weight = when (block.level) {
+        in 1..3 -> FontWeight.SemiBold
+        else -> FontWeight.Normal
+    }
+    val base = when (block.level) {
+        1 -> MaterialTheme.typography.headlineMedium
+        2 -> MaterialTheme.typography.headlineSmall
+        3 -> MaterialTheme.typography.titleLarge
+        4 -> MaterialTheme.typography.titleMedium
+        else -> MaterialTheme.typography.titleSmall
+    }
+    val style = base.copy(
+        fontWeight = weight,
+        fontSize = fontSize,
+        lineHeight = lineHeight,
+        textAlign = TextAlign.Start,
+    )
 
     val top = when (block.level) {
-        1 -> 20.dp
-        2 -> 18.dp
-        3 -> 14.dp
-        else -> 12.dp
+        1 -> 28.dp
+        2 -> 24.dp
+        3 -> 20.dp
+        else -> 16.dp
     }
     val bottom = when (block.level) {
-        1 -> 12.dp
-        2 -> 10.dp
-        3 -> 8.dp
+        1 -> 10.dp
+        2 -> 8.dp
+        3 -> 6.dp
         else -> 6.dp
     }
 
@@ -77,6 +77,7 @@ fun HeadingBlockView(
     Text(
         text = annotated ?: androidx.compose.ui.text.AnnotatedString(block.text.ifBlank { " " }),
         style = style,
+        textAlign = TextAlign.Start,
         color = if (block.level >= 5) {
             MaterialTheme.colorScheme.onSurfaceVariant
         } else {

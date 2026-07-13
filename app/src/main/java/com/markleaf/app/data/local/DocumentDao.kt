@@ -49,6 +49,56 @@ interface DocumentDao {
         readingProgress: Float,
     )
 
+    /**
+     * PDF progress: page index in [lastScrollIndex], total pages in [pageCount],
+     * fractional progress in [readingProgress].
+     */
+    @Query(
+        """
+        UPDATE documents
+        SET lastScrollIndex = :pageIndex,
+            lastScrollOffset = :intraPageFractionEncoded,
+            readingProgress = :readingProgress,
+            pageCount = :pageCount
+        WHERE id = :id
+        """,
+    )
+    suspend fun updatePdfReadingPosition(
+        id: String,
+        pageIndex: Int,
+        intraPageFractionEncoded: Int,
+        pageCount: Int,
+        readingProgress: Float,
+    )
+
+    @Query(
+        """
+        UPDATE documents SET
+            pdfViewportSessionVersion = :version,
+            pdfViewportReadingMode = :readingMode,
+            pdfViewportPageIndex = :pageIndex,
+            pdfPageAnchorXFraction = :pageAnchorXFraction,
+            pdfPageAnchorYFraction = :pageAnchorYFraction,
+            pdfViewportAnchorXFraction = :viewportAnchorXFraction,
+            pdfViewportAnchorYFraction = :viewportAnchorYFraction,
+            pdfViewportScale = :scale,
+            pdfViewportGeneration = :generation
+        WHERE id = :id
+        """,
+    )
+    suspend fun updatePdfViewportSession(
+        id: String,
+        version: Int,
+        readingMode: String,
+        pageIndex: Int,
+        pageAnchorXFraction: Float,
+        pageAnchorYFraction: Float,
+        viewportAnchorXFraction: Float,
+        viewportAnchorYFraction: Float,
+        scale: Float,
+        generation: Long,
+    )
+
     @Query("DELETE FROM documents")
     suspend fun deleteAll()
 }
