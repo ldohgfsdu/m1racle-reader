@@ -25,6 +25,7 @@ fun ListBlockView(
     settings: ReaderSettings,
     activeMatch: SearchMatch? = null,
     modifier: Modifier = Modifier,
+    onLinkClick: ((String) -> Unit)? = null,
 ) {
     val itemStyle = TextStyle(
         fontFamily = FontFamily.Default,
@@ -61,6 +62,7 @@ fun ListBlockView(
                     settings = settings,
                     style = itemStyle,
                     modifier = Modifier.weight(1f),
+                    onLinkClick = onLinkClick,
                 )
             }
         }

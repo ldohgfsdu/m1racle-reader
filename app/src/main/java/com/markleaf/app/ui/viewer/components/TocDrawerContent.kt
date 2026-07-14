@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -145,9 +147,10 @@ private fun TocRow(
     } else {
         Color.Transparent
     }
+    val resolvedTitle = item.title.ifBlank { stringResource(R.string.toc_untitled) }
 
     Text(
-        text = item.title.ifBlank { stringResource(R.string.toc_untitled) },
+        text = resolvedTitle,
         style = MaterialTheme.typography.bodyMedium.copy(
             fontWeight = weight,
             fontSize = fontSize,
@@ -161,6 +164,7 @@ private fun TocRow(
             .padding(vertical = 0.5.dp)
             .clip(shape)
             .background(bg)
+            .semantics { contentDescription = "目录链接：$resolvedTitle" }
             .clickable(onClick = onClick)
             .padding(
                 start = startPadding,

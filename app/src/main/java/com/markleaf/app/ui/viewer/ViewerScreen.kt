@@ -1,5 +1,8 @@
 package com.markleaf.app.ui.viewer
 
+import android.net.Uri
+import android.os.Trace
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -76,6 +79,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -99,12 +103,14 @@ import com.markleaf.app.R
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.TocItem
 import com.markleaf.app.markdown.blockContentType
-import com.markleaf.app.markdown.blockKey
+import com.markleaf.app.markdown.blockId
 import com.markleaf.app.ui.viewer.components.MarkdownBlockView
+import com.markleaf.app.ui.viewer.components.headingTopPadding
 import com.markleaf.app.ui.viewer.components.ReaderSettingsSheet
 import com.markleaf.app.ui.viewer.components.ReaderTypography
 import com.markleaf.app.ui.viewer.components.SearchTopBar
 import com.markleaf.app.ui.viewer.components.TocDrawerContent
+import com.markleaf.app.ui.viewer.components.TableLayoutCache
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -246,6 +252,9 @@ private fun ViewerSuccessScreen(
     var showSettings by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val density = LocalDensity.current
+    val tableLayoutCache = remember(state.document.id) {
+        TableLayoutCache(documentId = state.document.id)
+    }
     val topBarScrollState = remember(density) {
         ReaderTopBarScrollState(
             hideThresholdPx = with(density) { 32.dp.toPx() },
@@ -286,53 +295,28 @@ private fun ViewerSuccessScreen(
         initialFirstVisibleItemScrollOffset = restoredOffset,
     )
 
-    // Persist: scroll stop, integer percent change, leave, or app background.
-    // Never write Room on every scroll delta.
+    // Persist only from a settled list, plus leave/background flushes. Observing index/offset while
+    // a 120 Hz gesture is active used to allocate and dispatch one ReadingScrollSnapshot for every
+    // pixel-level position change even though the collector immediately discarded it.
     LaunchedEffect(listState, state.document.id, totalListItems) {
         if (totalListItems <= 0) return@LaunchedEffect
-        var lastPersistedPercent = -1
         var lastPersistedIndex = Int.MIN_VALUE
         var lastPersistedOffset = Int.MIN_VALUE
-        var wasScrolling = false
 
-        snapshotFlow {
-            val total = listState.layoutInfo.totalItemsCount
-            val progress = if (total <= 0) 0f else readingProgressOf(listState)
-            ReadingScrollSnapshot(
-                isScrolling = listState.isScrollInProgress,
-                index = listState.firstVisibleItemIndex,
-                offset = listState.firstVisibleItemScrollOffset,
-                progress = progress,
-                percent = (progress * 100f).toInt().coerceIn(0, 100),
-                hasLayout = total > 0,
-            )
-        }
+        snapshotFlow { listState.isScrollInProgress }
             .distinctUntilChanged()
-            .collect { snap ->
-                if (!snap.hasLayout) return@collect
-                val scrollJustStopped = wasScrolling && !snap.isScrolling
-                wasScrolling = snap.isScrolling
+            .collect { isScrolling ->
+                if (isScrolling || listState.layoutInfo.totalItemsCount <= 0) return@collect
+                val index = listState.firstVisibleItemIndex
+                val offset = listState.firstVisibleItemScrollOffset
+                if (index == lastPersistedIndex && offset == lastPersistedOffset) return@collect
 
-                val percentChanged = snap.percent != lastPersistedPercent
-                val positionChanged =
-                    snap.index != lastPersistedIndex || snap.offset != lastPersistedOffset
-
-                // While scrolling: only integer-percent steps (coarse home progress).
-                // On settle: full index/offset snapshot. Never every pixel delta.
-                val shouldPersist = when {
-                    snap.isScrolling -> percentChanged
-                    scrollJustStopped -> positionChanged || percentChanged
-                    else -> percentChanged
-                }
-                if (!shouldPersist) return@collect
-
-                lastPersistedPercent = snap.percent
-                lastPersistedIndex = snap.index
-                lastPersistedOffset = snap.offset
+                lastPersistedIndex = index
+                lastPersistedOffset = offset
                 viewModel.saveReadingPosition(
-                    lastScrollIndex = snap.index,
-                    lastScrollOffset = snap.offset,
-                    readingProgress = snap.progress,
+                    lastScrollIndex = index,
+                    lastScrollOffset = offset,
+                    readingProgress = readingProgressOf(listState),
                 )
             }
     }
@@ -408,12 +392,17 @@ private fun ViewerSuccessScreen(
                     listHeaderCount = listHeaderCount,
                     onItemClick = { item ->
                         scope.launch {
+                            topBarScrollState.forceShow()
                             drawerState.close()
                             scrollToTocItem(
                                 listState = listState,
                                 item = item,
+                                anchorRegistry = state.anchorRegistry,
                                 listHeaderCount = listHeaderCount,
                                 blockCount = state.blocks.size,
+                                scrollOffset = with(density) {
+                                    headingTopPadding(item.level).roundToPx()
+                                },
                             )
                             // Persist jump target immediately so quick back still restores it.
                             viewModel.saveReadingPosition(
@@ -460,6 +449,8 @@ private fun ViewerSuccessScreen(
                 listHeaderCount = listHeaderCount,
                 innerPadding = innerPadding,
                 searchActive = searchState.isActive,
+                tableLayoutCache = tableLayoutCache,
+                onAnchorJump = topBarScrollState::forceShow,
             )
         }
 
@@ -490,8 +481,12 @@ private fun ReaderDocumentBody(
     listHeaderCount: Int,
     innerPadding: PaddingValues,
     searchActive: Boolean,
+    tableLayoutCache: TableLayoutCache,
+    onAnchorJump: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val uriHandler = LocalUriHandler.current
     val contentPadding = readerSettings.contentPaddingLevel.horizontalDp
     val listTopInset = if (searchActive) {
         8.dp
@@ -506,6 +501,51 @@ private fun ReaderDocumentBody(
     // Only the active match block needs search highlight data.
     val activeMatch = searchState.currentMatch.takeIf { searchState.isActive }
     val activeMatchBlockIndex = activeMatch?.blockIndex
+    val onLinkClick: (String) -> Unit = remember(
+        state.anchorRegistry,
+        listState,
+        listHeaderCount,
+        state.blocks.size,
+        readerSettings.fontScale,
+        onAnchorJump,
+        density,
+        uriHandler,
+    ) {
+        { destination: String ->
+            if (destination.startsWith("#")) {
+                val anchorId = Uri.decode(destination.removePrefix("#"))
+                val target = state.anchorRegistry.resolve(anchorId)
+                if (target == null) {
+                    Log.w(
+                        TOC_LOG_TAG,
+                        "anchor_miss documentId=${state.document.id} anchor=$anchorId",
+                    )
+                } else {
+                    onAnchorJump()
+                    val targetHeadingLevel = (state.blocks.getOrNull(target.blockIndex)
+                        as? com.markleaf.app.markdown.MarkdownBlock.Heading)?.level ?: 1
+                    scope.launch {
+                        scrollToBlockIndex(
+                            listState = listState,
+                            blockIndex = target.blockIndex,
+                            listHeaderCount = listHeaderCount,
+                            blockCount = state.blocks.size,
+                            scrollOffset = with(density) {
+                                headingTopPadding(targetHeadingLevel).roundToPx()
+                            },
+                        )
+                    }
+                }
+            } else {
+                try {
+                    uriHandler.openUri(destination)
+                } catch (error: Exception) {
+                    Log.w(TOC_LOG_TAG, "external_link_open_failed destination=$destination", error)
+                }
+            }
+            Unit
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -583,16 +623,22 @@ private fun ReaderDocumentBody(
                 }
                 itemsIndexed(
                     items = state.blocks,
-                    key = { index, block -> block.blockKey(index) },
+                    key = { index, block ->
+                        "${state.document.id}:${state.blockIds.getOrElse(index) { block.blockId(index) }}"
+                    },
                     contentType = { _, block -> block.blockContentType() },
                 ) { index, block ->
                     val isActiveMatch = activeMatchBlockIndex == index
+                    val stableBlockId = state.blockIds.getOrElse(index) { block.blockId(index) }
                     MarkdownBlockView(
                         documentUri = state.document.uri,
                         block = block,
                         settings = readerSettings,
                         isSearchActive = isActiveMatch,
                         activeMatch = if (isActiveMatch) activeMatch else null,
+                        stableBlockId = stableBlockId,
+                        tableLayoutCache = tableLayoutCache,
+                        onLinkClick = onLinkClick,
                         onCopyMessage = { message ->
                             scope.launch {
                                 snackbarHostState.showSnackbar(message)
@@ -1028,15 +1074,6 @@ private fun ReaderTopBarOverlay(
     }
 }
 
-private data class ReadingScrollSnapshot(
-    val isScrolling: Boolean,
-    val index: Int,
-    val offset: Int,
-    val progress: Float,
-    val percent: Int,
-    val hasLayout: Boolean,
-)
-
 /**
  * Clamp saved absolute list index into the current list size.
  * Falls back to 0 when out of range or list is empty.
@@ -1065,14 +1102,18 @@ private fun readingProgressOf(listState: LazyListState): Float {
 private suspend fun scrollToTocItem(
     listState: LazyListState,
     item: TocItem,
+    anchorRegistry: com.markleaf.app.markdown.AnchorRegistry,
     listHeaderCount: Int,
     blockCount: Int,
+    scrollOffset: Int,
 ) {
+    val blockIndex = anchorRegistry.resolve(item.anchor)?.blockIndex ?: item.blockIndex
     scrollToBlockIndex(
         listState = listState,
-        blockIndex = item.blockIndex,
+        blockIndex = blockIndex,
         listHeaderCount = listHeaderCount,
         blockCount = blockCount,
+        scrollOffset = scrollOffset,
     )
 }
 
@@ -1081,14 +1122,37 @@ private suspend fun scrollToBlockIndex(
     blockIndex: Int,
     listHeaderCount: Int,
     blockCount: Int,
+    scrollOffset: Int = 0,
 ) {
     if (blockCount <= 0) return
     val target = listHeaderCount + blockIndex
     val maxIndex = listHeaderCount + blockCount - 1
     if (target !in 0..maxIndex) return
+    Trace.beginSection("AnchorJump")
     try {
-        listState.animateScrollToItem(target)
+        when (anchorJumpMode(listState.firstVisibleItemIndex, target)) {
+            AnchorJumpMode.Animated -> listState.animateScrollToItem(target, scrollOffset)
+            AnchorJumpMode.Direct -> listState.scrollToItem(target, scrollOffset)
+        }
     } catch (_: Exception) {
         // Ignore races from rapid clicks / disposed list.
+    } finally {
+        Trace.endSection()
     }
 }
+
+internal enum class AnchorJumpMode { Animated, Direct }
+
+internal fun anchorJumpMode(
+    currentItemIndex: Int,
+    targetItemIndex: Int,
+    animationDistanceItems: Int = 4,
+): AnchorJumpMode = if (
+    kotlin.math.abs(targetItemIndex - currentItemIndex) <= animationDistanceItems
+) {
+    AnchorJumpMode.Animated
+} else {
+    AnchorJumpMode.Direct
+}
+
+private const val TOC_LOG_TAG = "MARKDOWN_TOC"

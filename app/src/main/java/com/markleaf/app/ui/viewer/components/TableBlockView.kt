@@ -13,6 +13,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -22,6 +23,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +53,8 @@ fun TableBlockView(
     onColumnMetricsCalculated: (() -> Unit)? = null,
     /** Test/diagnostic hook exposing resolved header metrics without OCR. */
     onHeaderCellLayout: ((Int, TableHeaderCellLayoutMetadata) -> Unit)? = null,
+    stableTableId: String? = null,
+    layoutCache: TableLayoutCache? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val density = LocalDensity.current
@@ -82,8 +86,18 @@ fun TableBlockView(
     }
     val textMeasurer = rememberTextMeasurer(cacheSize = 512)
     val currentMetricsObserver by rememberUpdatedState(onColumnMetricsCalculated)
-    val scrollState = rememberScrollState()
     val tableContentHash = remember(block) { block.hashCode() }
+    val resolvedTableId = stableTableId ?: "table-${tableContentHash.toUInt().toString(16)}"
+    val effectiveCache = layoutCache ?: remember { TableLayoutCache("standalone") }
+    val savedHorizontalOffset = remember(effectiveCache, resolvedTableId) {
+        effectiveCache.horizontalOffset(resolvedTableId)
+    }
+    val scrollState = rememberScrollState(savedHorizontalOffset)
+    DisposableEffect(effectiveCache, resolvedTableId, scrollState) {
+        onDispose {
+            effectiveCache.saveHorizontalOffset(resolvedTableId, scrollState.value)
+        }
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -93,19 +107,57 @@ fun TableBlockView(
             .testTag("markdown-table"),
     ) {
         val viewportWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
-        // The cache key contains content, viewport, density/font scale, typography, and direction.
-        // Scroll position is deliberately absent, so width optimization cannot run while scrolling.
-        val metrics = remember(
-            block,
-            tableContentHash,
-            viewportWidthPx,
-            density.density,
-            density.fontScale,
-            bodyStyle,
-            resolvedHeaderTextStyle,
-            inlineStyles,
-            layoutDirection,
-        ) {
+        // Raw vertical/horizontal offsets are deliberately absent from this document-scoped key.
+        val cacheKey = effectiveCache.key(
+            stableTableId = resolvedTableId,
+            tableContentHash = tableContentHash,
+            viewportWidthPx = viewportWidthPx,
+            density = density.density,
+            systemFontScale = density.fontScale,
+            textSizeSetting = settings.fontScale,
+            lineHeightSetting = settings.lineHeightScale,
+            pageMarginSetting = settings.contentPaddingLevel.name,
+            typographyIdentity = 31 * bodyStyle.hashCode() + resolvedHeaderTextStyle.hashCode(),
+            layoutDirection = layoutDirection.name,
+        )
+        val cachedLayout = remember(effectiveCache, cacheKey) {
+            effectiveCache.getOrSolve(cacheKey) {
+            var measuredCellCount = 0L
+            val cellMeasureCache = mutableMapOf<CellMeasureKey, TextLayoutResult>()
+            fun measureCell(
+                source: String,
+                isHeader: Boolean,
+                availableWidth: Int?,
+                softWrap: Boolean,
+            ): TextLayoutResult {
+                val key = CellMeasureKey(
+                    text = source,
+                    styleIdentity = if (isHeader) {
+                        resolvedHeaderTextStyle.hashCode()
+                    } else {
+                        bodyStyle.hashCode()
+                    },
+                    availableWidthPx = availableWidth,
+                    softWrap = softWrap,
+                )
+                return cellMeasureCache.getOrPut(key) {
+                    measuredCellCount++
+                    com.markleaf.app.markdown.MarkdownPerformance.trace("MarkdownTableMeasure") {
+                        textMeasurer.measure(
+                            text = InlineMarkdownParser.parse(
+                                source.ifEmpty { " " },
+                                inlineStyles,
+                            ),
+                            style = if (isHeader) resolvedHeaderTextStyle else bodyStyle,
+                            softWrap = softWrap,
+                            maxLines = if (softWrap) Int.MAX_VALUE else 1,
+                            overflow = TextOverflow.Clip,
+                            constraints = availableWidth?.let { Constraints(maxWidth = it) }
+                                ?: Constraints(),
+                        )
+                    }
+                }
+            }
             val columnCount = block.headers.size.coerceAtLeast(1)
             val measurements = List(columnCount) { column ->
                 val cells = buildList {
@@ -118,13 +170,11 @@ fun TableBlockView(
                 val unconstrainedWidths = mutableListOf<Float>()
                 var headerWidth = 0f
                 cells.forEach { (isHeader, source) ->
-                    val annotated = InlineMarkdownParser.parse(source.ifEmpty { " " }, inlineStyles)
-                    val measured = textMeasurer.measure(
-                        text = annotated,
-                        style = if (isHeader) resolvedHeaderTextStyle else bodyStyle,
+                    val measured = measureCell(
+                        source = source,
+                        isHeader = isHeader,
+                        availableWidth = null,
                         softWrap = false,
-                        maxLines = 1,
-                        overflow = TextOverflow.Clip,
                     )
                     widest = maxOf(widest, measured.size.width.toFloat())
                     unconstrainedWidths += measured.size.width.toFloat()
@@ -165,16 +215,11 @@ fun TableBlockView(
                                     widths[column] -
                                         tokens.horizontalCellPaddingDp * 2f * density.density
                                     ).roundToInt().coerceAtLeast(1)
-                                val measured = textMeasurer.measure(
-                                    text = InlineMarkdownParser.parse(
-                                        source.ifEmpty { " " },
-                                        inlineStyles,
-                                    ),
-                                    style = if (isHeader) resolvedHeaderTextStyle else bodyStyle,
+                                val measured = measureCell(
+                                    source = source,
+                                    isHeader = isHeader,
+                                    availableWidth = availableWidth,
                                     softWrap = true,
-                                    overflow = TextOverflow.Clip,
-                                    maxLines = Int.MAX_VALUE,
-                                    constraints = Constraints(maxWidth = availableWidth),
                                 )
                                 WrappedCellMeasurement(
                                     heightPx = measured.size.height.toFloat(),
@@ -190,13 +235,18 @@ fun TableBlockView(
             } else {
                 emptyList()
             }
-            MarkdownTableLayoutEngine.calculate(
-                viewportWidthPx = viewportWidthPx,
-                density = density.density,
-                columns = measurements,
-                twoColumnCandidates = candidates,
-            ).also { currentMetricsObserver?.invoke() }
+                CachedTableLayout(
+                    metrics = MarkdownTableLayoutEngine.calculate(
+                        viewportWidthPx = viewportWidthPx,
+                        density = density.density,
+                        columns = measurements,
+                        twoColumnCandidates = candidates,
+                    ),
+                    measuredCellCount = measuredCellCount,
+                ).also { currentMetricsObserver?.invoke() }
+            }
         }
+        val metrics = cachedLayout.metrics
         val columnWidths = remember(metrics, density.density) {
             metrics.widthsPx.map { with(density) { it.toDp() } }
         }
@@ -246,6 +296,13 @@ fun TableBlockView(
         }
     }
 }
+
+private data class CellMeasureKey(
+    val text: String,
+    val styleIdentity: Int,
+    val availableWidthPx: Int?,
+    val softWrap: Boolean,
+)
 
 data class TableHeaderCellLayoutMetadata(
     val fontSizeSp: Float,

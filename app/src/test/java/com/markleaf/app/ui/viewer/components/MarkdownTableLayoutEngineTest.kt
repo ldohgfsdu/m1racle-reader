@@ -345,17 +345,18 @@ class MarkdownTableLayoutEngineTest {
     @Test
     fun `compose measurement cache key covers required environment and excludes scroll`() {
         val source = tableSource()
-        val metricsRemember = source.substringAfter("val metrics = remember(").substringBefore(") {")
-        assertTrue(metricsRemember.contains("block"))
-        assertTrue(metricsRemember.contains("tableContentHash"))
-        assertTrue(metricsRemember.contains("viewportWidthPx"))
-        assertTrue(metricsRemember.contains("density.density"))
-        assertTrue(metricsRemember.contains("density.fontScale"))
-        assertTrue(metricsRemember.contains("bodyStyle"))
-        assertTrue(metricsRemember.contains("layoutDirection"))
-        assertFalse(metricsRemember.contains("scrollState"))
+        val cacheKey = source.substringAfter("val cacheKey =").substringBefore("val cachedLayout")
+        assertTrue(cacheKey.contains("stableTableId"))
+        assertTrue(cacheKey.contains("tableContentHash"))
+        assertTrue(cacheKey.contains("viewportWidthPx"))
+        assertTrue(cacheKey.contains("density.density"))
+        assertTrue(cacheKey.contains("density.fontScale"))
+        assertTrue(cacheKey.contains("typographyIdentity"))
+        assertTrue(cacheKey.contains("layoutDirection"))
+        assertFalse(cacheKey.contains("scrollState"))
+        assertTrue(source.contains("effectiveCache.getOrSolve(cacheKey)"))
         assertTrue(source.contains("twoColumnCandidateFractions.map"))
-        assertTrue(source.contains("constraints = Constraints(maxWidth = availableWidth)"))
+        assertTrue(source.contains("Constraints(maxWidth = it)"))
     }
 
     @Test

@@ -69,6 +69,8 @@ data class InlineMarkdownStyles(
  */
 object InlineMarkdownParser {
 
+    const val LINK_ANNOTATION_TAG = "markleaf.markdown.link"
+
     fun parse(
         text: String,
         styles: InlineMarkdownStyles = InlineMarkdownStyles(),
@@ -263,9 +265,17 @@ object InlineMarkdownParser {
                         append('[')
                         i++
                     } else {
-                        withStyle(styles.link) {
-                            // Title may contain nested inline markup.
-                            appendInline(source, link.titleStart, link.titleEnd, styles)
+                        pushStringAnnotation(
+                            tag = LINK_ANNOTATION_TAG,
+                            annotation = source.substring(link.urlStart, link.urlEnd),
+                        )
+                        try {
+                            withStyle(styles.link) {
+                                // Title may contain nested inline markup.
+                                appendInline(source, link.titleStart, link.titleEnd, styles)
+                            }
+                        } finally {
+                            pop()
                         }
                         i = link.endExclusive
                     }
@@ -348,6 +358,8 @@ object InlineMarkdownParser {
     private data class ParsedLink(
         val titleStart: Int,
         val titleEnd: Int,
+        val urlStart: Int,
+        val urlEnd: Int,
         val endExclusive: Int,
     )
 
@@ -363,6 +375,8 @@ object InlineMarkdownParser {
         return ParsedLink(
             titleStart = start + 1,
             titleEnd = titleEnd,
+            urlStart = titleEnd + 2,
+            urlEnd = urlEnd,
             endExclusive = urlEnd + 1,
         )
     }

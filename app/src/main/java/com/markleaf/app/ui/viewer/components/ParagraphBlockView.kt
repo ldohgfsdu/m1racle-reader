@@ -19,6 +19,7 @@ fun ParagraphBlockView(
     settings: ReaderSettings,
     isCurrentSearchMatch: Boolean = false,
     modifier: Modifier = Modifier,
+    onLinkClick: ((String) -> Unit)? = null,
 ) {
     // Dynamic lineHeight from settings — not a fixed sp constant.
     val bodyStyle = TextStyle(
@@ -32,6 +33,7 @@ fun ParagraphBlockView(
         text = block.text,
         settings = settings,
         style = bodyStyle,
+        onLinkClick = onLinkClick,
         modifier = modifier
             .fillMaxWidth()
             .searchBlockHighlight(isCurrentSearchMatch)

@@ -67,6 +67,13 @@ fun MarkdownBlock.blockContentType(): String = when (this) {
 /** Session-stable LazyColumn key: blocks never reorder after parse. */
 fun MarkdownBlock.blockKey(index: Int): String = "${blockContentType()}-$index"
 
+/** Parse-stable block id; document id is deliberately added by the LazyColumn caller. */
+fun MarkdownBlock.blockId(index: Int): String = blockKey(index)
+
+/** Cross-document-safe LazyColumn key. */
+fun MarkdownBlock.blockKey(documentId: String, index: Int): String =
+    "$documentId:${blockId(index)}"
+
 enum class TableAlignment {
     Start,
     Center,

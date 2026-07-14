@@ -3,6 +3,7 @@ package com.markleaf.app.ui.viewer.components
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ fun InlineMarkdownText(
     style: TextStyle,
     modifier: Modifier = Modifier,
     strongColor: Color? = null,
+    onLinkClick: ((String) -> Unit)? = null,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val codeSize = ReaderTypography.inlineCodeFontSize.scaled(settings.fontScale)
@@ -52,10 +54,31 @@ fun InlineMarkdownText(
     )
     // Clear ambient Medium/SemiBold so base runs stay as [style]; spans still apply.
     CompositionLocalProvider(LocalTextStyle provides resolvedStyle) {
-        Text(
-            text = annotated,
-            style = resolvedStyle,
-            modifier = modifier,
-        )
+        val hasLinks = onLinkClick != null && annotated.getStringAnnotations(
+            tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
+            start = 0,
+            end = annotated.length,
+        ).isNotEmpty()
+        if (hasLinks) {
+            @Suppress("DEPRECATION")
+            ClickableText(
+                text = annotated,
+                style = resolvedStyle,
+                modifier = modifier,
+                onClick = { offset ->
+                    annotated.getStringAnnotations(
+                        tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
+                        start = offset,
+                        end = offset,
+                    ).firstOrNull()?.let { onLinkClick?.invoke(it.item) }
+                },
+            )
+        } else {
+            Text(
+                text = annotated,
+                style = resolvedStyle,
+                modifier = modifier,
+            )
+        }
     }
 }

@@ -1,20 +1,17 @@
 package com.markleaf.app.ui.viewer.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +31,7 @@ fun QuoteBlockView(
     settings: ReaderSettings,
     isCurrentSearchMatch: Boolean = false,
     modifier: Modifier = Modifier,
+    onLinkClick: ((String) -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val bodySize = ReaderTypography.quoteFontSize.scaled(settings.fontScale)
@@ -60,41 +58,40 @@ fun QuoteBlockView(
 
     val (body, attribution) = splitQuoteAttribution(block.text)
 
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .searchBlockHighlight(isCurrentSearchMatch)
-            .height(IntrinsicSize.Min),
+            .drawBehind {
+                val railWidth = 3.dp.toPx()
+                drawRoundRect(
+                    color = barColor,
+                    topLeft = Offset.Zero,
+                    size = Size(railWidth, size.height),
+                    cornerRadius = CornerRadius(railWidth / 2f),
+                )
+            }
+            .padding(start = 19.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .fillMaxHeight()
-                .background(barColor, RoundedCornerShape(1.5.dp)),
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 16.dp),
-        ) {
-            if (body.isNotEmpty()) {
-                InlineMarkdownText(
-                    text = body,
-                    settings = settings,
-                    style = bodyStyle,
-                    strongColor = strongColor,
-                )
-            }
-            if (attribution != null) {
-                Spacer(modifier = Modifier.height(16.dp))
-                InlineMarkdownText(
-                    text = attribution,
-                    settings = settings,
-                    style = attributionStyle,
-                    strongColor = strongColor,
-                )
-            }
+        if (body.isNotEmpty()) {
+            InlineMarkdownText(
+                text = body,
+                settings = settings,
+                style = bodyStyle,
+                strongColor = strongColor,
+                onLinkClick = onLinkClick,
+            )
+        }
+        if (attribution != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            InlineMarkdownText(
+                text = attribution,
+                settings = settings,
+                style = attributionStyle,
+                strongColor = strongColor,
+                onLinkClick = onLinkClick,
+            )
         }
     }
 }

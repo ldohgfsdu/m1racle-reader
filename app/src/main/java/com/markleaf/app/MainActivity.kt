@@ -2,6 +2,8 @@ package com.markleaf.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,6 +36,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        requestHighestRefreshRate()
 
         val app = application as MarkLeafApplication
         handleIncomingIntent(intent)
@@ -71,6 +74,45 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        requestHighestRefreshRate()
+    }
+
+    private fun requestHighestRefreshRate() {
+        val targetDisplay = display ?: return
+        val currentMode = targetDisplay.mode
+        val preferred = selectHighestRefreshMode(
+            currentWidth = currentMode.physicalWidth,
+            currentHeight = currentMode.physicalHeight,
+            candidates = targetDisplay.supportedModes.map { mode ->
+                DisplayModeCandidate(
+                    modeId = mode.modeId,
+                    width = mode.physicalWidth,
+                    height = mode.physicalHeight,
+                    refreshRate = mode.refreshRate,
+                )
+            },
+        ) ?: return
+        val attributes = window.attributes
+        if (attributes.preferredDisplayModeId == preferred.modeId &&
+            attributes.preferredRefreshRate == preferred.refreshRate
+        ) {
+            return
+        }
+        attributes.preferredDisplayModeId = preferred.modeId
+        attributes.preferredRefreshRate = preferred.refreshRate
+        if (Build.VERSION.SDK_INT >= 35) {
+            attributes.setFrameRateBoostOnTouchEnabled(true)
+            attributes.setFrameRatePowerSavingsBalanced(false)
+        }
+        window.attributes = attributes
+        Log.i(
+            "MARKDOWN_REFRESH",
+            "preferredModeId=${preferred.modeId} refreshRate=${preferred.refreshRate}",
+        )
     }
 
     private fun handleIncomingIntent(intent: Intent?) {

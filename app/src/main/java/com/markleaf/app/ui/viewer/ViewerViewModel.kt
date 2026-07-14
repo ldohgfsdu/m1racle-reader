@@ -11,6 +11,7 @@ import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.data.settings.ReaderSettingsRepository
 import com.markleaf.app.markdown.MarkdownBlock
 import com.markleaf.app.markdown.MarkdownParser
+import com.markleaf.app.markdown.AnchorRegistry
 import com.markleaf.app.markdown.TocItem
 import com.markleaf.app.search.DocumentSearch
 import com.markleaf.app.search.SearchMatch
@@ -33,6 +34,8 @@ sealed class ViewerUiState {
         val document: DocumentEntity,
         val blocks: List<MarkdownBlock>,
         val toc: List<TocItem>,
+        val anchorRegistry: AnchorRegistry,
+        val blockIds: List<String>,
         val isTruncated: Boolean,
         /** True when parser failed and content is a raw-text fallback block. */
         val isParseFallback: Boolean = false,
@@ -244,6 +247,12 @@ class ViewerViewModel(
                                 listOf(MarkdownBlock.Paragraph(preview.text))
                             },
                             toc = emptyList(),
+                            anchorRegistry = AnchorRegistry.Empty,
+                            blockIds = if (preview.text.isBlank()) {
+                                emptyList()
+                            } else {
+                                listOf("paragraph-0")
+                            },
                         )
                     }
 
@@ -273,6 +282,8 @@ class ViewerViewModel(
                         document = updated,
                         blocks = parseResult.blocks,
                         toc = parseResult.toc,
+                        anchorRegistry = parseResult.anchorRegistry,
+                        blockIds = parseResult.blockIds,
                         isTruncated = preview.isTruncated,
                         isParseFallback = parseFallback,
                     )

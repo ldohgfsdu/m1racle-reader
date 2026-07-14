@@ -9,6 +9,8 @@ object MarkdownParser {
     data class ParseResult(
         val blocks: List<MarkdownBlock>,
         val toc: List<TocItem>,
+        val anchorRegistry: AnchorRegistry,
+        val blockIds: List<String>,
     )
 
     private val headingRegex = Regex("""^(#{1,6})\s+(.*)$""")
@@ -24,7 +26,8 @@ object MarkdownParser {
         """^!\[([^]]*)]\((\S+?)(?:\s+"([^"]*)")?\s*\)$""",
     )
 
-    fun parse(source: String): ParseResult {
+    fun parse(source: String): ParseResult = MarkdownPerformance.trace("MarkdownParse") {
+        MarkdownPerformance.recordParse()
         val normalized = stripHtmlComments(source)
             .replace("\r\n", "\n")
             .replace('\r', '\n')
@@ -32,6 +35,7 @@ object MarkdownParser {
 
         val blocks = mutableListOf<MarkdownBlock>()
         val toc = mutableListOf<TocItem>()
+        val anchorTargets = mutableListOf<MarkdownAnchorTarget>()
         val anchorCounts = mutableMapOf<String, Int>()
 
         var i = 0
@@ -86,6 +90,11 @@ object MarkdownParser {
                         text = text,
                         anchor = anchor,
                     ),
+                )
+                anchorTargets += MarkdownAnchorTarget(
+                    anchorId = anchor,
+                    blockIndex = blockIndex,
+                    headingIndex = anchorTargets.size,
                 )
                 if (level in 1..3) {
                     toc.add(
@@ -226,7 +235,12 @@ object MarkdownParser {
             }
         }
 
-        return ParseResult(blocks = blocks, toc = toc)
+        ParseResult(
+            blocks = blocks.toList(),
+            toc = toc.toList(),
+            anchorRegistry = AnchorRegistry.fromTargets(anchorTargets),
+            blockIds = blocks.mapIndexed { index, block -> block.blockId(index) },
+        )
     }
 
     private data class TableParse(
@@ -374,14 +388,9 @@ object MarkdownParser {
     }
 
     private fun makeAnchor(text: String, counts: MutableMap<String, Int>): String {
-        val base = text
-            .lowercase()
-            .replace(Regex("""[^\p{L}\p{N}\s-]"""), "")
-            .trim()
-            .replace(Regex("""\s+"""), "-")
-            .ifBlank { "heading" }
+        val base = MarkdownAnchorSlug.normalize(text)
         val n = counts[base] ?: 0
         counts[base] = n + 1
-        return if (n == 0) base else "$base-$n"
+        return if (n == 0) base else "$base-${n + 1}"
     }
 }

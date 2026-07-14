@@ -50,12 +50,7 @@ fun HeadingBlockView(
         textAlign = TextAlign.Start,
     )
 
-    val top = when (block.level) {
-        1 -> 28.dp
-        2 -> 24.dp
-        3 -> 20.dp
-        else -> 16.dp
-    }
+    val top = headingTopPadding(block.level)
     val bottom = when (block.level) {
         1 -> 10.dp
         2 -> 8.dp
@@ -88,4 +83,11 @@ fun HeadingBlockView(
             .searchBlockHighlight(activeMatch != null)
             .padding(top = top, bottom = bottom),
     )
+}
+
+internal fun headingTopPadding(level: Int) = when (level) {
+    1 -> 28.dp
+    2 -> 24.dp
+    3 -> 20.dp
+    else -> 16.dp
 }

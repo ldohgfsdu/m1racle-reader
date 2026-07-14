@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import android.os.Trace
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.data.settings.ReaderSettings
@@ -19,8 +20,12 @@ fun MarkdownBlockView(
     activeMatch: SearchMatch? = null,
     onCopyMessage: (String) -> Unit = {},
     documentUri: String? = null,
+    stableBlockId: String? = null,
+    tableLayoutCache: TableLayoutCache? = null,
+    onLinkClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    Trace.beginSection("MarkdownBlockCompose")
     val highlight = isSearchActive && activeMatch != null
     when (block) {
         is MarkdownBlock.Heading -> HeadingBlockView(
@@ -34,12 +39,14 @@ fun MarkdownBlockView(
             settings = settings,
             isCurrentSearchMatch = highlight,
             modifier = modifier,
+            onLinkClick = onLinkClick,
         )
         is MarkdownBlock.Quote -> QuoteBlockView(
             block = block,
             settings = settings,
             isCurrentSearchMatch = highlight,
             modifier = modifier,
+            onLinkClick = onLinkClick,
         )
         is MarkdownBlock.CodeBlock -> CodeBlockView(
             block = block,
@@ -53,11 +60,14 @@ fun MarkdownBlockView(
             settings = settings,
             activeMatch = if (highlight) activeMatch else null,
             modifier = modifier,
+            onLinkClick = onLinkClick,
         )
         is MarkdownBlock.Table -> TableBlockView(
             block = block,
             settings = settings,
             isCurrentSearchMatch = highlight,
+            stableTableId = stableBlockId,
+            layoutCache = tableLayoutCache,
             modifier = modifier,
         )
         is MarkdownBlock.Image -> ImageBlockView(
@@ -78,4 +88,5 @@ fun MarkdownBlockView(
             )
         }
     }
+    Trace.endSection()
 }

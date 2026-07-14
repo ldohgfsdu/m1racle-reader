@@ -1,120 +1,99 @@
-id: MARKLEAF_TABLE_HEADER_TYPOGRAPHY_AND_ALIGNMENT_PARITY_FIX
+id: MARKLEAF_MARKDOWN_TOC_ANCHOR_AND_SCROLL_PERFORMANCE
 priority: P1
-status: device_accepted_qa_device_instrumentation_blocked
+status: device_accepted
 implementation: complete
-host_automated_validation: pass
-build_validation: pass
-configuration_matrix: pass
-main_package_data_safety: pass
+host_performance_validation: pass_optimized_main_package
+toc_anchor_validation: pass
+panel_120hz_touch_mode: pass
 qa_device_instrumentation: blocked
-human_visual_acceptance: accepted
+human_scroll_acceptance: accepted
 overall: device_accepted
-prior_human_visual_acceptance: rejected
-three_column_width_priority: pass
-three_column_horizontal_scroll: pass
-three_column_header_typography: pass
-three_column_header_alignment: pass
 baseline_commit: 4241b3b4a0a9af6d99e6f83a96092d19b6e2065e
-goal: >
-  Preserve accepted table width and scroll behavior while unifying every header cell's resolved
-  typography, top/baseline geometry, padding, and left alignment.
 scope:
-  - Markdown Table Compose renderer
-  - unified content-driven column solver
-  - table-only visual density and typography
-  - table JVM and isolated QA validation
+  - Markdown document anchors and TOC activation
+  - block-level LazyColumn identity and scroll performance
+  - document-scoped table layout caching without R4 visual changes
+  - QA-only host ADB performance telemetry
 out_of_scope:
-  - Markdown parser or source mutation
-  - other Markdown components
-  - PDF/H1, Room, persistence, Pointer Epoch, tile rendering
-  - git add, commit or push
-renderer_configuration:
-  parser: in_house_MarkdownParser_unchanged
-  ast: MarkdownBlock.Table_unchanged
-  two_column_candidate_fraction_range: 0.28_to_0.72
-  two_column_candidate_count: 12
-  content_driven_readable_preferred_maximum_metrics: true
-  content_classification: diagnostic_only
-  two_column_total_width: content_driven_capped_at_viewport
-  compact_two_column_total_safety_dp: 16
-  reader_setting_combinations_covered: 27
-  wide_table_identifier_column: compact_measured_plus_2dp_rounding_safety
-  wide_table_primary_columns: preferred_short_content_width
-  wide_table_overflow: natural_horizontal_scroll_no_viewport_compression
-  wide_primary_column_safety_dp: 8
-  header_style_instance: shared_resolvedHeaderTextStyle
-  header_font_family: default
-  header_font_weight: semibold
-  header_letter_spacing_sp: 0
-  header_text_direction: content_or_ltr
-  header_platform_include_font_padding: false
-  header_text_align: start
-  header_row_height: tallest_baseline_aligned_cell
-  header_vertical_alignment: shared_first_baseline
-  preview_spacer: false
-  fade_overlay: false
-  outer_border: false
-  rounded_card: false
-  vertical_dividers: false
-  horizontal_dividers: true
-  cell_padding_dp: 10x10
-  table_text_scale: 0.88
-  header_weight: semibold
-  body_weight: normal
-  soft_wrap: true
-  ellipsis: false
-  custom_pointer_input: false
-verification:
-  jvm: 606_of_606_pass
-  table_jvm: 37_of_37_pass
+  - PDF/H1
+  - Room schema or persistence semantics
+  - R4 table width, typography, padding, divider, or gesture parameters
+  - git commit or push
+production_path:
+  container: LazyColumn
+  parser_execution: once_in_ViewerViewModel_load_on_Dispatchers_Default
+  lazy_key: documentId_plus_parse_stable_blockId
+  content_type: block_type
+  nested_vertical_scroll: false
+anchor_registry:
+  generated_during_parse: true
+  lookup: anchorId_to_blockIndex_and_headingIndex
+  chinese: supported
+  duplicate_suffix: title_title-2_title-3
+  near_jump: short_animation
+  far_jump: direct_scrollToItem
+  top_bar_offset: heading_text_at_56dp_topbar_plus_8dp_gap
+table_cache:
+  scope: document
+  raw_scroll_in_key: false
+  horizontal_offset_by_table_id: true
+  warmup_parse_count: 1
+  warmup_table_solve_count: 7
+  warmup_cell_measure_count: 84
+  measured_parse_delta: 0
+  measured_table_solve_delta: 0
+  measured_cell_measure_delta: 0
+validation:
+  jvm: 615_of_615_pass
+  table_existing: 37_of_37_pass
+  table_cache: 2_of_2_pass
   configuration_matrix: 27_of_27_pass
   lint_debug: pass
   assemble_debug: pass
   assemble_qa: pass
   compile_qa_android_test_kotlin: pass
   assemble_qa_android_test: pass
-  qa_device_target: com.markleaf.app.qa
-  qa_device_runtime: blocked_hyperos_runner_startup_timeout_124s_after_reconnect
   device: 25098PN5AC/db04f865
-  main_install_method: adb_install_r_only
-  main_data_backup_before: .local-backups/markleaf-debug/com-markleaf-app-20260714T083358Z
-  main_data_backup_after: .local-backups/markleaf-debug/com-markleaf-app-20260714T083413Z
-  main_data_backup_files: 8
-  main_data_backup_bytes: 837632
-  main_data_archive_sha256_before: 9B289DDCC328B6D3BAFADCF53CAC3A619E168D3218B7AE22893B35685F1FBFC6
-  main_data_archive_sha256_after: 9B289DDCC328B6D3BAFADCF53CAC3A619E168D3218B7AE22893B35685F1FBFC6
-  main_data_payload_changed: 0
+  refresh_rate_hz: 120_during_main_package_touch
+  frame_budget_ms: 8.333
+  debug_main_vertical_p50_ms: 8
+  debug_main_vertical_p95_ms: 21
+  optimized_main_vertical_p50_ms: 5
+  optimized_main_vertical_p95_ms: 7
+  optimized_main_vertical_p99_ms: 8
+  optimized_main_table_horizontal_p50_ms: 5
+  optimized_main_table_horizontal_p95_ms: 5
+  optimized_main_table_horizontal_p99_ms: 7
+  optimized_main_missed_vsync: 0
+  optimized_main_dexopt: speed-profile
+  note: human tactile confirmation accepted
+  qa_target: com.markleaf.app.qa
+  main_package_remained_installed: true
 artifact:
-  path: dist/markleaf-debug-markdown-table-header-parity.apk
-  bytes: 74841758
-  sha256: 9EB5B982E3AFD58848C99D3646E03B856CF3D3C2EB960B3BDDFAD10F1A6B23C7
-screenshots:
-  r4_feedback_final: dist/performance/markdown-table-header-parity-r4-final.png
-  header_fix_initial: dist/performance/markdown-table-header-parity-three-start.png
-  header_fix_middle: dist/performance/markdown-table-header-parity-three-middle.png
-  header_fix_right: dist/performance/markdown-table-header-parity-three-right.png
-  header_fix_two_column_short: dist/performance/markdown-table-header-parity-two-short.png
-  header_fix_two_column_long: dist/performance/markdown-table-header-parity-two-long.png
-  r3_two_column_short: dist/performance/markdown-table-parity-r3-main-two-short.png
-  r3_two_column_long: dist/performance/markdown-table-parity-r3-main-two-long.png
-  r3_three_column_start: dist/performance/markdown-table-parity-r3-main-three-start.png
-  r3_three_column_middle: dist/performance/markdown-table-parity-r3-main-three-middle.png
-  r3_three_column_right: dist/performance/markdown-table-parity-r3-main-three-right.png
-  r3_three_column_landscape: dist/performance/markdown-table-parity-r3-main-three-landscape.png
-  two_column_short: dist/performance/markdown-table-parity-main-two-short.png
-  two_column_long: dist/performance/markdown-table-parity-main-two-long.png
-  three_column_start: dist/performance/markdown-table-parity-main-three-start.png
-  three_column_middle: dist/performance/markdown-table-parity-main-three-middle.png
-  three_column_right: dist/performance/markdown-table-parity-main-three-right.png
-  three_column_landscape: dist/performance/markdown-table-parity-main-three-landscape.png
-  dark_mode: dist/performance/markdown-table-parity-main-dark.png
-  body_weight_reference: dist/performance/markdown-table-parity-main-body-weight-reference.png
-fixture_inline_strong_note: >
-  The unchanged markdown-table-human-acceptance.md contains no inline strong token, so a truthful
-  real-reader inline-strong screenshot cannot be produced from this fixed fixture. Host semantic
-  coverage remains passing; no screenshot-only source mutation was made.
-report: docs/MARKLEAF_TABLE_HEADER_TYPOGRAPHY_AND_ALIGNMENT_PARITY_FIX_REPORT.md
-next_step: >
-  R4 is device accepted. Preserve the accepted table parameters. QA instrumentation remains
-  blocked by the HyperOS runner startup timeout and must not be reported as passed.
+  path: dist/markleaf-markdown-toc-scroll-performance-r4-optimized.apk
+  bytes: 56943132
+  sha256: 591415E435AF286DC29AEDD5654D9736974EBD1B551416128922BE4D8CA3EC56
+  build_variant: release_optimized_same_application_id_and_signing
+report: docs/MARKLEAF_MARKDOWN_TOC_ANCHOR_AND_SCROLL_PERFORMANCE_REPORT.md
+final_acceptance:
+  markdown_responsive_table:
+    implementation: complete
+    host_automated_validation: pass
+    build_validation: pass
+    configuration_matrix: 27_of_27_pass
+    main_package_data_safety: pass
+    qa_device_instrumentation: blocked
+    human_visual_acceptance: accepted
+    overall: device_accepted
+  markdown_toc_anchor:
+    implementation: complete
+    human_acceptance: accepted
+    overall: device_accepted
+  markdown_scroll_performance:
+    implementation: complete
+    human_scroll_acceptance: accepted
+    overall: device_accepted
+  markdown_reader_acceptance:
+    overall: device_accepted
+next_step: preserve_accepted_markdown_behavior
 updated: 2026-07-14
