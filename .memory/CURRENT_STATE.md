@@ -2,8 +2,21 @@
 
 **Updated:** 2026-07-13  
 **Authority decision:** R7 `ContinuousDocumentViewport` formally replaces R6 for vertical continuous reading.  
-**Active object:** `R7_P0C1_4_DECOUPLE_GESTURE_AND_RENDER_PIPELINE` (`device_accepted`)  
-**Current sub-object:** gesture/render decoupling device accepted; task closed without H1 changes.
+**Active object:** `MARKLEAF_TABLE_HEADER_TYPOGRAPHY_AND_ALIGNMENT_PARITY_FIX` (`device_accepted_qa_device_instrumentation_blocked`)
+**Current sub-object:** Markdown responsive mobile table R4 device accepted; QA instrumentation remains blocked.
+
+## Markdown responsive table R4 final acceptance (2026-07-14)
+
+- Human visual acceptance: **ACCEPTED**; overall: **DEVICE_ACCEPTED**.
+- PASS: two-column short/long layouts, three-column width priority, unified header typography,
+  shared first baseline, single-line `I、V6` and `rsR′、M 形、兔耳`, natural third-column
+  horizontal overflow, complete right endpoint, and the 27/27 reader-setting matrix.
+- Verification: JVM 606/606 PASS; table-specific 37/37 PASS; lint and requested Debug/QA builds
+  PASS. Main-package data safety PASS. HyperOS QA instrumentation remains **BLOCKED**, not PASS.
+- Final APK SHA-256:
+  `9EB5B982E3AFD58848C99D3646E03B856CF3D3C2EB960B3BDDFAD10F1A6B23C7`.
+- Reports: `docs/MARKLEAF_TABLE_HEADER_TYPOGRAPHY_AND_ALIGNMENT_PARITY_FIX_REPORT.md` and
+  `docs/MARKLEAF_MARKDOWN_RESPONSIVE_TABLE_RENDERER_REPORT.md`.
 
 ## Local accepted checkpoint (2026-07-13)
 
