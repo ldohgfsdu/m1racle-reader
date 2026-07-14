@@ -18,6 +18,7 @@ android {
     namespace = "com.markleaf.app"
     compileSdk = 35
     buildToolsVersion = "35.0.0" // PC build host has 35.0.0/36.0.0; AGP 8.7.3 default 34.0.0 not installed.
+    testBuildType = "qa"
 
     defaultConfig {
         applicationId = "com.markleaf.app"
@@ -26,6 +27,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
         // R7_P0C1_4: geometry visual sample passed; the decoupled tile pipeline is enabled.
         buildConfigField("boolean", "DETAIL_TILE_OVERLAY_ENABLED", detailTileOverlayEnabled.toString())
         // Debug capture controls: base-only, tile-only, combined, and 50% overlay builds.
@@ -55,6 +57,14 @@ android {
     }
 
     buildTypes {
+        create("qa") {
+            initWith(getByName("debug"))
+            matchingFallbacks += listOf("debug")
+            applicationIdSuffix = ".qa"
+            versionNameSuffix = "-qa"
+            isDebuggable = true
+            manifestPlaceholders["appLabel"] = "MarkLeaf QA"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -106,7 +116,44 @@ android {
     // P0A: expose Room schema JSONs to androidTest assets so MigrationTestHelper
     // can validate migrated schema against the exported v6.json.
     sourceSets {
+        getByName("qa") {
+            java.srcDirs("src/debug/java", "src/qa/java")
+            manifest.srcFile("src/qa/AndroidManifest.xml")
+        }
         getByName("androidTest").assets.srcDirs("schemas")
+    }
+}
+
+// Keep the formerly common command present only as an explicit, pre-install safety refusal.
+tasks.register("connectedDebugAndroidTest") {
+    group = "verification"
+    description = "Refuses device tests against the protected com.markleaf.app sandbox."
+    doFirst {
+        error(
+            "REFUSED connected test: target applicationId=com.markleaf.app. " +
+                "Use :app:connectedQaAndroidTest (applicationId=com.markleaf.app.qa).",
+        )
+    }
+}
+
+// Device-test safety: connected tasks may target only the isolated QA application sandbox.
+gradle.taskGraph.whenReady {
+    val connectedAndroidTests = allTasks.filter {
+        it.project == project && it.name.startsWith("connected") && it.name.endsWith("AndroidTest")
+    }
+    connectedAndroidTests.forEach { task ->
+        val targetApplicationId = if (task.name == "connectedQaAndroidTest") {
+            "com.markleaf.app.qa"
+        } else {
+            "com.markleaf.app"
+        }
+        check(targetApplicationId == "com.markleaf.app.qa") {
+            "REFUSED connected test: target applicationId=$targetApplicationId. " +
+                "Only :app:connectedQaAndroidTest may run; com.markleaf.app user data must not be touched."
+        }
+        task.doFirst {
+            logger.lifecycle("ANDROID_TEST_TARGET applicationId=$targetApplicationId")
+        }
     }
 }
 

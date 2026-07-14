@@ -13,4 +13,5 @@
 *.aab
 .external_inbox/
 .shared_inbox/
+.local-backups/
 .memory/

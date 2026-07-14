@@ -96,4 +96,16 @@ final_acceptance:
   markdown_reader_acceptance:
     overall: device_accepted
 next_step: preserve_accepted_markdown_behavior
+accepted_infrastructure:
+  android_test_data_isolation:
+    implementation: complete
+    main_and_qa_coexistence: pass
+    main_application_id: com.markleaf.app
+    qa_application_id: com.markleaf.app.qa
+    qa_app_label: MarkLeaf QA
+    qa_instrumentation_target_validation: pass
+    connected_debug_guard: pass
+    main_package_data_integrity: pass
+    qa_backup_restore_validation: pass
+    overall: device_accepted
 updated: 2026-07-14
