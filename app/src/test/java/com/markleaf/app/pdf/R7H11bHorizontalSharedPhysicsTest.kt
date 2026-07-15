@@ -9,6 +9,8 @@ class R7H11bHorizontalSharedPhysicsTest {
     private fun source(name: String): String = File(
         "src/main/java/com/markleaf/app/${if (name == "PdfViewerScreen.kt") "ui/pdf" else "pdf"}/$name",
     ).readText()
+        .replace("\r\n", "\n")
+        .replace('\r', '\n')
 
     @Test
     fun `horizontal mode delegates pointer epoch pan focal and fling to shared core`() {

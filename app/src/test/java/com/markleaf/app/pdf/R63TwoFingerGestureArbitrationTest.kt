@@ -195,6 +195,8 @@ class R63TwoFingerGestureArbitrationTest {
             File("src/main/java/com/markleaf/app/ui/pdf/PdfViewerScreen.kt"),
         )
         return candidates.first { it.isFile }.readText()
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
             .substringAfter("private fun PdfVerticalZoomLockArea")
             .substringBefore("private data class ViewportRaw")
     }
