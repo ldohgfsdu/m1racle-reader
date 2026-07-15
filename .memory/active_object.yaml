@@ -1,42 +1,51 @@
-id: MARKLEAF_EXTERNAL_OPEN_DEVICE_ACCEPTED_CHECKPOINT
-priority: P0
+id: R8_MARKDOWN_RELATIVE_ASSET_RESOLUTION_V1
+priority: P1
 status: device_accepted
-overall: device_accepted
-external_open_single_active_session:
-  implementation: complete
-  host_validation: pass
-  self_adb_control: pass
-  qa_device_validation: pass
-  human_acceptance: accepted
-  overall: device_accepted
-device_accepted: true
+overall: DEVICE_ACCEPTED
+scope_decision: capability_tiered_safe_degradation
+baseline_commit: f34b57d0dc929a5bd7f1ee0d4fd8f5e62450c726
 note: >
-  Checkpoint for third-party external open, single active viewer session,
-  ContentProvider metadata, content dedup, and acceptance reports.
-  H1.5A remains rejected/device_failed/frozen — do not treat PDF H1 as accepted.
-r7_h1_5a:
-  human_video_acceptance: rejected
-  overall: device_failed
-  status: frozen
-  frozen: true
-host_gates:
-  jvm: 723_of_723_pass
-  lint_debug: pass
-  assemble_debug: pass
-  assemble_qa: pass
-  compile_qa_android_test_kotlin: pass
-  assemble_qa_android_test: pass
-evidence:
-  guided_human: /root/.cache/markleaf-qa-acceptance/human-guided-20260715-203940
-  qa_automation: /root/.cache/markleaf-qa-acceptance/full-20260715-202201
-reports:
-  - docs/MARKLEAF_EXTERNAL_OPEN_SINGLE_ACTIVE_SESSION_IMPLEMENTATION_REPORT.md
-  - docs/MARKLEAF_EXTERNAL_OPEN_GUIDED_HUMAN_ACCEPTANCE_REPORT.md
-  - docs/MARKLEAF_EXTERNAL_OPEN_ATOMIC_SESSION_SWITCH_HARDENING_REPORT.md
-  - docs/MARKLEAF_EXTERNAL_OPEN_SINGLE_ACTIVE_DOCUMENT_AND_METADATA_REPORT.md
-out_of_scope_frozen:
-  - H1 / ThreePageStrip / tile pipeline
-  - Markdown reader product changes
-  - Room schema version
-  - ADB local config / keys
+  Markdown relative image resolution V1. Capability tiers:
+  AppOwnedDirectory / FileDirectory support relative images within sandbox root.
+  SafTreeDirectory only when a verified directory capability exists (no URI guessing).
+  SingleContentDocument relative images → Inaccessible (controlled failure).
+  No OpenDocumentTree UI, no schema change, no H1/PDF/tile changes.
+product_semantics:
+  absolute_uris_passthrough:
+    - http
+    - https
+    - data
+    - file
+    - content
+    - android.resource
+  relative_supported_when:
+    - AppOwnedDirectory
+    - FileDirectory
+    - SafTreeDirectory_with_verified_root
+  relative_inaccessible_when:
+    - SingleContentDocument
+    - Unknown
+    - external_open_single_file_grant
+ui_failure:
+  primary: 无法访问相对图片
+  secondary_single_file: 当前仅授权了 Markdown 文件，未授权图片所在目录
+frozen:
+  r7_h1_5a: rejected_device_failed_frozen
+  three_page_strip: frozen
+  tile_pipeline: frozen
+  external_open_session_lifecycle: do_not_change
+  remote: not_configured
+  worktree: leave_as_is
+out_of_scope:
+  - folder picker / ACTION_OPEN_DOCUMENT_TREE
+  - Room schema
+  - Markdown search
+  - 200KB truncation UX
+  - release packaging
+  - git commit or push
+report: docs/R8_MARKDOWN_RELATIVE_ASSET_V1_IMPLEMENTATION_REPORT.md
+review_report: docs/R8_MARKDOWN_RELATIVE_ASSET_V1_REVIEW_REPORT.md
+device_acceptance_report: docs/R8_MARKDOWN_RELATIVE_ASSET_V1_DEVICE_ACCEPTANCE_REPORT.md
+fixtures: testdata/r8_relative_asset_v1/
+evidence: dist/r8-device-acceptance/
 updated: 2026-07-15

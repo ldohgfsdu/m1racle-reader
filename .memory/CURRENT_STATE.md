@@ -1,63 +1,70 @@
 # CURRENT_STATE
 
-**Updated:** 2026-07-15  
-**Active object:** `MARKLEAF_EXTERNAL_OPEN_DEVICE_ACCEPTED_CHECKPOINT` (`device_accepted`)  
-**Frozen direction:** R7 H1.5 / H1.5A gesture work remains **rejected / device_failed / frozen** and is **not** accepted by this checkpoint.
+**Updated:** 2026-07-15
+**Active object:** `R8_MARKDOWN_RELATIVE_ASSET_RESOLUTION_V1` (`DEVICE_ACCEPTED`)
+**Baseline commit:** `f34b57d0dc929a5bd7f1ee0d4fd8f5e62450c726`
+**Frozen direction:** R7 H1.5 / H1.5A remains **rejected / device_failed / frozen**.
 
-## external_open_single_active_session
+## R8 Markdown relative asset V1
+
+```yaml
+r8_markdown_relative_asset_v1:
+  scope: capability_tiered_safe_degradation
+  implementation: complete
+  independent_review: APPROVED_FOR_DEVICE_ACCEPTANCE
+  host_tests: pass_related_suites_133
+  lint_debug: pass_0_errors
+  assemble_debug_qa: pass
+  device_acceptance: DEVICE_ACCEPTED
+  device: 25098PN5AC Android16
+  evidence: dist/r8-device-acceptance/
+  commit: not_done
+  overall: DEVICE_ACCEPTED
+```
+
+### Semantics (V1)
+
+- Single entry: `MarkdownAssetResolver` + explicit `MarkdownDocumentBase`
+- App-owned / file directory: relative images within sandbox root (`./`, `../`, spaces, `%20`)
+- `content://` single-file grant: relative → controlled `Inaccessible` placeholder
+- No tree picker, no sibling URI guessing, no schema, no External Open lifecycle change
+- Absolute http/https/data/file/content/android.resource not rewritten
+
+### Host gates (this object)
+
+- `MarkdownAssetResolverTest` + `RelativeImageResolveTest` + `PackageImageIntegrationTest`: **PASS**
+- markdown + image + packageimport + share unit tests: **PASS**
+- Full release package / device UI: **not** run for this object
+
+### Reports / fixtures / evidence
+
+- `docs/R8_MARKDOWN_RELATIVE_ASSET_V1_IMPLEMENTATION_REPORT.md`
+- `docs/R8_MARKDOWN_RELATIVE_ASSET_V1_REVIEW_REPORT.md`
+- `docs/R8_MARKDOWN_RELATIVE_ASSET_V1_DEVICE_ACCEPTANCE_REPORT.md`
+- `testdata/r8_relative_asset_v1/` (+ `HUMAN_ACCEPTANCE_CHECKLIST.md`)
+- `dist/r8-device-acceptance/` (screens, ui dumps, logs)
+
+### Explicitly NOT in V1
+
+- External Open single-file grant cannot reliably open sibling assets
+- Folder grant / workspace mode
+- H1.5A / ThreePageStrip / tile pipeline changes
+- remote / push / auto-commit
+
+## Prior: external_open_single_active_session
 
 ```yaml
 external_open_single_active_session:
-  implementation: complete
-  host_validation: pass
-  self_adb_control: pass
-  qa_device_validation: pass
-  human_acceptance: accepted
   overall: device_accepted
+  checkpoint_commit: f34b57d0dc929a5bd7f1ee0d4fd8f5e62450c726
 ```
 
-### Host gates (acceptance evidence)
+Still valid; R8 must not regress session prepare→flush→commit semantics.
 
-- JVM unit tests: **723/723 PASS**
-- lintDebug: **PASS**
-- assembleDebug / assembleQa: **PASS**
-- compileQaAndroidTestKotlin / assembleQaAndroidTest: **PASS**
-
-### QA device + human
-
-- Self-ADB wireless control: **pass** (serial configured outside repo)
-- Isolated QA package automation: **pass**
-- Guided human acceptance (4 scenes): **ACCEPTED**
-- Production package `com.markleaf.app`: **zero write** (pm path read-only only)
-
-### Scope of this checkpoint
-
-- Unified VIEW/SEND external open via `ExternalOpenCoordinator`
-- Confirm-before-replace dialog; cancel keeps session; prepare→flush→commit→nav replace
-- ContentProvider metadata (displayName / sizeBytes / MIME)
-- URI + SHA-256 content dedup; same-name different content kept separate
-- Single active viewer session registration (NavGraph)
-- Related JVM/QA tests, fixture provider, and external-open reports
-
-### Explicitly NOT accepted / frozen
+### Frozen
 
 ```yaml
 r7_h1_5a:
-  human_video_acceptance: rejected
   overall: device_failed
   status: frozen
 ```
-
-Do **not** treat H1 / ThreePageStrip / horizontal gesture physics / tile pipeline as device_accepted from this checkpoint.
-
-### Reports
-
-- `docs/MARKLEAF_EXTERNAL_OPEN_SINGLE_ACTIVE_SESSION_IMPLEMENTATION_REPORT.md`
-- `docs/MARKLEAF_EXTERNAL_OPEN_GUIDED_HUMAN_ACCEPTANCE_REPORT.md`
-- `docs/MARKLEAF_EXTERNAL_OPEN_ATOMIC_SESSION_SWITCH_HARDENING_REPORT.md`
-- `docs/MARKLEAF_EXTERNAL_OPEN_SINGLE_ACTIVE_DOCUMENT_AND_METADATA_REPORT.md`
-
-### Repo safety
-
-- No APK / screenshots / logcat / ADB secrets in this commit
-- local.properties and markleaf-adb env stay outside git

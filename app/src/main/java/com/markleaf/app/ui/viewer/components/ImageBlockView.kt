@@ -137,6 +137,9 @@ fun ImageBlockView(
             }
 
             is LocalImageState.Error -> {
+                val messageLines = s.message.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                val primaryMsg = messageLines.firstOrNull().orEmpty().ifBlank { "无法访问相对图片" }
+                val secondaryMsg = messageLines.drop(1).joinToString("\n").ifBlank { null }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -154,7 +157,8 @@ fun ImageBlockView(
                             } else {
                                 Icons.Outlined.BrokenImage
                             },
-                            contentDescription = null,
+                            // Expose failure reason to accessibility; no Toast/Dialog.
+                            contentDescription = primaryMsg,
                             tint = failIcon,
                             modifier = Modifier.size(28.dp),
                         )
@@ -172,11 +176,20 @@ fun ImageBlockView(
                             Spacer(modifier = Modifier.height(4.dp))
                         }
                         Text(
-                            text = s.message,
-                            style = captionStyle.copy(color = failSupport),
-                            maxLines = 2,
+                            text = primaryMsg,
+                            style = captionStyle.copy(color = failTitle),
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (secondaryMsg != null) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = secondaryMsg,
+                                style = captionStyle.copy(color = failSupport),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }

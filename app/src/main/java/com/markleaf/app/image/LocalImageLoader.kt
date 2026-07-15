@@ -9,6 +9,10 @@ import android.os.Build
 import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.markleaf.app.data.local.DocumentType
+import com.markleaf.app.markdown.MarkdownAssetResolver
+import com.markleaf.app.markdown.MarkdownAssetResult
+import com.markleaf.app.markdown.MarkdownDocumentBase
 import com.markleaf.app.packageimport.ZipPackageImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,76 +28,33 @@ sealed interface LocalImageState {
 
 /**
  * Load local images only (no network).
- * Package-relative paths resolve against the Markdown entry file under packages/.
+ * Relative refs go through [MarkdownAssetResolver] (single resolution entry).
  */
 object LocalImageLoader {
 
     private const val TAG = "MarkLeafImage"
     private const val MAX_EDGE_PX = 1600
-    private const val ASSET_SCHEME = "asset://"
 
     suspend fun load(
         context: Context,
         source: String,
         documentUri: String? = null,
+        documentType: DocumentType? = null,
     ): LocalImageState =
         withContext(Dispatchers.IO) {
             try {
-                val trimmed = source.trim()
-                if (trimmed.isEmpty()) {
-                    return@withContext LocalImageState.Error("图片地址为空")
-                }
-                val lower = trimmed.lowercase(Locale.US)
-                when {
-                    lower.startsWith("http://") || lower.startsWith("https://") ->
-                        LocalImageState.Error("网络图片已禁用")
-
-                    lower.startsWith(ASSET_SCHEME) -> {
-                        val path = trimmed.substringAfter("://", missingDelimiterValue = "")
-                        decodeAsset(context, path)
-                    }
-
-                    lower.startsWith("content://") ->
-                        decodeUri(context, Uri.parse(trimmed))
-
-                    lower.startsWith("file://") -> {
-                        val path = filePathFromUri(trimmed)
-                            ?: return@withContext LocalImageState.Error("图片无法读取")
-                        decodeFile(File(path))
-                    }
-
-                    lower.startsWith("/") ->
-                        LocalImageState.Error("图片无法读取")
-
-                    else -> {
-                        val docUri = documentUri?.trim().orEmpty()
-                        if (docUri.isEmpty()) {
-                            Log.d(TAG, "relative image without documentUri src=$trimmed")
-                            return@withContext LocalImageState.Error("相对图片路径暂未支持")
-                        }
-                        val entryPath = filePathFromUri(docUri)
-                        if (entryPath == null) {
-                            Log.d(TAG, "documentUri not file://: $docUri")
-                            return@withContext LocalImageState.Error("相对图片路径暂未支持")
-                        }
-                        val entryFile = File(entryPath)
-                        val packageRoot = ZipPackageImporter.findPackageRoot(entryFile)
-                        val resolved = ZipPackageImporter.resolvePackageImage(
-                            entryFile = entryFile,
-                            relativePath = trimmed,
-                            packageRoot = packageRoot,
-                        )
-                        Log.d(
-                            TAG,
-                            "entry=${entryFile.path} root=${packageRoot.path} " +
-                                "src=$trimmed target=${resolved?.path} " +
-                                "exists=${resolved?.isFile} readable=${resolved?.canRead()}",
-                        )
-                        if (resolved == null) {
-                            return@withContext LocalImageState.Error("图片路径越界或无效")
-                        }
-                        decodeFile(resolved)
-                    }
+                val app = context.applicationContext
+                val base = MarkdownAssetResolver.fromDocumentUri(
+                    context = app,
+                    documentUri = documentUri,
+                    documentType = documentType,
+                )
+                when (val result = MarkdownAssetResolver.resolve(base, source)) {
+                    is MarkdownAssetResult.Absolute -> loadAbsolute(app, result.uri)
+                    is MarkdownAssetResult.Resolved -> loadResolved(app, result.uri)
+                    is MarkdownAssetResult.Inaccessible,
+                    is MarkdownAssetResult.Invalid,
+                    -> LocalImageState.Error(MarkdownAssetResolver.userMessage(result))
                 }
             } catch (e: Exception) {
                 Log.d(TAG, "decode failed: ${e.javaClass.simpleName}: ${e.message}")
@@ -101,33 +62,71 @@ object LocalImageLoader {
             }
         }
 
+    private fun loadAbsolute(context: Context, uriString: String): LocalImageState {
+        val lower = uriString.trim().lowercase(Locale.ROOT)
+        return when {
+            lower.startsWith("http://") || lower.startsWith("https://") ->
+                LocalImageState.Error("网络图片已禁用")
+            lower.startsWith("asset://") -> {
+                val path = uriString.substringAfter("://", missingDelimiterValue = "")
+                decodeAsset(context, path)
+            }
+            lower.startsWith("content://") ->
+                decodeUri(context, Uri.parse(uriString))
+            lower.startsWith("file:") -> {
+                val path = filePathFromUri(uriString)
+                    ?: return LocalImageState.Error("图片无法读取")
+                decodeFile(File(path))
+            }
+            lower.startsWith("data:") -> LocalImageState.Error("图片无法读取")
+            lower.startsWith("android.resource://") ->
+                decodeUri(context, Uri.parse(uriString))
+            else -> LocalImageState.Error("图片无法读取")
+        }
+    }
+
+    private fun loadResolved(context: Context, uriString: String): LocalImageState {
+        val lower = uriString.trim().lowercase(Locale.ROOT)
+        return when {
+            lower.startsWith("file:") || !lower.contains("://") -> {
+                val path = filePathFromUri(uriString)
+                    ?: uriString.takeIf { it.startsWith("/") }
+                    ?: return LocalImageState.Error("图片无法读取")
+                decodeFile(File(path))
+            }
+            lower.startsWith("content://") -> decodeUri(context, Uri.parse(uriString))
+            else -> decodeUri(context, Uri.parse(uriString))
+        }
+    }
+
     /**
      * Resolve relative image against document entry URI (file://).
+     * Uses [MarkdownAssetResolver] with an explicit [MarkdownDocumentBase.FileDirectory].
      */
     fun resolveRelativeImage(documentUri: String, relativePath: String): File? {
         val path = filePathFromUri(documentUri) ?: return null
-        val entry = File(path)
-        val root = ZipPackageImporter.findPackageRoot(entry)
-        return ZipPackageImporter.resolvePackageImage(entry, relativePath, root)
+        val entry = try {
+            File(path).canonicalFile
+        } catch (_: Exception) {
+            return null
+        }
+        val root = try {
+            ZipPackageImporter.findPackageRoot(entry).canonicalFile
+        } catch (_: Exception) {
+            entry.parentFile?.canonicalFile ?: return null
+        }
+        val base = MarkdownDocumentBase.FileDirectory(documentUri, entry, root)
+        return when (val result = MarkdownAssetResolver.resolve(base, relativePath)) {
+            is MarkdownAssetResult.Resolved -> {
+                val p = filePathFromUri(result.uri) ?: return null
+                File(p).takeIf { it.isFile }
+            }
+            else -> null
+        }
     }
 
-    fun filePathFromUri(documentUri: String): String? {
-        val t = documentUri.trim()
-        if (!t.lowercase(Locale.ROOT).startsWith("file:")) return null
-        var p = when {
-            t.startsWith("file://") -> t.removePrefix("file://")
-            t.startsWith("file:") -> t.removePrefix("file:")
-            else -> return null
-        }
-        // file:///abs → /abs ; keep leading slash
-        try {
-            p = java.net.URLDecoder.decode(p, Charsets.UTF_8.name())
-        } catch (_: Exception) {
-            p = p.replace("%20", " ")
-        }
-        if (p.isEmpty()) return null
-        return p
-    }
+    fun filePathFromUri(documentUri: String): String? =
+        MarkdownAssetResolver.filePathFromDocumentUri(documentUri)
 
     private fun decodeAsset(context: Context, assetPath: String): LocalImageState {
         val path = assetPath.trim().trimStart('/')
