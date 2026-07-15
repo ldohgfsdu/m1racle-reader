@@ -144,6 +144,7 @@ class DeleteByIdTransactionTest {
     ) : DocumentDao {
         override fun observeRecentDocuments() = real.observeRecentDocuments()
         override suspend fun getById(id: String) = real.getById(id)
+        override suspend fun getAll() = real.getAll()
         override suspend fun upsert(document: DocumentEntity) = real.upsert(document)
         override suspend fun deleteById(id: String) {
             throw RuntimeException("simulated document delete failure")

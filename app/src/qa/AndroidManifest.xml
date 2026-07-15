@@ -6,6 +6,11 @@
             android:authorities="com.markleaf.app.qa.h1fixture"
             android:exported="true"
             android:grantUriPermissions="true" />
+        <provider
+            android:name=".ui.pdf.ExternalOpenFixtureProvider"
+            android:authorities="com.markleaf.app.qa.externalopen"
+            android:exported="true"
+            android:grantUriPermissions="true" />
         <activity
             android:name=".ui.pdf.R7ViewportTestActivity"
             android:exported="false" />

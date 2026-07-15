@@ -8,6 +8,17 @@
     <string name="delete_record">删除记录</string>
     <string name="recent_reads">最近文件</string>
     <string name="error_unsupported_format">暂只支持 .md / .markdown / .txt / .pdf / .zip 文件</string>
+    <string name="error_unsupported_format_detail">暂不支持此文件格式\n文件：%1$s\n类型：%2$s</string>
+    <string name="error_send_multiple_not_supported">一次只能打开一个文档</string>
+    <string name="external_open_confirm_title">打开新文档？</string>
+    <string name="external_open_confirm_current_label">当前文档</string>
+    <string name="external_open_confirm_new_label">新文档</string>
+    <string name="external_open_confirm_hint">将关闭当前阅读页并打开新文档。\n当前阅读进度会保存，旧文档不会被删除。</string>
+    <string name="external_open_cancel">取消</string>
+    <string name="external_open_confirm_action">关闭并打开</string>
+    <string name="external_import_loading_title">正在导入</string>
+    <string name="external_import_loading_body">正在准备新文档（当前阅读页保持打开）…</string>
+    <string name="external_open_size_after_open">大小将在打开时确认</string>
     <string name="error_file_too_large">文件过大，无法导入</string>
     <string name="pdf_loading">正在打开 PDF…</string>
     <string name="pdf_retry">重试</string>

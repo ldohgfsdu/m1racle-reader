@@ -1,111 +1,42 @@
-id: MARKLEAF_MARKDOWN_TOC_ANCHOR_AND_SCROLL_PERFORMANCE
-priority: P1
+id: MARKLEAF_EXTERNAL_OPEN_DEVICE_ACCEPTED_CHECKPOINT
+priority: P0
 status: device_accepted
-implementation: complete
-host_performance_validation: pass_optimized_main_package
-toc_anchor_validation: pass
-panel_120hz_touch_mode: pass
-qa_device_instrumentation: blocked
-human_scroll_acceptance: accepted
 overall: device_accepted
-baseline_commit: 4241b3b4a0a9af6d99e6f83a96092d19b6e2065e
-scope:
-  - Markdown document anchors and TOC activation
-  - block-level LazyColumn identity and scroll performance
-  - document-scoped table layout caching without R4 visual changes
-  - QA-only host ADB performance telemetry
-out_of_scope:
-  - PDF/H1
-  - Room schema or persistence semantics
-  - R4 table width, typography, padding, divider, or gesture parameters
-  - git commit or push
-production_path:
-  container: LazyColumn
-  parser_execution: once_in_ViewerViewModel_load_on_Dispatchers_Default
-  lazy_key: documentId_plus_parse_stable_blockId
-  content_type: block_type
-  nested_vertical_scroll: false
-anchor_registry:
-  generated_during_parse: true
-  lookup: anchorId_to_blockIndex_and_headingIndex
-  chinese: supported
-  duplicate_suffix: title_title-2_title-3
-  near_jump: short_animation
-  far_jump: direct_scrollToItem
-  top_bar_offset: heading_text_at_56dp_topbar_plus_8dp_gap
-table_cache:
-  scope: document
-  raw_scroll_in_key: false
-  horizontal_offset_by_table_id: true
-  warmup_parse_count: 1
-  warmup_table_solve_count: 7
-  warmup_cell_measure_count: 84
-  measured_parse_delta: 0
-  measured_table_solve_delta: 0
-  measured_cell_measure_delta: 0
-validation:
-  jvm: 615_of_615_pass
-  table_existing: 37_of_37_pass
-  table_cache: 2_of_2_pass
-  configuration_matrix: 27_of_27_pass
+external_open_single_active_session:
+  implementation: complete
+  host_validation: pass
+  self_adb_control: pass
+  qa_device_validation: pass
+  human_acceptance: accepted
+  overall: device_accepted
+device_accepted: true
+note: >
+  Checkpoint for third-party external open, single active viewer session,
+  ContentProvider metadata, content dedup, and acceptance reports.
+  H1.5A remains rejected/device_failed/frozen — do not treat PDF H1 as accepted.
+r7_h1_5a:
+  human_video_acceptance: rejected
+  overall: device_failed
+  status: frozen
+  frozen: true
+host_gates:
+  jvm: 723_of_723_pass
   lint_debug: pass
   assemble_debug: pass
   assemble_qa: pass
   compile_qa_android_test_kotlin: pass
   assemble_qa_android_test: pass
-  device: 25098PN5AC/db04f865
-  refresh_rate_hz: 120_during_main_package_touch
-  frame_budget_ms: 8.333
-  debug_main_vertical_p50_ms: 8
-  debug_main_vertical_p95_ms: 21
-  optimized_main_vertical_p50_ms: 5
-  optimized_main_vertical_p95_ms: 7
-  optimized_main_vertical_p99_ms: 8
-  optimized_main_table_horizontal_p50_ms: 5
-  optimized_main_table_horizontal_p95_ms: 5
-  optimized_main_table_horizontal_p99_ms: 7
-  optimized_main_missed_vsync: 0
-  optimized_main_dexopt: speed-profile
-  note: human tactile confirmation accepted
-  qa_target: com.markleaf.app.qa
-  main_package_remained_installed: true
-artifact:
-  path: dist/markleaf-markdown-toc-scroll-performance-r4-optimized.apk
-  bytes: 56943132
-  sha256: 591415E435AF286DC29AEDD5654D9736974EBD1B551416128922BE4D8CA3EC56
-  build_variant: release_optimized_same_application_id_and_signing
-report: docs/MARKLEAF_MARKDOWN_TOC_ANCHOR_AND_SCROLL_PERFORMANCE_REPORT.md
-final_acceptance:
-  markdown_responsive_table:
-    implementation: complete
-    host_automated_validation: pass
-    build_validation: pass
-    configuration_matrix: 27_of_27_pass
-    main_package_data_safety: pass
-    qa_device_instrumentation: blocked
-    human_visual_acceptance: accepted
-    overall: device_accepted
-  markdown_toc_anchor:
-    implementation: complete
-    human_acceptance: accepted
-    overall: device_accepted
-  markdown_scroll_performance:
-    implementation: complete
-    human_scroll_acceptance: accepted
-    overall: device_accepted
-  markdown_reader_acceptance:
-    overall: device_accepted
-next_step: preserve_accepted_markdown_behavior
-accepted_infrastructure:
-  android_test_data_isolation:
-    implementation: complete
-    main_and_qa_coexistence: pass
-    main_application_id: com.markleaf.app
-    qa_application_id: com.markleaf.app.qa
-    qa_app_label: MarkLeaf QA
-    qa_instrumentation_target_validation: pass
-    connected_debug_guard: pass
-    main_package_data_integrity: pass
-    qa_backup_restore_validation: pass
-    overall: device_accepted
-updated: 2026-07-14
+evidence:
+  guided_human: /root/.cache/markleaf-qa-acceptance/human-guided-20260715-203940
+  qa_automation: /root/.cache/markleaf-qa-acceptance/full-20260715-202201
+reports:
+  - docs/MARKLEAF_EXTERNAL_OPEN_SINGLE_ACTIVE_SESSION_IMPLEMENTATION_REPORT.md
+  - docs/MARKLEAF_EXTERNAL_OPEN_GUIDED_HUMAN_ACCEPTANCE_REPORT.md
+  - docs/MARKLEAF_EXTERNAL_OPEN_ATOMIC_SESSION_SWITCH_HARDENING_REPORT.md
+  - docs/MARKLEAF_EXTERNAL_OPEN_SINGLE_ACTIVE_DOCUMENT_AND_METADATA_REPORT.md
+out_of_scope_frozen:
+  - H1 / ThreePageStrip / tile pipeline
+  - Markdown reader product changes
+  - Room schema version
+  - ADB local config / keys
+updated: 2026-07-15

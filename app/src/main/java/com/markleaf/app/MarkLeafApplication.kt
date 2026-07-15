@@ -4,6 +4,7 @@ import android.app.Application
 import com.markleaf.app.data.local.AppDatabase
 import com.markleaf.app.data.repository.DocumentRepository
 import com.markleaf.app.data.settings.ReaderSettingsRepository
+import com.markleaf.app.share.ExternalOpenCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,5 +42,12 @@ class MarkLeafApplication : Application() {
 
     val readerSettingsRepository: ReaderSettingsRepository by lazy {
         ReaderSettingsRepository(this)
+    }
+
+    val externalOpenCoordinator: ExternalOpenCoordinator by lazy {
+        ExternalOpenCoordinator(
+            app = this,
+            repository = documentRepository,
+        )
     }
 }

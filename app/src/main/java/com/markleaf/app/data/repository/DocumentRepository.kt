@@ -50,8 +50,68 @@ class DocumentRepository(
             documentDao.getById(id)
         }
 
+    suspend fun getAllDocuments(): List<DocumentEntity> =
+        withContext(Dispatchers.IO) {
+            documentDao.getAll()
+        }
+
+    suspend fun touchLastOpened(id: String, time: Long = System.currentTimeMillis()) {
+        withContext(Dispatchers.IO) {
+            documentDao.updateLastOpenedAt(id, time)
+        }
+    }
+
+    /**
+     * Locate an existing private-library document whose content SHA-256 matches.
+     * Used for external-open content dedup without a Room schema change.
+     */
+    suspend fun findByContentSha256(sha256: String, sizeBytes: Long?): DocumentEntity? =
+        withContext(Dispatchers.IO) {
+            val want = sha256.lowercase(Locale.ROOT)
+            val byId = documentDao.getById("c:$want")
+            if (byId != null) return@withContext byId
+            val candidates = documentDao.getAll().filter { doc ->
+                sizeBytes == null || doc.fileSize == null || doc.fileSize == sizeBytes
+            }
+            for (doc in candidates) {
+                val path = filePathFromUriString(doc.uri) ?: continue
+                val file = File(path)
+                if (!file.isFile) continue
+                if (sizeBytes != null && file.length() != sizeBytes) continue
+                if (sha256OfFile(file) == want) return@withContext doc
+            }
+            null
+        }
+
+    private fun filePathFromUriString(uriString: String): String? {
+        return try {
+            val uri = Uri.parse(uriString)
+            when (uri.scheme?.lowercase(Locale.ROOT)) {
+                "file" -> uri.path
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun sha256OfFile(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                digest.update(buf, 0, n)
+            }
+        }
+        return digest.digest().joinToString("") { b -> "%02x".format(b) }
+    }
+
     suspend fun upsert(document: DocumentEntity) {
-        documentDao.upsert(document)
+        withContext(Dispatchers.IO) {
+            documentDao.upsert(document)
+        }
     }
 
     suspend fun deleteById(id: String) {
@@ -69,6 +129,11 @@ class DocumentRepository(
                 textbookOutlineNodeDao.deleteAllForDocument(id)
                 pdfPrintPageAnchorDao.deleteAllForDocument(id)
                 documentDao.deleteById(id)
+            }
+            // Sidecar identity index is rebuildable; remove best-effort after Room commit.
+            try {
+                com.markleaf.app.share.DocumentIdentityIndex(context).removeByDocumentId(id)
+            } catch (_: Exception) {
             }
         }
     }
@@ -413,13 +478,23 @@ class DocumentRepository(
             takeReadPermission(uri)
 
             val metadata = queryMetadata(uri)
-            val displayName = metadata.displayName
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-                ?: "未命名文档"
-
-            val mimeType = context.contentResolver.getType(uri)
+            val mimeType = context.contentResolver.getType(uri) ?: metadata.mimeType
             val pathSegment = uri.lastPathSegment
+            val resolvedMeta = com.markleaf.app.share.ExternalUriMetadata.resolve(
+                com.markleaf.app.share.ProviderMetadata(
+                    displayName = metadata.displayName,
+                    size = metadata.size,
+                    mimeType = mimeType,
+                    scheme = uri.scheme,
+                    authority = uri.authority,
+                    lastPathSegment = pathSegment,
+                    assetFileDescriptorLength = metadata.assetFdLength,
+                    parcelFileDescriptorStatSize = metadata.pfdStatSize,
+                ),
+                intentMime = mimeType,
+            )
+            val displayName = resolvedMeta.displayName
+
             if (!DocumentType.isAllowedImport(mimeType, displayName, pathSegment) &&
                 !isAllowedFileName(displayName) &&
                 !isAllowedFileName(pathSegment)
@@ -450,7 +525,7 @@ class DocumentRepository(
                     id = id,
                     displayName = zipDisplay,
                     mimeType = mimeType,
-                    fileSize = metadata.size
+                    fileSize = resolvedMeta.sizeBytesHint
                         ?: fileNameFromUri?.let { uri.path?.let { p -> File(p).length().takeIf { len -> len > 0 } } },
                     now = now,
                     existing = existing,
@@ -470,13 +545,19 @@ class DocumentRepository(
                 return@withContext ImportResult.UnsupportedFormat
             }
 
+            val resolvedSize = resolvedMeta.sizeBytesHint
+                ?: when (uri.scheme?.lowercase(Locale.ROOT)) {
+                    "file" -> uri.path?.let { File(it).length().takeIf { len -> len > 0 } }
+                    else -> null
+                }
+
             val entity = if (existing != null) {
                 // Same file again: refresh open time + metadata; keep progress/title.
                 existing.copy(
                     displayName = displayName,
                     uri = uriString,
                     mimeType = mimeType,
-                    fileSize = metadata.size,
+                    fileSize = resolvedSize ?: existing.fileSize,
                     lastOpenedAt = now,
                     documentType = documentType.name,
                 )
@@ -486,7 +567,7 @@ class DocumentRepository(
                     displayName = displayName,
                     uri = uriString,
                     mimeType = mimeType,
-                    fileSize = metadata.size,
+                    fileSize = resolvedSize,
                     lastOpenedAt = now,
                     createdAt = now,
                     lastScrollIndex = 0,
@@ -607,32 +688,75 @@ class DocumentRepository(
     private fun queryMetadata(uri: Uri): FileMetadata {
         var displayName: String? = null
         var size: Long? = null
+        var mimeType: String? = null
+        var assetFdLength: Long? = null
+        var pfdStatSize: Long? = null
 
-        context.contentResolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
-                    displayName = cursor.getString(nameIndex)
-                }
-                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
-                    size = cursor.getLong(sizeIndex)
+        try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
+                        displayName = cursor.getString(nameIndex)
+                    }
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                        size = cursor.getLong(sizeIndex)
+                    }
                 }
             }
+        } catch (_: Exception) {
         }
 
-        return FileMetadata(displayName = displayName, size = size)
+        try {
+            mimeType = context.contentResolver.getType(uri)
+        } catch (_: Exception) {
+        }
+
+        try {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
+                val len = afd.length
+                if (len >= 0L) assetFdLength = len
+            }
+        } catch (_: Exception) {
+        }
+
+        try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                val s = pfd.statSize
+                if (s >= 0L) pfdStatSize = s
+            }
+        } catch (_: Exception) {
+        }
+
+        // file:// path segment / length fallbacks
+        if (uri.scheme.equals("file", ignoreCase = true)) {
+            val f = uri.path?.let { File(it) }
+            if (displayName.isNullOrBlank()) displayName = f?.name
+            if ((size == null || size!! < 0) && f != null && f.isFile) size = f.length()
+        }
+
+        return FileMetadata(
+            displayName = displayName,
+            size = size,
+            mimeType = mimeType,
+            assetFdLength = assetFdLength,
+            pfdStatSize = pfdStatSize,
+        )
     }
 
     private data class FileMetadata(
         val displayName: String?,
         val size: Long?,
+        val mimeType: String? = null,
+        val assetFdLength: Long? = null,
+        val pfdStatSize: Long? = null,
     )
 
     companion object {
