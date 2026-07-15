@@ -30,6 +30,7 @@ import com.markleaf.app.pdf.PdfReadingPrefs
 import com.markleaf.app.pdf.PdfReadingPositionCodec
 import com.markleaf.app.pdf.PdfRenderQuality
 import com.markleaf.app.pdf.PdfViewportSessionState
+import com.markleaf.app.pdf.toCanonicalAnchor
 import com.markleaf.app.pdf.PdfViewportSessionTracker
 import com.markleaf.app.pdf.PdfTileEntry
 import com.markleaf.app.pdf.PdfTileKey
@@ -62,6 +63,9 @@ import com.markleaf.app.pdf.PrintPageSectionCatalog
 import com.markleaf.app.pdf.PrintPageResolver
 import com.markleaf.app.pdf.QualityTier
 import com.markleaf.app.pdf.TextbookOutlineResolver
+import com.markleaf.app.pdf.ThreePageStripState
+import com.markleaf.app.pdf.ZoomPanPhysics
+import com.markleaf.app.pdf.ZoomPanPhysicsProfile
 import com.markleaf.app.pdf.export.ChapterExportState
 import com.markleaf.app.pdf.export.ChapterPackageExporter
 import com.markleaf.app.pdf.export.ExportRangePlan
@@ -672,7 +676,8 @@ class PdfViewerViewModel(
 
     fun commitViewportSession(session: PdfViewportSessionState) {
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
-        if (ready.readingMode != PdfReadingMode.VERTICAL_CONTINUOUS ||
+        if (session.readingMode != ready.readingMode) return
+        if (ready.readingMode == PdfReadingMode.VERTICAL_CONTINUOUS &&
             ready.continuousEntryState.phase != com.markleaf.app.pdf.ContinuousEntryPhase.READY
         ) return
         val normalized = session.normalized(ready.pageCount, ready.pageIndex) ?: return
@@ -681,11 +686,24 @@ class PdfViewerViewModel(
         viewportSessionTracker.takeForFlush()?.let(::persistViewportSession)
     }
 
+    /** Latest exact UI transform for an immediate mode switch; never persisted by itself. */
+    fun previewViewportSession(session: PdfViewportSessionState) {
+        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
+        if (session.readingMode != ready.readingMode) return
+        if (ready.readingMode == PdfReadingMode.VERTICAL_CONTINUOUS &&
+            ready.continuousEntryState.phase != com.markleaf.app.pdf.ContinuousEntryPhase.READY
+        ) return
+        val normalized = session.normalized(ready.pageCount, ready.pageIndex) ?: return
+        viewportSessionTracker.preview(normalized)
+    }
+
     /** Non-suspending render-consumer ingress. Pointer input never waits for PdfRenderer. */
     fun requestPredictiveTiles(plan: PdfTilePlan) {
         if (closed) return
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
-        if (ready.readingMode != PdfReadingMode.VERTICAL_CONTINUOUS) return
+        if (ready.readingMode != PdfReadingMode.VERTICAL_CONTINUOUS &&
+            ready.readingMode != PdfReadingMode.HORIZONTAL_PAGED
+        ) return
         val requests = plan.requests
         latestTilePlan = plan
         latestVisibleTileKeys = plan.currentVisibleKeys
@@ -755,6 +773,9 @@ class PdfViewerViewModel(
             onTileReady = { entry ->
                 val current = _uiState.value as? PdfViewerUiState.Ready
                 if (current != null && TileRenderPipelinePolicy.swapAllowed(entry.interactionPhaseAtRequest)) {
+                    if (current.readingMode == PdfReadingMode.HORIZONTAL_PAGED) {
+                        HorizontalRealPathTelemetry.onTileReady()
+                    }
                     val evicted = tileCache.put(entry, tileWorkQueue.activeKeys())
                     pendingTileSwaps[entry.key] = entry
                     scheduleTileOverlayPublish()
@@ -797,6 +818,9 @@ class PdfViewerViewModel(
                 entries = tileCache.snapshot(),
                 publishedAtNanos = swapNanos,
             )
+            if ((_uiState.value as? PdfViewerUiState.Ready)?.readingMode == PdfReadingMode.HORIZONTAL_PAGED) {
+                HorizontalRealPathTelemetry.onTileSwap(batch.size)
+            }
             val readyKeys = _tileOverlaySnapshot.value.entries.keys
             val coverage = TileRenderPipelinePolicy.coverage(latestVisibleTileKeys, readyKeys)
             latestTilePlan?.let { tileHealthTracker.onViewport(it.snapshot, coverage) }
@@ -850,11 +874,7 @@ class PdfViewerViewModel(
         zoomTargetPage: Int?,
         continuousState: ContinuousDocumentState?,
     ) {
-        val clamped = if (readingMode == PdfReadingMode.VERTICAL_CONTINUOUS) {
-            PdfRenderQuality.clampContinuousZoom(scale)
-        } else {
-            PdfRenderQuality.clampZoom(scale)
-        }
+        val clamped = ZoomPanPhysics.clampScale(scale, ZoomPanPhysicsProfile.ScaleRange)
         if (isDebuggable) Log.d(ZOOM_LOG_TAG, "commitZoom old=$zoomScale new=$clamped reason=userCommit page=${(_uiState.value as? PdfViewerUiState.Ready)?.pageIndex} zoomTarget=$zoomTargetPage mode=$readingMode t=${System.currentTimeMillis()}")
         zoomScale = clamped
         val nextTier = if (readingMode == PdfReadingMode.VERTICAL_CONTINUOUS) {
@@ -1055,11 +1075,40 @@ class PdfViewerViewModel(
                 source = ReadingPositionSource.USER_HORIZONTAL_SETTLED,
                 generation = 0L,
             )
-        val page = PdfReadingNavigation.pageAfterModeSwitch(lastStable.pageIndex, ready.pageCount)
+        val fallbackSession = PdfViewportSessionState(
+            readingMode = ready.readingMode,
+            pageIndex = lastStable.pageIndex,
+            pageAnchorXFraction = 0.5f,
+            pageAnchorYFraction = lastStable.intraPageFraction,
+            scale = ready.viewportSessionState?.scale ?: ready.zoomScale,
+            generation = System.nanoTime(),
+        )
+        val stableSession = (
+            viewportSessionTracker.latestForMode(ready.readingMode) ?:
+                viewportSessionTracker.stable() ?:
+                ready.viewportSessionState ?:
+                fallbackSession
+            )
+            .normalized(ready.pageCount, lastStable.pageIndex) ?: fallbackSession
+        val modeSession = stableSession.toCanonicalAnchor().toViewportSession(
+            mode = mode,
+            nextGeneration = System.nanoTime(),
+        )
+        val page = PdfReadingNavigation.pageAfterModeSwitch(modeSession.pageIndex, ready.pageCount)
+        if (isDebuggable) {
+            Log.d(
+                "MarkLeafH14",
+                "H14_MODE_SWITCH_REQUEST from=${ready.readingMode} to=$mode " +
+                    "pageBefore=${stableSession.pageIndex} pageAfter=$page " +
+                    "scaleBefore=${stableSession.scale} scaleAfter=${modeSession.scale} " +
+                    "anchorX=${modeSession.pageAnchorXFraction} " +
+                    "anchorY=${modeSession.pageAnchorYFraction} generation=${modeSession.generation}",
+            )
+        }
         val modeTarget = if (mode == PdfReadingMode.VERTICAL_CONTINUOUS) {
             continuousEntryRestore.requestRestore(
                 pageIndex = page,
-                intraPageFraction = lastStable.intraPageFraction,
+                intraPageFraction = modeSession.pageAnchorYFraction,
                 source = ReadingPositionSource.MODE_SWITCH_RESTORE,
                 pageCount = ready.pageCount,
             )
@@ -1068,12 +1117,12 @@ class PdfViewerViewModel(
         }
         readingMode = mode
         readingPrefs.setMode(documentId, mode)
+        viewportSessionTracker.commit(modeSession)
         when (mode) {
             PdfReadingMode.HORIZONTAL_PAGED -> {
-                // Horizontal owns a separate page-local transform and always enters at 1×.
-                val horizontal = ContinuousModeZoomContract.horizontalEntry()
-                zoomScale = horizontal.scale
-                qualityTier = horizontal.qualityTier
+                // The target adapter receives the same document-session scale and page anchor.
+                zoomScale = modeSession.scale
+                qualityTier = ContinuousQualityHysteresis.resolve(zoomScale, qualityTier)
                 _uiState.value = ReadyBase(
                     ready,
                     pageIndex = page,
@@ -1083,15 +1132,18 @@ class PdfViewerViewModel(
                     scrubPreviewIndex = null,
                     zoomScale = zoomScale,
                     qualityTier = qualityTier,
+                    viewportSessionState = modeSession,
                 )
                 requestRender(page)
             }
             PdfReadingMode.VERTICAL_CONTINUOUS -> {
-                val restored = continuousDocumentSession.stableState
+                val restored = continuousDocumentSession.commit(
+                    continuousDocumentSession.stableState.copy(scale = modeSession.scale),
+                    page,
+                )
                 val restoredPage = modeTarget?.pageIndex ?: page
-                val vertical = ContinuousModeZoomContract.verticalEntry(restored)
-                zoomScale = vertical.scale
-                qualityTier = vertical.qualityTier
+                zoomScale = modeSession.scale
+                qualityTier = ContinuousQualityHysteresis.resolve(zoomScale, qualityTier)
                 continuousGeometryReady = false
                 _pageJump.value = null
                 _uiState.value = ReadyBase(
@@ -1105,6 +1157,7 @@ class PdfViewerViewModel(
                     zoomScale = zoomScale,
                     qualityTier = qualityTier,
                     continuousDocumentState = restored,
+                    viewportSessionState = modeSession,
                     continuousEntryState = continuousEntryRestore.snapshot(),
                 )
                 ensurePreviewAround(restoredPage)
@@ -1220,7 +1273,54 @@ class PdfViewerViewModel(
      * Does not upgrade to high (avoids sequential hi-res while flinging).
      */
     fun ensurePagesAround(center: Int) {
-        ensurePreviewAround(center)
+        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
+        if (ready.readingMode == PdfReadingMode.HORIZONTAL_PAGED) {
+            ensureHorizontalStripAround(center, ready)
+        } else {
+            ensurePreviewAround(center)
+        }
+    }
+
+    /**
+     * Keep exactly the stable PREVIOUS/CURRENT/NEXT base window for horizontal mode.
+     * A page that just left CURRENT remains protected as PREVIOUS until the completed commit rotates
+     * the strip; only then may the old page outside the three-slot window be recycled.
+     */
+    private fun ensureHorizontalStripAround(center: Int, ready: PdfViewerUiState.Ready) {
+        val current = PdfReadingNavigation.clampPageIndex(center, ready.pageCount)
+        val keep = ThreePageStripState(current, ready.pageCount.coerceAtLeast(1))
+            .slots()
+            .mapNotNull { it.pageIndex }
+            .toSet()
+        continuousProtectedPages = keep
+
+        cacheJobs.keys.toList().forEach { page ->
+            if (page !in keep) {
+                cacheJobs.remove(page)?.cancel()
+                cacheJobKeys.remove(page)
+            }
+        }
+        val beforeKeys = pageCache.keys()
+        pageCache.retainOnly(keep)
+        if (beforeKeys.any { it !in keep }) {
+            val latest = _uiState.value as? PdfViewerUiState.Ready ?: ready
+            _uiState.value = publishCache(latest, pageIndex = latest.pageIndex)
+        }
+
+        val order = buildList {
+            add(current)
+            if (current + 1 in keep) add(current + 1)
+            if (current - 1 in keep) add(current - 1)
+        }
+        order.forEach { page ->
+            requestPageRender(
+                pageIndex = page,
+                forceTier = QualityTier.SCROLL_PREVIEW,
+                allowUpgrade = false,
+                allowDowngrade = false,
+                primaryIndex = current,
+            )
+        }
     }
 
     /**

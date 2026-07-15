@@ -139,10 +139,8 @@ data class ContinuousModeZoomState(
 )
 
 object ContinuousModeZoomContract {
-    fun horizontalEntry(): ContinuousModeZoomState = ContinuousModeZoomState(
-        scale = PdfRenderQuality.MIN_ZOOM,
-        qualityTier = QualityTier.PREVIEW,
-    )
+    fun horizontalEntry(stableState: ContinuousDocumentState): ContinuousModeZoomState =
+        verticalEntry(stableState)
 
     fun verticalEntry(stableState: ContinuousDocumentState): ContinuousModeZoomState {
         val scale = PdfRenderQuality.clampContinuousZoom(stableState.scale)

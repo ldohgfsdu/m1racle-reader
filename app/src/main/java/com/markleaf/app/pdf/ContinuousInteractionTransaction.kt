@@ -39,84 +39,71 @@ object ContinuousPointerEpochReducer {
         viewportHeight: Float,
         geometry: ContinuousDocumentGeometry,
     ): PointerEpochFrame {
-        if (pointers.isEmpty()) return PointerEpochFrame(null, state, rebased = false, shouldSettle = previous != null)
-        val ids = pointers.map { it.id }.sorted()
-        val pointerSetChanged = previous == null || previous.activePointerIds != ids
-        val pairMissing = previous?.mode == PointerEpochMode.TWO_POINTER_PINCH &&
-            (previous.primaryPointerId !in ids || previous.secondaryPointerId !in ids)
-        if (pointerSetChanged || pairMissing) {
-            return PointerEpochFrame(rebase(previous, pointers, state), state, rebased = true)
-        }
-        val epoch = previous ?: return PointerEpochFrame(rebase(null, pointers, state), state, rebased = true)
-        val next = when (epoch.mode) {
-            PointerEpochMode.SINGLE_PAN -> {
-                val pointer = pointers.first { it.id == epoch.primaryPointerId }
-                geometry.clamp(
-                    state.copy(
-                        scrollX = epoch.baseScrollX - (pointer.x - epoch.baseCentroidX),
-                        scrollY = epoch.baseScrollY - (pointer.y - epoch.baseCentroidY),
-                    ),
-                    viewportWidth,
-                    viewportHeight,
-                )
-            }
-            PointerEpochMode.TWO_POINTER_PINCH -> {
-                val a = pointers.first { it.id == epoch.primaryPointerId }
-                val b = pointers.first { it.id == epoch.secondaryPointerId }
-                val cx = (a.x + b.x) / 2f
-                val cy = (a.y + b.y) / 2f
-                val span = kotlin.math.hypot(a.x - b.x, a.y - b.y).coerceAtLeast(0.0001f)
-                geometry.zoomAndPanFromFocal(
-                    state = state,
-                    newScale = epoch.baseScale * (span / epoch.baseSpan.coerceAtLeast(0.0001f)),
-                    focalDocumentX = epoch.focalDocumentX,
-                    focalDocumentY = epoch.focalDocumentY,
-                    centroidX = cx,
-                    centroidY = cy,
-                    viewportWidth = viewportWidth,
-                    viewportHeight = viewportHeight,
-                )
-            }
-        }
-        return PointerEpochFrame(epoch, next, rebased = false)
-    }
-
-    private fun rebase(
-        previous: ContinuousPointerEpoch?,
-        pointers: List<PointerSample>,
-        state: ContinuousDocumentState,
-    ): ContinuousPointerEpoch {
-        val sorted = pointers.sortedBy { it.id }
-        val ids = sorted.map { it.id }
-        val priorPair = listOfNotNull(previous?.primaryPointerId, previous?.secondaryPointerId)
-        val pair = if (sorted.size >= 2) {
-            val retained = priorPair.filter { it in ids }
-            (retained + ids.filterNot { it in retained }).take(2)
-        } else listOf(sorted.first().id)
-        val selected = sorted.filter { it.id in pair }
-        val cx = selected.sumOf { it.x.toDouble() }.toFloat() / selected.size
-        val cy = selected.sumOf { it.y.toDouble() }.toFloat() / selected.size
-        val span = if (selected.size == 2) {
-            kotlin.math.hypot(selected[0].x - selected[1].x, selected[0].y - selected[1].y)
-        } else 0f
-        val safeScale = state.scale.coerceAtLeast(0.0001f)
-        return ContinuousPointerEpoch(
-            epochId = (previous?.epochId ?: 0L) + 1L,
-            mode = if (selected.size == 2) PointerEpochMode.TWO_POINTER_PINCH else PointerEpochMode.SINGLE_PAN,
-            activePointerIds = ids,
-            primaryPointerId = pair.firstOrNull(),
-            secondaryPointerId = pair.getOrNull(1),
-            baseScale = state.scale,
-            baseScrollX = state.scrollX,
-            baseScrollY = state.scrollY,
-            baseCentroidX = cx,
-            baseCentroidY = cy,
-            baseSpan = span,
-            focalDocumentX = (state.scrollX + cx) / safeScale,
-            focalDocumentY = (state.scrollY + cy) / safeScale,
+        val shared = ZoomPanPointerEpochReducer.frame(
+            previous = previous?.toZoomPanPointerEpoch(),
+            pointers = pointers.map { ZoomPanPointer(it.id, ZoomPanPoint(it.x, it.y)) },
+            transform = ZoomPanTransform(
+                scale = state.scale,
+                legalOffsetPx = ZoomPanPoint(-state.scrollX, -state.scrollY),
+            ),
+            transformOriginViewportPx = ZoomPanPoint.Zero,
+            boundsForScale = { scale ->
+                geometry.zoomPanBounds(scale, viewportWidth, viewportHeight)
+            },
+            scaleRange = ZoomPanPhysicsProfile.ScaleRange,
+            overscrollPolicy = ZoomPanPhysicsProfile.ContinuousOverscrollPolicy,
+        )
+        return PointerEpochFrame(
+            epoch = shared.epoch?.toContinuousPointerEpoch(),
+            state = state.copy(
+                scale = shared.transform.scale,
+                scrollX = -shared.transform.legalOffsetPx.x,
+                scrollY = -shared.transform.legalOffsetPx.y,
+            ),
+            rebased = shared.rebased,
+            shouldSettle = shared.shouldSettle,
         )
     }
 }
+
+private fun ContinuousPointerEpoch.toZoomPanPointerEpoch(): ZoomPanPointerEpoch =
+    ZoomPanPointerEpoch(
+        epochId = epochId,
+        mode = when (mode) {
+            PointerEpochMode.SINGLE_PAN -> ZoomPanPointerMode.SINGLE_PAN
+            PointerEpochMode.TWO_POINTER_PINCH -> ZoomPanPointerMode.TWO_POINTER_PINCH
+        },
+        activePointerIds = activePointerIds,
+        primaryPointerId = primaryPointerId,
+        secondaryPointerId = secondaryPointerId,
+        baseTransform = ZoomPanTransform(
+            scale = baseScale,
+            legalOffsetPx = ZoomPanPoint(-baseScrollX, -baseScrollY),
+        ),
+        baseCentroidPx = ZoomPanPoint(baseCentroidX, baseCentroidY),
+        baseSpanPx = baseSpan,
+        focalAnchor = ZoomPanFocalAnchor(focalDocumentX, focalDocumentY),
+    )
+
+private fun ZoomPanPointerEpoch.toContinuousPointerEpoch(): ContinuousPointerEpoch =
+    ContinuousPointerEpoch(
+        epochId = epochId,
+        mode = when (mode) {
+            ZoomPanPointerMode.SINGLE_PAN -> PointerEpochMode.SINGLE_PAN
+            ZoomPanPointerMode.TWO_POINTER_PINCH -> PointerEpochMode.TWO_POINTER_PINCH
+        },
+        activePointerIds = activePointerIds,
+        primaryPointerId = primaryPointerId,
+        secondaryPointerId = secondaryPointerId,
+        baseScale = baseTransform.scale,
+        baseScrollX = -baseTransform.legalOffsetPx.x,
+        baseScrollY = -baseTransform.legalOffsetPx.y,
+        baseCentroidX = baseCentroidPx.x,
+        baseCentroidY = baseCentroidPx.y,
+        baseSpan = baseSpanPx,
+        focalDocumentX = focalAnchor.contentX,
+        focalDocumentY = focalAnchor.contentY,
+    )
 
 data class ContinuousInteractionTransaction(
     val interactionId: Long = 0L,

@@ -2,13 +2,12 @@ package com.markleaf.app.ui.pdf
 
 import android.util.Log
 import android.content.pm.ApplicationInfo
+import android.os.SystemClock
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
@@ -44,8 +43,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -82,17 +81,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -107,6 +107,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -115,6 +116,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -126,13 +128,40 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.markleaf.app.R
 import com.markleaf.app.pdf.PdfReadingMode
 import com.markleaf.app.pdf.PdfRenderQuality
+import com.markleaf.app.pdf.AxisOverscrollPolicy
 import com.markleaf.app.pdf.HorizontalPanState
 import com.markleaf.app.pdf.HorizontalZoomPanPhysics
+import com.markleaf.app.pdf.HorizontalTilePlanning
+import com.markleaf.app.pdf.HorizontalPageTransitionDirection
+import com.markleaf.app.pdf.PageStripSlotRole
+import com.markleaf.app.pdf.PageStripTransition
+import com.markleaf.app.pdf.ThreePageStripPhysics
+import com.markleaf.app.pdf.ThreePageStripState
+import com.markleaf.app.pdf.LatestViewportConflator
+import com.markleaf.app.pdf.PdfTilePlan
+import com.markleaf.app.pdf.PdfGestureTransformController
+import com.markleaf.app.pdf.PdfGesturePhase
+import com.markleaf.app.pdf.PdfGestureFrameSample
+import com.markleaf.app.pdf.PdfGestureFrameTelemetryRing
+import com.markleaf.app.pdf.PdfViewportSessionState
+import com.markleaf.app.pdf.PdfViewportSnapshot
+import com.markleaf.app.pdf.PdfZoomBuckets
+import com.markleaf.app.pdf.TileInteractionPhase
+import com.markleaf.app.pdf.TileOverlaySnapshot
+import com.markleaf.app.pdf.TileRenderPipelinePolicy
+import com.markleaf.app.pdf.ZoomPanPhysics
+import com.markleaf.app.pdf.ZoomPanPhysicsProfile
+import com.markleaf.app.pdf.ZoomPanPoint
+import com.markleaf.app.pdf.ZoomPanPointer
+import com.markleaf.app.pdf.ZoomPanPointerMode
+import com.markleaf.app.pdf.ZoomedPageTransitionPhase
+import com.markleaf.app.pdf.asHorizontalPanState
 import com.markleaf.app.pdf.ContinuousScrollDirection
 import com.markleaf.app.pdf.ContinuousScrollPhase
 import com.markleaf.app.pdf.ContinuousViewportSnapshot
@@ -154,9 +183,14 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.StateFlow
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.yield
 
 /**
@@ -369,6 +403,7 @@ fun PdfViewerScreen(
                                 onContinuousEntryRestoreApplied = viewModel::onContinuousEntryRestoreApplied,
                                 onDocumentStateSettled = viewModel::commitContinuousDocumentState,
                                 onViewportSessionSettled = viewModel::commitViewportSession,
+                                onViewportSessionPreview = viewModel::previewViewportSession,
                                 onTilePlan = viewModel::requestPredictiveTiles,
                                 tileOverlaySnapshots = viewModel.tileOverlaySnapshot,
                                 onZoomGestureActive = viewModel::setZoomGestureActive,
@@ -396,6 +431,12 @@ fun PdfViewerScreen(
                                 onViewportWidthPx = viewModel::onViewportWidth,
                                 onPageChanged = viewModel::onHorizontalPageSettled,
                                 onZoomScaleSettled = viewModel::onZoomScaleSettled,
+                                onViewportSessionSettled = viewModel::commitViewportSession,
+                                onViewportSessionPreview = viewModel::previewViewportSession,
+                                onTilePlan = viewModel::requestPredictiveTiles,
+                                tileOverlaySnapshots = viewModel.tileOverlaySnapshot,
+                                onZoomGestureActive = viewModel::setZoomGestureActive,
+                                onEnsureAround = viewModel::ensurePagesAround,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -1068,9 +1109,17 @@ private fun SetPrintPageDialog(
     )
 }
 
+private data class HorizontalTilePlannerInput(
+    val snapshot: PdfViewportSnapshot,
+    val visible: com.markleaf.app.pdf.PageTileViewport,
+    val ahead: com.markleaf.app.pdf.PageTileViewport?,
+    val currentBucket: Int,
+    val targetBucket: Int,
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PdfHorizontalPagedArea(
+internal fun PdfHorizontalPagedArea(
     state: PdfViewerUiState.Ready,
     pageJump: PdfViewerViewModel.PageJumpRequest?,
     controlsVisible: Boolean,
@@ -1082,67 +1131,682 @@ private fun PdfHorizontalPagedArea(
     onViewportWidthPx: (Int) -> Unit,
     onPageChanged: (Int) -> Unit,
     onZoomScaleSettled: (Float) -> Unit,
+    onViewportSessionSettled: (PdfViewportSessionState) -> Unit = {},
+    onViewportSessionPreview: (PdfViewportSessionState) -> Unit = {},
+    onTilePlan: (PdfTilePlan) -> Unit = {},
+    tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
+    onZoomGestureActive: (Boolean) -> Unit = {},
+    onEnsureAround: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
+    qaProbe: HorizontalInteractionProbe? = null,
 ) {
-    val pagerState = rememberPagerState(
-        initialPage = state.pageIndex,
-        pageCount = { state.pageCount.coerceAtLeast(1) },
-    )
     // GPU zoom only inside clipped viewport — never covers TopBar.
-    var scale by remember(state.document.id) { mutableFloatStateOf(1f) }
-    var offset by remember(state.document.id) { mutableStateOf(Offset.Zero) }
+    var scale by remember(state.document.id) {
+        mutableFloatStateOf(
+            (state.viewportSessionState?.scale ?: state.zoomScale)
+                .coerceIn(PdfRenderQuality.MIN_ZOOM, PdfRenderQuality.MAX_ZOOM),
+        )
+    }
     var horizontalPan by remember(state.document.id) { mutableStateOf(HorizontalPanState()) }
     var horizontalPinching by remember(state.document.id) { mutableStateOf(false) }
-    val horizontalTransforms=remember(state.document.id){mutableStateMapOf<Int,Pair<Float,Offset>>()}
     var activeHorizontalPage by remember(state.document.id){mutableIntStateOf(state.pageIndex)}
     var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val scrubbing = state.scrubPreviewIndex != null
     val scheme = MaterialTheme.colorScheme
+    val horizontalViewportBackground = MarkLeafTheme.extra.pdfCanvas
     val viewConfig = LocalViewConfiguration.current
     val horizontalDensity = LocalDensity.current
+    val horizontalContext = LocalContext.current
+    val horizontalDebuggable = remember(horizontalContext) {
+        (horizontalContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
+    val pageContentGap = 8.dp
+    val pageContentMarginPx = with(horizontalDensity) { pageContentGap.toPx() }
+    val horizontalOverscrollLimitXPx = with(horizontalDensity) { 24.dp.toPx() }
+    val horizontalOverscrollLimitYPx = with(horizontalDensity) { 20.dp.toPx() }
+    val horizontalOverscrollPolicy = AxisOverscrollPolicy(
+        horizontalEnabled = true,
+        verticalEnabled = true,
+        maxDistancePx = horizontalOverscrollLimitXPx,
+        horizontalMaxDistancePx = horizontalOverscrollLimitXPx,
+        verticalMaxDistancePx = horizontalOverscrollLimitYPx,
+    )
     val horizontalScope = rememberCoroutineScope()
-    var horizontalReboundJob by remember(state.document.id) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val platformFlingRunner = remember(horizontalContext) { PlatformPdfFlingRunner(horizontalContext) }
+    val gestureTelemetryRing = remember(state.document.id) { PdfGestureFrameTelemetryRing() }
+    var horizontalMotionJob by remember(state.document.id) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var horizontalGestureGeneration by remember(state.document.id) { mutableLongStateOf(0L) }
+    var pageStrip by remember(state.document.id) {
+        mutableStateOf(
+            ThreePageStripState(
+                currentPage = state.pageIndex.coerceIn(0, state.pageCount.coerceAtLeast(1) - 1),
+                pageCount = state.pageCount.coerceAtLeast(1),
+            ),
+        )
+    }
+    var pageTransition by remember(state.document.id) {
+        mutableStateOf<PageStripTransition>(ThreePageStripPhysics.idle(0L))
+    }
+    var pageStripOffsetPx by remember(state.document.id) { mutableFloatStateOf(0f) }
+    var pageTransitionTargetSession by remember(state.document.id) {
+        mutableStateOf<PdfViewportSessionState?>(null)
+    }
+    var pageStripSettlingGeneration by remember(state.document.id) { mutableLongStateOf(-1L) }
+    var pageIndexChangeCountThisGesture by remember(state.document.id) { mutableIntStateOf(0) }
+    var slotRotationCountThisGesture by remember(state.document.id) { mutableIntStateOf(0) }
+    var settleStartCountThisGesture by remember(state.document.id) { mutableIntStateOf(0) }
+    var offsetRebaseCountThisGesture by remember(state.document.id) { mutableIntStateOf(0) }
     var consumedJumpId by remember { mutableStateOf(pageJump?.id) }
     var lastTapTimeMs by remember { mutableLongStateOf(0L) }
     var lastTapPosition by remember { mutableStateOf<Offset?>(null) }
-    val currentHorizontalStatePage by rememberUpdatedState(state.pageIndex)
+    val currentOnTilePlan by rememberUpdatedState(onTilePlan)
+    val currentOnZoomGestureActive by rememberUpdatedState(onZoomGestureActive)
+    val currentOnEnsureAround by rememberUpdatedState(onEnsureAround)
+    val currentOnViewportSessionSettled by rememberUpdatedState(onViewportSessionSettled)
+    val currentOnViewportSessionPreview by rememberUpdatedState(onViewportSessionPreview)
+    val horizontalOverlaySnapshot = if (tileOverlaySnapshots != null) {
+        val snapshot by tileOverlaySnapshots.collectAsStateWithLifecycle()
+        snapshot
+    } else {
+        TileOverlaySnapshot(entries = state.tileEntries)
+    }
+    val currentHorizontalOverlaySnapshot by rememberUpdatedState(horizontalOverlaySnapshot)
+    val horizontalViewportConflator = remember(state.document.id) {
+        LatestViewportConflator<HorizontalTilePlannerInput>()
+    }
+    val horizontalViewportSignal = remember(state.document.id) { Channel<Unit>(Channel.CONFLATED) }
+    val horizontalViewportSequence = remember(state.document.id) { AtomicLong(0L) }
+    var horizontalTileBucket by remember(state.document.id) { mutableIntStateOf(0) }
+    var horizontalTileTargetBucket by remember(state.document.id) { mutableIntStateOf(0) }
+    var horizontalPointerDown by remember(state.document.id) { mutableStateOf(false) }
+    var appliedHorizontalSessionGeneration by remember(state.document.id) { mutableLongStateOf(-1L) }
+    var horizontalTileRequestCount by remember(state.document.id) { mutableIntStateOf(0) }
+    var horizontalPageAheadRequestCount by remember(state.document.id) { mutableIntStateOf(0) }
+    var horizontalVisibleTileKeys by remember(state.document.id) {
+        mutableStateOf(emptySet<com.markleaf.app.pdf.PdfTileKey>())
+    }
+    val sharedGestureController = remember(state.document.id) {
+        PdfGestureTransformController(horizontalPan.asZoomPanTransform(scale))
+    }
 
-    // VM state does not drive Pager. Only a new explicit request id may reposition it.
-    LaunchedEffect(pageJump?.id) {
+    LaunchedEffect(qaProbe) {
+        qaProbe?.recordPage(state.pageIndex)
+        qaProbe?.recordTransform(scale, horizontalPan)
+    }
+
+    fun pageLayout(page: Int) = HorizontalZoomPanPhysics.fitPage(
+        viewportWidthPx = viewportSize.width.toFloat(),
+        viewportHeightPx = viewportSize.height.toFloat(),
+        pageAspect = state.pageAspects[page] ?: HorizontalZoomPanPhysics.DEFAULT_PAGE_ASPECT,
+        contentMarginPx = pageContentMarginPx,
+        horizontalMarginPx = 0f,
+    )
+
+    fun panBounds(page: Int, targetScale: Float) =
+        HorizontalZoomPanPhysics.bounds(pageLayout(page), targetScale)
+
+    fun horizontalSession(page: Int, generation: Long = System.nanoTime()) =
+        HorizontalZoomPanPhysics.viewportSession(
+            pageIndex = page,
+            layout = pageLayout(page),
+            scale = scale,
+            pan = horizontalPan,
+            generation = generation,
+            phase = sharedGestureController.snapshot().phase,
+            pointerEpoch = sharedGestureController.snapshot().pointerEpoch?.epochId,
+        )
+
+    fun commitHorizontalSession(page: Int) {
+        val session = horizontalSession(page)
+        appliedHorizontalSessionGeneration = session.generation
+        currentOnViewportSessionSettled(session)
+    }
+
+    fun publishHorizontalTileSnapshot(
+        page: Int,
+        pointerDown: Boolean,
+        rebaseFrame: Boolean = false,
+    ) {
+        if (viewportSize.width <= 0 || viewportSize.height <= 0 || page !in 0 until state.pageCount) return
+        val layout = pageLayout(page)
+        currentOnViewportSessionPreview(horizontalSession(page))
+        val visible = HorizontalTilePlanning.visiblePage(page, layout, scale, horizontalPan) ?: return
+        val now = System.nanoTime()
+        val sequence = horizontalViewportSequence.incrementAndGet()
+        val currentBucket = PdfZoomBuckets.index(scale, horizontalTileBucket)
+        horizontalTileBucket = currentBucket
+        val targetBucket = PdfZoomBuckets.index(scale, currentBucket)
+        horizontalTileTargetBucket = targetBucket
+        val phase = when {
+            !pointerDown -> TileInteractionPhase.IDLE
+            horizontalPinching -> TileInteractionPhase.PINCHING
+            else -> TileInteractionPhase.DRAGGING
+        }
+        val snapshot = PdfViewportSnapshot(
+            documentGeneration = state.tileDocumentGeneration,
+            geometryGeneration = visible.geometryGeneration,
+            viewportRectDocument = com.markleaf.app.pdf.DocumentViewportRect(
+                visible.visibleRect.left,
+                visible.visibleRect.top,
+                visible.visibleRect.right,
+                visible.visibleRect.bottom,
+            ),
+            scale = scale,
+            focalPointViewport = null,
+            velocityX = 0f,
+            velocityY = 0f,
+            zoomVelocity = 0f,
+            motionConfidence = if (pageTransition.direction != null) 1f else 0f,
+            interactionPhase = phase,
+            timestampNanos = now,
+            sequence = sequence,
+            pointerDown = pointerDown,
+            currentPage = page,
+            rebaseFrame = rebaseFrame,
+        )
+        val ahead = HorizontalTilePlanning.pageAhead(
+            pageIndex = page,
+            pageCount = state.pageCount,
+            direction = pageTransition.direction,
+            layoutForPage = ::pageLayout,
+            visible = visible,
+        )
+        horizontalViewportConflator.offer(
+            HorizontalTilePlannerInput(snapshot, visible, ahead, currentBucket, targetBucket),
+        )
+        horizontalViewportSignal.trySend(Unit)
+    }
+
+    fun displayOffset(pan: HorizontalPanState) =
+        Offset(pan.displayOffsetX, pan.displayOffsetY)
+
+    fun transformOrigin(page: Int): Offset {
+        val layout = pageLayout(page)
+        return Offset(
+            x = layout.viewportWidthPx / 2f,
+            y = layout.contentTopPx,
+        )
+    }
+
+    fun logHorizontalBounds(page: Int, targetScale: Float) {
+        if (!horizontalDebuggable || viewportSize.width <= 0 || viewportSize.height <= 0) return
+        val layout = pageLayout(page)
+        val bounds = HorizontalZoomPanPhysics.bounds(layout, targetScale)
+        Log.d(
+            "MarkLeafH1",
+            "H1_BOUNDS pageIndex=$page viewportWidthPx=${layout.viewportWidthPx} " +
+                "viewportHeightPx=${layout.viewportHeightPx} fittedWidthPx=${layout.fittedWidthPx} " +
+                "fittedHeightPx=${layout.fittedHeightPx} scale=$targetScale " +
+                "scaledWidthPx=${layout.fittedWidthPx * targetScale} " +
+                "scaledHeightPx=${layout.fittedHeightPx * targetScale} " +
+                "minX=${bounds.minX} maxX=${bounds.maxX} " +
+                "minY=${bounds.minY} maxY=${bounds.maxY}",
+        )
+    }
+
+    LaunchedEffect(state.document.id) {
+        var lastPlannerTickNanos = 0L
+        for (ignored in horizontalViewportSignal) {
+            val throttleNanos = TileRenderPipelinePolicy.PLANNER_THROTTLE_MS * 1_000_000L
+            val elapsed = System.nanoTime() - lastPlannerTickNanos
+            if (elapsed in 1 until throttleNanos) {
+                delay((throttleNanos - elapsed + 999_999L) / 1_000_000L)
+            }
+            val input = horizontalViewportConflator.pollLatest() ?: continue
+            val plan = HorizontalTilePlanning.plan(
+                documentId = state.document.id,
+                documentGeneration = state.tileDocumentGeneration,
+                snapshot = input.snapshot,
+                visible = input.visible,
+                currentBucket = input.currentBucket,
+                targetBucket = input.targetBucket,
+                ahead = input.ahead,
+            )
+            horizontalTileRequestCount += plan.requests.size
+            horizontalVisibleTileKeys = plan.currentVisibleKeys
+            horizontalPageAheadRequestCount += plan.requests.count {
+                it.priority == com.markleaf.app.pdf.TilePriority.PAGE_AHEAD
+            }
+            currentOnTilePlan(plan)
+            HorizontalRealPathTelemetry.onPlan(plan)
+            if (horizontalDebuggable) {
+                Log.d(
+                    "MarkLeafH13",
+                    "{\"type\":\"tilePlanner\",\"eventTimeNanos\":${System.nanoTime()}," +
+                        "\"pointerDown\":${input.snapshot.pointerDown}," +
+                        "\"gesturePhase\":\"${input.snapshot.interactionPhase}\"," +
+                        "\"pageIndex\":${input.snapshot.currentPage}," +
+                        "\"scale\":${input.snapshot.scale}," +
+                        "\"tilePlannerTick\":${input.snapshot.sequence}," +
+                        "\"tileRequestCount\":$horizontalTileRequestCount," +
+                        "\"tileReadyCount\":${currentHorizontalOverlaySnapshot.entries.size}," +
+                        "\"tileSwapCount\":${currentHorizontalOverlaySnapshot.sequence}," +
+                        "\"pageAheadRequestCount\":$horizontalPageAheadRequestCount}",
+                )
+            }
+            lastPlannerTickNanos = System.nanoTime()
+        }
+    }
+
+    DisposableEffect(horizontalViewportSignal) {
+        onDispose { horizontalViewportSignal.close() }
+    }
+
+    fun cancelHorizontalMotion() {
+        sharedGestureController.cancelMotion(horizontalPan.asZoomPanTransform(scale))
+        horizontalMotionJob?.cancel()
+        horizontalMotionJob = null
+    }
+
+    suspend fun animateHorizontalSpring(generation: Long, page: Int) {
+        if (horizontalPan.visualOverscrollX == 0f && horizontalPan.visualOverscrollY == 0f) {
+            horizontalPan = HorizontalZoomPanPhysics.settle(horizontalPan)
+            return
+        }
+        val startedAtNs = System.nanoTime()
+        var previousNanos = 0L
+        var settled = false
+        while (
+            generation == sharedGestureController.snapshot().motionGeneration &&
+            page == activeHorizontalPage &&
+            !settled
+        ) {
+            withFrameNanos { now ->
+                if (previousNanos != 0L) {
+                    val frame = sharedGestureController.stepSpring(
+                        generation = generation,
+                        elapsedNanos = now - previousNanos,
+                        config = ZoomPanPhysicsProfile.HorizontalSpring,
+                        overscrollPolicy = horizontalOverscrollPolicy,
+                    )
+                    if (frame != null) {
+                        settled = frame.settled
+                        scale = frame.snapshot.transform.scale
+                        horizontalPan = frame.snapshot.transform.asHorizontalPanState()
+                    }
+                    qaProbe?.recordTransform(scale, horizontalPan)
+                }
+                previousNanos = now
+            }
+        }
+        if (generation == sharedGestureController.snapshot().motionGeneration && page == activeHorizontalPage) {
+            val snapshot = sharedGestureController.finishMotion(generation, settleOverscroll = true)
+            if (snapshot != null) {
+                scale = snapshot.transform.scale
+                horizontalPan = snapshot.transform.asHorizontalPanState()
+            }
+            val durationMs = (System.nanoTime() - startedAtNs) / 1_000_000L
+            qaProbe?.recordTransform(scale, horizontalPan)
+            qaProbe?.recordSpring(durationMs)
+            if (horizontalDebuggable) {
+                Log.d(
+                    "MarkLeafH1",
+                    "H1_SPRING durationMs=$durationMs legalOffset=" +
+                        "(${horizontalPan.legalOffsetX},${horizontalPan.legalOffsetY})",
+                )
+            }
+            commitHorizontalSession(page)
+        }
+    }
+
+    fun startHorizontalSpring(page: Int) {
+        cancelHorizontalMotion()
+        val generation = sharedGestureController.beginSpring(horizontalPan.asZoomPanTransform(scale))
+        horizontalMotionJob = horizontalScope.launch {
+            try {
+                animateHorizontalSpring(generation, page)
+            } finally {
+                if (generation == sharedGestureController.snapshot().motionGeneration) horizontalMotionJob = null
+            }
+        }
+    }
+
+    fun startHorizontalFling(page: Int, fingerVelocity: Offset) {
+        cancelHorizontalMotion()
+        if (fingerVelocity.getDistance() < platformFlingRunner.minimumFlingVelocityPxPerSecond ||
+            HorizontalZoomPanPhysics.owner(scale) != com.markleaf.app.pdf.HorizontalGestureOwner.INNER_PAN
+        ) {
+            commitHorizontalSession(page)
+            return
+        }
+        val generation = sharedGestureController.beginPlatformFling(
+            horizontalPan.asZoomPanTransform(scale),
+        )
+        horizontalMotionJob = horizontalScope.launch {
+            var flingResult: PlatformPdfFlingResult? = null
+            try {
+                flingResult = platformFlingRunner.run(
+                    releaseVelocityPxPerSecond = fingerVelocity,
+                    isCurrent = {
+                        generation == sharedGestureController.snapshot().motionGeneration &&
+                            page == activeHorizontalPage &&
+                            HorizontalZoomPanPhysics.owner(scale) ==
+                            com.markleaf.app.pdf.HorizontalGestureOwner.INNER_PAN
+                    },
+                    applyDelta = { requested ->
+                        val frame = sharedGestureController.applyPlatformFlingDelta(
+                            generation = generation,
+                            deltaPx = ZoomPanPoint(requested.x, requested.y),
+                            bounds = panBounds(page, scale).asZoomPanBounds(),
+                            overscrollPolicy = AxisOverscrollPolicy.Disabled,
+                        )
+                        if (frame == null) {
+                            Offset.Zero
+                        } else {
+                            scale = frame.snapshot.transform.scale
+                            horizontalPan = frame.snapshot.transform.asHorizontalPanState()
+                            qaProbe?.recordTransform(scale, horizontalPan)
+                            Offset(frame.appliedDeltaPx.x, frame.appliedDeltaPx.y)
+                        }
+                    },
+                )
+            } finally {
+                if (generation == sharedGestureController.snapshot().motionGeneration) {
+                    horizontalMotionJob = null
+                    sharedGestureController.finishMotion(generation, settleOverscroll = false)
+                    if (horizontalDebuggable) {
+                        flingResult?.let { result ->
+                            Log.d(
+                                "MarkLeafH1",
+                                "H1_PLATFORM_FLING release=(${result.releaseVelocityPxPerSecond.x}," +
+                                    "${result.releaseVelocityPxPerSecond.y}) splinePosition=" +
+                                    "(${result.splinePositionPx.x},${result.splinePositionPx.y}) " +
+                                    "plannedFinal=(${result.plannedFinalPositionPx.x}," +
+                                    "${result.plannedFinalPositionPx.y}) " +
+                                    "displayedPosition=(${result.displayedPositionPx.x}," +
+                                    "${result.displayedPositionPx.y}) " +
+                                    "durationMs=${result.durationMs} interrupted=${result.interrupted} " +
+                                    "terminatedByBounds=${result.terminatedByBounds} " +
+                                    "legalOffset=(${horizontalPan.legalOffsetX},${horizontalPan.legalOffsetY})",
+                            )
+                        }
+                    }
+                    if (horizontalPan.visualOverscrollX != 0f || horizontalPan.visualOverscrollY != 0f) {
+                        startHorizontalSpring(page)
+                    } else {
+                        commitHorizontalSession(page)
+                    }
+                }
+            }
+        }
+    }
+
+    // Explicit navigation re-centres the stable strip. It never animates through intermediate pages.
+    LaunchedEffect(pageJump?.id, horizontalPointerDown, pageTransition.phase) {
         val jump = pageJump ?: return@LaunchedEffect
+        if (horizontalPointerDown || pageTransition.phase != ZoomedPageTransitionPhase.IDLE) {
+            return@LaunchedEffect
+        }
         if (!com.markleaf.app.pdf.PagerRequestPolicy.shouldConsume(jump.id, consumedJumpId)) {
             return@LaunchedEffect
         }
         consumedJumpId = jump.id
-        pagerState.scrollToPage(jump.targetPageIndex.coerceIn(0, state.pageCount - 1))
-    }
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.settledPage }
-            .distinctUntilChanged()
-            .collect { page ->
-                if (page != currentHorizontalStatePage) onPageChanged(page)
-            }
+        cancelHorizontalMotion()
+        val target = jump.targetPageIndex.coerceIn(0, state.pageCount - 1)
+        pageStripOffsetPx = 0f
+        pageTransition = ThreePageStripPhysics.idle(horizontalGestureGeneration)
+        pageTransitionTargetSession = null
+        pageStrip = ThreePageStripState(target, state.pageCount.coerceAtLeast(1))
+        activeHorizontalPage = target
     }
 
-    fun clampOffset(s: Float, o: Offset): Offset {
-        if (s <= 1.01f || viewportSize.width <= 0) return Offset.Zero
-        val maxX = viewportSize.width * (s - 1f) / 2f
-        val maxY = viewportSize.height * (s - 1f) / 2f
-        return Offset(
-            o.x.coerceIn(-maxX, maxX),
-            o.y.coerceIn(-maxY, maxY),
-        )
-    }
     LaunchedEffect(state.pageIndex) {
+        if (horizontalPointerDown) return@LaunchedEffect
         if(activeHorizontalPage!=state.pageIndex){
-            horizontalReboundJob?.cancel()
-            val legal=clampOffset(scale,Offset(horizontalPan.contentX,horizontalPan.contentY))
-            horizontalTransforms[activeHorizontalPage]=scale to legal
+            cancelHorizontalMotion()
+            val outgoingScale = scale
+            val outgoingPage = activeHorizontalPage
+            val pageDelta = state.pageIndex - activeHorizontalPage
+            val outgoingSession = horizontalSession(outgoingPage)
             activeHorizontalPage=state.pageIndex
-            val restored=horizontalTransforms[state.pageIndex]?: (1f to Offset.Zero)
-            scale=restored.first;offset=restored.second
-            horizontalPan=HorizontalPanState(contentX=offset.x,contentY=offset.y)
+            val entryDirection = when {
+                pageDelta > 0 -> HorizontalPageTransitionDirection.NEXT
+                pageDelta < 0 -> HorizontalPageTransitionDirection.PREVIOUS
+                else -> null
+            }
+            val continued = HorizontalZoomPanPhysics.restoreViewportSession(
+                session = outgoingSession.copy(pageIndex = state.pageIndex),
+                layout = pageLayout(state.pageIndex),
+                entryDirection = entryDirection,
+            )
+            scale = continued.scale
+            horizontalPan = continued.pan
+            pageStripOffsetPx = 0f
+            pageTransition = ThreePageStripPhysics.idle(horizontalGestureGeneration)
+            pageTransitionTargetSession = null
+            pageStrip = ThreePageStripState(
+                currentPage = state.pageIndex,
+                pageCount = state.pageCount.coerceAtLeast(1),
+            )
+            sharedGestureController.replaceTransform(horizontalPan.asZoomPanTransform(scale))
+            if (horizontalDebuggable) {
+                val targetSession = horizontalSession(state.pageIndex)
+                Log.d(
+                    "MarkLeafH14",
+                    "H14_PAGE_COMMIT outgoingPage=$outgoingPage targetPage=${state.pageIndex} " +
+                        "direction=$entryDirection scaleBefore=$outgoingScale scaleAfter=$scale " +
+                        "anchorYBefore=${outgoingSession.pageAnchorYFraction} " +
+                        "anchorYAfter=${targetSession.pageAnchorYFraction} " +
+                        "entryOffsetX=${horizontalPan.legalOffsetX}",
+                )
+            }
+            qaProbe?.recordPageCommit(outgoingScale, scale, state.pageIndex)
+            qaProbe?.recordTransform(scale, horizontalPan)
             onZoomScaleSettled(scale)
+            commitHorizontalSession(state.pageIndex)
+            logHorizontalBounds(state.pageIndex, scale)
+        }
+    }
+
+    val activeHorizontalAspect = state.pageAspects[activeHorizontalPage] ?:
+        HorizontalZoomPanPhysics.DEFAULT_PAGE_ASPECT
+    LaunchedEffect(activeHorizontalPage, viewportSize, activeHorizontalAspect) {
+        if (viewportSize.width <= 0 || viewportSize.height <= 0) return@LaunchedEffect
+        if (horizontalPointerDown) {
+            if (horizontalDebuggable) {
+                Log.d(
+                    "MarkLeafH15",
+                    "H15_GEOMETRY_APPLY_DEFERRED pointerDown=true pageIndex=$activeHorizontalPage",
+                )
+            }
+            return@LaunchedEffect
+        }
+        cancelHorizontalMotion()
+        val pendingSession = state.viewportSessionState?.normalized(state.pageCount, activeHorizontalPage)
+        if (pendingSession != null &&
+            pendingSession.generation != appliedHorizontalSessionGeneration &&
+            pendingSession.pageIndex == activeHorizontalPage
+        ) {
+            val restored = HorizontalZoomPanPhysics.restoreViewportSession(
+                pendingSession,
+                pageLayout(activeHorizontalPage),
+            )
+            scale = restored.scale
+            horizontalPan = restored.pan
+            appliedHorizontalSessionGeneration = pendingSession.generation
+            if (horizontalDebuggable && pendingSession.readingMode == PdfReadingMode.HORIZONTAL_PAGED) {
+                val appliedSession = horizontalSession(activeHorizontalPage)
+                Log.d(
+                    "MarkLeafH14",
+                    "H14_MODE_APPLY mode=${PdfReadingMode.HORIZONTAL_PAGED} " +
+                        "page=${appliedSession.pageIndex} scale=${appliedSession.scale} " +
+                        "anchorY=${appliedSession.pageAnchorYFraction} " +
+                        "generation=${pendingSession.generation}",
+                )
+            }
+        } else {
+            horizontalPan = if (scale <= HorizontalZoomPanPhysics.PAGE_STRIP_SCALE_THRESHOLD) {
+                HorizontalPanState()
+            } else {
+                HorizontalZoomPanPhysics.clampToBounds(
+                    horizontalPan,
+                    panBounds(activeHorizontalPage, scale),
+                )
+            }
+        }
+        sharedGestureController.replaceTransform(horizontalPan.asZoomPanTransform(scale))
+        logHorizontalBounds(activeHorizontalPage, scale)
+        val layout = pageLayout(activeHorizontalPage)
+        qaProbe?.recordLayout(
+            layout.viewportWidthPx,
+            layout.viewportHeightPx,
+            layout.contentTopPx,
+            layout.fittedWidthPx,
+            layout.fittedHeightPx,
+        )
+        currentOnEnsureAround(activeHorizontalPage)
+        publishHorizontalTileSnapshot(activeHorizontalPage, pointerDown = false)
+    }
+
+    fun settleZoomedPageTransition(page: Int, fingerVelocityX: Float) {
+        check(!horizontalPointerDown) {
+            "page-strip settle cannot start while pointerDown=true"
+        }
+        if (pageStripSettlingGeneration == pageTransition.gestureGeneration) return
+        cancelHorizontalMotion()
+        val released = ThreePageStripPhysics.release(
+            transition = pageTransition,
+            displayedOffsetPx = pageStripOffsetPx,
+            viewportWidthPx = viewportSize.width.toFloat(),
+            releaseVelocityXPxPerSecond = fingerVelocityX,
+            minimumFlingVelocityPxPerSecond = platformFlingRunner.minimumFlingVelocityPxPerSecond,
+        )
+        pageTransition = released
+        pageStripSettlingGeneration = released.gestureGeneration
+        settleStartCountThisGesture += 1
+        check(settleStartCountThisGesture == 1) {
+            "page-strip settle started more than once for gesture ${released.gestureGeneration}"
+        }
+        qaProbe?.recordStripSettleStart()
+        qaProbe?.recordPageTransition(pageTransition, pageStripOffsetPx)
+        val targetOffset = ThreePageStripPhysics.settleTargetPx(
+            released,
+            viewportSize.width.toFloat(),
+        )
+        if (horizontalDebuggable) {
+            val targetBitmap = released.targetPage?.let(state.pageBitmaps::get)
+            Log.d(
+                "MarkLeafH15",
+                "H15_STRIP_RELEASE pageIndex=$page eventTimeNanos=${System.nanoTime()} " +
+                    "offsetPx=$pageStripOffsetPx releaseVelocityX=$fingerVelocityX " +
+                    "decision=${released.phase} settleTargetPx=$targetOffset " +
+                    "targetPage=${released.targetPage} " +
+                    "targetBaseReady=${targetBitmap != null} " +
+                    "visibleNeighborBitmapId=${targetBitmap?.let(System::identityHashCode) ?: -1}",
+            )
+        }
+        horizontalMotionJob = horizontalScope.launch {
+            val animation = Animatable(pageStripOffsetPx)
+            animation.animateTo(targetOffset, animationSpec = spring()) {
+                val width = viewportSize.width.toFloat().coerceAtLeast(1f)
+                val boundedValue = when (released.direction) {
+                    HorizontalPageTransitionDirection.PREVIOUS -> value.coerceIn(0f, width)
+                    HorizontalPageTransitionDirection.NEXT -> value.coerceIn(-width, 0f)
+                    null -> 0f
+                }
+                pageStripOffsetPx = boundedValue
+                qaProbe?.recordPageTransition(released, boundedValue)
+            }
+            pageStripOffsetPx = targetOffset
+            val settledOffset = pageStripOffsetPx
+            if (released.phase == ZoomedPageTransitionPhase.COMMITTING) {
+                val targetPage = released.targetPage ?: page
+                val outgoingScale = scale
+                val beforeRotation = pageStrip
+                val oldBitmap = state.pageBitmaps[page] ?: state.pageImage
+                val targetBitmap = state.pageBitmaps[targetPage]
+                val outgoingSession = horizontalSession(page)
+                val continued = HorizontalZoomPanPhysics.restoreViewportSession(
+                    session = outgoingSession.copy(pageIndex = targetPage),
+                    layout = pageLayout(targetPage),
+                    entryDirection = released.direction,
+                )
+                // At -/+viewport the neighbour is already at visual zero. Rotate its stable
+                // physical slot to CURRENT and rebase the strip in the same snapshot.
+                val width = viewportSize.width.toFloat().coerceAtLeast(1f)
+                val targetRole = when (checkNotNull(released.direction)) {
+                    HorizontalPageTransitionDirection.PREVIOUS ->
+                        com.markleaf.app.pdf.PageStripSlotRole.PREVIOUS
+                    HorizontalPageTransitionDirection.NEXT ->
+                        com.markleaf.app.pdf.PageStripSlotRole.NEXT
+                }
+                val beforeRotationTargetX = ThreePageStripPhysics.slotTranslationPx(
+                    targetRole,
+                    width,
+                    settledOffset,
+                )
+                pageStrip = pageStrip.committed(checkNotNull(released.direction))
+                slotRotationCountThisGesture += 1
+                activeHorizontalPage = targetPage
+                scale = continued.scale
+                horizontalPan = continued.pan
+                sharedGestureController.replaceTransform(horizontalPan.asZoomPanTransform(scale))
+                pageStripOffsetPx = 0f
+                offsetRebaseCountThisGesture += 1
+                pageIndexChangeCountThisGesture += 1
+                check(pageIndexChangeCountThisGesture <= 1)
+                check(slotRotationCountThisGesture <= 1)
+                pageTransition = ThreePageStripPhysics.idle(released.gestureGeneration)
+                pageTransitionTargetSession = null
+                val afterRotationCurrentX = ThreePageStripPhysics.slotTranslationPx(
+                    com.markleaf.app.pdf.PageStripSlotRole.CURRENT,
+                    width,
+                    pageStripOffsetPx,
+                )
+                val slotRotationVisualJumpPx = abs(afterRotationCurrentX - beforeRotationTargetX)
+                check(slotRotationVisualJumpPx <= ThreePageStripPhysics.FINAL_OFFSET_EPSILON_PX) {
+                    "slot rotation visual jump $slotRotationVisualJumpPx px"
+                }
+                qaProbe?.recordSlotRotation(pageStrip, slotRotationVisualJumpPx)
+                qaProbe?.recordOffsetRebase()
+                qaProbe?.recordStripSettle(targetOffset, settledOffset, pageStripOffsetPx)
+                qaProbe?.recordPageCommit(outgoingScale, scale, targetPage)
+                qaProbe?.recordTransform(scale, horizontalPan)
+                onPageChanged(targetPage)
+                onZoomScaleSettled(scale)
+                commitHorizontalSession(targetPage)
+                currentOnEnsureAround(targetPage)
+                if (horizontalDebuggable) {
+                    Log.d(
+                        "MarkLeafH15",
+                        "H15_PAGE_TRANSITION_COMMIT sourcePage=$page targetPage=$targetPage " +
+                            "commitTimeNanos=${System.nanoTime()} " +
+                            "settleTargetPx=$targetOffset settleFinalPx=$settledOffset " +
+                            "rebaseFinalPx=$pageStripOffsetPx viewportWidthPx=${viewportSize.width} " +
+                            "scaleBefore=$outgoingScale scaleAfter=$scale " +
+                            "oldCurrentSlotId=${beforeRotation.currentSlotId} " +
+                            "oldTargetSlotId=${beforeRotation.nextSlotId.takeIf { released.direction == HorizontalPageTransitionDirection.NEXT } ?: beforeRotation.previousSlotId} " +
+                            "newCurrentSlotId=${pageStrip.currentSlotId} " +
+                            "slotRotationVisualJumpPx=$slotRotationVisualJumpPx " +
+                            "pageIndexChangeCount=$pageIndexChangeCountThisGesture " +
+                            "slotRotationCount=$slotRotationCountThisGesture " +
+                            "settleStartCount=$settleStartCountThisGesture " +
+                            "offsetRebaseCount=$offsetRebaseCountThisGesture " +
+                            "pagerProgrammaticScrollCount=0 " +
+                            "oldBitmapId=${oldBitmap?.let(System::identityHashCode) ?: -1} " +
+                            "targetBitmapId=${targetBitmap?.let(System::identityHashCode) ?: -1}",
+                    )
+                }
+            } else {
+                pageStripOffsetPx = 0f
+                pageTransition = ThreePageStripPhysics.idle(released.gestureGeneration)
+                pageTransitionTargetSession = null
+                sharedGestureController.replaceTransform(horizontalPan.asZoomPanTransform(scale))
+                qaProbe?.recordStripSettle(targetOffset, settledOffset, pageStripOffsetPx)
+                commitHorizontalSession(page)
+                if (horizontalDebuggable) {
+                    Log.d(
+                        "MarkLeafH15",
+                        "H15_PAGE_TRANSITION_CANCEL page=$page settleTargetPx=0.0 " +
+                            "settleFinalPx=$settledOffset pageIndexChangeCount=$pageIndexChangeCountThisGesture " +
+                            "slotRotationCount=$slotRotationCountThisGesture " +
+                            "settleStartCount=$settleStartCountThisGesture " +
+                            "offsetRebaseCount=$offsetRebaseCountThisGesture " +
+                            "pagerProgrammaticScrollCount=0",
+                    )
+                }
+            }
+            horizontalMotionJob = null
         }
     }
 
@@ -1150,6 +1814,8 @@ private fun PdfHorizontalPagedArea(
         modifier = modifier
             .fillMaxSize()
             .clipToBounds()
+            .background(horizontalViewportBackground)
+            .testTag("h1-horizontal-viewport")
             .onSizeChanged {
                 viewportSize = it
                 onViewportWidthPx(it.width)
@@ -1167,118 +1833,530 @@ private fun PdfHorizontalPagedArea(
             return@Box
         }
 
-        HorizontalPager(
-            state = pagerState,
-            userScrollEnabled = scale <= 1.01f && !horizontalPinching,
-            beyondViewportPageCount = 0,
-            modifier = Modifier.fillMaxSize(),
-        ) { page ->
+        pageStrip.slots().forEach { slot ->
+            val page = slot.pageIndex ?: return@forEach
+            key(slot.stableId) {
             val bmp = if (page == state.pageIndex) {
                 state.pageImage ?: state.pageBitmaps[page]
             } else {
                 state.pageBitmaps[page]
             }
+            val fittedPage = pageLayout(page)
+            val fittedGeometry = com.markleaf.app.pdf.pageGeometryGeneration(
+                fittedPage.fittedWidthPx,
+                fittedPage.fittedHeightPx,
+                rotation = 0,
+            )
+            val horizontalTiles = horizontalOverlaySnapshot.entries.values.filter { tile ->
+                tile.key.documentGeneration == state.tileDocumentGeneration &&
+                    tile.key.pageIndex == page &&
+                    tile.key.geometryGeneration == fittedGeometry &&
+                    tile.key.fittedPageWidthVersion == fittedPage.fittedWidthPx.roundToInt() &&
+                    tile.key.zoomBucket in setOf(horizontalTileBucket, horizontalTileTargetBucket)
+            }
+            val pendingHorizontalRenderSession = state.viewportSessionState
+                ?.normalized(state.pageCount, activeHorizontalPage)
+                ?.takeIf { session ->
+                    session.readingMode == PdfReadingMode.HORIZONTAL_PAGED &&
+                        session.pageIndex == activeHorizontalPage &&
+                        session.generation != appliedHorizontalSessionGeneration
+                }
+            val staticRenderedTransform = if (page == activeHorizontalPage) {
+                pendingHorizontalRenderSession?.let { session ->
+                    HorizontalZoomPanPhysics.restoreViewportSession(session, fittedPage)
+                }
+            } else if (page == pageTransitionTargetSession?.pageIndex) {
+                HorizontalZoomPanPhysics.restoreViewportSession(
+                    session = checkNotNull(pageTransitionTargetSession).copy(pageIndex = page),
+                    layout = fittedPage,
+                    entryDirection = if (page > activeHorizontalPage) {
+                        HorizontalPageTransitionDirection.NEXT
+                    } else {
+                        HorizontalPageTransitionDirection.PREVIOUS
+                    },
+                )
+            } else {
+                com.markleaf.app.pdf.HorizontalPageTransform(1f, HorizontalPanState())
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = ThreePageStripPhysics.slotTranslationPx(
+                            role = slot.role,
+                            viewportWidthPx = viewportSize.width.toFloat(),
+                            stripOffsetPx = pageStripOffsetPx,
+                        )
+                    }
                     .clipToBounds()
-                    .pointerInput(page, currentHorizontalStatePage) {
-                        if (page != currentHorizontalStatePage) return@pointerInput
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            horizontalReboundJob?.cancel()
-                            val continuous=clampOffset(scale,offset)
-                            horizontalPan=HorizontalPanState(contentX=continuous.x,contentY=continuous.y)
-                            offset=continuous
+                    .background(horizontalViewportBackground)
+                    .pointerInput(
+                        slot.stableId,
+                        slot.role,
+                        activeHorizontalPage,
+                        fittedPage.fittedWidthPx,
+                        fittedPage.fittedHeightPx,
+                    ) {
+                        // Any visible portion of the stable strip can interrupt a settle. All
+                        // physical slots still feed the same controller and the same CURRENT page.
+                        val page = activeHorizontalPage
+                        fun pointerInViewport(localPosition: Offset): Offset = Offset(
+                            x = ThreePageStripPhysics.pointerXInViewport(
+                                localPointerX = localPosition.x,
+                                role = slot.role,
+                                viewportWidthPx = viewportSize.width.toFloat(),
+                                stripOffsetPx = pageStripOffsetPx,
+                            ),
+                            y = localPosition.y,
+                        )
+                        awaitPdfGestureLifecycle(sharedGestureController) { down ->
+                            cancelHorizontalMotion()
+                            gestureTelemetryRing.clear()
+                            horizontalPointerDown = true
+                            HorizontalRealPathTelemetry.onPointerDown()
+                            currentOnZoomGestureActive(true)
+                            horizontalGestureGeneration += 1L
+                            pageIndexChangeCountThisGesture = 0
+                            slotRotationCountThisGesture = 0
+                            settleStartCountThisGesture = 0
+                            offsetRebaseCountThisGesture = 0
+                            pageTransition = ThreePageStripPhysics.interrupt(
+                                previous = pageTransition,
+                                displayedOffsetPx = pageStripOffsetPx,
+                                currentPage = page,
+                                pageCount = state.pageCount,
+                                generation = horizontalGestureGeneration,
+                            )
+                            if (!pageTransition.active) pageTransitionTargetSession = null
+                            qaProbe?.beginPageStripGesture(
+                                strip = pageStrip,
+                                pageIndex = page,
+                                offsetPx = pageStripOffsetPx,
+                                viewportWidthPx = viewportSize.width.toFloat(),
+                            )
+                            HorizontalRealPathTelemetry.onPageStripGestureStart(
+                                strip = pageStrip,
+                                pageIndex = page,
+                                offsetPx = pageStripOffsetPx,
+                                viewportWidthPx = viewportSize.width.toFloat(),
+                            )
+                            qaProbe?.recordPageTransition(pageTransition, pageStripOffsetPx)
+                            horizontalPan = if (
+                                scale <= HorizontalZoomPanPhysics.PAGE_STRIP_SCALE_THRESHOLD
+                            ) {
+                                HorizontalPanState()
+                            } else {
+                                HorizontalZoomPanPhysics.clampToBounds(
+                                    horizontalPan,
+                                    panBounds(page, scale),
+                                )
+                            }
+                            val downOrigin = transformOrigin(page)
+                            val downViewportPosition = pointerInViewport(down.position)
+                            sharedGestureController.beginGesture(
+                                currentTransform = horizontalPan.asZoomPanTransform(scale),
+                                initialPointers = listOf(
+                                    ZoomPanPointer(
+                                        down.id.value,
+                                        ZoomPanPoint(
+                                            downViewportPosition.x,
+                                            downViewportPosition.y,
+                                        ),
+                                    ),
+                                ),
+                                transformOriginViewportPx = ZoomPanPoint(downOrigin.x, downOrigin.y),
+                                boundsForScale = { targetScale ->
+                                    panBounds(page, targetScale).asZoomPanBounds()
+                                },
+                                overscrollPolicy = horizontalOverscrollPolicy,
+                            )
+                            logHorizontalBounds(page, scale)
+                            var velocityTracker = VelocityTracker().also {
+                                it.addPosition(down.uptimeMillis, downViewportPosition)
+                            }
                             var transformed = false
-                            var activeIds = emptyList<Long>()
-                            var pair: Pair<Long,Long>? = null
-                            var baseScale = scale
-                            var baseOffset = offset
-                            var baseCentroid = Offset.Zero
-                            var baseSpan = 1f
-                            var focal = Offset.Zero
+                            var singlePanUsed = false
+                            var lastPanLogMs = -120L
+                            var telemetryRawPan = Offset.Zero
+                            var telemetryLegal = Offset.Zero
+                            var telemetryResidual = Offset.Zero
+                            var telemetryRawScaleFactor = 1f
+                            var stripRawInputAbsPx = 0f
+                            var stripDisplayedDeltaAbsPx = 0f
+                            var stripReverseDeltaCount = 0
+                            publishHorizontalTileSnapshot(page, pointerDown = true, rebaseFrame = true)
                             do {
                                 val event = awaitPointerEvent()
                                 val pressed = event.changes.filter { it.pressed }
-                                val ids=pressed.map{it.id.value}.sorted()
-                                val changed=ids!=activeIds
-                                if(changed && pressed.isNotEmpty()) {
-                                    horizontalPinching=pressed.size>=2
-                                    horizontalPan=horizontalPan.copy(overscrollX=0f,overscrollY=0f,edgeAccumulation=0f,handedOff=false)
-                                    activeIds=ids
-                                    pair=if(pressed.size>=2) {
-                                        val old=pair
-                                        if(old!=null&&old.first in ids&&old.second in ids) old else {
-                                            val retained=listOfNotNull(old?.first,old?.second).filter{it in ids}
-                                            val chosen=(retained+ids.filterNot{it in retained}).take(2)
-                                            chosen[0] to chosen[1]
-                                        }
-                                    } else null
-                                    baseScale=scale;baseOffset=offset
-                                    val selected=if(pair!=null) pressed.filter{it.id.value==pair!!.first||it.id.value==pair!!.second} else pressed.take(1)
-                                    baseCentroid=selected.map{it.position}.reduce{a,b->a+b}/selected.size.toFloat()
-                                    baseSpan=if(selected.size==2)(selected[0].position-selected[1].position).getDistance().coerceAtLeast(.001f) else 1f
-                                    val center=Offset(viewportSize.width/2f,viewportSize.height/2f)
-                                    focal=(baseCentroid-center-baseOffset)/baseScale.coerceAtLeast(.001f)
-                                    pressed.forEach{if(it.positionChanged())it.consume()}
-                                } else if (pressed.size >= 2) {
-                                    transformed = true
-                                    horizontalPinching=true
-                                    val locked=pair?.let{p->pressed.filter{it.id.value==p.first||it.id.value==p.second}}?:emptyList()
-                                    if(locked.size!=2) continue
-                                    val centroid=(locked[0].position+locked[1].position)/2f
-                                    val span=(locked[0].position-locked[1].position).getDistance().coerceAtLeast(.001f)
-                                    val newScale = (baseScale * span/baseSpan).coerceIn(
-                                        PdfRenderQuality.MIN_ZOOM,
-                                        PdfRenderQuality.MAX_ZOOM,
+                                val origin = transformOrigin(page)
+                                val controllerFrame = if (pressed.isNotEmpty()) {
+                                    val pointers = pressed.map {
+                                        val viewportPosition = pointerInViewport(it.position)
+                                        ZoomPanPointer(
+                                            id = it.id.value,
+                                            positionPx = ZoomPanPoint(
+                                                viewportPosition.x,
+                                                viewportPosition.y,
+                                            ),
+                                        )
+                                    }
+                                    sharedGestureController.pointerFrame(
+                                        pointers = pointers,
+                                        transformOriginViewportPx = ZoomPanPoint(origin.x, origin.y),
+                                        boundsForScale = { targetScale ->
+                                            panBounds(page, targetScale).asZoomPanBounds()
+                                        },
+                                        overscrollPolicy = if (
+                                            scale <= HorizontalZoomPanPhysics.PAGE_STRIP_SCALE_THRESHOLD
+                                        ) AxisOverscrollPolicy.Disabled else horizontalOverscrollPolicy,
                                     )
-                                    scale = newScale
-                                    val center=Offset(viewportSize.width/2f,viewportSize.height/2f)
-                                    offset = if (newScale <= 1.01f) Offset.Zero else clampOffset(newScale,centroid-center-focal*newScale)
-                                    horizontalPan=horizontalPan.copy(contentX=offset.x,contentY=offset.y,overscrollX=0f,overscrollY=0f)
-                                    pressed.forEach { if (it.positionChanged()) it.consume() }
-                                } else if (pressed.size == 1 && scale > 1.01f) {
-                                    val change = pressed.first()
-                                    val pan = change.position - change.previousPosition
-                                    val maxX=viewportSize.width*(scale-1f)/2f;val maxY=viewportSize.height*(scale-1f)/2f
-                                    val result=HorizontalZoomPanPhysics.pan(horizontalPan,pan.x,pan.y,maxX,maxY,with(horizontalDensity){56.dp.toPx()},with(horizontalDensity){32.dp.toPx()})
-                                    horizontalPan=result.state;offset=Offset(result.visualX,result.visualY)
-                                    if(result.navigateDirection>0)onPrevious() else if(result.navigateDirection<0)onNext()
-                                    if (change.positionChanged()) change.consume()
+                                } else null
+                                if (pressed.isEmpty()) {
+                                    // Freeze release velocity from the real UP/CANCEL sample. A held
+                                    // stationary finger may not emit MOVE events, so omitting this
+                                    // sample leaves VelocityTracker with stale drag velocity.
+                                    event.changes.firstOrNull()?.let { releaseChange ->
+                                        velocityTracker.addPosition(
+                                            releaseChange.uptimeMillis,
+                                            pointerInViewport(releaseChange.position),
+                                        )
+                                    }
                                 }
+                                if (pressed.isNotEmpty()) {
+                                    val beforeScale = scale
+                                    val beforePan = horizontalPan
+                                    val frame = checkNotNull(controllerFrame)
+                                    horizontalPinching = frame.snapshot.pointerEpoch?.mode ==
+                                        ZoomPanPointerMode.TWO_POINTER_PINCH
+                                    qaProbe?.recordFocalAnchorDrift(frame.focalAnchorDriftPx)
+                                    if (frame.rebased) {
+                                        telemetryRawPan = Offset.Zero
+                                        telemetryLegal = Offset.Zero
+                                        telemetryResidual = Offset.Zero
+                                        telemetryRawScaleFactor = 1f
+                                        qaProbe?.recordPointerRebase(
+                                            beforePan,
+                                            frame.snapshot.transform.asHorizontalPanState(),
+                                        )
+                                        publishHorizontalTileSnapshot(
+                                            page,
+                                            pointerDown = true,
+                                            rebaseFrame = true,
+                                        )
+                                    }
+                                    if (horizontalDebuggable) {
+                                        Log.d(
+                                            "MarkLeafH1",
+                                                "H1_OWNER scale=$scale pointerCount=${pressed.size} " +
+                                                    "owner=${HorizontalZoomPanPhysics.owner(scale)} " +
+                                                    "pageTransition=${pageTransition.phase} " +
+                                                    "visualOwner=THREE_PAGE_STRIP",
+                                        )
+                                    }
+                                    if (frame.rebased) {
+                                        if (pressed.size == 1) {
+                                            velocityTracker = VelocityTracker().also {
+                                                val change = pressed.first()
+                                                it.addPosition(
+                                                    change.uptimeMillis,
+                                                    pointerInViewport(change.position),
+                                                )
+                                            }
+                                        }
+                                        if (horizontalDebuggable) {
+                                            Log.d(
+                                                "MarkLeafH1",
+                                                "H1_POINTER_EPOCH_REBASE epochId=${frame.snapshot.pointerEpoch?.epochId} " +
+                                                    "pointerIds=${frame.snapshot.pointerEpoch?.activePointerIds} " +
+                                                    "mode=${frame.snapshot.pointerEpoch?.mode} scale=$scale",
+                                            )
+                                        }
+                                    } else {
+                                        if (pressed.size == 1) {
+                                            val change = pressed.first()
+                                            val rawPan = Offset(
+                                                frame.rawCentroidDeltaPx.x,
+                                                frame.rawCentroidDeltaPx.y,
+                                            )
+                                            val candidateScale = frame.snapshot.transform.scale
+                                            val candidatePan = frame.snapshot.transform.asHorizontalPanState()
+                                            val legalConsumed = Offset(
+                                                frame.legalConsumedPx.x,
+                                                frame.legalConsumedPx.y,
+                                            )
+                                            val residual = Offset(frame.residualPx.x, frame.residualPx.y)
+                                            telemetryRawPan = rawPan
+                                            telemetryLegal = legalConsumed
+                                            telemetryResidual = residual
+                                            telemetryRawScaleFactor = 1f
+                                            qaProbe?.recordPanFrame(
+                                                rawDeltaPx = ZoomPanPoint(rawPan.x, rawPan.y),
+                                                legalConsumedPx = ZoomPanPoint(
+                                                    legalConsumed.x,
+                                                    legalConsumed.y,
+                                                ),
+                                                residualPx = ZoomPanPoint(residual.x, residual.y),
+                                            )
+                                            velocityTracker.addPosition(
+                                                change.uptimeMillis,
+                                                pointerInViewport(change.position),
+                                            )
+                                            val transitionBeforeFrame = pageTransition
+                                            val stripOffsetBeforeFrame = pageStripOffsetPx
+                                            val stripDrag = ThreePageStripPhysics.drag(
+                                                transition = transitionBeforeFrame,
+                                                displayedOffsetPx = pageStripOffsetPx,
+                                                rawDeltaX = rawPan.x,
+                                                rawDeltaY = rawPan.y,
+                                                edgeResidualX = residual.x,
+                                                currentPage = page,
+                                                pageCount = state.pageCount,
+                                                viewportWidthPx = viewportSize.width.toFloat(),
+                                                previousBaseReady = page <= 0 ||
+                                                    state.pageBitmaps[page - 1] != null,
+                                                nextBaseReady = page >= state.pageCount - 1 ||
+                                                    state.pageBitmaps[page + 1] != null,
+                                            )
+                                            val nextTransition = stripDrag.transition
+                                            pageTransition = nextTransition
+                                            pageStripOffsetPx = stripDrag.offsetPx
+                                            val displayedStripDelta =
+                                                pageStripOffsetPx - stripOffsetBeforeFrame
+                                            if (transitionBeforeFrame.active || nextTransition.active) {
+                                                stripRawInputAbsPx += abs(rawPan.x)
+                                                stripDisplayedDeltaAbsPx += abs(displayedStripDelta)
+                                                if (
+                                                    abs(rawPan.x) > 0.01f &&
+                                                    abs(displayedStripDelta) > 0.01f &&
+                                                    rawPan.x * displayedStripDelta < 0f
+                                                ) {
+                                                    stripReverseDeltaCount += 1
+                                                }
+                                            }
+                                            qaProbe?.recordPageStripFrame(
+                                                rawDeltaX = rawPan.x,
+                                                displayedDeltaX = displayedStripDelta,
+                                                strip = pageStrip,
+                                                transition = pageTransition,
+                                                offsetPx = pageStripOffsetPx,
+                                                viewportWidthPx = viewportSize.width.toFloat(),
+                                            )
+                                            HorizontalRealPathTelemetry.onPageStripFrame(
+                                                rawDeltaX = rawPan.x,
+                                                displayedDeltaX = displayedStripDelta,
+                                                strip = pageStrip,
+                                                transition = pageTransition,
+                                                pageIndex = page,
+                                                offsetPx = pageStripOffsetPx,
+                                                viewportWidthPx = viewportSize.width.toFloat(),
+                                            )
+                                            qaProbe?.recordPageTransition(
+                                                pageTransition,
+                                                pageStripOffsetPx,
+                                            )
+                                            scale = candidateScale
+                                            horizontalPan = if (
+                                                transitionBeforeFrame.active || nextTransition.active
+                                            ) {
+                                                candidatePan.copy(
+                                                    rawOverscrollX = 0f,
+                                                    visualOverscrollX = 0f,
+                                                )
+                                            } else candidatePan
+                                            if (transitionBeforeFrame.active || nextTransition.active) {
+                                                sharedGestureController.replaceTransform(
+                                                    horizontalPan.asZoomPanTransform(scale),
+                                                )
+                                            }
+                                            if (
+                                                nextTransition.active &&
+                                                transitionBeforeFrame.targetPage != nextTransition.targetPage
+                                            ) {
+                                                pageTransitionTargetSession = horizontalSession(page).copy(
+                                                    pageIndex = checkNotNull(nextTransition.targetPage),
+                                                )
+                                                currentOnEnsureAround(page)
+                                                val targetBitmap = state.pageBitmaps[nextTransition.targetPage]
+                                                qaProbe?.recordStripSurfaces(
+                                                    previousBaseReady = page <= 0 ||
+                                                        state.pageBitmaps[page - 1] != null,
+                                                    currentBaseReady = state.pageImage != null ||
+                                                        state.pageBitmaps[page] != null,
+                                                    nextBaseReady = page >= state.pageCount - 1 ||
+                                                        state.pageBitmaps[page + 1] != null,
+                                                    visibleNeighborBitmapId = targetBitmap
+                                                        ?.let(System::identityHashCode) ?: -1,
+                                                )
+                                                if (horizontalDebuggable) {
+                                                    Log.d(
+                                                        "MarkLeafH15",
+                                                        "H15_STRIP_PREVIEW_START pageIndex=$page " +
+                                                            "eventTimeNanos=${System.nanoTime()} " +
+                                                            "rawDeltaX=${rawPan.x} legalConsumedX=${legalConsumed.x} " +
+                                                            "edgeResidualX=${residual.x} " +
+                                                            "pageStripOffsetPx=$pageStripOffsetPx " +
+                                                            "transitionProgress=${abs(pageStripOffsetPx) / viewportSize.width.toFloat().coerceAtLeast(1f)} " +
+                                                            "targetPage=${nextTransition.targetPage} " +
+                                                            "previousBaseReady=${page <= 0 || state.pageBitmaps[page - 1] != null} " +
+                                                            "currentBaseReady=${state.pageImage != null || state.pageBitmaps[page] != null} " +
+                                                            "nextBaseReady=${page >= state.pageCount - 1 || state.pageBitmaps[page + 1] != null} " +
+                                                            "visibleNeighborBitmapId=${targetBitmap?.let(System::identityHashCode) ?: -1}",
+                                                    )
+                                                }
+                                            }
+                                            if (stripDrag.blockedByMissingBase && horizontalDebuggable) {
+                                                currentOnEnsureAround(page)
+                                                Log.e(
+                                                    "MarkLeafH15",
+                                                    "H15_STRIP_BLOCKED_MISSING_BASE currentPage=$page " +
+                                                        "rawDeltaX=${rawPan.x} residualX=${residual.x} " +
+                                                        "previousReady=${page <= 0 || state.pageBitmaps[page - 1] != null} " +
+                                                        "nextReady=${page >= state.pageCount - 1 || state.pageBitmaps[page + 1] != null}",
+                                                )
+                                            }
+                                            singlePanUsed = true
+                                            qaProbe?.recordTransform(scale, horizontalPan)
+                                            publishHorizontalTileSnapshot(page, pointerDown = true)
+                                            if (change.positionChanged()) change.consume()
+                                            if (
+                                                horizontalDebuggable &&
+                                                change.uptimeMillis - lastPanLogMs >= 120L
+                                            ) {
+                                                lastPanLogMs = change.uptimeMillis
+                                                Log.d(
+                                                    "MarkLeafH1",
+                                                    "H1_PAN rawDelta=(${rawPan.x},${rawPan.y}) " +
+                                                        "legalConsumed=(${legalConsumed.x},${legalConsumed.y}) " +
+                                                        "residual=(${residual.x},${residual.y}) " +
+                                                        "legalOffset=(${horizontalPan.legalOffsetX},${horizontalPan.legalOffsetY}) " +
+                                                        "visualOverscroll=(${horizontalPan.visualOverscrollX},${horizontalPan.visualOverscrollY}) " +
+                                                        "displayOffset=(${horizontalPan.displayOffsetX},${horizontalPan.displayOffsetY}) " +
+                                                        "pageTransition=${pageTransition.phase} " +
+                                                        "pageStripOffsetPx=$pageStripOffsetPx " +
+                                                        "previousBaseReady=${page <= 0 || state.pageBitmaps[page - 1] != null} " +
+                                                        "currentBaseReady=${state.pageImage != null || state.pageBitmaps[page] != null} " +
+                                                        "nextBaseReady=${page >= state.pageCount - 1 || state.pageBitmaps[page + 1] != null}",
+                                                )
+                                            }
+                                        } else {
+                                            scale = frame.snapshot.transform.scale
+                                            horizontalPan = frame.snapshot.transform.asHorizontalPanState()
+                                            if (pageTransition.active && pageTransition.targetPage != null) {
+                                                pageTransitionTargetSession = horizontalSession(page).copy(
+                                                    pageIndex = checkNotNull(pageTransition.targetPage),
+                                                )
+                                            }
+                                            telemetryRawPan = Offset.Zero
+                                            telemetryLegal = Offset(
+                                                horizontalPan.legalOffsetX - beforePan.legalOffsetX,
+                                                horizontalPan.legalOffsetY - beforePan.legalOffsetY,
+                                            )
+                                            telemetryResidual = Offset.Zero
+                                            telemetryRawScaleFactor = frame.rawScaleFactor
+                                            transformed = transformed || abs(scale - beforeScale) > 0.0001f
+                                            qaProbe?.recordTransform(scale, horizontalPan)
+                                            publishHorizontalTileSnapshot(page, pointerDown = true)
+                                            pressed.forEach { if (it.positionChanged()) it.consume() }
+                                        }
+                                    }
+                                } else {
+                                    horizontalPinching = false
+                                }
+                                if (horizontalDebuggable) {
+                                    val eventUptime = event.changes.firstOrNull()?.uptimeMillis
+                                        ?: SystemClock.uptimeMillis()
+                                    gestureTelemetryRing.record(
+                                        PdfGestureFrameSample(
+                                            eventUptimeMillis = eventUptime,
+                                            observedUptimeMillis = SystemClock.uptimeMillis(),
+                                            rawDeltaPx = ZoomPanPoint(telemetryRawPan.x, telemetryRawPan.y),
+                                            legalDeltaPx = ZoomPanPoint(telemetryLegal.x, telemetryLegal.y),
+                                            residualPx = ZoomPanPoint(telemetryResidual.x, telemetryResidual.y),
+                                            pageTransitionOffsetPx = pageStripOffsetPx,
+                                        ),
+                                    )
+                                }
+                                HorizontalRealPathTelemetry.onGestureFrame()
                             } while (event.changes.any { it.pressed })
-                            horizontalPinching=false
-                            val reboundStart=offset
-                            horizontalPan=HorizontalZoomPanPhysics.settle(horizontalPan)
-                            val reboundEnd=clampOffset(scale,Offset(horizontalPan.contentX,horizontalPan.contentY))
-                            horizontalReboundJob=horizontalScope.launch {
-                                Animatable(0f).animateTo(1f,spring(dampingRatio=Spring.DampingRatioNoBouncy,stiffness=Spring.StiffnessMedium)){ 
-                                    offset=Offset(reboundStart.x+(reboundEnd.x-reboundStart.x)*value,reboundStart.y+(reboundEnd.y-reboundStart.y)*value)
-                                }
+                            horizontalPointerDown = false
+                            HorizontalRealPathTelemetry.onPointerUp()
+                            qaProbe?.recordPageStripPointerUp()
+                            val gestureSummary = gestureTelemetryRing.summary()
+                            qaProbe?.recordGestureSummary(gestureSummary)
+                            if (horizontalDebuggable) {
+                                Log.d(
+                                    "MarkLeafH15",
+                                    "H15_GESTURE_SUMMARY frames=${gestureSummary.frameCount} " +
+                                        "inputLatencyP50Ms=${gestureSummary.inputLatencyP50Ms} " +
+                                        "inputLatencyP95Ms=${gestureSummary.inputLatencyP95Ms} " +
+                                        "maxInputLatencyMs=${gestureSummary.maxInputLatencyMs} " +
+                                        "dragGain=(${gestureSummary.legalDragGainX},${gestureSummary.legalDragGainY}) " +
+                                        "pageStripDragGain=${if (stripRawInputAbsPx > 0f) stripDisplayedDeltaAbsPx / stripRawInputAbsPx else 1f} " +
+                                        "reverseDeltaCount=$stripReverseDeltaCount " +
+                                        "pageIndexChangeCount=$pageIndexChangeCountThisGesture " +
+                                        "slotRotationCount=$slotRotationCountThisGesture " +
+                                        "settleStartCount=$settleStartCountThisGesture " +
+                                        "offsetRebaseCount=$offsetRebaseCountThisGesture " +
+                                        "pagerProgrammaticScrollCount=0 " +
+                                        "maxPageTransitionOffsetPx=${gestureSummary.maxPageTransitionOffsetPx}",
+                                )
                             }
+                            horizontalPinching = false
+                            if (scale <= HorizontalZoomPanPhysics.PAGE_STRIP_SCALE_THRESHOLD) {
+                                horizontalPan = HorizontalPanState()
+                                sharedGestureController.replaceTransform(
+                                    horizontalPan.asZoomPanTransform(scale),
+                                )
+                            }
+                            currentOnZoomGestureActive(false)
+                            publishHorizontalTileSnapshot(page, pointerDown = false)
+                            logHorizontalBounds(page, scale)
                             if (transformed) onZoomScaleSettled(scale)
+                            if (pageTransition.phase == ZoomedPageTransitionPhase.EDGE_PREVIEW) {
+                                val velocity = velocityTracker.calculateVelocity()
+                                settleZoomedPageTransition(page, velocity.x)
+                            } else if (
+                                horizontalPan.visualOverscrollX != 0f ||
+                                horizontalPan.visualOverscrollY != 0f
+                            ) {
+                                startHorizontalSpring(page)
+                            } else if (singlePanUsed) {
+                                val velocity = velocityTracker.calculateVelocity()
+                                startHorizontalFling(page, Offset(velocity.x, velocity.y))
+                            } else {
+                                commitHorizontalSession(page)
+                            }
                         }
                     }
-                    .pointerInput(page, scale, currentHorizontalStatePage) {
-                        if (page != currentHorizontalStatePage) return@pointerInput
+                    .pointerInput(slot.stableId, slot.role, activeHorizontalPage) {
+                        val page = activeHorizontalPage
+                        fun tapPositionInViewport(localPosition: Offset): Offset = Offset(
+                            x = ThreePageStripPhysics.pointerXInViewport(
+                                localPointerX = localPosition.x,
+                                role = slot.role,
+                                viewportWidthPx = viewportSize.width.toFloat(),
+                                stripOffsetPx = pageStripOffsetPx,
+                            ),
+                            y = localPosition.y,
+                        )
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             var maxDistance = 0f
-                            var lastPosition = down.position
+                            val downPosition = tapPositionInViewport(down.position)
+                            var lastPosition = downPosition
                             var upTimeMs = down.uptimeMillis
                             do {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull()
                                 if (change != null) {
-                                    lastPosition = change.position
+                                    lastPosition = tapPositionInViewport(change.position)
                                     upTimeMs = change.uptimeMillis
                                     maxDistance = maxOf(
-                                        maxDistance, (change.position - down.position).getDistance(),
+                                        maxDistance, (lastPosition - downPosition).getDistance(),
                                     )
                                 }
                             } while (event.changes.any { it.pressed })
-                            if (maxDistance > viewConfig.touchSlop || pagerState.isScrollInProgress) {
+                            if (maxDistance > viewConfig.touchSlop) {
                                 return@awaitEachGesture
                             }
                             val now = upTimeMs
@@ -1290,11 +2368,34 @@ private fun PdfHorizontalPagedArea(
                                 val target = if (scale < 1.5f) {
                                     PdfRenderQuality.DOUBLE_TAP_ZOOM
                                 } else PdfRenderQuality.MIN_ZOOM
+                                val oldScale = scale
+                                horizontalPan = if (
+                                    target <= HorizontalZoomPanPhysics.PAGE_STRIP_SCALE_THRESHOLD
+                                ) {
+                                    HorizontalPanState()
+                                } else {
+                                    val origin = transformOrigin(page)
+                                    HorizontalZoomPanPhysics.rebaseLegalForPinch(
+                                        baseState = HorizontalZoomPanPhysics.settle(horizontalPan),
+                                        baseScale = oldScale,
+                                        newScale = target,
+                                        basePointerX = lastPosition.x,
+                                        basePointerY = lastPosition.y,
+                                        pointerX = lastPosition.x,
+                                        pointerY = lastPosition.y,
+                                        transformOriginX = origin.x,
+                                        transformOriginY = origin.y,
+                                        bounds = panBounds(page, target),
+                                    )
+                                }
                                 scale = target
-                                if (target <= 1.01f) { offset = Offset.Zero; horizontalPan=HorizontalPanState() }
+                                sharedGestureController.replaceTransform(
+                                    horizontalPan.asZoomPanTransform(scale),
+                                )
                                 lastTapTimeMs = 0L
                                 lastTapPosition = null
                                 onZoomScaleSettled(target)
+                                commitHorizontalSession(page)
                             } else {
                                 lastTapTimeMs = now
                                 lastTapPosition = lastPosition
@@ -1310,8 +2411,9 @@ private fun PdfHorizontalPagedArea(
                                 }
                             }
                         }
-                    },
-                contentAlignment = Alignment.Center,
+                    }
+                    .padding(top = pageContentGap),
+                contentAlignment = Alignment.TopCenter,
             ) {
                 when {
                     bmp != null -> {
@@ -1323,25 +2425,65 @@ private fun PdfHorizontalPagedArea(
                                 scheme.outlineVariant,
                             ),
                             modifier = Modifier
-                                .padding(8.dp)
-                                .graphicsLayer {
-                                    scaleX = scale
-                                    scaleY = scale
-                                    translationX = offset.x
-                                    translationY = offset.y
-                                },
+                                .size(
+                                    width = with(horizontalDensity) {
+                                        fittedPage.fittedWidthPx.coerceAtLeast(1f).toDp()
+                                    },
+                                    height = with(horizontalDensity) {
+                                        fittedPage.fittedHeightPx.coerceAtLeast(1f).toDp()
+                                    },
+                                )
+                                 .graphicsLayer {
+                                     transformOrigin = TransformOrigin(0.5f, 0f)
+                                     val activeTransform = if (
+                                         page == activeHorizontalPage && staticRenderedTransform == null
+                                     ) {
+                                         com.markleaf.app.pdf.HorizontalPageTransform(scale, horizontalPan)
+                                     } else {
+                                         staticRenderedTransform ?:
+                                             com.markleaf.app.pdf.HorizontalPageTransform(1f, HorizontalPanState())
+                                     }
+                                     scaleX = activeTransform.scale
+                                     scaleY = activeTransform.scale
+                                     translationX = activeTransform.pan.displayOffsetX
+                                     translationY = activeTransform.pan.displayOffsetY
+                                 }
+                                 .testTag("h1-horizontal-page-$page"),
                         ) {
-                            Image(
-                                bitmap = bmp,
-                                contentDescription = stringResource(
-                                    R.string.pdf_page_cd,
-                                    page + 1,
-                                    state.pageCount,
-                                ),
-                                contentScale = ContentScale.Fit,
-                                filterQuality = FilterQuality.Medium,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                            Box(Modifier.fillMaxSize()) {
+                                Image(
+                                    bitmap = bmp,
+                                    contentDescription = stringResource(
+                                        R.string.pdf_page_cd,
+                                        page + 1,
+                                        state.pageCount,
+                                    ),
+                                    contentScale = ContentScale.Fit,
+                                    filterQuality = FilterQuality.Medium,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                if (horizontalTiles.isNotEmpty()) {
+                                    Canvas(Modifier.fillMaxSize()) {
+                                        horizontalTiles.forEach { tile ->
+                                            val source = tile.contentRectPx
+                                            val destination = tile.pageRect.roundedPixelRect()
+                                            drawImage(
+                                                image = tile.bitmap,
+                                                srcOffset = IntOffset(source.left, source.top),
+                                                srcSize = IntSize(
+                                                    source.width.coerceAtLeast(1),
+                                                    source.height.coerceAtLeast(1),
+                                                ),
+                                                dstOffset = IntOffset(destination.left, destination.top),
+                                                dstSize = IntSize(
+                                                    destination.width.coerceAtLeast(1),
+                                                    destination.height.coerceAtLeast(1),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     page == state.pageIndex && state.renderError != null -> {
@@ -1357,6 +2499,7 @@ private fun PdfHorizontalPagedArea(
                 }
             }
         }
+        }
 
         // Semi-transparent bottom overlay controls (not a fixed Scaffold bottom bar).
         // Edge/center taps handled via detectTapGestures on the page (does not block pager swipe).
@@ -1366,7 +2509,8 @@ private fun PdfHorizontalPagedArea(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .navigationBarsPadding(),
+                    .navigationBarsPadding()
+                    .testTag("h1-horizontal-controls-overlay"),
             ) {
                 Column {
                     Row(

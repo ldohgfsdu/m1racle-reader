@@ -4,7 +4,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 /** Single product authority for the R7 continuous viewport zoom range. */
-const val MAX_CONTINUOUS_SCALE = 4f
+const val MAX_CONTINUOUS_SCALE = MAX_ZOOM_PAN_SCALE
 
 /** One document-wide transform; no page owns zoom or pan. */
 data class ContinuousDocumentState(
@@ -43,14 +43,22 @@ class ContinuousDocumentGeometry private constructor(
     fun maxScrollY(scale: Float, viewportHeight: Float): Float =
         max(0f, scaledDocumentHeight(scale) - viewportHeight)
 
-    fun clamp(state: ContinuousDocumentState, viewportWidth: Float, viewportHeight: Float): ContinuousDocumentState {
-        val scale = state.scale.coerceIn(MIN_SCALE, MAX_CONTINUOUS_SCALE)
-        val x = if (scale <= MIN_SCALE) 0f else state.scrollX.coerceIn(0f, maxScrollX(scale, viewportWidth))
-        return state.copy(
-            scale = scale,
-            scrollX = x,
-            scrollY = state.scrollY.coerceIn(0f, maxScrollY(scale, viewportHeight)),
+    /** Continuous adapter: document scroll is the negative of content translation. */
+    fun zoomPanBounds(scale: Float, viewportWidth: Float, viewportHeight: Float): ZoomPanBounds =
+        ZoomPanBounds(
+            minX = if (scale <= MIN_SCALE) 0f else -maxScrollX(scale, viewportWidth),
+            maxX = 0f,
+            minY = -maxScrollY(scale, viewportHeight),
+            maxY = 0f,
         )
+
+    fun clamp(state: ContinuousDocumentState, viewportWidth: Float, viewportHeight: Float): ContinuousDocumentState {
+        val scale = ZoomPanPhysics.clampScale(state.scale, ZoomPanPhysicsProfile.ScaleRange)
+        val clamped = ZoomPanPhysics.clampToBounds(
+            transform = state.toZoomPanTransform(scale),
+            bounds = zoomPanBounds(scale, viewportWidth, viewportHeight),
+        )
+        return state.fromZoomPanTransform(clamped)
     }
 
     /** Preserve the document point beneath the pinch centroid across a scale change. */
@@ -62,19 +70,16 @@ class ContinuousDocumentGeometry private constructor(
         viewportWidth: Float,
         viewportHeight: Float,
     ): ContinuousDocumentState {
-        val oldScale = state.scale.coerceAtLeast(0.0001f)
-        val documentX = (state.scrollX + centroidX) / oldScale
-        val documentY = (state.scrollY + centroidY) / oldScale
-        val nextScale = newScale.coerceIn(MIN_SCALE, MAX_CONTINUOUS_SCALE)
-        return clamp(
-            state.copy(
-                scale = nextScale,
-                scrollX = documentX * nextScale - centroidX,
-                scrollY = documentY * nextScale - centroidY,
-            ),
-            viewportWidth,
-            viewportHeight,
+        val nextScale = ZoomPanPhysics.clampScale(newScale, ZoomPanPhysicsProfile.ScaleRange)
+        val transformed = ZoomPanPhysics.applyScaleAtFocal(
+            transform = state.toZoomPanTransform(),
+            newScale = nextScale,
+            focalViewportPx = ZoomPanPoint(centroidX, centroidY),
+            transformOriginViewportPx = ZoomPanPoint.Zero,
+            newBounds = zoomPanBounds(nextScale, viewportWidth, viewportHeight),
+            scaleRange = ZoomPanPhysicsProfile.ScaleRange,
         )
+        return state.fromZoomPanTransform(transformed)
     }
 
     /** Positive finger delta moves document content with the finger. */
@@ -84,11 +89,16 @@ class ContinuousDocumentGeometry private constructor(
         fingerDy: Float,
         viewportWidth: Float,
         viewportHeight: Float,
-    ): ContinuousDocumentState = clamp(
-        state.copy(scrollX = state.scrollX - fingerDx, scrollY = state.scrollY - fingerDy),
-        viewportWidth,
-        viewportHeight,
-    )
+    ): ContinuousDocumentState {
+        val scale = ZoomPanPhysics.clampScale(state.scale, ZoomPanPhysicsProfile.ScaleRange)
+        val result = ZoomPanPhysics.applyPan(
+            transform = state.toZoomPanTransform(scale),
+            rawDeltaPx = ZoomPanPoint(fingerDx, fingerDy),
+            bounds = zoomPanBounds(scale, viewportWidth, viewportHeight),
+            policy = ZoomPanPhysicsProfile.ContinuousOverscrollPolicy,
+        )
+        return state.fromZoomPanTransform(result.transform)
+    }
 
     /**
      * P0B1: Single-step focal-point-preserving transform.
@@ -111,17 +121,33 @@ class ContinuousDocumentGeometry private constructor(
         viewportWidth: Float,
         viewportHeight: Float,
     ): ContinuousDocumentState {
-        val nextScale = newScale.coerceIn(MIN_SCALE, MAX_CONTINUOUS_SCALE)
-        return clamp(
-            state.copy(
-                scale = nextScale,
-                scrollX = focalDocumentX * nextScale - centroidX,
-                scrollY = focalDocumentY * nextScale - centroidY,
-            ),
-            viewportWidth,
-            viewportHeight,
+        val nextScale = ZoomPanPhysics.clampScale(newScale, ZoomPanPhysicsProfile.ScaleRange)
+        val transformed = ZoomPanPhysics.applyScaleFromAnchor(
+            transform = state.toZoomPanTransform(),
+            newScale = nextScale,
+            anchor = ZoomPanFocalAnchor(focalDocumentX, focalDocumentY),
+            focalViewportPx = ZoomPanPoint(centroidX, centroidY),
+            transformOriginViewportPx = ZoomPanPoint.Zero,
+            newBounds = zoomPanBounds(nextScale, viewportWidth, viewportHeight),
+            scaleRange = ZoomPanPhysicsProfile.ScaleRange,
         )
+        return state.fromZoomPanTransform(transformed)
     }
+
+    private fun ContinuousDocumentState.toZoomPanTransform(
+        transformScale: Float = scale,
+    ): ZoomPanTransform = ZoomPanTransform(
+        scale = transformScale,
+        legalOffsetPx = ZoomPanPoint(-scrollX, -scrollY),
+    )
+
+    private fun ContinuousDocumentState.fromZoomPanTransform(
+        transform: ZoomPanTransform,
+    ): ContinuousDocumentState = copy(
+        scale = transform.scale,
+        scrollX = -transform.legalOffsetPx.x,
+        scrollY = -transform.legalOffsetPx.y,
+    )
 
     /** Viewport center chooses page metadata/render priority only; it never drives scroll. */
     fun pageAtViewportCenter(state: ContinuousDocumentState, viewportHeight: Float): Int =
@@ -150,16 +176,60 @@ class ContinuousDocumentGeometry private constructor(
         viewportAnchorYFraction: Float = 0.5f,
     ): PdfViewportSessionState {
         val safeScale = state.scale.coerceAtLeast(0.0001f)
+        val requestedViewportY = viewportHeight * viewportAnchorYFraction
+        val requestedDocumentY = (state.scrollY + requestedViewportY) / safeScale
+        var page = pageAtDocumentY(requestedDocumentY)
+        var resolvedViewportY = requestedViewportY
+        val requestedInsidePage = requestedDocumentY >= pageTop(page) &&
+            requestedDocumentY <= pageTop(page) + pageHeight(page)
+        if (!requestedInsidePage && pageCount > 0) {
+            // A continuous viewport can put its center inside an inter-page gap, while horizontal
+            // mode must select exactly one page. Preserve the dominant visible page and a real
+            // point on that page instead of coercing a negative next-page fraction to zero.
+            val visibleDocumentTop = state.scrollY / safeScale
+            val visibleDocumentBottom = (state.scrollY + viewportHeight) / safeScale
+            val candidateStart = (pageAtDocumentY(visibleDocumentTop) - 1).coerceAtLeast(0)
+            val candidateEnd = (pageAtDocumentY(visibleDocumentBottom) + 1)
+                .coerceAtMost(pageCount - 1)
+            var bestPage = page
+            var bestVisibleHeightPx = -1f
+            for (candidate in candidateStart..candidateEnd) {
+                val topPx = pageTop(candidate) * safeScale - state.scrollY
+                val bottomPx = (pageTop(candidate) + pageHeight(candidate)) * safeScale - state.scrollY
+                val visibleHeightPx = (
+                    min(viewportHeight, bottomPx) - max(0f, topPx)
+                    ).coerceAtLeast(0f)
+                if (visibleHeightPx > bestVisibleHeightPx + 0.001f ||
+                    kotlin.math.abs(visibleHeightPx - bestVisibleHeightPx) <= 0.001f &&
+                    candidate < bestPage
+                ) {
+                    bestPage = candidate
+                    bestVisibleHeightPx = visibleHeightPx
+                }
+            }
+            page = bestPage
+            val pageTopPx = pageTop(page) * safeScale - state.scrollY
+            val pageBottomPx = (pageTop(page) + pageHeight(page)) * safeScale - state.scrollY
+            val visibleTopPx = max(0f, pageTopPx)
+            val visibleBottomPx = min(viewportHeight, pageBottomPx)
+            resolvedViewportY = if (visibleBottomPx >= visibleTopPx) {
+                requestedViewportY.coerceIn(visibleTopPx, visibleBottomPx)
+            } else {
+                requestedViewportY
+            }
+        }
         val documentX = (state.scrollX + viewportWidth * viewportAnchorXFraction) / safeScale
-        val documentY = (state.scrollY + viewportHeight * viewportAnchorYFraction) / safeScale
-        val page = pageAtDocumentY(documentY)
+        val documentY = (state.scrollY + resolvedViewportY) / safeScale
         return PdfViewportSessionState(
             readingMode = PdfReadingMode.VERTICAL_CONTINUOUS,
             pageIndex = page,
             pageAnchorXFraction = (documentX / basePageWidth.coerceAtLeast(1f)).coerceIn(0f, 1f),
             pageAnchorYFraction = ((documentY - pageTop(page)) / pageHeight(page).coerceAtLeast(1f)).coerceIn(0f, 1f),
             viewportAnchorXFraction = viewportAnchorXFraction,
-            viewportAnchorYFraction = viewportAnchorYFraction,
+            viewportAnchorYFraction = (resolvedViewportY / viewportHeight.coerceAtLeast(1f))
+                .coerceIn(0f, 1f),
+            sourceViewportWidthPx = viewportWidth.coerceAtLeast(1f),
+            sourceViewportHeightPx = viewportHeight.coerceAtLeast(1f),
             scale = state.scale,
             generation = generation,
         )

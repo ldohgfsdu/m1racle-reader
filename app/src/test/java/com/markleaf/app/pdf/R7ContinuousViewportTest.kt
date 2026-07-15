@@ -34,9 +34,10 @@ class R7ContinuousViewportTest {
     @Test fun `V2 gesture writes one state and retains R3 viewport callback`() {
         val source = viewportSource()
         assertTrue(source.contains("ContinuousDocumentState"))
-        assertTrue(source.contains("ContinuousPointerEpochReducer.frame("))
+        assertTrue(source.contains("PdfGestureTransformController("))
+        assertTrue(source.contains("sharedGestureController.pointerFrame("))
+        assertFalse(source.contains("ContinuousPointerEpochReducer.frame("))
         assertFalse(source.contains("calculateZoom()"))
-        assertTrue(source.contains("currentGeometry.panBy("))
         assertTrue(source.contains("onContinuousViewportChanged").not())
         assertTrue(source.contains("onViewportChanged(ContinuousViewportSnapshot"))
     }

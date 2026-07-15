@@ -146,16 +146,16 @@ class R7P0aGestureContractTest {
         assertEquals(ContinuousDocumentState(), session.reset())
     }
 
-    @Test fun `mode round trip resets horizontal and restores vertical session consistently`() {
+    @Test fun `mode round trip preserves the shared document session scale`() {
         val session = ContinuousDocumentSession()
         val verticalState = session.commit(
             ContinuousDocumentState(scale = 2.4f, scrollX = 90f, scrollY = 1_200f),
             pageIndex = 12,
         )
 
-        val horizontal = ContinuousModeZoomContract.horizontalEntry()
-        assertEquals(1f, horizontal.scale, 0f)
-        assertEquals(QualityTier.PREVIEW, horizontal.qualityTier)
+        val horizontal = ContinuousModeZoomContract.horizontalEntry(session.stableState)
+        assertEquals(verticalState.scale, horizontal.scale, 0f)
+        assertEquals(QualityTier.HIGH, horizontal.qualityTier)
 
         val restored = ContinuousModeZoomContract.verticalEntry(session.stableState)
         assertEquals(verticalState.scale, restored.scale, 0f)

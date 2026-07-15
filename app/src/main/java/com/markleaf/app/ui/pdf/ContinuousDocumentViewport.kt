@@ -65,9 +65,7 @@ import com.markleaf.app.pdf.ContinuousScrollDirection
 import com.markleaf.app.pdf.ContinuousScrollPhase
 import com.markleaf.app.pdf.ContinuousViewportSnapshot
 import com.markleaf.app.pdf.DisplayMergePolicy
-import com.markleaf.app.pdf.ContinuousPointerEpoch
-import com.markleaf.app.pdf.ContinuousPointerEpochReducer
-import com.markleaf.app.pdf.PointerSample
+import com.markleaf.app.pdf.PdfGestureTransformController
 import com.markleaf.app.pdf.PdfTileEntry
 import com.markleaf.app.pdf.PdfTilePlanner
 import com.markleaf.app.pdf.PdfTileRequest
@@ -91,6 +89,12 @@ import com.markleaf.app.pdf.QualityTier
 import com.markleaf.app.pdf.PdfViewportSessionState
 import com.markleaf.app.pdf.ReadingPosition
 import com.markleaf.app.pdf.ReadingPositionSource
+import com.markleaf.app.pdf.PdfReadingMode
+import com.markleaf.app.pdf.ZoomPanPhysics
+import com.markleaf.app.pdf.ZoomPanPhysicsProfile
+import com.markleaf.app.pdf.ZoomPanPoint
+import com.markleaf.app.pdf.ZoomPanPointer
+import com.markleaf.app.pdf.ZoomPanTransform
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -98,7 +102,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
-import kotlin.math.exp
 import kotlin.math.roundToInt
 
 internal val R7ContinuousScaleKey = SemanticsPropertyKey<Float>("R7ContinuousScale")
@@ -125,6 +128,7 @@ internal fun ContinuousDocumentViewport(
     onEnsureAround: (Int) -> Unit,
     onRetryPage: (Int) -> Unit,
     onViewportSessionSettled: (PdfViewportSessionState) -> Unit = {},
+    onViewportSessionPreview: (PdfViewportSessionState) -> Unit = {},
     onTilePlan: (PdfTilePlan) -> Unit = {},
     tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
     gestureCoordinatorOverride: ContinuousGestureCoordinator? = null,
@@ -169,9 +173,19 @@ internal fun ContinuousDocumentViewport(
     val viewportSignal = remember(documentId) { Channel<Unit>(Channel.CONFLATED) }
     val viewportSequence = remember(documentId) { AtomicLong(0L) }
     val gestures = remember(documentId) { ContinuousDocumentGestureState() }
+    val platformFlingRunner = remember(context) { PlatformPdfFlingRunner(context) }
+    val sharedGestureController = remember(documentId) {
+        PdfGestureTransformController(
+            ZoomPanTransform(
+                scale = documentState.scale,
+                legalOffsetPx = ZoomPanPoint(-documentState.scrollX, -documentState.scrollY),
+            ),
+        )
+    }
     val currentOnZoomGestureActive by rememberUpdatedState(onZoomGestureActive)
     val currentOnDocumentStateSettled by rememberUpdatedState(onDocumentStateSettled)
     val currentOnViewportSessionSettled by rememberUpdatedState(onViewportSessionSettled)
+    val currentOnViewportSessionPreview by rememberUpdatedState(onViewportSessionPreview)
     val currentOnTilePlan by rememberUpdatedState(onTilePlan)
     val currentOnContinuousGeometryReady by rememberUpdatedState(onContinuousGeometryReady)
     val currentOnContinuousEntryRestoreApplied by rememberUpdatedState(onContinuousEntryRestoreApplied)
@@ -314,6 +328,14 @@ internal fun ContinuousDocumentViewport(
         val activeGeometry = currentGeometry
         if (!currentGeometryReady || size.width <= 0 || size.height <= 0) return
         val now = System.nanoTime()
+        currentOnViewportSessionPreview(
+            activeGeometry.viewportSessionAtAnchor(
+                next,
+                size.width.toFloat(),
+                size.height.toFloat(),
+                now,
+            ),
+        )
         val rect = PdfTilePlanner.documentViewport(next, size.width.toFloat(), size.height.toFloat())
         viewportMotion = PdfViewportMotion.update(
             viewportMotion,
@@ -541,6 +563,12 @@ internal fun ContinuousDocumentViewport(
             viewportSize.height.toFloat(),
         )
         documentState = clamped
+        sharedGestureController.replaceTransform(
+            ZoomPanTransform(
+                scale = clamped.scale,
+                legalOffsetPx = ZoomPanPoint(-clamped.scrollX, -clamped.scrollY),
+            ),
+        )
         publishViewportSnapshot(clamped)
         return clamped
     }
@@ -567,12 +595,20 @@ internal fun ContinuousDocumentViewport(
             appliedEntryGeneration == target.generation
         ) return@LaunchedEffect
 
-        gestures.motionGeneration += 1L
+        sharedGestureController.cancelMotion(
+            ZoomPanTransform(
+                scale = documentState.scale,
+                legalOffsetPx = ZoomPanPoint(-documentState.scrollX, -documentState.scrollY),
+            ),
+        )
         gestures.flingJob?.cancel()
         gestures.flingJob = null
         flingActive = false
         val session = state.viewportSessionState?.takeIf {
-            target.source == ReadingPositionSource.ZOOM_SESSION_RESTORE && it.pageIndex == target.pageIndex
+            target.source in setOf(
+                ReadingPositionSource.ZOOM_SESSION_RESTORE,
+                ReadingPositionSource.MODE_SWITCH_RESTORE,
+            ) && it.pageIndex == target.pageIndex
         }
         val applied = if (session != null) {
             update(geometry.restoreViewportSession(session, documentState, viewportSize.width.toFloat(), viewportSize.height.toFloat()))
@@ -600,6 +636,15 @@ internal fun ContinuousDocumentViewport(
         )
         if (targetVisible && anchorVisible) {
             appliedEntryGeneration = target.generation
+            if (isDebuggable && target.source == ReadingPositionSource.MODE_SWITCH_RESTORE) {
+                Log.d(
+                    "MarkLeafH14",
+                    "H14_MODE_APPLY mode=${PdfReadingMode.VERTICAL_CONTINUOUS} " +
+                        "page=${actual.pageIndex} scale=${applied.scale} " +
+                        "anchorY=${session?.pageAnchorYFraction ?: actual.intraPageFraction} " +
+                        "generation=${target.generation}",
+                )
+            }
             currentOnContinuousEntryRestoreApplied(actual, applied)
         } else if (isDebuggable) {
             Log.d(tag, "RESTORE_REJECT generation=${target.generation} targetPage=${target.pageIndex} " +
@@ -609,7 +654,12 @@ internal fun ContinuousDocumentViewport(
     }
 
     fun cancelFling() {
-        gestures.motionGeneration += 1L
+        sharedGestureController.cancelMotion(
+            ZoomPanTransform(
+                scale = documentState.scale,
+                legalOffsetPx = ZoomPanPoint(-documentState.scrollX, -documentState.scrollY),
+            ),
+        )
         gestures.flingJob?.cancel()
         gestures.flingJob = null
         flingActive = false
@@ -630,53 +680,103 @@ internal fun ContinuousDocumentViewport(
 
     fun startFling(fingerVelocity: Offset) {
         cancelFling()
-        val motionGeneration = gestures.motionGeneration
-        if (abs(fingerVelocity.x) < 30f && abs(fingerVelocity.y) < 30f) {
+        if (fingerVelocity.getDistance() < platformFlingRunner.minimumFlingVelocityPxPerSecond) {
             commitStableState()
             return
         }
+        val motionGeneration = sharedGestureController.beginPlatformFling(
+            currentTransform = ZoomPanTransform(
+                scale = documentState.scale,
+                legalOffsetPx = ZoomPanPoint(-documentState.scrollX, -documentState.scrollY),
+            ),
+        )
         flingActive = true
         publishViewportSnapshot(documentState.copy(gestureActive = false))
         gestures.flingJob = scope.launch {
+            var flingResult: PlatformPdfFlingResult? = null
             try {
                 gestures.mutatorMutex.mutate(MutatePriority.Default) {
-                    var velocityX = -fingerVelocity.x
-                    var velocityY = -fingerVelocity.y
-                    var previousNanos = 0L
-                    while (abs(velocityX) > 8f || abs(velocityY) > 8f) {
-                        withFrameNanos { now ->
-                            if (previousNanos != 0L) {
-                                val seconds = ((now - previousNanos).coerceAtMost(48_000_000L) / 1_000_000_000f)
-                                update(
-                                    currentGeometry.panBy(
-                                        documentState,
-                                        fingerDx = -velocityX * seconds,
-                                        fingerDy = -velocityY * seconds,
-                                        viewportWidth = viewportSize.width.toFloat(),
-                                        viewportHeight = viewportSize.height.toFloat(),
-                                    ).copy(gestureActive = false),
+                    flingResult = platformFlingRunner.run(
+                        releaseVelocityPxPerSecond = fingerVelocity,
+                        isCurrent = {
+                            motionGeneration == sharedGestureController.snapshot().motionGeneration
+                        },
+                        applyDelta = { requested ->
+                            val frame = sharedGestureController.applyPlatformFlingDelta(
+                                    generation = motionGeneration,
+                                    deltaPx = ZoomPanPoint(requested.x, requested.y),
+                                    bounds = currentGeometry.zoomPanBounds(
+                                        documentState.scale,
+                                        viewportSize.width.toFloat(),
+                                        viewportSize.height.toFloat(),
+                                    ),
+                                    overscrollPolicy = ZoomPanPhysicsProfile.ContinuousOverscrollPolicy,
                                 )
-                                val decay = exp((-5.2f * seconds).toDouble()).toFloat()
-                                velocityX *= decay
-                                velocityY *= decay
+                            if (frame == null) {
+                                Offset.Zero
+                            } else {
+                                update(
+                                    documentState.copy(
+                                        scale = frame.snapshot.transform.scale,
+                                        scrollX = -frame.snapshot.transform.legalOffsetPx.x,
+                                        scrollY = -frame.snapshot.transform.legalOffsetPx.y,
+                                        gestureActive = false,
+                                    ),
+                                )
+                                Offset(frame.appliedDeltaPx.x, frame.appliedDeltaPx.y)
                             }
-                            previousNanos = now
-                        }
-                    }
+                        },
+                    )
                 }
             } finally {
                 flingActive = false
                 publishViewportSnapshot(documentState.copy(gestureActive = false))
-                if (gestures.motionGeneration == motionGeneration) {
+                if (sharedGestureController.snapshot().motionGeneration == motionGeneration) {
+                    sharedGestureController.finishMotion(motionGeneration, settleOverscroll = false)
+                    if (isDebuggable) {
+                        flingResult?.let { result ->
+                            Log.d(
+                                tag,
+                                "PLATFORM_FLING release=(${result.releaseVelocityPxPerSecond.x}," +
+                                    "${result.releaseVelocityPxPerSecond.y}) splinePosition=" +
+                                    "(${result.splinePositionPx.x},${result.splinePositionPx.y}) " +
+                                    "plannedFinal=(${result.plannedFinalPositionPx.x}," +
+                                    "${result.plannedFinalPositionPx.y}) " +
+                                    "displayedPosition=(${result.displayedPositionPx.x}," +
+                                    "${result.displayedPositionPx.y}) " +
+                                    "durationMs=${result.durationMs} interrupted=${result.interrupted} " +
+                                    "terminatedByBounds=${result.terminatedByBounds}",
+                            )
+                        }
+                    }
                     commitStableState()
                 }
             }
         }
     }
 
-    val requestedComposedRange = geometry.composedPages(documentState, viewportSize.height.toFloat())
+    val pendingModeRestoreSession = state.viewportSessionState?.takeIf { session ->
+        val pending = currentEntryState.pendingRestorePosition
+        currentEntryState.phase != ContinuousEntryPhase.READY &&
+            pending?.source == ReadingPositionSource.MODE_SWITCH_RESTORE &&
+            session.readingMode == PdfReadingMode.VERTICAL_CONTINUOUS &&
+            session.pageIndex == pending.pageIndex &&
+            viewportSize.width > 0 && viewportSize.height > 0
+    }
+    // Render the target session synchronously while the entry state machine commits it. Without
+    // this derived frame, continuous mode could briefly draw the previous/default transform before
+    // LaunchedEffect applied the exact page-local anchor.
+    val renderDocumentState = pendingModeRestoreSession?.let { session ->
+        geometry.restoreViewportSession(
+            session,
+            documentState,
+            viewportSize.width.toFloat(),
+            viewportSize.height.toFloat(),
+        )
+    } ?: documentState
+    val requestedComposedRange = geometry.composedPages(renderDocumentState, viewportSize.height.toFloat())
     val actualVisibleRange = geometry.composedPages(
-        documentState,
+        renderDocumentState,
         viewportSize.height.toFloat(),
         prefetchPages = 0,
     )
@@ -690,21 +790,21 @@ internal fun ContinuousDocumentViewport(
         requestedComposedRange.isEmpty() -> emptySet()
         else -> requestedComposedRange.toSet()
     }
-    val primaryPage = geometry.pageAtViewportCenter(documentState, viewportSize.height.toFloat())
+    val primaryPage = geometry.pageAtViewportCenter(renderDocumentState, viewportSize.height.toFloat())
     val snapshotPayload = ContinuousGestureSnapshotPayload(
         documentId = documentId,
         composedPages = composedPages.toSet(),
         visiblePages = visiblePages.toSet(),
         viewportPage = primaryPage,
         geometry = geometry,
-        documentState = documentState,
+        documentState = renderDocumentState,
         viewportWidth = viewportSize.width,
         viewportHeight = viewportSize.height,
         displayedBitmapIds = composedPages.associateWith { page ->
             displayedBitmaps[page]?.let(System::identityHashCode) ?: 0
         },
         pageBounds = composedPages.associateWith { page ->
-            geometry.pageBoundsInViewport(documentState, page)
+            geometry.pageBoundsInViewport(renderDocumentState, page)
         },
     )
     SideEffect {
@@ -797,7 +897,7 @@ internal fun ContinuousDocumentViewport(
         modifier = modifier
             .clipToBounds()
             .testTag("r7-continuous-viewport")
-            .semantics { r7ContinuousScale = documentState.scale; r7TileCount = drawableTiles.size }
+            .semantics { r7ContinuousScale = renderDocumentState.scale; r7TileCount = drawableTiles.size }
             .onSizeChanged {
                 viewportSize = it
                 onViewportWidthPx(it.width)
@@ -812,15 +912,34 @@ internal fun ContinuousDocumentViewport(
                     )
                 }
                 try {
-                    awaitEachGesture {
+                    awaitPdfGestureLifecycle(
+                        controller = sharedGestureController,
+                        pass = PointerEventPass.Initial,
+                    ) { down ->
                     val velocityTracker = VelocityTracker()
-                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    cancelFling()
+                    sharedGestureController.beginGesture(
+                        currentTransform = ZoomPanTransform(
+                            scale = documentState.scale,
+                            legalOffsetPx = ZoomPanPoint(-documentState.scrollX, -documentState.scrollY),
+                        ),
+                        initialPointers = listOf(
+                            ZoomPanPointer(down.id.value, ZoomPanPoint(down.position.x, down.position.y)),
+                        ),
+                        boundsForScale = { targetScale ->
+                            currentGeometry.zoomPanBounds(
+                                targetScale,
+                                viewportSize.width.toFloat(),
+                                viewportSize.height.toFloat(),
+                            )
+                        },
+                        overscrollPolicy = ZoomPanPhysicsProfile.ContinuousOverscrollPolicy,
+                    )
                     velocityTracker.addPosition(down.uptimeMillis, down.position)
                     publishViewportSnapshot(documentState.copy(gestureActive = true))
                     var twoFinger = false
                     var pinchUsed = false
                     var gestureCapture: ContinuousGestureCapture? = null
-                    var pointerEpoch: ContinuousPointerEpoch? = null
                     var dragStarted = false
                     do {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -904,28 +1023,41 @@ internal fun ContinuousDocumentViewport(
                             }
                             pressed.forEach { it.consume() }
                             if (gestureCapture != null) {
-                                val frame = ContinuousPointerEpochReducer.frame(
-                                    previous = pointerEpoch,
-                                    pointers = pressed.map { PointerSample(it.id.value, it.position.x, it.position.y) },
-                                    state = documentState,
-                                    viewportWidth = viewportSize.width.toFloat(),
-                                    viewportHeight = viewportSize.height.toFloat(),
-                                    geometry = currentGeometry,
+                                val frame = sharedGestureController.pointerFrame(
+                                    pointers = pressed.map {
+                                        ZoomPanPointer(it.id.value, ZoomPanPoint(it.position.x, it.position.y))
+                                    },
+                                    transformOriginViewportPx = ZoomPanPoint.Zero,
+                                    boundsForScale = { targetScale ->
+                                        currentGeometry.zoomPanBounds(
+                                            targetScale,
+                                            viewportSize.width.toFloat(),
+                                            viewportSize.height.toFloat(),
+                                        )
+                                    },
+                                    overscrollPolicy = ZoomPanPhysicsProfile.ContinuousOverscrollPolicy,
                                 )
-                                pointerEpoch = frame.epoch
                                 if (frame.rebased) {
                                     publishViewportSnapshot(documentState.copy(gestureActive = true), rebased = true)
                                     if (isDebuggable) {
                                         Log.d(tag, "POINTER_EPOCH_REBASE interactionId=${interaction.interactionId} " +
-                                            "epochId=${frame.epoch?.epochId} mode=${frame.epoch?.mode} " +
-                                            "pointerIds=${frame.epoch?.activePointerIds} pair=" +
-                                            "${frame.epoch?.primaryPointerId},${frame.epoch?.secondaryPointerId} " +
+                                            "epochId=${frame.snapshot.pointerEpoch?.epochId} mode=${frame.snapshot.pointerEpoch?.mode} " +
+                                            "pointerIds=${frame.snapshot.pointerEpoch?.activePointerIds} pair=" +
+                                            "${frame.snapshot.pointerEpoch?.primaryPointerId},${frame.snapshot.pointerEpoch?.secondaryPointerId} " +
                                             "scale=${documentState.scale} scrollX=${documentState.scrollX} scrollY=${documentState.scrollY}")
                                         Log.d(tag, "POINTER_EPOCH_FRAME_SKIPPED interactionId=${interaction.interactionId} " +
-                                            "epochId=${frame.epoch?.epochId} reason=POINTER_SET_CHANGED")
+                                            "epochId=${frame.snapshot.pointerEpoch?.epochId} reason=POINTER_SET_CHANGED")
                                     }
                                 } else {
-                                    update(frame.state.copy(gestureActive = true))
+                                    val transformed = frame.snapshot.transform
+                                    update(
+                                        documentState.copy(
+                                            scale = transformed.scale,
+                                            scrollX = -transformed.legalOffsetPx.x,
+                                            scrollY = -transformed.legalOffsetPx.y,
+                                            gestureActive = true,
+                                        ),
+                                    )
                                 }
                             }
                         } else if (pressed.size == 1) {
@@ -941,39 +1073,48 @@ internal fun ContinuousDocumentViewport(
                                         dragStarted = true
                                     }
                                 }
-                                if (gestureCapture != null) {
-                                    val frame = ContinuousPointerEpochReducer.frame(
-                                        previous = pointerEpoch,
-                                        pointers = listOf(PointerSample(change.id.value, change.position.x, change.position.y)),
-                                        state = documentState,
-                                        viewportWidth = viewportSize.width.toFloat(),
-                                        viewportHeight = viewportSize.height.toFloat(),
-                                        geometry = currentGeometry,
+                                if (gestureCapture != null || !twoFinger) {
+                                    val frame = sharedGestureController.pointerFrame(
+                                        pointers = listOf(
+                                            ZoomPanPointer(
+                                                change.id.value,
+                                                ZoomPanPoint(change.position.x, change.position.y),
+                                            ),
+                                        ),
+                                        transformOriginViewportPx = ZoomPanPoint.Zero,
+                                        boundsForScale = { targetScale ->
+                                            currentGeometry.zoomPanBounds(
+                                                targetScale,
+                                                viewportSize.width.toFloat(),
+                                                viewportSize.height.toFloat(),
+                                            )
+                                        },
+                                        overscrollPolicy = ZoomPanPhysicsProfile.ContinuousOverscrollPolicy,
                                     )
-                                    pointerEpoch = frame.epoch
                                     if (frame.rebased) {
                                         publishViewportSnapshot(documentState.copy(gestureActive = true), rebased = true)
                                         if (isDebuggable) {
                                             Log.d(tag, "POINTER_EPOCH_REBASE interactionId=${interaction.interactionId} " +
-                                                "epochId=${frame.epoch?.epochId} mode=SINGLE_PAN pointerIds=${frame.epoch?.activePointerIds}")
+                                                "epochId=${frame.snapshot.pointerEpoch?.epochId} mode=SINGLE_PAN pointerIds=${frame.snapshot.pointerEpoch?.activePointerIds}")
                                             Log.d(tag, "POINTER_EPOCH_FRAME_SKIPPED interactionId=${interaction.interactionId} " +
-                                                "epochId=${frame.epoch?.epochId} reason=2_TO_1")
+                                                "epochId=${frame.snapshot.pointerEpoch?.epochId} reason=2_TO_1")
                                         }
                                     } else {
-                                        update(frame.state.copy(gestureActive = true))
+                                        val transformed = frame.snapshot.transform
+                                        update(
+                                            documentState.copy(
+                                                scale = transformed.scale,
+                                                scrollX = -transformed.legalOffsetPx.x,
+                                                scrollY = -transformed.legalOffsetPx.y,
+                                                gestureActive = true,
+                                            ),
+                                        )
                                     }
                                 } else {
-                                    // At 1x this is vertical fit-width scrolling; above 1x it becomes
-                                    // a document-wide 2D pan. Both write the same state and cross pages.
-                                    val panX = if (documentState.scale > 1.001f) delta.x else 0f
                                     update(
-                                        currentGeometry.panBy(
-                                            documentState,
-                                            panX,
-                                            delta.y,
-                                            viewportSize.width.toFloat(),
-                                            viewportSize.height.toFloat(),
-                                        ).copy(gestureActive = true),
+                                        documentState.copy(
+                                            gestureActive = true,
+                                        ),
                                     )
                                 }
                             }
@@ -1131,10 +1272,10 @@ internal fun ContinuousDocumentViewport(
             pages.forEach { page ->
                 val top = geometry.pageTop(page)
                 placeables.getValue(page).placeWithLayer(0, top.roundToInt()) {
-                    scaleX = documentState.scale
-                    scaleY = documentState.scale
-                    translationX = -documentState.scrollX
-                    translationY = top * (documentState.scale - 1f) - documentState.scrollY
+                    scaleX = renderDocumentState.scale
+                    scaleY = renderDocumentState.scale
+                    translationX = -renderDocumentState.scrollX
+                    translationY = top * (renderDocumentState.scale - 1f) - renderDocumentState.scrollY
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
                 }
             }
@@ -1146,7 +1287,6 @@ private class ContinuousDocumentGestureState {
     val mutatorMutex = MutatorMutex()
     var flingJob: Job? = null
     var settleJob: Job? = null
-    var motionGeneration: Long = 0L
 }
 
 /** Real Compose lifecycle boundary used by production and instrumentation tests. */

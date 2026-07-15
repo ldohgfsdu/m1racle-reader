@@ -1,4 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application />
+    <application>
+        <provider
+            android:name=".ui.pdf.H1QaPdfFixtureProvider"
+            android:authorities="com.markleaf.app.qa.h1fixture"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+        <activity
+            android:name=".ui.pdf.R7ViewportTestActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.pdf.H1QaHarnessActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.MarkLeaf" />
+        <activity
+            android:name=".ui.pdf.H1QaContinuousHarnessActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.MarkLeaf" />
+    </application>
 </manifest>

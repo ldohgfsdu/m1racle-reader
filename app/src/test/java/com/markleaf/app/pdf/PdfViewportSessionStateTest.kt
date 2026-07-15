@@ -63,6 +63,22 @@ class PdfViewportSessionStateTest {
         assertEquals(stable, tracker.stable())
     }
 
+    @Test fun `live preview drives mode handoff without becoming persisted stable state`() {
+        val stable = PdfViewportSessionState(
+            readingMode = PdfReadingMode.HORIZONTAL_PAGED, pageIndex = 4,
+            pageAnchorXFraction = .5f, pageAnchorYFraction = .2f, scale = 2f, generation = 4,
+        )
+        val live = stable.copy(pageAnchorYFraction = .73f, generation = 5)
+        val tracker = PdfViewportSessionTracker()
+        tracker.seed(stable)
+        tracker.preview(live)
+
+        assertEquals(live, tracker.latestForMode(PdfReadingMode.HORIZONTAL_PAGED))
+        assertEquals(stable, tracker.stable())
+        assertEquals(stable, tracker.takeForFlush())
+        assertNull(tracker.takeForFlush())
+    }
+
     @Test fun `restore priority external then mode then zoom then startup`() {
         assertTrue(ReadingPositionPolicy.priority(ReadingPositionSource.EXTERNAL_NAVIGATION) > ReadingPositionPolicy.priority(ReadingPositionSource.MODE_SWITCH_RESTORE))
         assertTrue(ReadingPositionPolicy.priority(ReadingPositionSource.MODE_SWITCH_RESTORE) > ReadingPositionPolicy.priority(ReadingPositionSource.ZOOM_SESSION_RESTORE))
