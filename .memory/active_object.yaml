@@ -1,51 +1,28 @@
-id: R8_MARKDOWN_RELATIVE_ASSET_RESOLUTION_V1
+id: R9_MARKDOWN_SEARCH_MATCH_HIGHLIGHT_V1
 priority: P1
-status: device_accepted
-overall: DEVICE_ACCEPTED
-scope_decision: capability_tiered_safe_degradation
-baseline_commit: f34b57d0dc929a5bd7f1ee0d4fd8f5e62450c726
-note: >
-  Markdown relative image resolution V1. Capability tiers:
-  AppOwnedDirectory / FileDirectory support relative images within sandbox root.
-  SafTreeDirectory only when a verified directory capability exists (no URI guessing).
-  SingleContentDocument relative images → Inaccessible (controlled failure).
-  No OpenDocumentTree UI, no schema change, no H1/PDF/tile changes.
-product_semantics:
-  absolute_uris_passthrough:
-    - http
-    - https
-    - data
-    - file
-    - content
-    - android.resource
-  relative_supported_when:
-    - AppOwnedDirectory
-    - FileDirectory
-    - SafTreeDirectory_with_verified_root
-  relative_inaccessible_when:
-    - SingleContentDocument
-    - Unknown
-    - external_open_single_file_grant
-ui_failure:
-  primary: 无法访问相对图片
-  secondary_single_file: 当前仅授权了 Markdown 文件，未授权图片所在目录
+status: design_audit
+overall: DESIGN_READY
+phase: design_audit_only
+baseline_commit: pending_after_p0_checkpoint
+p0:
+  object: R9_MARKDOWN_IN_DOCUMENT_SEARCH_V1
+  device_acceptance: P0_DEVICE_ACCEPTED
+  known_limits:
+    - block_level_scroll_only
+    - same_block_matches_not_visually_distinct
+    - full_block_background_not_char_span
+    - no_in_block_char_scroll
+    - no_cross_block_match
+perf_object: R9_MARKDOWN_SCROLL_PERFORMANCE_RECOVERY
+perf_status: ready_for_human_perf_acceptance
+design_report: docs/R9_MARKDOWN_SEARCH_MATCH_HIGHLIGHT_V1_DESIGN_AUDIT.md
+implementation: not_started
 frozen:
   r7_h1_5a: rejected_device_failed_frozen
   three_page_strip: frozen
   tile_pipeline: frozen
-  external_open_session_lifecycle: do_not_change
+  external_open_session: do_not_change
+  r8_relative_asset: do_not_change
   remote: not_configured
-  worktree: leave_as_is
-out_of_scope:
-  - folder picker / ACTION_OPEN_DOCUMENT_TREE
-  - Room schema
-  - Markdown search
-  - 200KB truncation UX
-  - release packaging
-  - git commit or push
-report: docs/R8_MARKDOWN_RELATIVE_ASSET_V1_IMPLEMENTATION_REPORT.md
-review_report: docs/R8_MARKDOWN_RELATIVE_ASSET_V1_REVIEW_REPORT.md
-device_acceptance_report: docs/R8_MARKDOWN_RELATIVE_ASSET_V1_DEVICE_ACCEPTANCE_REPORT.md
-fixtures: testdata/r8_relative_asset_v1/
-evidence: dist/r8-device-acceptance/
-updated: 2026-07-15
+  p0_search_semantics: do_not_break
+updated: 2026-07-16

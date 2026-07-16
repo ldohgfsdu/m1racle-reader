@@ -339,9 +339,20 @@ private fun ViewerSuccessScreen(
     }
 
     // Scroll to current search match (absolute list index = header + blockIndex).
-    LaunchedEffect(searchState.currentIndex, searchState.matches) {
-        val match = searchState.currentMatch ?: return@LaunchedEffect
+    // P0: block-level only — not character-precise. Ignore stale keys / empty results.
+    LaunchedEffect(
+        searchState.currentIndex,
+        searchState.matches,
+        searchState.isActive,
+        searchState.documentKey,
+        state.document.id,
+    ) {
         if (!searchState.isActive) return@LaunchedEffect
+        if (searchState.documentKey != state.document.id) return@LaunchedEffect
+        if (searchState.matches.isEmpty()) return@LaunchedEffect
+        val match = searchState.currentMatch ?: return@LaunchedEffect
+        if (match.documentKey != state.document.id) return@LaunchedEffect
+        if (match.blockIndex !in state.blocks.indices) return@LaunchedEffect
         scrollToBlockIndex(
             listState = listState,
             blockIndex = match.blockIndex,

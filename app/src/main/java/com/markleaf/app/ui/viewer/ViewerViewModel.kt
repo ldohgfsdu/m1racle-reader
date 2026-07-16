@@ -15,9 +15,11 @@ import com.markleaf.app.markdown.AnchorRegistry
 import com.markleaf.app.markdown.TocItem
 import com.markleaf.app.search.DocumentSearch
 import com.markleaf.app.search.SearchMatch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,9 +51,14 @@ sealed class ViewerUiState {
 
 data class DocumentSearchUiState(
     val isActive: Boolean = false,
+    /** Bound document identity — results from another key must not be applied. */
+    val documentKey: String = "",
+    /** Raw user query (not trimmed) for UI. */
     val query: String = "",
     val matches: List<SearchMatch> = emptyList(),
     val currentIndex: Int = 0,
+    /** True when [DocumentSearch.MAX_MATCHES] stopped further hits. */
+    val resultsTruncated: Boolean = false,
 ) {
     val matchCount: Int get() = matches.size
     val currentMatch: SearchMatch?
@@ -59,9 +66,20 @@ data class DocumentSearchUiState(
 
     val counterLabel: String
         get() {
+            // Empty query: no scan — avoid implying a completed zero-result search.
+            if (query.isEmpty()) return "—"
             if (matches.isEmpty()) return "0 / 0"
-            return "${currentIndex + 1} / ${matches.size}"
+            val total = if (resultsTruncated) {
+                "${matches.size}+"
+            } else {
+                matches.size.toString()
+            }
+            // Guard against bad index (should not happen after reset).
+            val idx = currentIndex.coerceIn(0, (matches.size - 1).coerceAtLeast(0)) + 1
+            return "$idx / $total"
         }
+
+    val hasMatches: Boolean get() = matches.isNotEmpty()
 }
 
 class ViewerViewModel(
@@ -73,10 +91,19 @@ class ViewerViewModel(
     private val _uiState = MutableStateFlow<ViewerUiState>(ViewerUiState.Loading)
     val uiState: StateFlow<ViewerUiState> = _uiState.asStateFlow()
 
-    private val _searchState = MutableStateFlow(DocumentSearchUiState())
+    private val _searchState = MutableStateFlow(
+        DocumentSearchUiState(documentKey = documentId),
+    )
     val searchState: StateFlow<DocumentSearchUiState> = _searchState.asStateFlow()
 
     private var searchJob: Job? = null
+    /** Last query that completed a scan (for distinctUntilChanged-style skip). */
+    private var lastScannedQuery: String? = null
+    /**
+     * Monotonic generation: bumped on close/open and every query schedule.
+     * Late results must match [searchGeneration] to apply.
+     */
+    private var searchGeneration: Long = 0L
 
     val readerSettings: StateFlow<ReaderSettings> = readerSettingsRepository.settingsFlow
         .stateIn(
@@ -89,36 +116,106 @@ class ViewerViewModel(
         load()
     }
 
+    override fun onCleared() {
+        searchJob?.cancel()
+        searchJob = null
+        super.onCleared()
+    }
+
     fun retry() {
         load()
     }
 
     fun openSearch() {
-        _searchState.value = DocumentSearchUiState(isActive = true)
+        searchJob?.cancel()
+        lastScannedQuery = null
+        searchGeneration++
+        _searchState.value = DocumentSearchUiState(
+            isActive = true,
+            documentKey = documentId,
+        )
     }
 
     fun closeSearch() {
         searchJob?.cancel()
-        _searchState.value = DocumentSearchUiState()
+        searchJob = null
+        lastScannedQuery = null
+        searchGeneration++
+        _searchState.value = DocumentSearchUiState(documentKey = documentId)
     }
 
+    /**
+     * Updates the search query with debounce. Leading/trailing spaces are kept for matching.
+     * Empty string clears matches without scanning. Identical re-entries skip re-scan.
+     */
     fun onSearchQueryChange(query: String) {
-        _searchState.update { it.copy(query = query) }
-        val blocks = (_uiState.value as? ViewerUiState.Success)?.blocks.orEmpty()
-        searchJob?.cancel()
-        if (query.trim().isEmpty()) {
-            _searchState.update { it.copy(matches = emptyList(), currentIndex = 0) }
-            return
+        _searchState.update {
+            it.copy(
+                query = query,
+                documentKey = documentId,
+            )
         }
-        searchJob = viewModelScope.launch {
-            val matches = withContext(Dispatchers.Default) {
-                DocumentSearch.search(blocks, query)
-            }
+        searchJob?.cancel()
+
+        if (query.isEmpty()) {
+            lastScannedQuery = ""
+            searchGeneration++
             _searchState.update {
                 it.copy(
-                    matches = matches,
+                    matches = emptyList(),
                     currentIndex = 0,
+                    resultsTruncated = false,
+                    documentKey = documentId,
                 )
+            }
+            return
+        }
+
+        if (query == lastScannedQuery && _searchState.value.documentKey == documentId) {
+            // Same query already scanned for this document — skip re-scan.
+            return
+        }
+
+        val success = _uiState.value as? ViewerUiState.Success
+        val blocks = success?.blocks.orEmpty()
+        val blockIds = success?.blockIds.orEmpty()
+        val keyAtSchedule = documentId
+        val generationAtSchedule = ++searchGeneration
+
+        searchJob = viewModelScope.launch {
+            try {
+                delay(SEARCH_DEBOUNCE_MS)
+                // Re-check after debounce: may have been superseded.
+                if (generationAtSchedule != searchGeneration) return@launch
+                if (_searchState.value.query != query) return@launch
+                if (keyAtSchedule != documentId) return@launch
+
+                val result = withContext(Dispatchers.Default) {
+                    DocumentSearch.search(
+                        documentKey = keyAtSchedule,
+                        blocks = blocks,
+                        rawQuery = query,
+                        blockIds = blockIds,
+                    )
+                }
+
+                // Drop late results (cancel, newer query, or wrong document).
+                if (generationAtSchedule != searchGeneration) return@launch
+                if (keyAtSchedule != documentId) return@launch
+                if (_searchState.value.query != query) return@launch
+                if (result.documentKey != documentId) return@launch
+
+                lastScannedQuery = query
+                _searchState.update {
+                    it.copy(
+                        documentKey = documentId,
+                        matches = result.matches,
+                        currentIndex = 0,
+                        resultsTruncated = result.truncated,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
             }
         }
     }
@@ -287,9 +384,10 @@ class ViewerViewModel(
                         isTruncated = preview.isTruncated,
                         isParseFallback = parseFallback,
                     )
-                    // Re-run search if user is already in search mode (rare race).
+                    // Re-run search if user is already in search mode (rare race after reload).
+                    lastScannedQuery = null
                     val q = _searchState.value.query
-                    if (_searchState.value.isActive && q.trim().isNotEmpty()) {
+                    if (_searchState.value.isActive && q.isNotEmpty()) {
                         onSearchQueryChange(q)
                     }
                 },
@@ -309,6 +407,11 @@ class ViewerViewModel(
                 },
             )
         }
+    }
+
+    companion object {
+        /** Debounce before scanning so rapid typing cancels prior work. */
+        const val SEARCH_DEBOUNCE_MS: Long = 200L
     }
 
     class Factory(
