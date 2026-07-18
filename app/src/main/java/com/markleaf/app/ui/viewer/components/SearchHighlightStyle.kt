@@ -1,27 +1,31 @@
 package com.markleaf.app.ui.viewer.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 
+/**
+ * P1: character-level search highlight colors.
+ * Normal matches are restrained; active match is clearly stronger but not harsh.
+ */
+@Composable
+fun searchMatchNormalBackground(): Color {
+    return MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.38f)
+}
+
+@Composable
+fun searchMatchActiveBackground(): Color {
+    return MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.82f)
+}
+
+/** @deprecated P0 whole-block yellow — kept as no-op so call sites can be deleted safely. */
 @Composable
 fun Modifier.searchBlockHighlight(active: Boolean): Modifier {
-    if (!active) return this
-    // tertiaryContainer is warm yellow (light) / muted gold well (dark) from fixed scheme.
-    val color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.72f)
+    // P1: do not paint entire block background for search hits.
     return this
-        .clip(RoundedCornerShape(6.dp))
-        .background(color)
-        .padding(horizontal = 4.dp, vertical = 2.dp)
 }
 
+/** @deprecated Use [searchMatchActiveBackground]. */
 @Composable
-fun searchFragmentHighlightColor(): Color {
-    return MaterialTheme.colorScheme.tertiaryContainer
-}
+fun searchFragmentHighlightColor(): Color = searchMatchActiveBackground()

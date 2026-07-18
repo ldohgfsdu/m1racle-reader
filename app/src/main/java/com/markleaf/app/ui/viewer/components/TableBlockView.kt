@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -40,6 +41,10 @@ import com.markleaf.app.markdown.InlineMarkdownParser
 import com.markleaf.app.markdown.InlineMarkdownStyles
 import com.markleaf.app.markdown.MarkdownBlock
 import com.markleaf.app.markdown.TableAlignment
+import com.markleaf.app.search.BlockSearchHighlights
+import com.markleaf.app.search.SearchHighlightRange
+import com.markleaf.app.search.withSearchHighlights
+// EmptyRanges / short-circuit when searchHighlights is null
 import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
 import kotlin.math.roundToInt
 
@@ -47,7 +52,7 @@ import kotlin.math.roundToInt
 fun TableBlockView(
     block: MarkdownBlock.Table,
     settings: ReaderSettings,
-    isCurrentSearchMatch: Boolean = false,
+    searchHighlights: BlockSearchHighlights? = null,
     modifier: Modifier = Modifier,
     /** Test/diagnostic hook; invoked only when the remembered whole-table measurement is rebuilt. */
     onColumnMetricsCalculated: (() -> Unit)? = null,
@@ -99,11 +104,16 @@ fun TableBlockView(
         }
     }
 
+    val hasSearch = searchHighlights != null && !searchHighlights.isEmpty
+    val normalHl = if (hasSearch) searchMatchNormalBackground() else Color.Unspecified
+    val activeHl = if (hasSearch) searchMatchActiveBackground() else Color.Unspecified
+    // Cell ordinal matches MarkdownSearchTextExtractor: headers then row-major body cells.
+    val columnCount = block.headers.size.coerceAtLeast(1)
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .searchBlockHighlight(isCurrentSearchMatch)
             .testTag("markdown-table"),
     ) {
         val viewportWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
@@ -271,6 +281,15 @@ fun TableBlockView(
                     horizontalPadding = tokens.horizontalCellPaddingDp.dp,
                     verticalPadding = tokens.verticalCellPaddingDp.dp,
                     onHeaderCellLayout = onHeaderCellLayout,
+                    cellHighlight = { col ->
+                        if (!hasSearch) {
+                            BlockSearchHighlights.EmptyRanges
+                        } else {
+                            searchHighlights!!.forCell(col)
+                        }
+                    },
+                    normalHl = normalHl,
+                    activeHl = activeHl,
                 )
                 HorizontalDivider(
                     modifier = Modifier.testTag("markdown-table-header-divider"),
@@ -278,6 +297,7 @@ fun TableBlockView(
                     thickness = 0.75.dp,
                 )
                 block.rows.forEachIndexed { rowIndex, row ->
+                    val rowBaseOrdinal = columnCount + rowIndex * columnCount
                     TableRow(
                         cells = row,
                         alignments = block.alignments,
@@ -287,6 +307,15 @@ fun TableBlockView(
                         horizontalPadding = tokens.horizontalCellPaddingDp.dp,
                         verticalPadding = tokens.verticalCellPaddingDp.dp,
                         rowTag = "body-$rowIndex",
+                        cellHighlight = { col ->
+                            if (!hasSearch) {
+                                BlockSearchHighlights.EmptyRanges
+                            } else {
+                                searchHighlights!!.forCell(rowBaseOrdinal + col)
+                            }
+                        },
+                        normalHl = normalHl,
+                        activeHl = activeHl,
                     )
                     if (rowIndex < block.rows.lastIndex) {
                         HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
@@ -335,12 +364,23 @@ private fun TableHeaderRow(
     horizontalPadding: Dp,
     verticalPadding: Dp,
     onHeaderCellLayout: ((Int, TableHeaderCellLayoutMetadata) -> Unit)?,
+    cellHighlight: (Int) -> List<SearchHighlightRange> = { emptyList() },
+    normalHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
+    activeHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
 ) {
     Row(modifier = Modifier.testTag("markdown-table-row-header")) {
         columnWidths.forEachIndexed { column, width ->
             val source = cells.getOrElse(column) { "" }
-            val annotated = remember(source, inlineStyles) {
+            val ranges = cellHighlight(column)
+            val baseAnnotated = remember(source, inlineStyles) {
                 InlineMarkdownParser.parse(source.ifEmpty { " " }, inlineStyles)
+            }
+            val annotated = if (ranges.isEmpty()) {
+                baseAnnotated
+            } else {
+                remember(baseAnnotated, ranges, normalHl, activeHl) {
+                    baseAnnotated.withSearchHighlights(ranges, normalHl, activeHl)
+                }
             }
             Text(
                 text = annotated,
@@ -388,6 +428,9 @@ private fun TableRow(
     verticalPadding: Dp,
     rowTag: String,
     modifier: Modifier = Modifier,
+    cellHighlight: (Int) -> List<SearchHighlightRange> = { emptyList() },
+    normalHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
+    activeHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
 ) {
     Row(
         modifier = modifier.testTag("markdown-table-row-$rowTag"),
@@ -399,6 +442,9 @@ private fun TableRow(
                 style = style,
                 inlineStyles = inlineStyles,
                 alignment = alignments.getOrElse(column) { TableAlignment.Start },
+                searchRanges = cellHighlight(column),
+                normalHl = normalHl,
+                activeHl = activeHl,
                 modifier = Modifier
                     .width(width)
                     .padding(horizontal = horizontalPadding, vertical = verticalPadding)
@@ -415,9 +461,19 @@ private fun TableCell(
     inlineStyles: InlineMarkdownStyles,
     alignment: TableAlignment,
     modifier: Modifier = Modifier,
+    searchRanges: List<SearchHighlightRange> = emptyList(),
+    normalHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
+    activeHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
 ) {
-    val annotated = remember(text, inlineStyles) {
+    val baseAnnotated = remember(text, inlineStyles) {
         InlineMarkdownParser.parse(text.ifEmpty { " " }, inlineStyles)
+    }
+    val annotated = if (searchRanges.isEmpty()) {
+        baseAnnotated
+    } else {
+        remember(baseAnnotated, searchRanges, normalHl, activeHl) {
+            baseAnnotated.withSearchHighlights(searchRanges, normalHl, activeHl)
+        }
     }
     val resolvedStyle = style.copy(
         fontFamily = style.fontFamily ?: FontFamily.Default,

@@ -34,6 +34,8 @@ android {
         buildConfigField("boolean", "DETAIL_TILE_BASE_LAYER_ENABLED", detailTileBaseLayerEnabled.toString())
         buildConfigField("boolean", "DETAIL_TILE_DIAGNOSTICS_ENABLED", detailTileDiagnosticsEnabled.toString())
         buildConfigField("float", "DETAIL_TILE_OVERLAY_ALPHA", "${detailTileOverlayAlpha}f")
+        // Disabled for every normal build; the qa build type overrides this below.
+        buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "false")
     }
 
     // Local/acceptance signing: AGP applies zipalign + APK Signature Scheme v2/v3.
@@ -63,6 +65,7 @@ android {
             applicationIdSuffix = ".qa"
             versionNameSuffix = "-qa"
             isDebuggable = true
+            buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "true")
             manifestPlaceholders["appLabel"] = "MarkLeaf QA"
         }
         release {

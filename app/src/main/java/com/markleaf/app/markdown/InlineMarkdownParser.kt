@@ -71,16 +71,57 @@ object InlineMarkdownParser {
 
     const val LINK_ANNOTATION_TAG = "markleaf.markdown.link"
 
+    /**
+     * True when [text] may contain inline Markdown that must be walked.
+     *
+     * Mid-word single underscores (e.g. `SCROLL_BODY`) do **not** count as emphasis
+     * openers — matching CommonMark word-internal `_` rules and avoiding a full
+     * AnnotatedString rebuild for plain body paragraphs that only use identifiers.
+     */
+    fun mayContainInlineMarkup(text: String): Boolean {
+        if (text.isEmpty()) return false
+        var i = 0
+        val end = text.length
+        while (i < end) {
+            when (val c = text[i]) {
+                '`', '*', '[', '!', '\\', '<' -> return true
+                '_' -> {
+                    // "__" is strong; a single mid-word "_" is plain text.
+                    val next = text.getOrNull(i + 1)
+                    if (next == '_') return true
+                    val prev = text.getOrNull(i - 1)
+                    val prevWord = prev != null && prev.isLetterOrDigit()
+                    val nextWord = next != null && next.isLetterOrDigit()
+                    if (!(prevWord && nextWord)) return true
+                    i++
+                }
+                else -> i++
+            }
+        }
+        return false
+    }
+
     fun parse(
         text: String,
         styles: InlineMarkdownStyles = InlineMarkdownStyles(),
     ): AnnotatedString {
-        if (text.isEmpty()) return AnnotatedString("")
+        if (text.isEmpty()) {
+            MarkdownPerformance.recordInlineParse(usedFastPath = true)
+            return AnnotatedString("")
+        }
+        // Fast path: plain paragraphs with no real markup skip buildAnnotatedString.
+        if (!mayContainInlineMarkup(text)) {
+            MarkdownPerformance.recordInlineParse(usedFastPath = true)
+            return AnnotatedString(text)
+        }
         return try {
-            buildAnnotatedString {
+            val result = buildAnnotatedString {
                 appendInline(text, 0, text.length, styles)
             }
+            MarkdownPerformance.recordInlineParse(usedFastPath = false)
+            result
         } catch (_: Exception) {
+            MarkdownPerformance.recordInlineParse(usedFastPath = false)
             AnnotatedString(text)
         }
     }
@@ -321,15 +362,25 @@ object InlineMarkdownParser {
                     }
                 }
                 source[i] == '_' -> {
-                    val close = indexOfSingleDelimiter(source, i + 1, end, '_')
-                    if (close == -1) {
+                    // Mid-word "_" (SCROLL_BODY) is never emphasis — keep literal.
+                    val prev = if (i > start) source[i - 1] else null
+                    val next = if (i + 1 < end) source[i + 1] else null
+                    val midWord = prev != null && prev.isLetterOrDigit() &&
+                        next != null && next.isLetterOrDigit()
+                    if (midWord) {
                         append('_')
                         i++
                     } else {
-                        withStyle(styles.italic) {
-                            appendInline(source, i + 1, close, styles)
+                        val close = indexOfSingleDelimiter(source, i + 1, end, '_')
+                        if (close == -1) {
+                            append('_')
+                            i++
+                        } else {
+                            withStyle(styles.italic) {
+                                appendInline(source, i + 1, close, styles)
+                            }
+                            i = close + 1
                         }
-                        i = close + 1
                     }
                 }
 

@@ -1,28 +1,32 @@
-id: R9_MARKDOWN_SEARCH_MATCH_HIGHLIGHT_V1
-priority: P1
-status: design_audit
-overall: DESIGN_READY
-phase: design_audit_only
-baseline_commit: pending_after_p0_checkpoint
-p0:
-  object: R9_MARKDOWN_IN_DOCUMENT_SEARCH_V1
-  device_acceptance: P0_DEVICE_ACCEPTED
-  known_limits:
-    - block_level_scroll_only
-    - same_block_matches_not_visually_distinct
-    - full_block_background_not_char_span
-    - no_in_block_char_scroll
-    - no_cross_block_match
-perf_object: R9_MARKDOWN_SCROLL_PERFORMANCE_RECOVERY
-perf_status: ready_for_human_perf_acceptance
-design_report: docs/R9_MARKDOWN_SEARCH_MATCH_HIGHLIGHT_V1_DESIGN_AUDIT.md
-implementation: not_started
-frozen:
-  r7_h1_5a: rejected_device_failed_frozen
-  three_page_strip: frozen
-  tile_pipeline: frozen
-  external_open_session: do_not_change
-  r8_relative_asset: do_not_change
-  remote: not_configured
-  p0_search_semantics: do_not_break
-updated: 2026-07-16
+id: R9_COMPOSE_LIST_VS_PDF_SCROLL_ISOLATION
+status: device_accepted
+overall_primary: SHARED_SCROLL_CHROME_ROOT_CAUSE_FOUND
+overall_primary_scope: markdown_only
+overall_secondary: SCREEN_SPECIFIC_ITEM_WORK_FOUND
+overall_secondary_scope: home_file_list_cards
+chrome_isolation: gain_proven
+chrome_production_fix: overlay_snap_auto_hide_accepted
+chrome_slow_drag_fix: accumulated_same_direction_delta_with_reversal_jitter
+first_entry_item_fix: plain_inline_parse_fast_path
+first_entry_item_dominant: paragraph
+first_entry_item_report: docs/R9_FIRST_ENTRY_ITEM_COST_CLOSED_LOOP_REPORT.md
+first_entry_item_artifacts: dist/r9-markdown-scroll-chrome/first-entry-item-fix/20260718-085401-post
+first_entry_item_apk: dist/r9-markdown-scroll-chrome/markleaf-qa-first-entry-item-fix.apk
+first_entry_item_apk_sha256: 7e3df156cba089de515e0b3b1a45ae8b2ca4e1674aee68413a3eca7ff61f19cf
+first_entry_item_auto: p99_33_to_30_legacy_jank_31_to_27p7
+first_entry_ab: COMPLETED_NO_DOMINANT_ISOLATION_WIN
+first_entry_ab_report: docs/R9_FIRST_ENTRY_PERF_AB_DIAGNOSTIC.md
+pdf_continuous_production: unmodified
+pdf_formal_ft_control: VALID
+device: 198.18.0.1:37173
+adb_retest: PASS_FUNCTIONAL_AND_GFXINFO_20260718
+adb_retest_report: docs/R9_MARKDOWN_SCROLL_CHROME_ADB_RETEST.md
+performance_gate: DEVICE_ACCEPTED
+human_feel: PASS_20260719
+report: docs/R9_MARKDOWN_SCROLL_CHROME_RECOVERY_REPORT.md
+isolation_report: docs/R9_COMPOSE_LIST_VS_PDF_SCROLL_ISOLATION_REPORT.md
+closed_loop_report: docs/R9_FIRST_ENTRY_ITEM_COST_CLOSED_LOOP_REPORT.md
+next_home_candidate: R10_HOME_LIST_CARD_PERFORMANCE
+commit: done_in_r9_closure_commit
+push: not_done
+updated: 2026-07-19

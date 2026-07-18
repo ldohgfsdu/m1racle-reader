@@ -11,17 +11,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
+import com.markleaf.app.search.BlockSearchHighlights
 import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
+// BlockSearchHighlights.EmptyRanges used for zero-cost search-closed path
 
 @Composable
 fun ParagraphBlockView(
     block: MarkdownBlock.Paragraph,
     settings: ReaderSettings,
-    isCurrentSearchMatch: Boolean = false,
+    searchHighlights: BlockSearchHighlights? = null,
     modifier: Modifier = Modifier,
     onLinkClick: ((String) -> Unit)? = null,
 ) {
-    // Dynamic lineHeight from settings — not a fixed sp constant.
     val bodyStyle = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
@@ -34,9 +35,9 @@ fun ParagraphBlockView(
         settings = settings,
         style = bodyStyle,
         onLinkClick = onLinkClick,
+        searchRanges = searchHighlights?.forWholeBlock() ?: BlockSearchHighlights.EmptyRanges,
         modifier = modifier
             .fillMaxWidth()
-            .searchBlockHighlight(isCurrentSearchMatch)
             .padding(top = 2.dp, bottom = 14.dp),
     )
 }

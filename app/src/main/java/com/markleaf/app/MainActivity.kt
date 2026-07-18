@@ -35,6 +35,7 @@ import com.markleaf.app.share.PendingExternalOpen
 import com.markleaf.app.ui.navigation.MarkLeafNavGraph
 import com.markleaf.app.ui.navigation.Routes
 import com.markleaf.app.ui.theme.MarkLeafTheme
+import com.markleaf.app.ui.viewer.ReaderPerformanceExperiments
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -44,6 +45,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestHighestRefreshRate()
+        ReaderPerformanceExperiments.configure(intent)
 
         val app = application as MarkLeafApplication
         val coordinator = app.externalOpenCoordinator

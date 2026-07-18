@@ -4,9 +4,8 @@ import android.net.Uri
 import android.os.Trace
 import android.util.Log
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -35,8 +34,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
+import androidx.compose.foundation.lazy.LazyListPrefetchScope
+import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.layout.NestedPrefetchScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,6 +66,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,6 +86,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -99,8 +104,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.markleaf.app.BuildConfig
 import com.markleaf.app.R
 import com.markleaf.app.data.settings.ReaderSettings
+import com.markleaf.app.markdown.MarkdownPerformance
 import com.markleaf.app.markdown.TocItem
 import com.markleaf.app.markdown.blockContentType
 import com.markleaf.app.markdown.blockId
@@ -236,6 +243,7 @@ fun ViewerScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ViewerSuccessScreen(
     state: ViewerUiState.Success,
@@ -255,15 +263,18 @@ private fun ViewerSuccessScreen(
     val tableLayoutCache = remember(state.document.id) {
         TableLayoutCache(documentId = state.document.id)
     }
-    val topBarScrollState = remember(density) {
+    // Keyed by document id so a new document never inherits a hidden bar / accumulators.
+    val topBarScrollState = remember(state.document.id, density) {
         ReaderTopBarScrollState(
             hideThresholdPx = with(density) { 32.dp.toPx() },
-            // Continuous upward drag only — not fling velocity.
+            // Continuous upward drag only — not fling velocity (hysteresis > hide).
             showThresholdPx = with(density) { 88.dp.toPx() },
             jitterIgnorePx = with(density) { 12.dp.toPx() },
             cooldownMs = 250L,
         )
     }
+    // Observe-only nested scroll: thresholded show/hide, never consumes body deltas.
+    // Overlay uses graphicsLayer.translationY (snap) so LazyColumn viewport stays fixed.
     val topBarNestedScroll = remember(topBarScrollState) {
         topBarScrollState.asNestedScrollConnection()
     }
@@ -290,9 +301,18 @@ private fun ViewerSuccessScreen(
     val restoredOffset = remember(state.document.id) {
         state.document.lastScrollOffset.coerceAtLeast(0)
     }
+    // QA-only: swap in a no-op prefetch strategy when isolating first-entry item work.
+    val prefetchStrategy = remember(ReaderPerformanceExperiments.disablePrefetch) {
+        if (ReaderPerformanceExperiments.disablePrefetch) {
+            DisabledLazyListPrefetchStrategy
+        } else {
+            LazyListPrefetchStrategy()
+        }
+    }
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = restoredIndex,
         initialFirstVisibleItemScrollOffset = restoredOffset,
+        prefetchStrategy = prefetchStrategy,
     )
 
     // Persist only from a settled list, plus leave/background flushes. Observing index/offset while
@@ -361,19 +381,42 @@ private fun ViewerSuccessScreen(
         )
     }
 
-    // Force TopAppBar visible at document top and while searching.
+    // Force TopAppBar visible while searching, and when the list *settles* at top.
+    // Do not observe firstVisibleItemScrollOffset every scroll frame (120Hz invalidation).
     LaunchedEffect(listState, searchState.isActive) {
         if (searchState.isActive) {
             topBarScrollState.forceShow()
             return@LaunchedEffect
         }
-        snapshotFlow {
-            listState.firstVisibleItemIndex == 0 &&
-                listState.firstVisibleItemScrollOffset <= 0
-        }
+        snapshotFlow { listState.isScrollInProgress }
             .distinctUntilChanged()
-            .collect { atTop ->
-                if (atTop) topBarScrollState.forceShow()
+            .collect { scrolling ->
+                if (scrolling) return@collect
+                if (listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset <= 0
+                ) {
+                    topBarScrollState.forceShow()
+                }
+            }
+    }
+
+    // QA-only: attribute first-entry block compose cost after the first *user* scroll settles.
+    // Production builds never enable READER_PERFORMANCE_EXPERIMENTS_ENABLED.
+    LaunchedEffect(listState, state.document.id) {
+        if (!BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) return@LaunchedEffect
+        MarkdownPerformance.reset()
+        var sawScroll = false
+        var dumped = false
+        snapshotFlow { listState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { scrolling ->
+                if (scrolling) {
+                    sawScroll = true
+                    return@collect
+                }
+                if (!sawScroll || dumped) return@collect
+                dumped = true
+                MarkdownPerformance.dumpBlockCompose("MarkdownBlockPerf")
             }
     }
 
@@ -448,8 +491,19 @@ private fun ViewerSuccessScreen(
             onSearchNext = viewModel::goToNextMatch,
             snackbarHostState = snackbarHostState,
             // Pass state object only — body never reads .visible (avoids recompose cascade).
-            topBarScrollState = topBarScrollState,
-            nestedScrollConnection = if (searchState.isActive) null else topBarNestedScroll,
+            // QA: nulling the state freezes the overlay at visible and drops hide/show flips.
+            topBarScrollState = topBarScrollState.takeUnless {
+                ReaderPerformanceExperiments.disableTopBar
+            },
+            // Search owns the scaffold topBar; disable scroll-hide while searching.
+            // QA: also drop nestedScroll when isolating top-bar flip cost.
+            nestedScrollConnection = if (
+                searchState.isActive || ReaderPerformanceExperiments.disableTopBar
+            ) {
+                null
+            } else {
+                topBarNestedScroll
+            },
         ) { innerPadding ->
             ReaderDocumentBody(
                 state = state,
@@ -509,9 +563,22 @@ private fun ReaderDocumentBody(
         .calculateBottomPadding()
     val listBottomInset = navBottom + 24.dp
 
-    // Only the active match block needs search highlight data.
-    val activeMatch = searchState.currentMatch.takeIf { searchState.isActive }
-    val activeMatchBlockIndex = activeMatch?.blockIndex
+    // Group matches once when the result set changes — not on every next/prev.
+    // Search-closed: empty map + no active key → items get null highlights (zero paint path).
+    val searchPaintActive = searchState.isActive && searchState.matches.isNotEmpty()
+    val matchesByBlock = remember(searchPaintActive, searchState.documentKey, searchState.matches) {
+        if (!searchPaintActive) {
+            emptyMap()
+        } else {
+            com.markleaf.app.search.groupMatchesByBlockIndex(searchState.matches)
+        }
+    }
+    val activeStableKey = if (searchPaintActive) {
+        searchState.currentMatch?.stableKey
+    } else {
+        null
+    }
+    val activeMatch = if (searchPaintActive) searchState.currentMatch else null
     val onLinkClick: (String) -> Unit = remember(
         state.anchorRegistry,
         listState,
@@ -639,14 +706,32 @@ private fun ReaderDocumentBody(
                     },
                     contentType = { _, block -> block.blockContentType() },
                 ) { index, block ->
-                    val isActiveMatch = activeMatchBlockIndex == index
                     val stableBlockId = state.blockIds.getOrElse(index) { block.blockId(index) }
+                    // Only this block's matches; active key is null when this block is inactive
+                    // so inactive blocks keep equal props across next/prev on other blocks.
+                    val blockMatches = matchesByBlock[index]
+                    // Pass active key only for the active block so inactive hit-blocks
+                    // keep stable props when active moves between other blocks.
+                    val activeKeyForBlock =
+                        if (blockMatches != null && activeMatch?.blockIndex == index) {
+                            activeStableKey
+                        } else {
+                            null
+                        }
+                    // Memoize so parent recompose (e.g. next/prev elsewhere) does not
+                    // allocate a new BlockSearchHighlights for every visible hit block.
+                    val searchHighlights = remember(blockMatches, activeKeyForBlock) {
+                        com.markleaf.app.search.blockHighlightsFromGrouped(
+                            blockIndex = index,
+                            blockMatches = blockMatches,
+                            activeStableKey = activeKeyForBlock,
+                        )
+                    }
                     MarkdownBlockView(
                         documentUri = state.document.uri,
                         block = block,
                         settings = readerSettings,
-                        isSearchActive = isActiveMatch,
-                        activeMatch = if (isActiveMatch) activeMatch else null,
+                        searchHighlights = searchHighlights,
                         stableBlockId = stableBlockId,
                         tableLayoutCache = tableLayoutCache,
                         onLinkClick = onLinkClick,
@@ -654,6 +739,12 @@ private fun ReaderDocumentBody(
                             scope.launch {
                                 snackbarHostState.showSnackbar(message)
                             }
+                        },
+                        // QA: strip block semantics tree to measure a11y update cost in isolation.
+                        modifier = if (ReaderPerformanceExperiments.clearBlockSemantics) {
+                            Modifier.clearAndSetSemantics { }
+                        } else {
+                            Modifier
                         },
                     )
                 }
@@ -674,6 +765,24 @@ private fun flushReadingPosition(
             readingProgress = readingProgressOf(listState),
         )
     }
+}
+
+/**
+ * QA diagnostic: do not schedule any lazy-list prefetch work.
+ * Production always uses the default [LazyListPrefetchStrategy].
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private object DisabledLazyListPrefetchStrategy : LazyListPrefetchStrategy {
+    override fun LazyListPrefetchScope.onScroll(
+        delta: Float,
+        layoutInfo: LazyListLayoutInfo,
+    ) = Unit
+
+    override fun LazyListPrefetchScope.onVisibleItemsUpdated(
+        layoutInfo: LazyListLayoutInfo,
+    ) = Unit
+
+    override fun NestedPrefetchScope.onNestedPrefetch(firstVisibleItemIndex: Int) = Unit
 }
 
 /** Reader chrome height only — excludes status bar. */
@@ -1017,9 +1126,13 @@ private fun ViewerScaffold(
 }
 
 /**
- * Isolated TopBar chrome: only this subtree observes show/hide and animates
- * [graphicsLayer] translationY. Snap animation runs once per visibility flip
- * (not per scroll delta). LazyColumn contentPadding stays fixed.
+ * Isolated TopBar chrome: only this subtree observes show/hide.
+ *
+ * Production recovery (R9 markdown scroll chrome):
+ * - Move with [graphicsLayer] translationY only — never height/padding/layout.
+ * - Snap on visibility flip (no Animatable frame loop / no per-delta animation).
+ * - LazyColumn contentPadding stays fixed at [ReaderTopBarHeight]; body never
+ *   reads visibility, so viewport measure/layout does not thrash with the bar.
  */
 @Composable
 private fun ReaderTopBarOverlay(
@@ -1036,32 +1149,30 @@ private fun ReaderTopBarOverlay(
 ) {
     val density = LocalDensity.current
     val topBarHeightPx = with(density) { ReaderTopBarHeight.toPx() }
-    val translationY = remember { Animatable(0f) }
+    // Single float state: one write per visibility flip (not per scroll delta).
+    var translationY by remember(topBarHeightPx) {
+        mutableFloatStateOf(0f)
+    }
 
-    // Single animation per visibility change — not per drag delta.
     LaunchedEffect(topBarScrollState, topBarHeightPx) {
         if (topBarScrollState == null) {
-            translationY.snapTo(0f)
+            translationY = 0f
             return@LaunchedEffect
         }
-        // Sync initial without animation.
-        translationY.snapTo(if (topBarScrollState.visible) 0f else -topBarHeightPx)
+        translationY = if (topBarScrollState.visible) 0f else -topBarHeightPx
         snapshotFlow { topBarScrollState.visible }
             .distinctUntilChanged()
             .collect { visible ->
-                val target = if (visible) 0f else -topBarHeightPx
-                translationY.animateTo(
-                    targetValue = target,
-                    animationSpec = tween(durationMillis = 190),
-                )
+                // Snap — no multi-frame animation queue during fling.
+                translationY = if (visible) 0f else -topBarHeightPx
             }
     }
 
     Column(
         modifier = modifier
             .graphicsLayer {
-                // High-frequency animated value is read only here (layer invalidate).
-                this.translationY = translationY.value
+                // Layer-only invalidate; does not remeasure LazyColumn.
+                this.translationY = translationY
             }
             .background(MaterialTheme.colorScheme.surface),
     ) {

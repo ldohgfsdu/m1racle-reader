@@ -19,17 +19,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
+import com.markleaf.app.search.BlockSearchHighlights
 import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
+// EmptyRanges shared constant
 
 /**
  * Blockquote: left rail only, no card chrome.
- * Body uses onSurfaceVariant; strong spans use onSurface.
+ * When search highlights are active, render full quote text as one unit so
+ * UTF-16 offsets (from whole-block plain text) stay valid.
  */
 @Composable
 fun QuoteBlockView(
     block: MarkdownBlock.Quote,
     settings: ReaderSettings,
-    isCurrentSearchMatch: Boolean = false,
+    searchHighlights: BlockSearchHighlights? = null,
     modifier: Modifier = Modifier,
     onLinkClick: ((String) -> Unit)? = null,
 ) {
@@ -56,13 +59,13 @@ fun QuoteBlockView(
     val strongColor = scheme.onSurface
     val barColor = scheme.outline
 
+    val ranges = searchHighlights?.forWholeBlock() ?: BlockSearchHighlights.EmptyRanges
     val (body, attribution) = splitQuoteAttribution(block.text)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .searchBlockHighlight(isCurrentSearchMatch)
             .drawBehind {
                 val railWidth = 3.dp.toPx()
                 drawRoundRect(
@@ -74,24 +77,36 @@ fun QuoteBlockView(
             }
             .padding(start = 19.dp),
     ) {
-        if (body.isNotEmpty()) {
+        if (ranges.isNotEmpty()) {
+            // Single text unit keeps search offsets aligned with extractor plain text.
             InlineMarkdownText(
-                text = body,
+                text = block.text,
                 settings = settings,
                 style = bodyStyle,
                 strongColor = strongColor,
                 onLinkClick = onLinkClick,
+                searchRanges = ranges,
             )
-        }
-        if (attribution != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            InlineMarkdownText(
-                text = attribution,
-                settings = settings,
-                style = attributionStyle,
-                strongColor = strongColor,
-                onLinkClick = onLinkClick,
-            )
+        } else {
+            if (body.isNotEmpty()) {
+                InlineMarkdownText(
+                    text = body,
+                    settings = settings,
+                    style = bodyStyle,
+                    strongColor = strongColor,
+                    onLinkClick = onLinkClick,
+                )
+            }
+            if (attribution != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                InlineMarkdownText(
+                    text = attribution,
+                    settings = settings,
+                    style = attributionStyle,
+                    strongColor = strongColor,
+                    onLinkClick = onLinkClick,
+                )
+            }
         }
     }
 }
@@ -100,7 +115,7 @@ fun QuoteBlockView(
  * View-only split: last line starting with em/en dash is treated as attribution.
  * Does not change MarkdownParser.
  */
-private fun splitQuoteAttribution(text: String): Pair<String, String?> {
+internal fun splitQuoteAttribution(text: String): Pair<String, String?> {
     val trimmed = text.trimEnd()
     if (trimmed.isEmpty()) return "" to null
     val lines = trimmed.lines()

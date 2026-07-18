@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -39,7 +40,9 @@ import com.markleaf.app.R
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.highlight.CodeHighlighter
 import com.markleaf.app.markdown.MarkdownBlock
-import com.markleaf.app.search.SearchMatch
+import com.markleaf.app.search.BlockSearchHighlights
+import com.markleaf.app.search.withSearchHighlights
+// EmptyRanges for search-closed
 
 private object CodeBlockChrome {
     val corner = 12.dp
@@ -55,7 +58,7 @@ fun CodeBlockView(
     block: MarkdownBlock.CodeBlock,
     settings: ReaderSettings,
     onCopyMessage: (String) -> Unit,
-    activeMatch: SearchMatch? = null,
+    searchHighlights: BlockSearchHighlights? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -79,19 +82,29 @@ fun CodeBlockView(
     val failedMsg = stringResource(R.string.code_copy_failed)
     val isEmptyCode = block.code.isEmpty()
 
-    val codeAnnotated = remember(block.code, block.language, isDarkHighlight) {
+    val ranges = searchHighlights?.forWholeBlock() ?: BlockSearchHighlights.EmptyRanges
+    val hasSearch = ranges.isNotEmpty()
+    val normalHl = if (hasSearch) searchMatchNormalBackground() else Color.Unspecified
+    val activeHl = if (hasSearch) searchMatchActiveBackground() else Color.Unspecified
+    val codeBase = remember(block.code, block.language, isDarkHighlight) {
         CodeHighlighter.highlightCode(
             code = block.code.ifEmpty { " " },
             language = block.language,
             isDarkTheme = isDarkHighlight,
         )
     }
+    val codeAnnotated = if (!hasSearch) {
+        codeBase
+    } else {
+        remember(codeBase, ranges, normalHl, activeHl) {
+            codeBase.withSearchHighlights(ranges, normalHl, activeHl)
+        }
+    }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 10.dp)
-            .searchBlockHighlight(activeMatch != null)
             .clip(shape)
             .border(1.dp, border, shape)
             .background(bodyBg),

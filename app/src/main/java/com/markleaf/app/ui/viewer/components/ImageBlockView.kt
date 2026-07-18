@@ -49,7 +49,6 @@ private const val PlaceholderAspect = 16f / 9f
 fun ImageBlockView(
     block: MarkdownBlock.Image,
     settings: ReaderSettings,
-    isCurrentSearchMatch: Boolean = false,
     /** Document entry URI (file:// for ZIP packages) for relative image paths. */
     documentUri: String? = null,
     modifier: Modifier = Modifier,
@@ -95,8 +94,7 @@ fun ImageBlockView(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 10.dp)
-            .searchBlockHighlight(isCurrentSearchMatch),
+            .padding(vertical = 10.dp),
     ) {
         when (val s = state) {
             LocalImageState.Loading -> {

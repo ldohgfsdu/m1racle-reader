@@ -16,14 +16,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownBlock
-import com.markleaf.app.search.SearchMatch
+import com.markleaf.app.search.BlockSearchHighlights
 import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
+// EmptyRanges: shared empty list for search-closed composition
 
 @Composable
 fun ListBlockView(
     block: MarkdownBlock.ListBlock,
     settings: ReaderSettings,
-    activeMatch: SearchMatch? = null,
+    searchHighlights: BlockSearchHighlights? = null,
     modifier: Modifier = Modifier,
     onLinkClick: ((String) -> Unit)? = null,
 ) {
@@ -37,19 +38,16 @@ fun ListBlockView(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .searchBlockHighlight(activeMatch != null)
             .padding(vertical = 2.dp),
     ) {
         block.items.forEachIndexed { index, item ->
-            val itemActive = activeMatch != null &&
-                (activeMatch.listItemIndex < 0 || activeMatch.listItemIndex == index)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 2.5.dp)
-                    .searchBlockHighlight(itemActive && activeMatch.listItemIndex == index),
+                    .padding(vertical = 2.5.dp),
                 verticalAlignment = Alignment.Top,
             ) {
+                // Bullet / number decoration — never search-highlighted.
                 Text(
                     text = if (block.ordered) "${index + 1}." else "•",
                     style = itemStyle,
@@ -63,6 +61,8 @@ fun ListBlockView(
                     style = itemStyle,
                     modifier = Modifier.weight(1f),
                     onLinkClick = onLinkClick,
+                    searchRanges = searchHighlights?.forListItem(index)
+                        ?: BlockSearchHighlights.EmptyRanges,
                 )
             }
         }

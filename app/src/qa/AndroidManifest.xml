@@ -29,5 +29,10 @@
             android:exported="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.MarkLeaf" />
+            <activity
+            android:name=".ui.home.MinimalListHarnessActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.MarkLeaf" />
     </application>
 </manifest>

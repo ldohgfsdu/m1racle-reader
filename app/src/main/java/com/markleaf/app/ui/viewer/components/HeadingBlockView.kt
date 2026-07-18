@@ -5,25 +5,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.data.settings.ReaderSettings
+import com.markleaf.app.markdown.InlineMarkdownParser
 import com.markleaf.app.markdown.MarkdownBlock
-import com.markleaf.app.search.SearchMatch
-import com.markleaf.app.search.highlightPlainText
+import com.markleaf.app.search.BlockSearchHighlights
+import com.markleaf.app.search.withSearchHighlights
 import com.markleaf.app.ui.viewer.components.ReaderTypography.scaled
 
 @Composable
 fun HeadingBlockView(
     block: MarkdownBlock.Heading,
     settings: ReaderSettings,
-    activeMatch: SearchMatch? = null,
+    searchHighlights: BlockSearchHighlights? = null,
     modifier: Modifier = Modifier,
 ) {
     val fs = settings.fontScale
-    // SemiBold only for H1–H3; lineHeight follows line-height preset ratio.
     val fontSize = when (block.level) {
         1 -> ReaderTypography.h1Size.scaled(fs)
         2 -> ReaderTypography.h2Size.scaled(fs)
@@ -58,19 +60,24 @@ fun HeadingBlockView(
         else -> 6.dp
     }
 
-    val annotated = if (activeMatch != null) {
-        highlightPlainText(
-            text = block.text.ifBlank { " " },
-            activeStart = activeMatch.matchStart,
-            activeEnd = activeMatch.matchEnd,
-            highlightColor = searchFragmentHighlightColor(),
-        )
+    val ranges = searchHighlights?.forWholeBlock() ?: BlockSearchHighlights.EmptyRanges
+    val hasSearch = ranges.isNotEmpty()
+    val normalHl = if (hasSearch) searchMatchNormalBackground() else Color.Unspecified
+    val activeHl = if (hasSearch) searchMatchActiveBackground() else Color.Unspecified
+    val source = block.text.ifBlank { " " }
+    val baseAnnotated = remember(source) {
+        InlineMarkdownParser.parse(source)
+    }
+    val annotated = if (!hasSearch) {
+        baseAnnotated
     } else {
-        null
+        remember(baseAnnotated, ranges, normalHl, activeHl) {
+            baseAnnotated.withSearchHighlights(ranges, normalHl, activeHl)
+        }
     }
 
     Text(
-        text = annotated ?: androidx.compose.ui.text.AnnotatedString(block.text.ifBlank { " " }),
+        text = annotated,
         style = style,
         textAlign = TextAlign.Start,
         color = if (block.level >= 5) {
@@ -80,7 +87,6 @@ fun HeadingBlockView(
         },
         modifier = modifier
             .fillMaxWidth()
-            .searchBlockHighlight(activeMatch != null)
             .padding(top = top, bottom = bottom),
     )
 }
