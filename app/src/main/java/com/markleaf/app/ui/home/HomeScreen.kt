@@ -3,7 +3,10 @@ package com.markleaf.app.ui.home
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,23 +25,22 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,10 +48,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -211,6 +218,7 @@ private fun EmptyState(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecentDocumentList(
     documents: List<DocumentEntity>,
@@ -218,33 +226,37 @@ private fun RecentDocumentList(
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 8.dp,
-            bottom = 88.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        item {
-            Text(
-                text = stringResource(R.string.recent_reads),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
-            )
-        }
-        items(
-            items = documents,
-            key = { it.id },
-        ) { document ->
-            DocumentCard(
-                document = document,
-                onOpen = { onOpen(document) },
-                onDelete = { onDelete(document.id) },
-            )
+    // Short recent lists spend most drag time near edges; stretch overscroll reads as sticky.
+    CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+        LazyColumn(
+            modifier = modifier,
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = 88.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item(contentType = "home_header") {
+                Text(
+                    text = stringResource(R.string.recent_reads),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
+                )
+            }
+            items(
+                items = documents,
+                key = { it.id },
+                contentType = { "home_doc_card" },
+            ) { document ->
+                DocumentCard(
+                    document = document,
+                    onOpen = { onOpen(document) },
+                    onDelete = { onDelete(document.id) },
+                )
+            }
         }
     }
 }
@@ -280,20 +292,48 @@ private fun DocumentCard(
     ) {
         resolveDocumentCardTitles(document)
     }
+    val meta = remember(
+        document.id,
+        document.lastOpenedAt,
+        document.fileSize,
+        document.readingProgress,
+        document.isPdf,
+        document.pageCount,
+        document.lastScrollIndex,
+    ) {
+        formatMeta(document)
+    }
 
-    Card(
-        onClick = onOpen,
-        modifier = modifier.fillMaxWidth(),
+    // Combined a11y for the three visible lines (menu stays a separate node).
+    val spokenText = remember(titles.displayTitle, titles.supportingText, meta) {
+        listOfNotNull(titles.displayTitle, titles.supportingText, meta).joinToString(", ")
+    }
+
+    // Surface + null indication: avoids Material Card press/ripple fighting the finger
+    // (human sticky FAIL on canvas-draw candidate; feel-v2 accepted with this shell).
+    val cardInteraction = remember { MutableInteractionSource() }
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = spokenText }
+            .clickable(
+                interactionSource = cardInteraction,
+                indication = null,
+                onClick = onOpen,
+            ),
         shape = HomeCardShape,
-        colors = CardDefaults.cardColors(containerColor = cardBg),
+        color = cardBg,
         border = BorderStroke(1.dp, cardBorder),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 6.dp),
         ) {
+            // Restored three independent Text lines (title / supporting / meta).
+            // feel-v2 single AnnotatedString + softWrap=false clipped/hid card content.
             Box(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
@@ -312,7 +352,6 @@ private fun DocumentCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    // Fixed-height supporting row keeps card rhythm with/without subtitle.
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -335,13 +374,21 @@ private fun DocumentCard(
                     }
                 }
                 Box(modifier = Modifier.align(Alignment.TopEnd)) {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.delete_record),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    val menuInteraction = remember { MutableInteractionSource() }
+                    val menuDesc = stringResource(R.string.delete_record)
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = menuDesc,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clickable(
+                                interactionSource = menuInteraction,
+                                indication = null,
+                                onClick = { menuExpanded = true },
+                            )
+                            .padding(8.dp),
+                    )
                     DropdownMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
@@ -364,14 +411,15 @@ private fun DocumentCard(
             }
 
             Spacer(modifier = Modifier.height(5.dp))
-
             Text(
-                text = formatMeta(document),
+                text = meta,
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Normal,
                 ),
                 color = metaColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
 
             // Fixed progress footprint so all cards share the same height.
@@ -387,7 +435,7 @@ private fun DocumentCard(
 }
 
 /**
- * Simple determinate bar: inactive full track + active fill, both round-capped.
+ * Simple determinate bar: one draw pass for track + fill (no nested clip children).
  * Avoids Material3 [LinearProgressIndicator] stop indicator (endpoint dot).
  */
 @Composable
@@ -398,23 +446,21 @@ private fun ReadingProgressBar(
     modifier: Modifier = Modifier,
 ) {
     val fraction = progress.coerceIn(0f, 1f)
-    val cap = RoundedCornerShape(percent = 50)
     Box(
         modifier = modifier
             .height(ProgressBarHeight)
-            .clip(cap)
-            .background(trackColor),
-    ) {
-        if (fraction > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .fillMaxSize()
-                    .clip(cap)
-                    .background(activeColor),
-            )
-        }
-    }
+            .drawBehind {
+                val radius = CornerRadius(size.height / 2f, size.height / 2f)
+                drawRoundRect(color = trackColor, cornerRadius = radius)
+                if (fraction > 0f) {
+                    drawRoundRect(
+                        color = activeColor,
+                        size = Size(width = size.width * fraction, height = size.height),
+                        cornerRadius = radius,
+                    )
+                }
+            },
+    )
 }
 
 /**

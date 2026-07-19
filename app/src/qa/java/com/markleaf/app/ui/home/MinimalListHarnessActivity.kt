@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.markleaf.app.ui.theme.MarkLeafTheme
 
 /**
- * QA-only list complexity ladder for R9_COMPOSE_LIST_VS_PDF_SCROLL_ISOLATION.
+ * QA-only list complexity ladder for R10_HOME_LIST_CARD_PERFORMANCE.
  *
  * Intent extras:
  * - ladder=A fixed-height plain strings (1000)
@@ -34,6 +34,8 @@ import com.markleaf.app.ui.theme.MarkLeafTheme
  * - ladder=C multi-span AnnotatedString (1000)
  * - ladder=D long multi-paragraph AnnotatedString (500) — heavier text
  * - ladder=E home-like multi-line card text (200)
+ * - ladder=E_NO_SURFACE E with the per-item Surface shell removed
+ * - ladder=E_ONE_TEXT E with three visual lines collapsed into one Text node
  * - ladder=F (not PDF — PDF measured on real viewer)
  */
 class MinimalListHarnessActivity : ComponentActivity() {
@@ -53,6 +55,8 @@ class MinimalListHarnessActivity : ComponentActivity() {
                         "C" -> LadderC()
                         "D" -> LadderD()
                         "E" -> LadderE()
+                        "E_NO_SURFACE" -> LadderENoSurface()
+                        "E_ONE_TEXT" -> LadderEOneText()
                         else -> LadderA()
                     }
                 }
@@ -199,6 +203,65 @@ private fun LadderE() {
                     Text(row.second, style = MaterialTheme.typography.bodySmall)
                     Text(row.third, style = MaterialTheme.typography.labelMedium)
                 }
+            }
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun LadderENoSurface() {
+    // Preserve E text count and spacing; remove only the per-item Surface shell.
+    val items = remember {
+        List(200) { i ->
+            Triple(
+                "文档标题示例 $i 带一点较长文字",
+                "filename_$i.md · 12.${i % 9} MB",
+                "今天 12:${i % 60} · 已读 ${i % 100}%",
+            )
+        }
+    }
+    LazyColumn(Modifier.fillMaxSize().padding(12.dp)) {
+        itemsIndexed(items, key = { i, _ -> i }) { _, row ->
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp)
+                    .padding(14.dp),
+            ) {
+                Text(row.first, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                Text(row.second, style = MaterialTheme.typography.bodySmall)
+                Text(row.third, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun LadderEOneText() {
+    // Preserve E Surface and three visual lines; collapse three Text nodes into one layout.
+    val items = remember {
+        List(200) { i ->
+            Triple(
+                "文档标题示例 $i 带一点较长文字",
+                "filename_$i.md · 12.${i % 9} MB",
+                "今天 12:${i % 60} · 已读 ${i % 100}%",
+            )
+        }
+    }
+    LazyColumn(Modifier.fillMaxSize().padding(12.dp)) {
+        itemsIndexed(items, key = { i, _ -> i }) { _, row ->
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+            ) {
+                Text(
+                    text = "${row.first}\n${row.second}\n${row.third}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 3,
+                    modifier = Modifier.padding(14.dp),
+                )
             }
         }
     }
