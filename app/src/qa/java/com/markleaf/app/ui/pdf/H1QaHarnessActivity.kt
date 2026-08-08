@@ -39,9 +39,7 @@ class H1QaHarnessActivity : ComponentActivity() {
                 PdfHorizontalPagedArea(
                     state = readyState(pageIndex),
                     pageJump = null,
-                    controlsVisible = true,
                     onToggleChrome = {},
-                    onShowChrome = {},
                     onPrevious = { if (pageIndex > 0) pageIndex -= 1 },
                     onNext = { if (pageIndex < PAGE_COUNT - 1) pageIndex += 1 },
                     onPageLabelClick = {},

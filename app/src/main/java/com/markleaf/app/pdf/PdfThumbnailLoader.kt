@@ -96,6 +96,7 @@ class PdfThumbnailLoader(
             }
             PdfPageRenderer.RenderResult.Closed -> ThumbResult.Closed
             PdfPageRenderer.RenderResult.InvalidPage -> ThumbResult.Failed("页码无效")
+            PdfPageRenderer.RenderResult.OutOfMemory -> ThumbResult.Failed("内存不足")
             is PdfPageRenderer.RenderResult.Failed -> {
                 cacheMutex.withLock { failed.add(pageIndex) }
                 ThumbResult.Failed(rendered.message)

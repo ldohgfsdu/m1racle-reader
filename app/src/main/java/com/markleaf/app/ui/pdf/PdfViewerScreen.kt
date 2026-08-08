@@ -4,6 +4,7 @@ import android.util.Log
 import android.content.pm.ApplicationInfo
 import android.os.SystemClock
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -11,6 +12,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -19,9 +22,9 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.stopScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,30 +35,47 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
-import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.AlertDialog
@@ -65,23 +85,18 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import com.kyant.backdrop.backdrops.layerBackdrop
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -102,7 +117,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -110,15 +128,17 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -127,11 +147,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.markleaf.app.R
+import com.markleaf.app.pdf.PdfChromeLevel
 import com.markleaf.app.pdf.PdfReadingMode
 import com.markleaf.app.pdf.PdfRenderQuality
 import com.markleaf.app.pdf.AxisOverscrollPolicy
@@ -165,22 +188,12 @@ import com.markleaf.app.pdf.asHorizontalPanState
 import com.markleaf.app.pdf.ContinuousScrollDirection
 import com.markleaf.app.pdf.ContinuousScrollPhase
 import com.markleaf.app.pdf.ContinuousViewportSnapshot
-import com.markleaf.app.pdf.OverlayOffset
-import com.markleaf.app.pdf.OverlayRect
-import com.markleaf.app.pdf.VisiblePageTarget
 import com.markleaf.app.pdf.ZoomPageOverlayMath
-import com.markleaf.app.pdf.TwoFingerGestureArbitration
-import com.markleaf.app.pdf.TwoFingerGesturePhase
 import com.markleaf.app.pdf.PageTap
-import com.markleaf.app.pdf.ContinuousZoomSession
-import com.markleaf.app.pdf.ContinuousZoomSessionReducer
 import com.markleaf.app.pdf.export.ChapterExportState
 import com.markleaf.app.ui.theme.MarkLeafTheme
-import com.markleaf.app.ui.theme.dialogContainer
-import com.markleaf.app.ui.theme.markLeafOutlinedFieldColors
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
@@ -197,7 +210,33 @@ import kotlinx.coroutines.yield
  * PDF reader: jump / scrubber / print anchors (P0.2A) + on-demand thumbnails (P0.2B)
  * + vertical continuous / horizontal paged reading modes.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+// ── Chrome show/hide tuning constants ─────────────────────────────────────
+// All scroll-driven chrome thresholds live in PdfChromeScrollParams
+// (pdf package); the UI layer only carries the menu/cooldown constants.
+
+/** Capsule anchored jump-card payload (rendered by PdfChrome below the capsule). */
+data class JumpCardParams(
+    val currentHumanPage: Int,
+    val pageCount: Int,
+    val onConfirm: (Int) -> Unit,
+    val onCancel: () -> Unit = {},
+)
+
+/** Print-page anchor section payload (rendered by the textbook-page form surface). */
+data class PrintPageSectionParams(
+    val currentPdfHumanPage: Int,
+    val currentPrint: Int?,
+    val isExact: Boolean,
+    val onConfirm: (Int) -> Unit,
+    val onClear: () -> Unit,
+)
+/** Duration of the menu card's reverse morph back into the circle (ms). */
+private const val MENU_CLOSE_MORPH_MS = 200L
+
+/** Serial child handover: old child collapses (180ms) + buffer before opening the next. */
+private const val MENU_CHILD_SWITCH_DELAY_MS = 260L
+
 @Composable
 fun PdfViewerScreen(
     viewModel: PdfViewerViewModel,
@@ -208,17 +247,246 @@ fun PdfViewerScreen(
     val embeddedOffer by viewModel.embeddedOutlineOffer.collectAsStateWithLifecycle()
     val importMessage by viewModel.importMessage.collectAsStateWithLifecycle()
     val exportPlan by viewModel.exportPlan.collectAsStateWithLifecycle()
+
+    // Keyboard contract (r19): while the PDF reader is on screen the window
+    // uses ADJUST_NOTHING, so the IME overlays the content instead of
+    // resizing it — the expanded location capsule stays top-anchored, the
+    // Reader Chrome is never pushed away and the PDF viewport never changes.
+    // The manifest default (ADJUST_RESIZE) is restored when the reader leaves.
+    val readerWindowContext = LocalContext.current
+    DisposableEffect(readerWindowContext) {
+        val activity = readerWindowContext as? android.app.Activity
+        val previousMode = activity?.window?.attributes?.softInputMode
+        activity?.window?.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING,
+        )
+        onDispose {
+            if (activity != null && previousMode != null) {
+                activity.window.setSoftInputMode(previousMode)
+            }
+        }
+    }
+
+    // Scroll-driven chrome state machine (pure logic, unit-tested). The UI
+    // layer feeds ONLY the measured content anchor delta (ground truth screen
+    // motion), mapped by mapScrollToContentMotion — never the raw delta sign.
+    val chromeStateMachine = remember { com.markleaf.app.pdf.PdfChromeScrollStateMachine() }
+    var chromeLevel by remember { mutableStateOf(com.markleaf.app.pdf.PdfChromeLevel.FULL) }
+    fun applyChromeChange(c: com.markleaf.app.pdf.ChromeStateChange) {
+        chromeLevel = c.levelAfter
+        Log.i(
+            "CHROME_STATE",
+            "userGestureId=${c.userGestureId} dir=${c.direction} rawDelta=${c.rawDeltaPx} " +
+                "anchorDeltaY=${c.anchorDeltaY} effectiveDistanceDp=${c.effectiveDistanceDp} " +
+                "levelBefore=${c.levelBefore} levelAfter=${c.levelAfter} reason=${c.reason}",
+        )
+    }
+
+
+    // ── Chrome scroll-driven state machine (rules live in PdfChromeScrollStateMachine) ──
+    // Direction semantics: the adapter below maps raw scrollDeltaY to
+    // CONTENT_MOVING_UP/DOWN (PDF content's actual on-screen motion); the
+    // state machine never interprets raw deltas. Programmatic scrolls
+    // (phase IDLE: settle/restore/snap) never feed the machine.
+    var chromeGestureActive by remember { mutableStateOf(false) }
+    var chromeFlingAccumDp by remember { mutableFloatStateOf(0f) }
+    val chromeDensity = LocalDensity.current
+    // Direction-diagnostic state (temporary, DEBUG builds only): last logged
+    // anchor screenY and throttle for the CHROME_DIR stream.
+    var lastChromeDirLogMs by remember { mutableLongStateOf(0L) }
+    var lastChromeAnchorScreenY by remember { mutableFloatStateOf(0f) }
+    val chromeAppContext = androidx.compose.ui.platform.LocalContext.current
+    val chromeDebuggable = remember(chromeAppContext) {
+        (chromeAppContext.applicationInfo.flags and
+            android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
+
+    // Initial visibility lock: the document opens in FULL and stays FULL —
+    // init scrolls / layout settling / programmatic restore may not change
+    // chromeLevel; only real user scrolls may. The capsule has NO timer: its
+    // visibility is purely `chromeLevel == FULL`.
+    var chromeInitialLockUntilMs by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        chromeInitialLockUntilMs = android.os.SystemClock.uptimeMillis() +
+            com.markleaf.app.pdf.PdfChromeScrollParams().initialLockMs
+        delay(com.markleaf.app.pdf.PdfChromeScrollParams().initialLockMs)
+        // Lock expiry is passive: the state machine checks the timestamp itself.
+    }
+
+    // Center tap = explicit control (never the stepwise scroll rules):
+    // HIDDEN/BUTTONS_ONLY → FULL directly; FULL → HIDDEN directly.
+    val toggleChromeByTap: () -> Unit = {
+        chromeStateMachine.onCenterTap()?.let { applyChromeChange(it) }
+    }
+    val topBarMode by viewModel.topBarMode.collectAsStateWithLifecycle()
+
+    // ── System bar presentation (PDF reader only) ────────────────────────────
+    // IMMERSIVE hides status bar while reading. Leaving the reader MUST restore
+    // bars so Home never inherits immersive (top chrome stuck / clipped).
+    val view = LocalView.current
+    LaunchedEffect(topBarMode) {
+        val activity = view.context as? android.app.Activity ?: return@LaunchedEffect
+        val wic = androidx.core.view.WindowInsetsControllerCompat(activity.window, view)
+        val status = androidx.core.view.WindowInsetsCompat.Type.statusBars()
+        val nav = androidx.core.view.WindowInsetsCompat.Type.navigationBars()
+        val all = androidx.core.view.WindowInsetsCompat.Type.systemBars()
+        when (topBarMode) {
+            com.markleaf.app.pdf.PdfTopBarMode.NORMAL -> {
+                wic.systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+                wic.show(all)
+            }
+            com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE -> {
+                wic.systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+                wic.show(nav)
+                wic.hide(status)
+            }
+        }
+        Log.i(
+            "PDF_SYSBARS",
+            "apply topBarMode=$topBarMode wic behavior=" + wic.systemBarsBehavior,
+        )
+    }
+    DisposableEffect(view) {
+        onDispose {
+            val activity = view.context as? android.app.Activity ?: return@onDispose
+            val wic = androidx.core.view.WindowInsetsControllerCompat(activity.window, view)
+            val all = androidx.core.view.WindowInsetsCompat.Type.systemBars()
+            wic.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            wic.show(all)
+            Log.i("PDF_SYSBARS", "leave reader → restore all system bars")
+        }
+    }
+
+    // Evidence logging: any change of the visible system-bars insets re-runs
+    // this effect (composition-level read), so the fullscreen gray mask can be
+    // correlated with SystemUI transient bars on the device (the app itself
+    // never paints a sysbar scrim).
+    val sysbarDensity = LocalDensity.current
+    val visibleStatusTop = WindowInsets.statusBars.getTop(sysbarDensity)
+    val visibleNavBottom = WindowInsets.navigationBars.getBottom(sysbarDensity)
+    LaunchedEffect(visibleStatusTop, visibleNavBottom, topBarMode) {
+        Log.i(
+            "PDF_SYSBARS",
+            "visible insets statusTop=$visibleStatusTop navBottom=$visibleNavBottom " +
+                "mode=$topBarMode (transient bars animate these values)",
+        )
+    }
+
     val exportState by viewModel.exportState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showJumpDialog by remember { mutableStateOf(false) }
-    var showPrintDialog by remember { mutableStateOf(false) }
-    var showThumbSheet by remember { mutableStateOf(false) }
-    var showOutlineSheet by remember { mutableStateOf(false) }
-    var showReadingModeSheet by remember { mutableStateOf(false) }
+    // THE more control state (single source of truth — ReaderMoreState, the
+    // explicit 8-state machine): the three-dot circle morphs into the menu
+    // card; the card can keep changing into a Foreground Advanced Card (R25).
+    var moreState by remember { mutableStateOf<ReaderMoreState>(ReaderMoreState.CLOSED) }
+    // Morph-back phase: the card is shrinking back into the circle before the
+    // state flips (also the handover window before a secondary surface opens).
+    var moreClosing by remember { mutableStateOf(false) }
+    // Advanced reverse-morph phase: while true the state STAYS ADVANCED_* and
+    // the Foreground Advanced Card collapses back to its OWN source row; the
+    // host calls onChildCollapsed when the morph completes (→ MAIN). The
+    // collapse identity is the state itself — no origin fallback exists.
+    var childClosing by remember { mutableStateOf(false) }
+    // When user taps 阅读方式/阅读界面 while a Child is open: close Child first,
+    // then open the pending inline section after reverse-morph completes.
+    var pendingInlineAfterChild by remember { mutableStateOf<ReaderMoreState?>(null) }
+    // r26 §17: a document switch must close any open child and drop focus /
+    // thumbnail state — never leave a half-expanded overlay or stale source
+    // bounds on the next document.
+    val currentDocumentId = (uiState as? PdfViewerUiState.Ready)?.document?.id
+    LaunchedEffect(currentDocumentId) {
+        if (currentDocumentId != null &&
+            (moreState != ReaderMoreState.CLOSED || moreClosing || childClosing)
+        ) {
+            moreState = ReaderMoreState.CLOSED
+            moreClosing = false
+            childClosing = false
+            pendingInlineAfterChild = null
+        }
+    }
+    // Capsule anchored expansion (jump card): the capsule is its own header
+    // and the body grows from its bottom edge. Mutually exclusive with the
+    // overflow menu; overlay controller state — never touches chrome levels.
+    var capsuleExpanded by remember { mutableStateOf(false) }
+    val closeCapsule: () -> Unit = {
+        if (capsuleExpanded) capsuleExpanded = false
+    }
+    val toggleCapsule: () -> Unit = { capsuleExpanded = !capsuleExpanded }
+    val menuActive: Boolean = moreState != ReaderMoreState.CLOSED || moreClosing
+    val openPdfMenu: () -> Unit = {
+        if (!menuActive) {
+            capsuleExpanded = false // overlay 互斥
+            moreState = ReaderMoreStateMachine.onToggleOpen(moreState)
+        }
+    }
+    val closePdfMenu: () -> Unit = {
+        moreState = ReaderMoreState.CLOSED
+        moreClosing = false
+        // Menu open/close freezes scroll-driven chrome; on close, clear all
+        // accumulated distance / direction / fling residue and start a fresh
+        // gesture session from the current chrome level (rule 8).
+        chromeStateMachine.resetForNewSession()
+        chromeFlingAccumDp = 0f
+        chromeGestureActive = false
+    }
     var thumbRangePick by remember { mutableStateOf(false) }
     var outlineEditor by remember { mutableStateOf<OutlineEditorState?>(null) }
-    var pendingExportMime by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    // Close / dismiss (Back AND outside tap): level-returning. The Advanced
+    // Card collapses back to Main (never straight to the circle); the menu
+    // reverse-morphs into the circle, then the state flips.
+    val requestClosePdfMenu: () -> Unit = {
+        when {
+            moreState.isChild() && !childClosing -> {
+                // Reverse morph to the source row: the state stays ADVANCED_*
+                // (the card's identity) until the morph completes.
+                childClosing = true
+            }
+            moreState != ReaderMoreState.CLOSED && !moreClosing -> {
+                moreClosing = true
+                scope.launch {
+                    delay(MENU_CLOSE_MORPH_MS)
+                    closePdfMenu()
+                }
+            }
+        }
+    }
+    // Advanced reverse-morph completed (host): restore MAIN, or pending inline.
+    val onChildCollapsed: () -> Unit = {
+        childClosing = false
+        val pending = pendingInlineAfterChild
+        pendingInlineAfterChild = null
+        moreState = ReaderMoreTransitions.afterChildCollapsed(pending)
+    }
+    // Collapse the foreground Advanced Card through its reverse morph — used
+    // by header/Back/outside taps AND by business completion (保存/取消/清空/
+    // SAF 接管): every advanced interface returns to its OWN source row, then
+    // the state machine lands on MAIN.
+    val collapseChild: () -> Unit = {
+        if (moreState.isChild() && !childClosing) childClosing = true
+    }
+    // Back priority: Child → inline → Parent dismiss (ReaderMoreTransitions).
+    BackHandler(enabled = menuActive || capsuleExpanded) {
+        when (ReaderMoreTransitions.onBack(moreState, childClosing, capsuleExpanded)) {
+            ReaderMoreBackAction.CLOSE_CAPSULE -> closeCapsule()
+            ReaderMoreBackAction.CLOSE_CHILD -> childClosing = true
+            ReaderMoreBackAction.COLLAPSE_INLINE -> moreState = ReaderMoreState.MAIN
+            ReaderMoreBackAction.DISMISS_PARENT -> requestClosePdfMenu()
+        }
+    }
+    // Section toggle: mutual exclusion with Child — if Child open, close it
+    // first then expand inline; else same-card accordion handover.
+    val switchPdfMenuSubmenu: (ReaderMoreState) -> Unit = { next ->
+        val decision = ReaderMoreTransitions.onSectionToggle(moreState, next, childClosing)
+        if (decision.closeChildFirst) {
+            pendingInlineAfterChild = decision.pendingInline
+            if (!childClosing) childClosing = true
+        } else {
+            decision.immediateState?.let { moreState = it }
+        }
+    }
 
     val createZipLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip"),
@@ -226,7 +494,13 @@ fun PdfViewerScreen(
         if (uri != null) {
             viewModel.runExportToUri(uri)
         }
-        // User cancel of SAF is not an error
+    }
+    val createPdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { uri ->
+        if (uri != null) {
+            viewModel.runExportToUri(uri)
+        }
     }
 
     LaunchedEffect(importMessage) {
@@ -251,20 +525,10 @@ fun PdfViewerScreen(
     when (val state = uiState) {
         PdfViewerUiState.Loading -> {
             PdfChrome(
-                title = stringResource(R.string.viewer_loading),
-                pageLabel = null,
-                printLabel = null,
-                outlinePathLabel = null,
+                capsuleMain = stringResource(R.string.viewer_loading),
+                capsuleSub = null,
                 onBack = onBack,
-                canPrevious = false,
-                canNext = false,
-                onPrevious = {},
-                onNext = {},
-                onPageLabelClick = null,
-                onSetPrintClick = null,
-                onThumbsClick = null,
-                onOutlineClick = null,
-                scrubber = null,
+                onCapsuleToggle = null,
                 modifier = Modifier.fillMaxSize(),
                 content = {
                     Box(
@@ -287,20 +551,10 @@ fun PdfViewerScreen(
 
         is PdfViewerUiState.Error -> {
             PdfChrome(
-                title = state.displayName ?: stringResource(R.string.viewer_title_fallback),
-                pageLabel = null,
-                printLabel = null,
-                outlinePathLabel = null,
+                capsuleMain = state.displayName ?: stringResource(R.string.viewer_title_fallback),
+                capsuleSub = null,
                 onBack = onBack,
-                canPrevious = false,
-                canNext = false,
-                onPrevious = {},
-                onNext = {},
-                onPageLabelClick = null,
-                onSetPrintClick = null,
-                onThumbsClick = null,
-                onOutlineClick = null,
-                scrubber = null,
+                onCapsuleToggle = null,
                 modifier = Modifier.fillMaxSize(),
                 content = {
                     Box(
@@ -339,61 +593,242 @@ fun PdfViewerScreen(
                 else ->
                     stringResource(R.string.pdf_print_inferred, printNum)
             }
-
             val outlinePath = state.outlinePathLabel.takeIf { it.isNotBlank() }
             val isVertical = state.readingMode == PdfReadingMode.VERTICAL_CONTINUOUS
             val pageJump by viewModel.pageJump.collectAsStateWithLifecycle()
             // R6: TopBar is stable and always present. Horizontal controls are viewport overlays.
-            var horizontalControlsVisible by remember(state.readingMode) { mutableStateOf(true) }
 
+            val capsuleMain = if (printNum != null) {
+                "${state.pageLabel} · $printLabel"
+            } else {
+                state.pageLabel
+            }
+            val capsuleSub = outlinePath
+            // Advanced Cards are Reader overlays (like Main), not sheets:
+            // the chrome keeps its normal level (the capsule retracts via
+            // menuActive; the back circle stays).
             PdfChrome(
-                title = state.document.displayName,
-                pageLabel = state.pageLabel,
-                printLabel = printLabel,
-                outlinePathLabel = outlinePath,
+                capsuleMain = capsuleMain,
+                capsuleSub = capsuleSub,
                 onBack = onBack,
-                canPrevious = state.canGoPrevious,
-                canNext = state.canGoNext,
-                // Bottom flip chrome removed from fixed bar — horizontal uses overlay.
-                showPageButtons = false,
-                topBarVisible = true,
-                onPrevious = viewModel::goToPreviousPage,
-                onNext = viewModel::goToNextPage,
-                onPageLabelClick = { showJumpDialog = true },
-                onSetPrintClick = { showPrintDialog = true },
-                onThumbsClick = {
-                    thumbRangePick = false
-                    viewModel.prepareThumbnails()
-                    showThumbSheet = true
-                },
-                onOutlineClick = { showOutlineSheet = true },
-                onReadingModeClick = { showReadingModeSheet = true },
-                scrubber = if (isVertical) {
-                    {
-                        // Read-only 2dp progress — not a page slider.
-                        val progress = if (state.pageCount > 1) {
-                            state.displayPageIndex.toFloat() / (state.pageCount - 1).toFloat()
-                        } else {
-                            0f
-                        }
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { progress.coerceIn(0f, 1f) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(2.dp),
-                            trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                        )
+                onCapsuleToggle = toggleCapsule,
+                chromeLevel = chromeLevel,
+                capsuleExpanded = capsuleExpanded,
+                onCapsuleDismiss = closeCapsule,
+                jumpCardParams = JumpCardParams(
+                    currentHumanPage = state.pageIndex + 1,
+                    pageCount = state.pageCount,
+                    onConfirm = { human ->
+                        if (viewModel.jumpToHumanPage(human)) closeCapsule()
+                    },
+                    onCancel = closeCapsule,
+                ),
+                menuExpanded = moreState != ReaderMoreState.CLOSED,
+                menuClosing = moreClosing,
+                menuState = moreState,
+                onMenuToggle = openPdfMenu,
+                onMenuDismiss = requestClosePdfMenu,
+                onSubmenuChange = switchPdfMenuSubmenu,
+                childClosing = childClosing,
+                onChildCollapsed = onChildCollapsed,
+                onPreparingLayoutReady = { target ->
+                    // Promote PREPARING_* → CHILD_* after Main geometry is stable.
+                    if (moreState.isPreparing() && target.isChild()) {
+                        moreState = target
                     }
-                } else {
-                    null
                 },
+                nestedData = ReaderAdvancedData(
+                    textbookPage = TextbookPageAdvancedData(
+                        currentPdfHumanPage = state.pageIndex + 1,
+                        currentPrint = state.printPageNumber,
+                        isExact = state.isPrintExactAnchor,
+                        onConfirm = { print ->
+                            viewModel.setPrintPageForCurrent(print)
+                            // 保存后 Advanced → 逆变换回来源 row → Main（层级返回）
+                            collapseChild()
+                        },
+                        onClear = { viewModel.clearPrintPageForCurrent() },
+                    ),
+                    outline = OutlineAdvancedData(
+                        nodes = state.outlineNodes,
+                        currentPageIndex = state.pageIndex,
+                        hasEmbeddedDrafts = viewModel.hasCachedEmbeddedOutline(),
+                        onJumpToNode = { node ->
+                            viewModel.goToPage(node.startPageIndex) // 卡保持打开
+                        },
+                        onRequestEdit = { draft ->
+                            outlineEditor = draft
+                            collapseChild() // 编辑器 dialog 接管（先逆变换回教材目录 row）
+                        },
+                        onDelete = viewModel::deleteOutlineNode,
+                        onImportEmbedded = {
+                            if (viewModel.hasCachedEmbeddedOutline()) {
+                                viewModel.requestEmbeddedImportUi()
+                            } else {
+                                viewModel.rescanEmbeddedOutline()
+                            }
+                        },
+                    ),
+                    thumbnails = ThumbnailsAdvancedData(
+                        pageCount = state.pageCount,
+                        currentPageIndex = state.pageIndex,
+                        printAnchors = state.printAnchors,
+                        loader = viewModel.thumbnailLoader(),
+                        rangePickMode = thumbRangePick,
+                        onPageSelected = { index ->
+                            viewModel.goToPage(index) // 卡保持打开，连续浏览
+                        },
+                        onRangePicked = if (thumbRangePick) {
+                            { start, end ->
+                                outlineEditor = outlineEditor?.copy(
+                                    startPageIndex = start,
+                                    endPageIndex = end,
+                                )
+                                thumbRangePick = false
+                                collapseChild()
+                            }
+                        } else {
+                            null
+                        },
+                    ),
+                    export = ExportAdvancedData(
+                        plan = exportPlan,
+                        documentPageCount = state.pageCount,
+                        allNodes = state.outlineNodes,
+                        initialFormat = viewModel.lastExportFormat,
+                        onSelectNode = viewModel::beginExportNode,
+                        onConfirm = { start0, end0, format ->
+                            val name = viewModel.confirmExportRange(start0, end0, format)
+                            if (name != null) {
+                                collapseChild() // 系统流程接管（先逆变换回导出章节 row）
+                                when (format) {
+                                    com.markleaf.app.pdf.export.ChapterExportFormat.ZIP_PACKAGE ->
+                                        createZipLauncher.launch(name)
+                                    com.markleaf.app.pdf.export.ChapterExportFormat.PDF_ANNOTATED ->
+                                        createPdfLauncher.launch(name)
+                                }
+                            }
+                        },
+                    ),
+                ),
+                submenuEntries = listOf(
+                    PdfChromeSubmenuEntry(
+                        kind = ReaderMoreState.INLINE_READING_MODE,
+                        icon = Icons.Outlined.SwapVert,
+                        label = stringResource(R.string.pdf_reading_mode_open),
+                    ),
+                    PdfChromeSubmenuEntry(
+                        kind = ReaderMoreState.INLINE_READING_UI,
+                        icon = Icons.Outlined.AutoAwesome,
+                        label = stringResource(R.string.pdf_top_bar_mode),
+                    ),
+                ),
+                plainMenuItems = listOf(
+                    // Four advanced entries — each opens nested child from its own row.
+                    PdfChromeMenuItem(
+                        icon = Icons.Outlined.Tag,
+                        label = stringResource(R.string.pdf_set_print_page),
+                        closeOnClick = false,
+                        onClick = {
+                            moreState = ReaderMoreStateMachine.onOpenChild(
+                                moreState,
+                                ReaderMoreState.CHILD_PAGE_MAPPING,
+                            )
+                        },
+                    ),
+                    PdfChromeMenuItem(
+                        icon = Icons.AutoMirrored.Outlined.MenuBook,
+                        label = stringResource(R.string.pdf_outline_open),
+                        closeOnClick = false,
+                        onClick = {
+                            moreState = ReaderMoreStateMachine.onOpenChild(
+                                moreState,
+                                ReaderMoreState.CHILD_TOC,
+                            )
+                        },
+                    ),
+                    PdfChromeMenuItem(
+                        icon = Icons.Outlined.GridView,
+                        label = stringResource(R.string.pdf_thumbs_open),
+                        closeOnClick = false,
+                        onClick = {
+                            thumbRangePick = false
+                            viewModel.prepareThumbnails()
+                            moreState = ReaderMoreStateMachine.onOpenChild(
+                                moreState,
+                                ReaderMoreState.CHILD_THUMBNAILS,
+                            )
+                        },
+                    ),
+                    PdfChromeMenuItem(
+                        icon = Icons.Outlined.IosShare,
+                        label = stringResource(R.string.pdf_export_entry),
+                        closeOnClick = false,
+                        onClick = {
+                            viewModel.beginExportCurrent()
+                            moreState = ReaderMoreStateMachine.onOpenChild(
+                                moreState,
+                                ReaderMoreState.CHILD_EXPORT,
+                            )
+                        },
+                    ),
+                ),
+                readingModeOptions = listOf(
+                    PdfChromeMenuOption(
+                        label = stringResource(R.string.pdf_reading_mode_continuous),
+                        selected = state.readingMode == PdfReadingMode.VERTICAL_CONTINUOUS,
+                        onClick = {
+                            viewModel.setReadingMode(PdfReadingMode.VERTICAL_CONTINUOUS)
+                        },
+                    ),
+                    PdfChromeMenuOption(
+                        label = stringResource(R.string.pdf_reading_mode_horizontal),
+                        selected = state.readingMode == PdfReadingMode.HORIZONTAL_PAGED,
+                        onClick = {
+                            viewModel.setReadingMode(PdfReadingMode.HORIZONTAL_PAGED)
+                        },
+                    ),
+                ),
+                topBarModeOptions = listOf(
+                    PdfChromeMenuOption(
+                        label = stringResource(R.string.pdf_top_bar_mode_normal),
+                        selected = topBarMode == com.markleaf.app.pdf.PdfTopBarMode.NORMAL,
+                        onClick = {
+                            viewModel.setTopBarMode(com.markleaf.app.pdf.PdfTopBarMode.NORMAL)
+                        },
+                    ),
+                    PdfChromeMenuOption(
+                        label = stringResource(R.string.pdf_top_bar_mode_immersive),
+                        selected = topBarMode == com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE,
+                        onClick = {
+                            viewModel.setTopBarMode(com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE)
+                        },
+                    ),
+                    // Material rows removed (r26.1): Liquid is the only chrome surface.
+                ),
                 modifier = Modifier.fillMaxSize(),
                 content = {
                     when (state.readingMode) {
                         PdfReadingMode.VERTICAL_CONTINUOUS -> {
-                            // R7 V2 production path. PdfVerticalZoomLockArea remains below as
-                            // retained legacy code only until physical-device acceptance completes.
+                            // R7 V2 production path (the legacy PdfVerticalZoomLockArea
+                            // zoom-lock implementation was deleted in the R25 closure —
+                            // single continuous-viewport path only). Static tap toggles
+                            // the chrome (fully decoupled from scroll:
+                            // detectTapGestures consumes nothing until a stationary up, so
+                            // drag/zoom/fling paths are untouched).
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(onTap = {
+                                            if (menuActive) {
+                                                closePdfMenu()
+                                            } else {
+                                                toggleChromeByTap()
+                                            }
+                                        })
+                                    },
+                            ) {
                             ContinuousDocumentViewport(
                                 state = state,
                                 pageJump = pageJump,
@@ -408,26 +843,103 @@ fun PdfViewerScreen(
                                 tileOverlaySnapshots = viewModel.tileOverlaySnapshot,
                                 onZoomGestureActive = viewModel::setZoomGestureActive,
                                 onPageSettled = viewModel::onVerticalPageSettled,
-                                onViewportChanged = viewModel::onContinuousViewportChanged,
+                                onViewportChanged = { snapshot ->
+                                    val now = android.os.SystemClock.uptimeMillis()
+                                    val phase = snapshot.phase
+                                    val chromeFrozen = menuActive || capsuleExpanded
+                                    if (!chromeFrozen) {
+                                        // Gesture boundary: end clears residue (keeps level),
+                                        // begin starts a new gesture id.
+                                        val wasActive = chromeGestureActive
+                                        if (wasActive && phase == com.markleaf.app.pdf.ContinuousScrollPhase.IDLE) {
+                                            chromeStateMachine.endGesture()
+                                        }
+                                        chromeGestureActive = phase != com.markleaf.app.pdf.ContinuousScrollPhase.IDLE
+                                        if (!wasActive && chromeGestureActive) {
+                                            chromeStateMachine.beginGesture()
+                                        }
+
+                                        // Adapter layer: ground truth direction from the
+                                        // MEASURED content anchor displacement (same PDF
+                                        // anchor's on-screen y delta), never from the raw
+                                        // scrollDeltaY sign. Programmatic scrolls (phase
+                                        // IDLE) never feed the machine; neither does
+                                        // anything during the init lock.
+                                        if (phase != com.markleaf.app.pdf.ContinuousScrollPhase.IDLE &&
+                                            now >= chromeInitialLockUntilMs
+                                        ) {
+                                            val rawDelta = snapshot.scrollDeltaY
+                                            val anchorDeltaY = snapshot.contentAnchorDeltaY
+                                            val dir = com.markleaf.app.pdf
+                                                .mapScrollToContentMotion(anchorDeltaY)
+                                            // Temporary direction diagnostic (DEBUG only):
+                                            // correlates the raw scroll delta with the
+                                            // measured on-screen anchor motion. MUST match
+                                            // the eye: content visibly up => anchorDeltaY < 0,
+                                            // visibly down => anchorDeltaY > 0.
+                                            if (chromeDebuggable && dir != null &&
+                                                now - lastChromeDirLogMs >= 80L
+                                            ) {
+                                                lastChromeDirLogMs = now
+                                                Log.i(
+                                                    "CHROME_DIR",
+                                                    "gestureId=${chromeStateMachine.userGestureId} " +
+                                                        "rawDelta=$rawDelta consumedDelta=$rawDelta " +
+                                                        "oldAnchorY=$lastChromeAnchorScreenY " +
+                                                        "newAnchorY=${snapshot.contentAnchorScreenY} " +
+                                                        "anchorDeltaY=$anchorDeltaY mapped=$dir",
+                                                )
+                                                lastChromeAnchorScreenY = snapshot.contentAnchorScreenY
+                                            }
+                                            if (dir != null) {
+                                                val deltaDp = with(chromeDensity) {
+                                                    kotlin.math.abs(anchorDeltaY) / density
+                                                }
+                                                chromeStateMachine
+                                                    .onScrollSample(dir, deltaDp, rawDelta, anchorDeltaY, now)
+                                                    .forEach { applyChromeChange(it) }
+                                                // Fling fast path obeys the same direction rules.
+                                                if (phase == com.markleaf.app.pdf.ContinuousScrollPhase.FLINGING) {
+                                                    chromeFlingAccumDp += deltaDp
+                                                    val speed = kotlin.math.abs(snapshot.velocityYDpPerSec)
+                                                    val minSpeed = com.markleaf.app.pdf
+                                                        .PdfChromeScrollParams().flingMinSpeedDpPerSec
+                                                    val minDist = com.markleaf.app.pdf
+                                                        .PdfChromeScrollParams().flingMinDistanceDp
+                                                    if (speed >= minSpeed && chromeFlingAccumDp >= minDist) {
+                                                        val change = chromeStateMachine.onFling(
+                                                            dir = dir,
+                                                            velocityDpPerSec = speed,
+                                                            distanceDp = chromeFlingAccumDp,
+                                                            anchorDeltaYPx = anchorDeltaY,
+                                                            nowMs = now,
+                                                        )
+                                                        if (change != null) applyChromeChange(change)
+                                                        chromeFlingAccumDp = 0f
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    viewModel.onContinuousViewportChanged(snapshot)
+                                },
                                 onEnsureAround = viewModel::ensurePagesAround,
                                 onRetryPage = { viewModel.ensurePagesAround(it) },
                                 modifier = Modifier.fillMaxSize(),
                             )
+                            }
                         }
                         PdfReadingMode.HORIZONTAL_PAGED -> {
                             PdfHorizontalPagedArea(
                                 state = state,
                                 pageJump = pageJump,
-                                controlsVisible = horizontalControlsVisible,
                                 onToggleChrome = {
-                                    horizontalControlsVisible = !horizontalControlsVisible
-                                },
-                                onShowChrome = {
-                                    horizontalControlsVisible = true
+                                    if (menuActive) closePdfMenu()
+                                    else toggleChromeByTap()
                                 },
                                 onPrevious = viewModel::goToPreviousPage,
                                 onNext = viewModel::goToNextPage,
-                                onPageLabelClick = { showJumpDialog = true },
+                                onPageLabelClick = toggleCapsule,
                                 onViewportWidthPx = viewModel::onViewportWidth,
                                 onPageChanged = viewModel::onHorizontalPageSettled,
                                 onZoomScaleSettled = viewModel::onZoomScaleSettled,
@@ -444,90 +956,10 @@ fun PdfViewerScreen(
                 },
             )
 
-            if (showReadingModeSheet) {
-                PdfReadingModeSheet(
-                    mode = state.readingMode,
-                    showPageButtons = state.showPageButtons,
-                    onSelectMode = { mode ->
-                        viewModel.setReadingMode(mode)
-                        showReadingModeSheet = false
-                    },
-                    onShowButtonsChange = viewModel::setShowPageButtons,
-                    onDismiss = { showReadingModeSheet = false },
-                )
-            }
-
-            if (showJumpDialog) {
-                JumpToPageDialog(
-                    currentHumanPage = state.displayPageIndex + 1,
-                    pageCount = state.pageCount,
-                    onDismiss = { showJumpDialog = false },
-                    onConfirm = { human ->
-                        if (viewModel.jumpToHumanPage(human)) {
-                            showJumpDialog = false
-                        }
-                    },
-                )
-            }
-
-            if (showPrintDialog) {
-                SetPrintPageDialog(
-                    currentPdfHumanPage = state.pageIndex + 1,
-                    currentPrint = state.printPageNumber,
-                    isExact = state.isPrintExactAnchor,
-                    onDismiss = { showPrintDialog = false },
-                    onConfirm = { print ->
-                        viewModel.setPrintPageForCurrent(print)
-                        showPrintDialog = false
-                    },
-                    onClear = {
-                        viewModel.clearPrintPageForCurrent()
-                        showPrintDialog = false
-                    },
-                )
-            }
-
-            if (showOutlineSheet && !showThumbSheet && outlineEditor == null) {
-                TextbookOutlineSheet(
-                    nodes = state.outlineNodes,
-                    currentPageIndex = state.pageIndex,
-                    currentPathLabel = state.outlinePathLabel,
-                    hasEmbeddedDrafts = viewModel.hasCachedEmbeddedOutline(),
-                    onJumpToNode = { node ->
-                        viewModel.goToPage(node.startPageIndex)
-                        showOutlineSheet = false
-                    },
-                    onRequestEdit = { draft ->
-                        outlineEditor = draft
-                    },
-                    onDelete = viewModel::deleteOutlineNode,
-                    onExportNode = { node ->
-                        showOutlineSheet = false
-                        viewModel.beginExportNode(node)
-                    },
-                    onImportEmbedded = {
-                        showOutlineSheet = false
-                        viewModel.requestEmbeddedImportUi()
-                    },
-                    onDismiss = { showOutlineSheet = false },
-                )
-            }
-
-            exportPlan?.let { plan ->
-                val pageCount = (uiState as? PdfViewerUiState.Ready)?.pageCount ?: 1
-                ChapterExportConfirmDialog(
-                    plan = plan,
-                    documentPageCount = pageCount,
-                    onDismiss = viewModel::dismissExportPlan,
-                    onConfirm = { start0, end0 ->
-                        val name = viewModel.confirmExportRange(start0, end0)
-                        if (name != null) {
-                            createZipLauncher.launch(name)
-                        }
-                    },
-                )
-            }
-
+            // R25: the four task surfaces are Foreground Advanced Cards
+            // rendered inside PdfChrome (from the tapped row). No BottomSheets
+            // in the Reader More chain anymore. The export PROGRESS dialog is
+            // the system-flow status surface (kept).
             exportState?.let { st ->
                 ChapterExportProgressDialog(
                     state = st,
@@ -547,7 +979,10 @@ fun PdfViewerScreen(
                     pageCount = state.pageCount,
                     onDismiss = {
                         outlineEditor = null
-                        showOutlineSheet = true
+                        moreState = ReaderMoreStateMachine.onOpenChild(
+                            ReaderMoreState.MAIN,
+                            ReaderMoreState.CHILD_TOC,
+                        )
                     },
                     onSave = { id, parentId, type, title, start, end ->
                         viewModel.saveOutlineNode(
@@ -559,13 +994,18 @@ fun PdfViewerScreen(
                             endPageIndex = end,
                         )
                         outlineEditor = null
-                        showOutlineSheet = true
+                        moreState = ReaderMoreStateMachine.onOpenChild(
+                            ReaderMoreState.MAIN,
+                            ReaderMoreState.CHILD_TOC,
+                        )
                     },
                     onPickRangeFromThumbs = {
                         thumbRangePick = true
-                        showOutlineSheet = false
+                        moreState = ReaderMoreStateMachine.onOpenChild(
+                            ReaderMoreState.MAIN,
+                            ReaderMoreState.CHILD_THUMBNAILS,
+                        )
                         viewModel.prepareThumbnails()
-                        showThumbSheet = true
                     },
                     onUseCurrentPage = {
                         outlineEditor = draft.copy(
@@ -587,43 +1027,6 @@ fun PdfViewerScreen(
                     onDismiss = viewModel::dismissEmbeddedOutlineOffer,
                 )
             }
-
-            if (showThumbSheet) {
-                LaunchedEffect(Unit) {
-                    viewModel.prepareThumbnails()
-                }
-                PdfThumbnailSheet(
-                    pageCount = state.pageCount,
-                    currentPageIndex = state.pageIndex,
-                    printAnchors = state.printAnchors,
-                    loader = viewModel.thumbnailLoader(),
-                    rangePickMode = thumbRangePick,
-                    onPageSelected = { index ->
-                        viewModel.goToPage(index)
-                        showThumbSheet = false
-                        thumbRangePick = false
-                    },
-                    onRangePicked = if (thumbRangePick) {
-                        { start, end ->
-                            outlineEditor = outlineEditor?.copy(
-                                startPageIndex = start,
-                                endPageIndex = end,
-                            )
-                            thumbRangePick = false
-                            showThumbSheet = false
-                        }
-                    } else {
-                        null
-                    },
-                    onDismiss = {
-                        showThumbSheet = false
-                        if (thumbRangePick) {
-                            thumbRangePick = false
-                            // Keep editor open for user to continue.
-                        }
-                    },
-                )
-            }
         }
     }
         SnackbarHost(
@@ -636,240 +1039,467 @@ fun PdfViewerScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PdfChrome(
-    title: String,
-    pageLabel: String?,
-    printLabel: String?,
-    outlinePathLabel: String?,
+    /** Capsule main line, e.g. "78 / 982 · 教材页 47". */
+    capsuleMain: String,
+    /** Capsule sub line, e.g. "第二篇 呼吸系统疾病 · 内科学（第10版）". */
+    capsuleSub: String?,
     onBack: () -> Unit,
-    canPrevious: Boolean,
-    canNext: Boolean,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onPageLabelClick: (() -> Unit)?,
-    onSetPrintClick: (() -> Unit)?,
-    onThumbsClick: (() -> Unit)?,
-    onOutlineClick: (() -> Unit)?,
-    onReadingModeClick: (() -> Unit)? = null,
-    showPageButtons: Boolean = true,
-    /** When false, TopBar is hidden (horizontal reading chrome overlay mode). */
-    topBarVisible: Boolean = true,
-    scrubber: (@Composable () -> Unit)?,
+    /** Capsule tap: toggle the anchored jump card (never changes chrome levels). */
+    onCapsuleToggle: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    /** Four-state chrome visibility: FULL / BUTTONS_ONLY / CAPSULE_ONLY / HIDDEN. */
+    chromeLevel: PdfChromeLevel = PdfChromeLevel.FULL,
+    /** Capsule anchored expansion (jump card) state — overlay controller. */
+    capsuleExpanded: Boolean = false,
+    onCapsuleDismiss: () -> Unit = {},
+    jumpCardParams: JumpCardParams? = null,
+    /** Anchored popover state (non-modal, no dim) — the morphing more control. */
+    menuExpanded: Boolean = false,
+    /** Morph-back phase: the card is shrinking back into the circle. */
+    menuClosing: Boolean = false,
+    /** The more control's full state (the explicit 8-state machine). */
+    menuState: ReaderMoreState = ReaderMoreState.CLOSED,
+    onMenuToggle: () -> Unit = {},
+    onMenuDismiss: () -> Unit = {},
+    onSubmenuChange: (ReaderMoreState) -> Unit = {},
+    /** Advanced reverse-morph phase: the state STAYS ADVANCED_* while the
+     *  Foreground Advanced Card collapses back to its own source row; the
+     *  host fires [onChildCollapsed] when the morph completes. */
+    childClosing: Boolean = false,
+    onChildCollapsed: () -> Unit = {},
+    /** PREPARING_* layout ready → promote to CHILD_* (r26.1 two-phase). */
+    onPreparingLayoutReady: (ReaderMoreState) -> Unit = {},
+    /** Expandable entries (chevron rows): reading mode + top-bar mode. */
+    submenuEntries: List<PdfChromeSubmenuEntry> = emptyList(),
+    /** Plain one-level entries. */
+    plainMenuItems: List<PdfChromeMenuItem> = emptyList(),
+    /** Reading-mode submenu options (check-marked). */
+    readingModeOptions: List<PdfChromeMenuOption> = emptyList(),
+    /** Top-bar-mode submenu options (check-marked). */
+    topBarModeOptions: List<PdfChromeMenuOption> = emptyList(),
+    /** Foreground Advanced Card payloads (R25). */
+    nestedData: ReaderAdvancedData? = null,
     content: @Composable () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    Column(
+    // Four-state orthogonal derivation: capsule and the two circles are
+    // independent dims. FULL=(T,T) BUTTONS_ONLY=(F,T) CAPSULE_ONLY=(T,F)
+    // HIDDEN=(F,F). Tap toggles the capsule only; scroll drives both.
+    val capsuleVisible = chromeLevel == PdfChromeLevel.FULL ||
+        chromeLevel == PdfChromeLevel.CAPSULE_ONLY
+    val edgeButtonsVisible = chromeLevel == PdfChromeLevel.FULL ||
+        chromeLevel == PdfChromeLevel.BUTTONS_ONLY
+
+    // Liquid-only chrome (r26.1): stable rememberLayerBackdrop() (default onDraw).
+    // Parent exportedBackdrop → Child samples export (glass-on-glass CORRECT).
+    val rootBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
+    val parentExportBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
+    val backdropHost = com.markleaf.app.ui.common.LiquidBackdropHost(
+        root = rootBackdrop,
+        parentExport = parentExportBackdrop,
+    )
+
+    CompositionLocalProvider(
+        LocalReaderChromeBackdropHost provides backdropHost,
+    ) {
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(scheme.background)
-            .statusBarsPadding(),
+            .background(scheme.background),
     ) {
-        if (topBarVisible) {
-        Surface(
-            color = scheme.surface,
-            shadowElevation = 0.dp,
-            tonalElevation = 0.dp,
+        // PDF content feeds the root LayerBackdrop for Liquid chrome sampling.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .layerBackdrop(rootBackdrop),
         ) {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .padding(end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                            tint = scheme.onSurface,
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                            ),
-                            color = scheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (pageLabel != null) {
-                            val interaction = remember { MutableInteractionSource() }
-                            Text(
-                                text = pageLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = scheme.onSurface,
-                                modifier = if (onPageLabelClick != null) {
-                                    Modifier.clickable(
-                                        interactionSource = interaction,
-                                        indication = null,
-                                        role = Role.Button,
-                                        onClick = onPageLabelClick,
-                                    )
-                                } else {
-                                    Modifier
-                                },
-                            )
-                        }
-                    }
-                    if (onReadingModeClick != null) {
-                        IconButton(onClick = onReadingModeClick) {
-                            Icon(
-                                imageVector = Icons.Outlined.SwapVert,
-                                contentDescription = stringResource(R.string.pdf_reading_mode_open),
-                                tint = scheme.onSurface,
-                            )
-                        }
-                    }
-                    if (onOutlineClick != null) {
-                        IconButton(onClick = onOutlineClick) {
-                            Icon(
-                                imageVector = Icons.Outlined.MenuBook,
-                                contentDescription = stringResource(R.string.pdf_outline_open),
-                                tint = scheme.onSurface,
-                            )
-                        }
-                    }
-                    if (onThumbsClick != null) {
-                        IconButton(onClick = onThumbsClick) {
-                            Icon(
-                                imageVector = Icons.Outlined.GridView,
-                                contentDescription = stringResource(R.string.pdf_thumbs_open),
-                                tint = scheme.onSurface,
-                            )
-                        }
-                    }
-                    if (onSetPrintClick != null) {
-                        IconButton(onClick = onSetPrintClick) {
-                            Icon(
-                                imageVector = Icons.Outlined.Tag,
-                                contentDescription = stringResource(R.string.pdf_set_print_page),
-                                tint = scheme.onSurface,
-                            )
-                        }
-                    }
+            content()
+        }
+        // ── Three independent, position-stable anchors (Box overlay) ──────────
+        // The round buttons are FIXED screen anchors: left = TopStart, right =
+        // TopEnd, fixed margins and sizes. The capsule is an independent
+        // centered layer; hiding it (COMPACT) must NEVER re-layout or move the
+        // buttons. Level changes only affect alpha/visibility/translationY.
+        //
+        // Top anchor uses the STABLE status-bar inset (statusBarsIgnoringVisibility):
+        // immersive mode hides the system bar — which extends PdfContent, but must
+        // never move the app chrome (no jump when the visible inset becomes 0).
+        val chromeDensity = LocalDensity.current
+        val stableTopInsetDp = WindowInsets.statusBarsIgnoringVisibility
+            .asPaddingValues()
+            .calculateTopPadding()
+        val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+        // Capsule hard cap: <=52% of the screen AND leaves >=12dp clearance to
+        // each round button (12 margin + 44 slot + 12 gap per side). Never
+        // fillMaxWidth, never weight(1f).
+        val capsuleMaxWidthDp = minOf(
+            screenWidthDp - (12 + 44 + 12) * 2,
+            (screenWidthDp * 0.52f).toInt(),
+        ).coerceAtLeast(120)
+
+        // ── Overlay contract ────────────────────────────────────────────────
+        //   content = z0, chrome row (back / capsule / more circle) = z1,
+        //   outside-tap catcher = z2, popover surface = z3.
+        // The more control is ONE surface family: the three-dot circle morphs
+        // into the menu card, and the card can KEEP morphing into a foreground
+        // advanced child-card (same container, same anchor — top/right pinned
+        // to the circle's anchor; the capsule RETRACTS while the family is up
+        // so nothing overlaps). Advanced tasks (page mapping / TOC / thumbs /
+        // export) open anchored children rendered above Main — no BottomSheet,
+        // no secondary window, no handoff.
+        val chromeRowTopDp = stableTopInsetDp + 8.dp
+        val screenHeightDpFull = LocalConfiguration.current.screenHeightDp.dp
+        // IME-available height (0 while the keyboard is hidden): the form may
+        // shrink/scroll into this space, but the window itself is
+        // ADJUST_NOTHING, so the chrome never moves and the PDF viewport is
+        // never resized by the keyboard.
+        val imeBottomPx = WindowInsets.ime.getBottom(chromeDensity)
+        val imeAvailableHeightDp = with(chromeDensity) {
+            LocalConfiguration.current.screenHeightDp.dp - imeBottomPx.toDp()
+        } - chromeRowTopDp
+        val viewportBottomRootPx = with(chromeDensity) {
+            screenHeightDpFull.toPx() - WindowInsets.navigationBars
+                .asPaddingValues()
+                .calculateBottomPadding()
+                .toPx()
+        }
+
+        // Left back button — fixed TopStart anchor; visible IFF the two circles
+        // are on (FULL / BUTTONS_ONLY). Scroll NEVER hides it alone; only the
+        // full-hide stage (or explicit entry) does.
+        AnimatedVisibility(
+            visible = edgeButtonsVisible,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -it / 2 },
+            // Both round buttons exit with a 100ms delay so the hide order is
+            // always capsule first, then the two circles (staggered by the
+            // scroll rules; buttons re-enter immediately on restore).
+            exit = fadeOut(tween(180, delayMillis = 100)) +
+                slideOutVertically(tween(180, delayMillis = 100)) { -it / 2 },
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 20.dp, top = chromeRowTopDp)
+                .zIndex(1f),
+        ) {
+            FloatingChromeButton(
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.back),
+                onClick = onBack,
+            )
+        }
+
+        // Right more control — ONE node, ONE TopEnd anchor, both states
+        // (r22: the three-dot circle morphs INTO the menu card; the card is
+        // the circle grown leftward/downward, never a second surface). The
+        // layer stays alive while the menu is active so the morph container
+        // is never torn down mid-animation.
+        val moreChromeSlidePx = with(chromeDensity) { 22.dp.roundToPx() }
+        val menuActiveLayer = menuExpanded || menuClosing
+        AnimatedVisibility(
+            visible = edgeButtonsVisible || menuActiveLayer,
+            // Slide amount is pinned to the circle size (the layer itself is
+            // full-screen because it hosts the outside-tap catcher).
+            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -moreChromeSlidePx },
+            exit = fadeOut(tween(180, delayMillis = 100)) +
+                slideOutVertically(tween(180, delayMillis = 100)) { -moreChromeSlidePx },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 20.dp, top = chromeRowTopDp)
+                .zIndex(1f),
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Outside-tap catcher while the menu is up: consumes taps only
+                // (drags still reach the PDF), closes via the reverse morph.
+                if (menuActiveLayer) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(1f)
+                            .pointerInput(menuActiveLayer) {
+                                detectTapGestures(onTap = { onMenuDismiss() })
+                            },
+                    )
                 }
-                if (printLabel != null) {
+                val nestedMaxH = AdvancedChildLayoutSpec.maxHeightDp(
+                    windowHeightDp = screenHeightDpFull.value,
+                    statusInsetDp = chromeRowTopDp.value,
+                    navInsetDp = with(chromeDensity) {
+                        WindowInsets.navigationBars
+                            .asPaddingValues()
+                            .calculateBottomPadding()
+                            .value
+                    },
+                    marginDp = 20f,
+                ).dp.coerceAtLeast(240.dp)
+                ReaderMoreHost(
+                    state = menuState,
+                    closing = menuClosing,
+                    childClosing = childClosing,
+                    contentDescription = stringResource(R.string.pdf_menu_open),
+                    onToggleOpen = onMenuToggle,
+                    onCloseRequest = onMenuDismiss,
+                    onChildCollapsed = onChildCollapsed,
+                    onSectionToggle = onSubmenuChange,
+                    submenuEntries = submenuEntries,
+                    plainMenuItems = plainMenuItems,
+                    readingModeOptions = readingModeOptions,
+                    topBarModeOptions = topBarModeOptions,
+                    nestedData = nestedData,
+                    nestedMaxHeightDp = nestedMaxH,
+                    viewportBottomRoot = viewportBottomRootPx,
+                    onPreparingLayoutReady = onPreparingLayoutReady,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .zIndex(2f),
+                )
+            }
+        }
+
+        // ── Center capsule layer: ONE surface, two states ────────────────────
+        // Collapsed it is the position pill; expanded the SAME surface grows
+        // downward and widens below the header — top edge stays the pill's
+        // exact width and position (CapsulePopoverShape), so the jump input
+        // reads as the capsule's own expanded popover, never a second card.
+        // While the more menu is up (or morphing shut) the capsule RETRACTS
+        // entirely (overlay behavior — chrome levels untouched, no re-layout);
+        // it fades back in when the menu has fully closed.
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = chromeRowTopDp)
+                .zIndex(if (capsuleExpanded) 3f else 1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            AnimatedVisibility(
+                visible = capsuleVisible && !menuActiveLayer,
+                enter = fadeIn(tween(180, delayMillis = 100)),
+                exit = fadeOut(tween(180)),
+            ) {
+                PdfInfoCapsule(
+                    mainLine = capsuleMain,
+                    subLine = capsuleSub,
+                    onClick = onCapsuleToggle,
+                    maxWidthDp = capsuleMaxWidthDp,
+                    expanded = capsuleExpanded && jumpCardParams != null,
+                    jumpParams = jumpCardParams,
+                    imeAvailableHeightDp = imeAvailableHeightDp,
+                )
+            }
+        }
+        // Outside-tap catcher while the jump card is open (no indication).
+        if (capsuleExpanded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(2f)
+                    .pointerInput(capsuleExpanded) {
+                        detectTapGestures(onTap = { onCapsuleDismiss() })
+                    },
+            )
+        }
+        // The textbook-page form lives INSIDE the morphing more container
+        // (ReaderMoreHost): the menu card keeps changing into the form surface
+        // — never a separate popup layer here.
+    }
+    } // CompositionLocalProvider (backdrop host)
+}
+
+/**
+ * X/iOS-style floating chrome button: 42dp circle, translucent surface + scrim
+ * + hairline border + very light shadow. Backdrop blur is approximated with a
+ * near-opaque translucent surface so page outlines remain faintly perceptible
+ * while glyph strokes never read through behind the icon.
+ */
+@Composable
+private fun FloatingChromeButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .readerChromeSurface(
+                level = ReaderGlassElevation.Chrome,
+                shape = CircleShape,
+                role = ReaderChromeSurfaceRole.Chrome,
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = scheme.onSurface,
+        )
+    }
+}
+
+/**
+ * Small frosted capsule: document title (maxLines=1, ellipsis) plus
+ * page · section line. Tap → jump-to-page.
+ */
+/**
+ * Center chrome surface: collapsed it is the position pill; expanded it is
+ * the SAME surface grown downward AND widened below the header — the top
+ * edge keeps the pill's exact width and position (CapsulePopoverShape), so
+ * the jump input reads as a popover growing out of the capsule, never a
+ * second, boxier card. Never a BottomSheet, never a full-screen dim.
+ * The system keyboard may appear at the bottom; the surface stays
+ * top-anchored (ADJUST_NOTHING), and the body may scroll within the
+ * IME-available height.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PdfInfoCapsule(
+    mainLine: String,
+    subLine: String?,
+    onClick: (() -> Unit)?,
+    maxWidthDp: Int = 260,
+    expanded: Boolean = false,
+    jumpParams: JumpCardParams? = null,
+    imeAvailableHeightDp: Dp = Dp.Infinity,
+) {
+    val scheme = MaterialTheme.colorScheme
+    // Popover width band: collapsed pill 200dp (capped), expanded body widens
+    // to 240dp (capped). The TOP EDGE stays 200dp in both states, so the
+    // top/centerX are invariant under the expand/collapse toggle.
+    val widthCap = maxWidthDp.dp
+    val collapsedWidth = 200.dp.coerceAtMost(widthCap)
+    val expandedWidth = 240.dp.coerceAtMost(widthCap)
+    val surfaceWidthDp by animateDpAsState(
+        targetValue = if (expanded) expandedWidth else collapsedWidth,
+        animationSpec = tween(200),
+        label = "capsuleWidth",
+    )
+    // Silhouette: trapezoid while the surface is wider than the pill (the
+    // shape's bottom edge follows the animated width, so both ends of the
+    // animation are plain rounded rectangles and only the body flares);
+    // plain pill shape otherwise.
+    val shape = if ((expanded || surfaceWidthDp > collapsedWidth) && expandedWidth > collapsedWidth) {
+        CapsulePopoverShape(
+            topWidth = collapsedWidth,
+            bottomWidth = surfaceWidthDp,
+            topRadius = 22.dp,
+            bottomRadius = 16.dp,
+        )
+    } else {
+        RoundedCornerShape(22.dp)
+    }
+    // Anchor-stability evidence: log the surface top/centerX whenever they
+    // change (collapsed vs expanded must print identical top & centerX; the
+    // width legitimately animates and is not part of the invariant).
+    var lastCapsuleAnchor by remember { mutableStateOf(IntArray(0)) }
+
+    // ── R25 closure P1-1: single authoritative body progress p (the same
+    // pattern as the menu's inline sections — R25.2). Region height =
+    // measuredNaturalHeight × p, children stay composed (clipped) while
+    // expanded or mid-collapse. No separate expand/fade clocks — no late
+    // content, no blank shrinking tail at the end of the collapse.
+    val bodyProgress = remember { Animatable(0f) }
+    var bodyNaturalHeightPx by remember { mutableFloatStateOf(0f) }
+    val bodyDensity = LocalDensity.current
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            bodyProgress.snapTo(0f)
+            bodyProgress.animateTo(1f, tween(200, easing = MoreMorphEasing))
+        } else {
+            bodyProgress.animateTo(0f, tween(180, easing = MoreMorphEasing))
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .width(surfaceWidthDp)
+            .readerChromeSurface(
+                level = ReaderGlassElevation.Chrome,
+                shape = shape,
+                role = ReaderChromeSurfaceRole.Chrome,
+            )
+            .onGloballyPositioned { coords ->
+                val bounds = coords.boundsInWindow()
+                val anchor = intArrayOf(
+                    bounds.top.roundToInt(),
+                    (bounds.left + bounds.width / 2f).roundToInt(),
+                )
+                if (lastCapsuleAnchor.size != 2 ||
+                    lastCapsuleAnchor[0] != anchor[0] ||
+                    lastCapsuleAnchor[1] != anchor[1]
+                ) {
+                    Log.i(
+                        "CAPSULE_SURFACE",
+                        "expanded=$expanded top=${anchor[0]} centerX=${anchor[1]} " +
+                            "w=${surfaceWidthDp.value.toInt()}",
+                    )
+                    lastCapsuleAnchor = anchor
+                }
+            }
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        // Header: always the position line, always the pill's width (centered
+        // inside the wider body) — continuous with the collapsed capsule.
+        Row(
+            modifier = Modifier
+                .width(collapsedWidth)
+                .height(44.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .align(Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f, fill = false)) {
+                Text(
+                    text = mainLine,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!subLine.isNullOrBlank()) {
                     Text(
-                        text = printLabel,
+                        text = subLine,
                         style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 2.dp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (outlinePathLabel != null) {
-                    Text(
-                        text = stringResource(R.string.pdf_outline_here, outlinePathLabel),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onSurface,
-                        modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 6.dp),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                } else if (printLabel != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(0.5.dp)
-                        .background(scheme.outlineVariant),
-                )
             }
         }
-        } // topBarVisible
-
-        // PDF viewport — clipped; zoom must stay inside this box (never over TopBar).
+        // Expanded body: grows from the header's bottom edge inside the same
+        // surface (pure downward growth, same left/right bounds — the region
+        // height follows the single progress p). IME-adaptive: capped to the
+        // space above the keyboard and scrollable, but never relocates the
+        // surface.
+        val shouldComposeBody = expanded || bodyProgress.value > 0f
+        val bodyRegionHeightDp = with(bodyDensity) {
+            (bodyNaturalHeightPx * bodyProgress.value).toDp()
+        }
+        val bodyParams = jumpParams
         Box(
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
-                .clipToBounds()
-                .background(MarkLeafTheme.extra.pdfCanvas),
+                .height(bodyRegionHeightDp)
+                .clipToBounds(),
         ) {
-            content()
-        }
-
-        if (scrubber != null || showPageButtons) {
-            Surface(
-                color = scheme.surface,
-                shadowElevation = 0.dp,
-            ) {
-                Column {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(0.5.dp)
-                            .background(scheme.outlineVariant),
+            if (shouldComposeBody && bodyParams != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .reportNaturalHeight { bodyNaturalHeightPx = it.toFloat() },
+                ) {
+                    JumpPageBody(
+                        params = bodyParams,
+                        bodyMaxHeightDp = (imeAvailableHeightDp - 44.dp).coerceAtLeast(96.dp),
                     )
-                    if (scrubber != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding(),
-                        ) {
-                            scrubber()
-                        }
-                    }
-                    if (showPageButtons) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            IconButton(onClick = onPrevious, enabled = canPrevious) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.NavigateBefore,
-                                    contentDescription = stringResource(R.string.pdf_previous_page),
-                                    tint = if (canPrevious) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
-                                    },
-                                )
-                            }
-                            val pageInteraction = remember { MutableInteractionSource() }
-                            Text(
-                                text = pageLabel ?: "",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Medium,
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = if (onPageLabelClick != null) {
-                                    Modifier
-                                        .clickable(
-                                            interactionSource = pageInteraction,
-                                            indication = null,
-                                            role = Role.Button,
-                                            onClick = onPageLabelClick,
-                                        )
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            IconButton(onClick = onNext, enabled = canNext) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.NavigateNext,
-                                    contentDescription = stringResource(R.string.pdf_next_page),
-                                    tint = if (canNext) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
-                                    },
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -877,237 +1507,157 @@ private fun PdfChrome(
 }
 
 /**
- * Compact horizontal-mode scrubber only (continuous mode uses thin LinearProgressIndicator).
- * Touch row ~44dp; track thin; side inset 24dp.
+ * Jump-to-page body: grows inside the capsule surface, under the header.
+ * Compact expansion: small title + single helper line + 50dp number field
+ * (11dp radius, only slightly deeper than the capsule glass) + light
+ * 取消 text action + compact 跳转 primary action. The header above keeps the
+ * current position, so the input is a tight extension of the pill — never a
+ * form-like dialog. Body stays IME-adaptive (scrolls within the space above
+ * the keyboard; the window is ADJUST_NOTHING so neither the chrome nor the
+ * PDF viewport ever moves).
  */
 @Composable
-private fun PdfPageScrubber(
-    pageCount: Int,
-    currentIndex: Int,
-    onPreview: (Int) -> Unit,
-    onFinished: (Int) -> Unit,
-    modifier: Modifier = Modifier,
+private fun JumpPageBody(
+    params: JumpCardParams,
+    bodyMaxHeightDp: Dp,
 ) {
-    if (pageCount <= 1) return
-    val maxIndex = (pageCount - 1).toFloat()
-    var sliderValue by remember(currentIndex, pageCount) {
-        mutableFloatStateOf(currentIndex.toFloat().coerceIn(0f, maxIndex))
-    }
-    var dragging by remember { mutableStateOf(false) }
-
-    LaunchedEffect(currentIndex, pageCount) {
-        if (!dragging) {
-            sliderValue = currentIndex.toFloat().coerceIn(0f, maxIndex)
-        }
-    }
-
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .padding(horizontal = 24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Slider(
-            value = sliderValue,
-            onValueChange = { v ->
-                dragging = true
-                sliderValue = v
-                onPreview(v.roundToInt().coerceIn(0, pageCount - 1))
-            },
-            onValueChangeFinished = {
-                dragging = false
-                val idx = sliderValue.roundToInt().coerceIn(0, pageCount - 1)
-                onFinished(idx)
-            },
-            valueRange = 0f..maxIndex,
-            steps = 0,
-            modifier = Modifier.fillMaxWidth(),
-            colors = SliderDefaults.colors(
-                thumbColor = scheme.primary,
-                activeTrackColor = scheme.primary,
-                inactiveTrackColor = scheme.outlineVariant.copy(alpha = 0.45f),
-                activeTickColor = Color.Transparent,
-                inactiveTickColor = Color.Transparent,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun JumpToPageDialog(
-    currentHumanPage: Int,
-    pageCount: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit,
-) {
-    var text by remember { mutableStateOf(currentHumanPage.toString()) }
+    var text by remember { mutableStateOf(params.currentHumanPage.toString()) }
     var error by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    val rangeHint = stringResource(R.string.pdf_jump_range, pageCount)
-    val invalidMsg = stringResource(R.string.pdf_jump_invalid, pageCount)
+    val scheme = MaterialTheme.colorScheme
+    val rangeHint = stringResource(R.string.pdf_jump_range, params.pageCount)
+    val invalidMsg = stringResource(R.string.pdf_jump_invalid, params.pageCount)
 
+    // R25 closure P2-1: request focus only after the body morph completes
+    // (200ms) — the IME slides up over an already-grown body instead of
+    // fighting the expanding region on frame 1.
     LaunchedEffect(Unit) {
+        delay(200)
         focus.requestFocus()
     }
 
     fun submit() {
         val n = text.trim().toIntOrNull()
-        if (n == null || n < 1 || n > pageCount) {
+        if (n == null || n < 1 || n > params.pageCount) {
             error = invalidMsg
             return
         }
         error = null
         keyboard?.hide()
-        onConfirm(n)
+        params.onConfirm(n)
     }
 
-    val scheme = MaterialTheme.colorScheme
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = scheme.dialogContainer,
-        titleContentColor = scheme.onSurface,
-        textContentColor = scheme.onSurfaceVariant,
-        title = { Text(stringResource(R.string.pdf_jump_title)) },
-        text = {
-            Column {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = bodyMaxHeightDp)
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+    ) {
+        // Small title + one helper line (no oversized form header).
+        Text(
+            text = stringResource(R.string.pdf_jump_title),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = scheme.onSurface,
+        )
+        Text(
+            text = rangeHint,
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        // Restrained number field: 44dp tall, 11dp radius, filled only
+        // slightly deeper than the capsule glass — never a solid black
+        // rectangle, never a bulky form field.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(scheme.onSurface.copy(alpha = 0.06f))
+                .border(
+                    width = 1.dp,
+                    color = if (error != null) {
+                        scheme.error.copy(alpha = 0.7f)
+                    } else {
+                        scheme.outline.copy(alpha = 0.4f)
+                    },
+                    shape = RoundedCornerShape(11.dp),
+                )
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            if (text.isEmpty()) {
                 Text(
-                    text = rangeHint,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = stringResource(R.string.pdf_jump_label),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = scheme.onSurfaceVariant,
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = {
-                        text = it.filter { ch -> ch.isDigit() }.take(6)
-                        error = null
-                    },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.pdf_jump_label)) },
-                    isError = error != null,
-                    supportingText = error?.let { { Text(it) } },
-                    colors = markLeafOutlinedFieldColors(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Go,
-                    ),
-                    keyboardActions = KeyboardActions(onGo = { submit() }),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focus),
-                )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { submit() }) {
-                Text(stringResource(R.string.pdf_jump_go))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.pdf_dialog_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun SetPrintPageDialog(
-    currentPdfHumanPage: Int,
-    currentPrint: Int?,
-    isExact: Boolean,
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit,
-    onClear: () -> Unit,
-) {
-    var text by remember {
-        mutableStateOf(currentPrint?.toString().orEmpty())
-    }
-    var error by remember { mutableStateOf<String?>(null) }
-    val focus = remember { FocusRequester() }
-    val invalidMsg = stringResource(R.string.pdf_print_invalid)
-
-    LaunchedEffect(Unit) {
-        focus.requestFocus()
-    }
-
-    fun submit() {
-        val n = text.trim().toIntOrNull()
-        if (n == null || n < 1) {
-            error = invalidMsg
-            return
+            BasicTextField(
+                value = text,
+                onValueChange = {
+                    text = it.filter { ch -> ch.isDigit() }.take(6)
+                    error = null
+                },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = scheme.onSurface),
+                cursorBrush = SolidColor(scheme.primary),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Go,
+                ),
+                keyboardActions = KeyboardActions(onGo = { submit() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focus),
+            )
         }
-        onConfirm(n)
-    }
-
-    val scheme = MaterialTheme.colorScheme
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = scheme.dialogContainer,
-        titleContentColor = scheme.onSurface,
-        textContentColor = scheme.onSurfaceVariant,
-        title = { Text(stringResource(R.string.pdf_set_print_title)) },
-        text = {
-            Column {
+        val errorMsg = error
+        if (errorMsg != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = errorMsg,
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.error,
+                maxLines = 1,
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 取消 = light text action that folds the capsule back.
+            TextButton(onClick = {
+                keyboard?.hide()
+                params.onCancel()
+            }) {
                 Text(
-                    text = stringResource(R.string.pdf_set_print_hint, currentPdfHumanPage),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                )
-                if (currentPrint != null && !isExact) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.pdf_print_currently_inferred, currentPrint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = scheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = {
-                        text = it.filter { ch -> ch.isDigit() }.take(6)
-                        error = null
-                    },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.pdf_print_label)) },
-                    isError = error != null,
-                    supportingText = error?.let { { Text(it) } },
-                    colors = markLeafOutlinedFieldColors(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done,
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { submit() }),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 360.dp)
-                        .focusRequester(focus),
+                    text = stringResource(R.string.pdf_dialog_cancel),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { submit() }) {
-                Text(stringResource(R.string.pdf_print_save))
+            Spacer(modifier = Modifier.width(4.dp))
+            // 跳转 = compact primary action (Material min-height only, no
+            // oversized padding).
+            Button(
+                onClick = { submit() },
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.pdf_jump_go),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                )
             }
-        },
-        dismissButton = {
-            Row {
-                if (isExact) {
-                    TextButton(onClick = onClear) {
-                        Text(stringResource(R.string.pdf_print_clear))
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.pdf_dialog_cancel))
-                }
-            }
-        },
-    )
+        }
+    }
 }
+
+
 
 private data class HorizontalTilePlannerInput(
     val snapshot: PdfViewportSnapshot,
@@ -1122,22 +1672,20 @@ private data class HorizontalTilePlannerInput(
 internal fun PdfHorizontalPagedArea(
     state: PdfViewerUiState.Ready,
     pageJump: PdfViewerViewModel.PageJumpRequest?,
-    controlsVisible: Boolean,
     onToggleChrome: () -> Unit,
-    onShowChrome: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onPageLabelClick: () -> Unit,
     onViewportWidthPx: (Int) -> Unit,
     onPageChanged: (Int) -> Unit,
     onZoomScaleSettled: (Float) -> Unit,
+    modifier: Modifier = Modifier,
     onViewportSessionSettled: (PdfViewportSessionState) -> Unit = {},
     onViewportSessionPreview: (PdfViewportSessionState) -> Unit = {},
     onTilePlan: (PdfTilePlan) -> Unit = {},
     tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
     onZoomGestureActive: (Boolean) -> Unit = {},
     onEnsureAround: (Int) -> Unit = {},
-    modifier: Modifier = Modifier,
     qaProbe: HorizontalInteractionProbe? = null,
 ) {
     // GPU zoom only inside clipped viewport — never covers TopBar.
@@ -1151,7 +1699,6 @@ internal fun PdfHorizontalPagedArea(
     var horizontalPinching by remember(state.document.id) { mutableStateOf(false) }
     var activeHorizontalPage by remember(state.document.id){mutableIntStateOf(state.pageIndex)}
     var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    val scrubbing = state.scrubPreviewIndex != null
     val scheme = MaterialTheme.colorScheme
     val horizontalViewportBackground = MarkLeafTheme.extra.pdfCanvas
     val viewConfig = LocalViewConfiguration.current
@@ -1822,17 +2369,6 @@ internal fun PdfHorizontalPagedArea(
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (scrubbing) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = state.pageLabel,
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = scheme.onSurface,
-                )
-            }
-            return@Box
-        }
-
         pageStrip.slots().forEach { slot ->
             val page = slot.pageIndex ?: return@forEach
             key(slot.stableId) {
@@ -2399,20 +2935,16 @@ internal fun PdfHorizontalPagedArea(
                             } else {
                                 lastTapTimeMs = now
                                 lastTapPosition = lastPosition
-                                if (scale > 1.01f) {
-                                    onShowChrome()
-                                    return@awaitEachGesture
-                                }
                                 val w = size.width.toFloat().coerceAtLeast(1f)
                                 when (ZoomPageOverlayMath.pageTap(lastPosition.x, w, false, scale)) {
-                                    PageTap.PREVIOUS -> if (state.canGoPrevious) onPrevious() else onShowChrome()
-                                    PageTap.NEXT -> if (state.canGoNext) onNext() else onShowChrome()
+                                    PageTap.PREVIOUS -> if (state.canGoPrevious) onPrevious() else Unit
+                                    PageTap.NEXT -> if (state.canGoNext) onNext() else Unit
                                     PageTap.NONE -> onToggleChrome()
                                 }
                             }
                         }
                     }
-                    .padding(top = pageContentGap),
+                    .padding(top = with(horizontalDensity) { fittedPage.contentTopPx.toDp() }),
                 contentAlignment = Alignment.TopCenter,
             ) {
                 when {
@@ -2503,938 +3035,7 @@ internal fun PdfHorizontalPagedArea(
 
         // Semi-transparent bottom overlay controls (not a fixed Scaffold bottom bar).
         // Edge/center taps handled via detectTapGestures on the page (does not block pager swipe).
-        if (controlsVisible) {
-            Surface(
-                color = scheme.surface.copy(alpha = 0.88f),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .testTag("h1-horizontal-controls-overlay"),
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        IconButton(onClick = onPrevious, enabled = state.canGoPrevious) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.NavigateBefore,
-                                contentDescription = stringResource(R.string.pdf_previous_page),
-                            )
-                        }
-                        Text(
-                            text = state.pageLabel,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            color = scheme.onSurface,
-                            modifier = Modifier
-                                .clickable(onClick = onPageLabelClick)
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                        IconButton(onClick = onNext, enabled = state.canGoNext) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.NavigateNext,
-                                contentDescription = stringResource(R.string.pdf_next_page),
-                            )
-                        }
-                    }
-                }
-            }
-        }
     }
 
 }
 
-/** R6 continuous mode: fixed LazyColumn geometry plus a viewport-clipped current-page overlay. */
-@OptIn(FlowPreview::class)
-@Composable
-private fun PdfVerticalZoomLockArea(
-    state: PdfViewerUiState.Ready,
-    pageJump: PdfViewerViewModel.PageJumpRequest?,
-    onViewportWidthPx: (Int) -> Unit,
-    onZoomScaleSettled: (Float, Int?) -> Unit,
-    onZoomGestureActive: (Boolean) -> Unit,
-    onPageSettled: (Int) -> Unit,
-    onViewportChanged: (ContinuousViewportSnapshot) -> Unit,
-    onEnsureAround: (Int) -> Unit,
-    onRetryPage: (Int) -> Unit,
-    onFastScrollPreview: (Int) -> Unit,
-    onFastScrollFinished: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = state.pageIndex.coerceAtLeast(0),
-    )
-    val directlyDragged by listState.interactionSource.collectIsDraggedAsState()
-    val scheme = MaterialTheme.colorScheme
-    val density = LocalDensity.current
-    val scope = rememberCoroutineScope()
-    val docId = state.document.id
-    val TAG = "MarkLeafZoom"
-    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    /** Per-page bounds in ReadingViewport-local coordinates for every visible item. */
-    val pageBoundsInViewport = remember { mutableStateMapOf<Int, Rect>() }
-    var viewportCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    // This state freezes LazyColumn as soon as the second pointer arrives. It is
-    // intentionally independent from ZoomSession creation/hit testing.
-    var twoFingerCaptured by remember(docId) { mutableStateOf(false) }
-    // Stable for this document composition; a new value in logs proves detector recreation.
-    val detectorInstanceId = remember(docId) { System.nanoTime() }
-    // Stable owner above the conditional overlay. Never keyed by gesture/bitmap/page/quality.
-    var zoomSession by remember { mutableStateOf(ContinuousZoomSession.inactive()) }
-    val lockedPage = zoomSession.lockedPage
-    val currentLockedPage by rememberUpdatedState(lockedPage)
-    val context = LocalContext.current
-    val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-
-    fun overlayRect(): OverlayRect = OverlayRect(
-        zoomSession.lockedBounds.left,
-        zoomSession.lockedBounds.top,
-        zoomSession.lockedBounds.width,
-        zoomSession.lockedBounds.height,
-    )
-
-    /** Build hit-test candidates from the currently visible items and their known bounds. */
-    fun buildCandidates(): List<VisiblePageTarget> {
-        val visiblePages = listState.layoutInfo.visibleItemsInfo
-            .filter { it.index in 0 until state.pageCount }
-            .map { it.index }
-            .toSet()
-        return pageBoundsInViewport
-            .filterKeys { it in visiblePages }
-            .map { (page, rect) ->
-                VisiblePageTarget(page, OverlayRect(rect.left, rect.top, rect.width, rect.height))
-            }
-    }
-
-    fun enterLock(page: Int, bounds: OverlayRect): Boolean {
-        if (zoomSession.active || bounds.width <= 0f || bounds.height <= 0f) return false
-        // Require a last-good bitmap for the exact hit-tested page; never fall back to pageImage.
-        val bitmapReady = state.pageBitmaps[page] != null
-        if (!bitmapReady) {
-            if (isDebuggable) Log.d(TAG, "BITMAP_REJECT page=$page reason=noBitmapForLockedPage")
-            return false
-        }
-        zoomSession = ContinuousZoomSessionReducer.begin(
-            previous = zoomSession,
-            page = page,
-            bounds = bounds,
-            listIndex = listState.firstVisibleItemIndex,
-            listOffset = listState.firstVisibleItemScrollOffset,
-        )
-        if (isDebuggable) {
-            Log.d(
-                TAG,
-                "SESSION_CREATE instanceId=$detectorInstanceId lockedPage=$page bitmapPage=$page " +
-                    "listIndex=${listState.firstVisibleItemIndex} " +
-                    "offset=${listState.firstVisibleItemScrollOffset} " +
-                    "sessionId=${zoomSession.sessionId}",
-            )
-        }
-        return true
-    }
-
-    fun exitLock(reason: String = "explicit") {
-        val page = zoomSession.lockedPage
-        // One snapshot restores bottom content and removes the sole overlay atomically.
-        zoomSession = ContinuousZoomSessionReducer.exit(zoomSession)
-        onZoomGestureActive(false)
-        onZoomScaleSettled(1f, null)
-        if (isDebuggable) {
-            Log.d(TAG, "SESSION_EXIT reason=$reason wasPage=$page")
-            if (page != null) Log.d(TAG, "LOCKED_ITEM_SHOW page=$page")
-        }
-    }
-
-    DisposableEffect(docId, detectorInstanceId) {
-        onDispose {
-            if (isDebuggable) {
-                Log.d(
-                    TAG,
-                    "DETECTOR_DISPOSE instanceId=$detectorInstanceId " +
-                        "listIndex=${listState.firstVisibleItemIndex} " +
-                        "offset=${listState.firstVisibleItemScrollOffset}",
-                )
-            }
-        }
-    }
-
-    LaunchedEffect(pageJump?.id) {
-        if (lockedPage != null) return@LaunchedEffect
-        val jump = pageJump ?: return@LaunchedEffect
-        val target = jump.targetPageIndex.coerceIn(0, (state.pageCount - 1).coerceAtLeast(0))
-        if (jump.source.startsWith("fastScroll") || abs(target - listState.firstVisibleItemIndex) > 3) {
-            listState.scrollToItem(target)
-        } else {
-            listState.animateScrollToItem(target)
-        }
-    }
-
-    LaunchedEffect(listState, state.pageCount, lockedPage) {
-        if (lockedPage != null) return@LaunchedEffect
-        snapshotFlow {
-            val info = listState.layoutInfo
-            val center = (info.viewportStartOffset + info.viewportEndOffset) / 2
-            info.visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2 - center) }?.index
-        }.distinctUntilChanged().debounce(150).collect { page ->
-            if (page != null) onPageSettled(page)
-        }
-    }
-
-    LaunchedEffect(listState, state.pageCount, directlyDragged, lockedPage) {
-        if (lockedPage != null) return@LaunchedEffect
-        var previousIndex = listState.firstVisibleItemIndex
-        var previousOffset = listState.firstVisibleItemScrollOffset
-        var direction = ContinuousScrollDirection.IDLE
-        var last: ContinuousViewportSnapshot? = null
-        snapshotFlow {
-            val info = listState.layoutInfo
-            val valid = info.visibleItemsInfo.filter { it.index in 0 until state.pageCount }
-            val center = (info.viewportStartOffset + info.viewportEndOffset) / 2
-            val primary = valid.minByOrNull { abs(it.offset + it.size / 2 - center) }?.index
-                ?: listState.firstVisibleItemIndex.coerceIn(0, state.pageCount - 1)
-            ViewportRaw(
-                valid.map { it.index }.toSet(), primary,
-                listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset,
-                listState.isScrollInProgress,
-            )
-        }.collect { raw ->
-            val moved = raw.firstIndex.compareTo(previousIndex).takeIf { it != 0 }
-                ?: raw.firstOffset.compareTo(previousOffset)
-            if (moved > 0) direction = ContinuousScrollDirection.FORWARD
-            if (moved < 0) direction = ContinuousScrollDirection.BACKWARD
-            val phase = when {
-                directlyDragged -> ContinuousScrollPhase.DRAGGING
-                raw.scrolling -> ContinuousScrollPhase.FLINGING
-                else -> ContinuousScrollPhase.IDLE
-            }
-            val snapshot = ContinuousViewportSnapshot(
-                raw.visible, raw.primary,
-                if (phase == ContinuousScrollPhase.IDLE) ContinuousScrollDirection.IDLE else direction,
-                phase,
-            )
-            if (snapshot != last) onViewportChanged(snapshot)
-            last = snapshot
-            previousIndex = raw.firstIndex
-            previousOffset = raw.firstOffset
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .clipToBounds()
-            .onSizeChanged {
-                viewportSize = it
-                onViewportWidthPx(it.width)
-            }
-            // Stable ReadingViewport space for both pointer centroids and page bounds.
-            .onGloballyPositioned { viewportCoordinates = it }
-            .pointerInput(docId) {
-                if (isDebuggable) {
-                    Log.d(
-                        TAG,
-                        "DETECTOR_START instanceId=$detectorInstanceId documentId=$docId " +
-                            "listIndex=${listState.firstVisibleItemIndex} " +
-                            "offset=${listState.firstVisibleItemScrollOffset}",
-                    )
-                }
-                try {
-                    awaitEachGesture {
-                    val firstDown = awaitFirstDown(
-                        requireUnconsumed = false,
-                        pass = PointerEventPass.Initial,
-                    )
-                    if (isDebuggable) {
-                        Log.d(
-                            TAG,
-                            "FIRST_DOWN instanceId=$detectorInstanceId pointerId=${firstDown.id} " +
-                                "listIndex=${listState.firstVisibleItemIndex} " +
-                                "offset=${listState.firstVisibleItemScrollOffset}",
-                        )
-                    }
-                    var phase = if (zoomSession.active) {
-                        TwoFingerGesturePhase.ZOOM_SESSION_ACTIVE
-                    } else {
-                        TwoFingerGesturePhase.IDLE
-                    }
-                    var capturedThisGesture = false
-                    var sessionCreatedThisGesture = false
-                    var pinchReleased = false
-                    var hitAttempts = 0
-                    var captureListIndex = 0
-                    var captureListOffset = 0
-
-                    fun consumeCapturedChanges(event: androidx.compose.ui.input.pointer.PointerEvent) {
-                        event.changes
-                            .filter { it.pressed || it.previousPressed }
-                            .forEach { it.consume() }
-                    }
-
-                    fun attemptSessionCreate(centroid: Offset) {
-                        if (zoomSession.active || !TwoFingerGestureArbitration.canRetryHit(hitAttempts)) {
-                            return
-                        }
-                        val firstHitAttempt = hitAttempts == 0
-                        hitAttempts += 1
-                        val candidates = buildCandidates()
-                        val hitPage = ZoomPageOverlayMath.hitTestPage(
-                            centroid.x,
-                            centroid.y,
-                            candidates,
-                        )
-                        if (isDebuggable && firstHitAttempt) {
-                            val pages = candidates.joinToString(prefix = "[", postfix = "]") { target ->
-                                val rect = target.bounds
-                                "pageIndex=${target.pageIndex},left=${rect.left},top=${rect.top}," +
-                                    "right=${rect.left + rect.width},bottom=${rect.top + rect.height}"
-                            }
-                            val result = if (hitPage == null) "MISS" else "HIT"
-                            Log.d(
-                                TAG,
-                                "$result instanceId=$detectorInstanceId " +
-                                    "coordinateSpace=ReadingViewportLocal " +
-                                    "centroidX=${centroid.x} centroidY=${centroid.y} " +
-                                    "pages=$pages hitPage=${hitPage ?: "MISS"}",
-                            )
-                        }
-                        val hitBounds = hitPage?.let(pageBoundsInViewport::get) ?: return
-                        val overlayBounds = OverlayRect(
-                            hitBounds.left,
-                            hitBounds.top,
-                            hitBounds.width,
-                            hitBounds.height,
-                        )
-                        if (enterLock(hitPage, overlayBounds)) {
-                            sessionCreatedThisGesture = true
-                            phase = TwoFingerGesturePhase.ZOOM_SESSION_ACTIVE
-                            onZoomGestureActive(true)
-                        }
-                    }
-
-                    do {
-                        // Initial pass precedes LazyColumn scrollable Main-pass processing. The
-                        // second finger therefore takes ownership before drag velocity is recorded.
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val pressed = event.changes.filter { it.pressed }
-                        if (TwoFingerGestureArbitration.shouldCapture(pressed.size)) {
-                            if (!capturedThisGesture) {
-                                // The first operation on SECOND_POINTER_DOWN. This is deliberately
-                                // before logging, hit testing, session work, or scroll cancellation.
-                                twoFingerCaptured = true
-                                capturedThisGesture = true
-                                phase = TwoFingerGestureArbitration.onSecondPointer()
-                                captureListIndex = listState.firstVisibleItemIndex
-                                captureListOffset = listState.firstVisibleItemScrollOffset
-                                if (isDebuggable) {
-                                    Log.d(
-                                        TAG,
-                                        "SECOND_DOWN instanceId=$detectorInstanceId pointerCount=${pressed.size} " +
-                                            "listIndex=$captureListIndex offset=$captureListOffset",
-                                    )
-                                    Log.d(
-                                        TAG,
-                                        "CAPTURE instanceId=$detectorInstanceId pointerCount=${pressed.size} " +
-                                            "listIndex=$captureListIndex offset=$captureListOffset",
-                                    )
-                                }
-                                // Consume before a suspending scroll mutation so this very event
-                                // cannot reach LazyColumn Main-pass handling.
-                                consumeCapturedChanges(event)
-                                // Start cancellation in this dispatch turn. The Initial-pass consume
-                                // above already prevents this event and all later movement from
-                                // reaching LazyColumn while the scroll mutation acquires its lock.
-                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    listState.stopScroll(MutatePriority.PreventUserInput)
-                                }
-                            } else {
-                                consumeCapturedChanges(event)
-                            }
-                            // Capture holds even if no bounds are ready, so LazyColumn cannot
-                            // receive later movement or release velocity.
-                            val centroid = event.calculateCentroid(useCurrent = true)
-                            attemptSessionCreate(centroid)
-                            val activeLockedPage = zoomSession.lockedPage
-                            if (activeLockedPage != null) {
-                                phase = TwoFingerGesturePhase.ZOOM_SESSION_ACTIVE
-                                if (!zoomSession.gestureActive) {
-                                    zoomSession = ContinuousZoomSessionReducer.begin(
-                                        zoomSession, activeLockedPage, overlayRect(),
-                                        zoomSession.entryListIndex, zoomSession.entryListOffset,
-                                    )
-                                    onZoomGestureActive(true)
-                                }
-                                val oldScale = zoomSession.scale
-                                val newScale = ZoomPageOverlayMath.targetScale(
-                                    oldScale, event.calculateZoom(),
-                                )
-                                val pan = event.calculatePan()
-                                val anchored = ZoomPageOverlayMath.anchoredOffset(
-                                    oldScale, newScale, zoomSession.offset,
-                                    centroid.x, centroid.y, overlayRect(), pan.x, pan.y,
-                                )
-                                val clampedOffset = ZoomPageOverlayMath.clampOffset(
-                                    newScale, anchored, overlayRect(),
-                                    viewportSize.width.toFloat(), viewportSize.height.toFloat(),
-                                )
-                                zoomSession = ContinuousZoomSessionReducer.updateTransform(
-                                    zoomSession, newScale, clampedOffset,
-                                )
-                            }
-                        } else if (capturedThisGesture) {
-                            // After one finger lifts, retain ownership until every pointer is up.
-                            // A captured miss must also never turn into a LazyColumn fling.
-                            consumeCapturedChanges(event)
-                            if (!pinchReleased) {
-                                pinchReleased = true
-                                if (zoomSession.active && zoomSession.gestureActive) {
-                                    val ended = ContinuousZoomSessionReducer.gestureEnd(zoomSession)
-                                    zoomSession = ended
-                                    onZoomGestureActive(false)
-                                    if (ended.active) onZoomScaleSettled(ended.scale, ended.lockedPage)
-                                    else onZoomScaleSettled(1f, null)
-                                }
-                                val moved = captureListIndex != listState.firstVisibleItemIndex ||
-                                    captureListOffset != listState.firstVisibleItemScrollOffset
-                                if (isDebuggable) {
-                                    Log.d(
-                                        TAG,
-                                        "RELEASE instanceId=$detectorInstanceId " +
-                                            "sessionCreated=$sessionCreatedThisGesture " +
-                                            "listIndex=${listState.firstVisibleItemIndex} " +
-                                            "offset=${listState.firstVisibleItemScrollOffset} " +
-                                            "listMovedDuringGesture=$moved",
-                                    )
-                                }
-                            }
-                            if (pressed.size == 1 && zoomSession.active) {
-                                val change = pressed.first()
-                                val pan = OverlayOffset(
-                                    zoomSession.offset.x + change.position.x - change.previousPosition.x,
-                                    zoomSession.offset.y + change.position.y - change.previousPosition.y,
-                                )
-                                val clampedOffset = ZoomPageOverlayMath.clampOffset(
-                                    zoomSession.scale, pan, overlayRect(),
-                                    viewportSize.width.toFloat(), viewportSize.height.toFloat(),
-                                )
-                                zoomSession = zoomSession.copy(offset = clampedOffset)
-                            }
-                        } else if (pressed.size == 1 && zoomSession.lockedPage != null) {
-                            phase = TwoFingerGesturePhase.ZOOM_SESSION_ACTIVE
-                            val change = pressed.first()
-                            val pan = OverlayOffset(
-                                zoomSession.offset.x + change.position.x - change.previousPosition.x,
-                                zoomSession.offset.y + change.position.y - change.previousPosition.y,
-                            )
-                            val clampedOffset = ZoomPageOverlayMath.clampOffset(
-                                zoomSession.scale, pan, overlayRect(),
-                                viewportSize.width.toFloat(), viewportSize.height.toFloat(),
-                            )
-                            zoomSession = zoomSession.copy(offset = clampedOffset)
-                            if (change.positionChanged()) change.consume()
-                        } else {
-                            phase = TwoFingerGestureArbitration.onSinglePointer(phase)
-                        }
-                    } while (event.changes.any { it.pressed })
-
-                    if (!pinchReleased && zoomSession.active && zoomSession.gestureActive) {
-                        val ended = ContinuousZoomSessionReducer.gestureEnd(zoomSession)
-                        zoomSession = ended
-                        onZoomGestureActive(false)
-                        if (isDebuggable) Log.d(TAG, "GESTURE_END active=${ended.active} scale=${ended.scale} exitRequested=${ended.exitRequested} page=${ended.lockedPage}")
-                        if (ended.active) {
-                            // Gesture end persists the session and transform.
-                            onZoomScaleSettled(ended.scale, ended.lockedPage)
-                        } else {
-                            onZoomScaleSettled(1f, null)
-                        }
-                    }
-                    if (!zoomSession.active) twoFingerCaptured = false
-                    }
-                } finally {
-                    if (isDebuggable) {
-                        Log.d(
-                            TAG,
-                            "DETECTOR_CANCEL instanceId=$detectorInstanceId " +
-                                "listIndex=${listState.firstVisibleItemIndex} " +
-                                "offset=${listState.firstVisibleItemScrollOffset}",
-                        )
-                    }
-                }
-            }
-            .pointerInput(docId) {
-                detectTapGestures(onDoubleTap = { centroid ->
-                    if (currentLockedPage != null) {
-                        exitLock("doubleTap")
-                    } else {
-                        // R6.2: hit-test centroid against visible page bounds.
-                        val candidates = buildCandidates()
-                        val hitPage = ZoomPageOverlayMath.hitTestPage(
-                            centroid.x,
-                            centroid.y,
-                            candidates,
-                        )
-                        if (isDebuggable) {
-                            Log.d(
-                                TAG,
-                                "ZOOM_TARGET_HIT coordinateSpace=ReadingViewportLocal " +
-                                    "centroidX=${centroid.x} centroidY=${centroid.y} " +
-                                    "hitPage=$hitPage (doubleTap)",
-                            )
-                        }
-                        if (hitPage != null) {
-                            val hitBounds = pageBoundsInViewport[hitPage]
-                            if (hitBounds != null) {
-                                val overlayBounds = OverlayRect(
-                                    hitBounds.left, hitBounds.top,
-                                    hitBounds.width, hitBounds.height,
-                                )
-                                scope.launch {
-                                    listState.stopScroll()
-                                    if (enterLock(hitPage, overlayBounds)) {
-                                        val target = PdfRenderQuality.DOUBLE_TAP_ZOOM
-                                        val anchored = ZoomPageOverlayMath.anchoredOffset(
-                                            1f, target, OverlayOffset(0f, 0f),
-                                            centroid.x, centroid.y, overlayBounds,
-                                        )
-                                        val clampedOffset = ZoomPageOverlayMath.clampOffset(
-                                            target, anchored, overlayBounds,
-                                            viewportSize.width.toFloat(), viewportSize.height.toFloat(),
-                                        )
-                                        zoomSession = ContinuousZoomSessionReducer.updateTransform(
-                                            zoomSession.copy(gestureActive = false), target, clampedOffset,
-                                        )
-                                        onZoomScaleSettled(target, hitPage)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                })
-            },
-    ) {
-        LazyColumn(
-            state = listState,
-            userScrollEnabled = TwoFingerGestureArbitration.listScrollEnabled(
-                twoFingerCaptured = twoFingerCaptured,
-                sessionActive = zoomSession.active,
-            ),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            items(
-                count = state.pageCount,
-                key = { page -> "$docId|$page" },
-            ) { page ->
-                val aspect = state.pageAspects[page] ?: 1.414f
-                val bitmap = state.pageBitmaps[page]
-                val current = page == state.pageIndex
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(if (current) scheme.surfaceContainerHigh else MarkLeafTheme.extra.pdfCanvas)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(2.dp),
-                        color = Color.White,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outlineVariant),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                                .aspectRatio(1f / aspect.coerceIn(0.4f, 3f))
-                                .onGloballyPositioned { coordinates ->
-                                    // Convert every item to ReadingViewport-local coordinates. Pointer
-                                    // centroids from the root detector use this exact same space.
-                                    if (lockedPage == null) {
-                                        val viewport = viewportCoordinates
-                                            ?: return@onGloballyPositioned
-                                        val topLeft = viewport.localPositionOf(coordinates, Offset.Zero)
-                                        pageBoundsInViewport[page] = Rect(
-                                            left = topLeft.x,
-                                            top = topLeft.y,
-                                            right = topLeft.x + coordinates.size.width,
-                                            bottom = topLeft.y + coordinates.size.height,
-                                        )
-                                    }
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            when {
-                                !ContinuousZoomSessionReducer.bottomContentVisible(
-                                    zoomSession, page,
-                                ) -> Box(Modifier.fillMaxSize().background(Color.White))
-                                bitmap != null -> Image(
-                                    bitmap = bitmap,
-                                    contentDescription = stringResource(
-                                        R.string.pdf_page_cd, page + 1, state.pageCount,
-                                    ),
-                                    contentScale = ContentScale.FillWidth,
-                                    filterQuality = FilterQuality.Medium,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                                current && state.renderError != null -> TextButton(
-                                    onClick = { onRetryPage(page) },
-                                ) { Text(stringResource(R.string.pdf_retry)) }
-                                else -> {
-                                    Box(Modifier.fillMaxSize().background(Color.White))
-                                    LaunchedEffect(page, docId) { onEnsureAround(page) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        val page = lockedPage
-        // R6.2: log when a higher-quality bitmap arrives for the locked page during an active session.
-        if (zoomSession.active && page != null && isDebuggable) {
-            val currentBitmap = state.pageBitmaps[page]
-            LaunchedEffect(currentBitmap) {
-                if (currentBitmap != null) {
-                    Log.d(TAG, "BITMAP_ACCEPT page=$page sessionId=${zoomSession.sessionId}")
-                }
-            }
-        }
-        if (zoomSession.active && page != null &&
-            zoomSession.lockedBounds.width > 0f && zoomSession.lockedBounds.height > 0f
-        ) {
-            // R6.2: strictly use only the locked page's own bitmap — never fall back to state.pageImage.
-            val bitmap = state.pageBitmaps[page]
-            if (bitmap == null && isDebuggable) Log.d(TAG, "BITMAP_REJECT page=$page reason=overlayMissingBitmap")
-            val bounds = zoomSession.lockedBounds
-            if (isDebuggable) Log.d(TAG, "OVERLAY_SHOW page=$page scale=${zoomSession.scale} hasBitmap=${bitmap != null}")
-            DisposableEffect(page) {
-                onDispose {
-                    if (isDebuggable) Log.d(TAG, "OVERLAY_DISPOSE page=$page")
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .offset {
-                        IntOffset(bounds.left.roundToInt(), bounds.top.roundToInt())
-                    }
-                    .width(with(density) { bounds.width.toDp() })
-                    .height(with(density) { bounds.height.toDp() })
-                    .graphicsLayer {
-                        scaleX = zoomSession.scale
-                        scaleY = zoomSession.scale
-                        translationX = zoomSession.offset.x
-                        translationY = zoomSession.offset.y
-                        transformOrigin = TransformOrigin(0f, 0f)
-                    }
-                    .background(Color.White),
-            ) {
-                if (bitmap != null) Image(
-                    bitmap = bitmap,
-                    contentDescription = stringResource(
-                        R.string.pdf_page_cd, page + 1, state.pageCount,
-                    ),
-                    contentScale = ContentScale.FillBounds,
-                    filterQuality = FilterQuality.Medium,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-
-        if (lockedPage == null) {
-            PdfFastScroller(
-                pageCount = state.pageCount,
-                currentIndex = state.displayPageIndex,
-                printPageNumber = state.printPageNumber,
-                outlineLabel = state.outlinePathLabel.takeIf { it.isNotBlank() },
-                listState = listState,
-                onPreview = onFastScrollPreview,
-                onFinished = onFastScrollFinished,
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(28.dp),
-            )
-        }
-    }
-
-}
-
-private data class ViewportRaw(
-    val visible: Set<Int>,
-    val primary: Int,
-    val firstIndex: Int,
-    val firstOffset: Int,
-    val scrolling: Boolean,
-)
-
-/**
- * Right-side fast scroller for continuous mode.
- * Track ~3dp, touch ≥28dp, thumb min 32dp; auto-hide after idle.
- */
-@Composable
-private fun PdfFastScroller(
-    pageCount: Int,
-    currentIndex: Int,
-    printPageNumber: Int?,
-    outlineLabel: String?,
-    listState: LazyListState,
-    onPreview: (Int) -> Unit,
-    onFinished: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (pageCount <= 1) return
-    val scheme = MaterialTheme.colorScheme
-    var visible by remember { mutableStateOf(false) }
-    var dragging by remember { mutableStateOf(false) }
-    var bubblePage by remember { mutableIntStateOf(currentIndex) }
-    var lastUiEmitMs by remember { mutableLongStateOf(0L) }
-    val scope = rememberCoroutineScope()
-
-    // Show on list scroll, hide after idle.
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            listState.isScrollInProgress to listState.firstVisibleItemIndex
-        }.collect { (scrolling, _) ->
-            if (scrolling) {
-                visible = true
-            } else if (!dragging) {
-                delay(PdfRenderQuality.FAST_SCROLL_HIDE_MS)
-                if (!dragging) visible = false
-            }
-        }
-    }
-
-    LaunchedEffect(currentIndex) {
-        if (!dragging) bubblePage = currentIndex
-    }
-
-    val alpha = when {
-        dragging -> 1f
-        visible -> 0.55f
-        else -> 0.12f
-    }
-    val fraction = if (pageCount <= 1) {
-        0f
-    } else {
-        currentIndex.toFloat() / (pageCount - 1).toFloat()
-    }
-
-    var trackHeightPx by remember { mutableIntStateOf(0) }
-    val density = LocalDensity.current
-    val thumbH = with(density) { 32.dp.roundToPx() }
-    val thumbFrac = if (dragging) {
-        bubblePage.toFloat() / (pageCount - 1).toFloat()
-    } else {
-        fraction
-    }.coerceIn(0f, 1f)
-    val thumbOffsetY = ((trackHeightPx - thumbH).coerceAtLeast(0) * thumbFrac).roundToInt()
-
-    Box(modifier = modifier) {
-        // Touch strip (28dp) + track/thumb — only the right strip, does not cover content.
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .width(28.dp)
-                .onSizeChanged { trackHeightPx = it.height }
-                .pointerInput(pageCount) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        dragging = true
-                        visible = true
-                        val h = size.height.coerceAtLeast(1).toFloat()
-                        fun pageAt(y: Float): Int {
-                            val f = (y / h).coerceIn(0f, 1f)
-                            return (f * (pageCount - 1)).roundToInt().coerceIn(0, pageCount - 1)
-                        }
-                        var page = pageAt(down.position.y)
-                        bubblePage = page
-                        val now0 = System.currentTimeMillis()
-                        if (now0 - lastUiEmitMs >= PdfRenderQuality.FAST_SCROLL_THROTTLE_MS) {
-                            lastUiEmitMs = now0
-                            onPreview(page)
-                        }
-                        do {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.pressed } ?: break
-                            page = pageAt(change.position.y)
-                            bubblePage = page
-                            val now = System.currentTimeMillis()
-                            if (now - lastUiEmitMs >= PdfRenderQuality.FAST_SCROLL_THROTTLE_MS) {
-                                lastUiEmitMs = now
-                                onPreview(page)
-                            }
-                            if (change.positionChanged()) change.consume()
-                        } while (event.changes.any { it.pressed })
-                        dragging = false
-                        onFinished(page)
-                        scope.launch {
-                            delay(PdfRenderQuality.FAST_SCROLL_HIDE_MS)
-                            if (!dragging) visible = false
-                        }
-                    }
-                },
-        ) {
-            // Visual track 3dp
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 4.dp)
-                    .width(3.dp)
-                    .fillMaxSize()
-                    .background(
-                        scheme.onSurface.copy(alpha = 0.15f * alpha),
-                        RoundedCornerShape(2.dp),
-                    ),
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 2.dp)
-                    .offset { IntOffset(0, thumbOffsetY) }
-                    .width(8.dp)
-                    .height(32.dp)
-                    .background(
-                        scheme.primary.copy(alpha = alpha),
-                        RoundedCornerShape(4.dp),
-                    ),
-            )
-        }
-
-        if (dragging) {
-            Surface(
-                color = scheme.surfaceContainerHigh.copy(alpha = 0.94f),
-                shape = RoundedCornerShape(8.dp),
-                shadowElevation = 4.dp,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 36.dp)
-                    .offset { IntOffset(0, thumbOffsetY - 24) },
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Text(
-                        text = "PDF ${bubblePage + 1} / $pageCount",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = scheme.onSurface,
-                    )
-                    if (printPageNumber != null) {
-                        // Use print of bubble page if available from parent state (approx during drag).
-                        Text(
-                            text = "教材页 $printPageNumber",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = scheme.onSurfaceVariant,
-                        )
-                    }
-                    if (!outlineLabel.isNullOrBlank()) {
-                        Text(
-                            text = outlineLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = scheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 180.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PdfReadingModeSheet(
-    mode: PdfReadingMode,
-    showPageButtons: Boolean,
-    onSelectMode: (PdfReadingMode) -> Unit,
-    onShowButtonsChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val horizontal = mode == PdfReadingMode.HORIZONTAL_PAGED
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp)
-                .padding(bottom = 28.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.pdf_reading_mode_title),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
-            ModeOptionRow(
-                label = stringResource(R.string.pdf_reading_mode_vertical),
-                selected = mode == PdfReadingMode.VERTICAL_CONTINUOUS,
-                onClick = { onSelectMode(PdfReadingMode.VERTICAL_CONTINUOUS) },
-            )
-            ModeOptionRow(
-                label = stringResource(R.string.pdf_reading_mode_horizontal),
-                selected = mode == PdfReadingMode.HORIZONTAL_PAGED,
-                onClick = { onSelectMode(PdfReadingMode.HORIZONTAL_PAGED) },
-            )
-            // Flip buttons only apply to horizontal paged mode.
-            if (horizontal) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = stringResource(R.string.pdf_reading_mode_show_buttons),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Switch(
-                        checked = showPageButtons,
-                        onCheckedChange = onShowButtonsChange,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModeOptionRow(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(
-                selected = selected,
-                onClick = onClick,
-                role = Role.RadioButton,
-            )
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Spacer(modifier = Modifier.size(12.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        if (selected) {
-            Icon(
-                imageVector = Icons.Outlined.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}

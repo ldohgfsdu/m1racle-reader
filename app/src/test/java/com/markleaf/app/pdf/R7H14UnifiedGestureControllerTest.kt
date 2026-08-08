@@ -282,7 +282,8 @@ class R7H14UnifiedGestureControllerTest {
         )
 
         assertEquals(viewportWidth, layout.fittedWidthPx, 0f)
-        assertEquals(topGap, layout.contentTopPx, 0f)
+        // 1784 available height, 1414 fitted height -> top = 8 + (1784-1414)/2 = 193
+        assertEquals(193f, layout.contentTopPx, 0f)
         assertEquals(viewportWidth * 2.5f, layout.fittedWidthPx * 2.5f, 0f)
     }
 
@@ -325,12 +326,10 @@ class R7H14UnifiedGestureControllerTest {
             generation = 40L,
         )
 
-        assertEquals(1f, session.pageAnchorYFraction, 0.001f)
-        assertEquals(
-            (layout.contentTopPx + layout.fittedHeightPx) / layout.viewportHeightPx,
-            session.viewportAnchorYFraction,
-            0.001f,
-        )
+        // Centered page: viewport center (900) falls inside the page band
+        // [654, 1146], so the session anchor points at the page center.
+        assertEquals(0.5f, session.pageAnchorYFraction, 0.001f)
+        assertEquals(0.5f, session.viewportAnchorYFraction, 0.001f)
     }
 
     @Test

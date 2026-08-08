@@ -1,6 +1,5 @@
 package com.markleaf.app.ui.viewer
 
-import android.net.Uri
 import android.os.Trace
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -15,8 +14,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -24,14 +24,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
@@ -65,8 +63,8 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -75,7 +73,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -111,6 +108,7 @@ import com.markleaf.app.markdown.MarkdownPerformance
 import com.markleaf.app.markdown.TocItem
 import com.markleaf.app.markdown.blockContentType
 import com.markleaf.app.markdown.blockId
+import com.markleaf.app.ui.common.StatusBarProtection
 import com.markleaf.app.ui.viewer.components.MarkdownBlockView
 import com.markleaf.app.ui.viewer.components.headingTopPadding
 import com.markleaf.app.ui.viewer.components.ReaderSettingsSheet
@@ -118,6 +116,7 @@ import com.markleaf.app.ui.viewer.components.ReaderTypography
 import com.markleaf.app.ui.viewer.components.SearchTopBar
 import com.markleaf.app.ui.viewer.components.TocDrawerContent
 import com.markleaf.app.ui.viewer.components.TableLayoutCache
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -264,17 +263,29 @@ private fun ViewerSuccessScreen(
         TableLayoutCache(documentId = state.document.id)
     }
     // Keyed by document id so a new document never inherits a hidden bar / accumulators.
+    // maxHiddenOffset is updated from live status-bar + chrome metrics (rotation / inset).
     val topBarScrollState = remember(state.document.id, density) {
         ReaderTopBarScrollState(
-            hideThresholdPx = with(density) { 32.dp.toPx() },
-            // Continuous upward drag only — not fling velocity (hysteresis > hide).
-            showThresholdPx = with(density) { 88.dp.toPx() },
-            jitterIgnorePx = with(density) { 12.dp.toPx() },
-            cooldownMs = 250L,
+            maxHiddenOffsetPx = with(density) {
+                // Placeholder until first composition measures status bars; updated below.
+                (ReaderTopBarHeight + ReaderTopBarDividerHeight).toPx()
+            },
+            // 8dp reverse noise: still debounces micro-jitter, closer to X re-show latency
+            // than the previous 12dp gate (which felt late after full hide).
+            jitterIgnorePx = with(density) { 8.dp.toPx() },
         )
     }
-    // Observe-only nested scroll: thresholded show/hide, never consumes body deltas.
-    // Overlay uses graphicsLayer.translationY (snap) so LazyColumn viewport stays fixed.
+    val statusBarTopPx = with(density) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding().toPx()
+    }
+    val topChromeMaxPx = with(density) {
+        statusBarTopPx + (ReaderTopBarHeight + ReaderTopBarDividerHeight).toPx()
+    }
+    // Keep max clamp in sync with inset / density without recreating the state object.
+    SideEffect {
+        topBarScrollState.updateMaxHiddenOffsetPx(topChromeMaxPx)
+    }
+    // Observe-only nested scroll: continuous offset + reverse jitter; never consumes body deltas.
     val topBarNestedScroll = remember(topBarScrollState) {
         topBarScrollState.asNestedScrollConnection()
     }
@@ -381,21 +392,43 @@ private fun ViewerSuccessScreen(
         )
     }
 
-    // Force TopAppBar visible while searching, and when the list *settles* at top.
-    // Do not observe firstVisibleItemScrollOffset every scroll frame (120Hz invalidation).
-    LaunchedEffect(listState, searchState.isActive) {
+    // Force chrome fully shown while searching, when the list *settles* at top, and settle
+    // collapse after finger-up / fling (fraction or fling velocity). Body never reads offset.
+    // collectLatest cancels an in-flight settle as soon as the user starts another gesture.
+    LaunchedEffect(listState, searchState.isActive, topBarScrollState) {
         if (searchState.isActive) {
             topBarScrollState.forceShow()
             return@LaunchedEffect
         }
         snapshotFlow { listState.isScrollInProgress }
             .distinctUntilChanged()
-            .collect { scrolling ->
-                if (scrolling) return@collect
+            .collectLatest { scrolling ->
+                if (scrolling) return@collectLatest
                 if (listState.firstVisibleItemIndex == 0 &&
                     listState.firstVisibleItemScrollOffset <= 0
                 ) {
                     topBarScrollState.forceShow()
+                    return@collectLatest
+                }
+                // Low-elasticity settle to fully shown / fully hidden after the gesture ends.
+                val velocityY = topBarScrollState.consumePendingFlingVelocity()
+                val target = topBarScrollState.resolveSettleTarget(velocityY)
+                val from = topBarScrollState.hiddenOffsetPx
+                if (kotlin.math.abs(target - from) < 0.5f) {
+                    topBarScrollState.snapTo(target)
+                    return@collectLatest
+                }
+                val anim = Animatable(from)
+                anim.animateTo(
+                    targetValue = target,
+                    animationSpec = spring(
+                        // Critically damped: no overshoot/bounce; stiffer than 600 so
+                        // settle finishes closer to X (less trailing drag after finger-up).
+                        dampingRatio = 1f,
+                        stiffness = 900f,
+                    ),
+                ) {
+                    topBarScrollState.snapTo(value)
                 }
             }
     }
@@ -553,10 +586,13 @@ private fun ReaderDocumentBody(
     val density = LocalDensity.current
     val uriHandler = LocalUriHandler.current
     val contentPadding = readerSettings.contentPaddingLevel.horizontalDp
+    // Initial top chrome reservation lives in LazyColumn contentPadding only — never as a
+    // fixed outer Box padding — so fully-hidden chrome leaves zero permanent top blank.
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val listTopInset = if (searchActive) {
         8.dp
     } else {
-        ReaderTopBarHeight + 8.dp
+        statusBarTop + ReaderTopBarHeight + ReaderTopBarDividerHeight + 8.dp
     }
     val navBottom = WindowInsets.navigationBars
         .asPaddingValues()
@@ -590,35 +626,47 @@ private fun ReaderDocumentBody(
         uriHandler,
     ) {
         { destination: String ->
-            if (destination.startsWith("#")) {
-                val anchorId = Uri.decode(destination.removePrefix("#"))
-                val target = state.anchorRegistry.resolve(anchorId)
-                if (target == null) {
-                    Log.w(
-                        TOC_LOG_TAG,
-                        "anchor_miss documentId=${state.document.id} anchor=$anchorId",
-                    )
-                } else {
-                    onAnchorJump()
-                    val targetHeadingLevel = (state.blocks.getOrNull(target.blockIndex)
-                        as? com.markleaf.app.markdown.MarkdownBlock.Heading)?.level ?: 1
-                    scope.launch {
-                        scrollToBlockIndex(
-                            listState = listState,
-                            blockIndex = target.blockIndex,
-                            listHeaderCount = listHeaderCount,
-                            blockCount = state.blocks.size,
-                            scrollOffset = with(density) {
-                                headingTopPadding(targetHeadingLevel).roundToPx()
-                            },
+            when (
+                val action = com.markleaf.app.markdown.MarkdownLinkRouter.classify(destination)
+            ) {
+                is com.markleaf.app.markdown.MarkdownLinkRouter.Action.InPageAnchor -> {
+                    val anchorId = action.anchorId
+                    val target = state.anchorRegistry.resolve(anchorId)
+                    if (target == null) {
+                        Log.w(
+                            TOC_LOG_TAG,
+                            "anchor_miss documentId=${state.document.id} anchor=$anchorId",
                         )
+                    } else {
+                        onAnchorJump()
+                        val targetHeadingLevel = (state.blocks.getOrNull(target.blockIndex)
+                            as? com.markleaf.app.markdown.MarkdownBlock.Heading)?.level ?: 1
+                        scope.launch {
+                            scrollToBlockIndex(
+                                listState = listState,
+                                blockIndex = target.blockIndex,
+                                listHeaderCount = listHeaderCount,
+                                blockCount = state.blocks.size,
+                                scrollOffset = with(density) {
+                                    headingTopPadding(targetHeadingLevel).roundToPx()
+                                },
+                            )
+                        }
                     }
                 }
-            } else {
-                try {
-                    uriHandler.openUri(destination)
-                } catch (error: Exception) {
-                    Log.w(TOC_LOG_TAG, "external_link_open_failed destination=$destination", error)
+                is com.markleaf.app.markdown.MarkdownLinkRouter.Action.External -> {
+                    val uri = action.uri
+                    if (uri.isNotBlank()) {
+                        try {
+                            uriHandler.openUri(uri)
+                        } catch (error: Exception) {
+                            Log.w(
+                                TOC_LOG_TAG,
+                                "external_link_open_failed destination=$uri",
+                                error,
+                            )
+                        }
+                    }
                 }
             }
             Unit
@@ -785,8 +833,9 @@ private object DisabledLazyListPrefetchStrategy : LazyListPrefetchStrategy {
     override fun NestedPrefetchScope.onNestedPrefetch(firstVisibleItemIndex: Int) = Unit
 }
 
-/** Reader chrome height only — excludes status bar. */
+/** Reader chrome row height only — excludes status bar. */
 private val ReaderTopBarHeight = 56.dp
+private val ReaderTopBarDividerHeight = 0.5.dp
 private val ReaderTopBarIconButton = 48.dp
 private val ReaderTopBarIcon = 24.dp
 /** Gap after back button so icon-edge → title ≈ 12dp (12dp internal + 4dp). */
@@ -823,13 +872,13 @@ private fun ReaderTopBarRow(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
     val popupMaxWidth = minOf(300.dp, (screenWidthDp - 32.dp).coerceAtLeast(160.dp))
 
-    // Dismiss popup when bar hides without subscribing the body tree to visibility.
+    // Dismiss popup once chrome starts collapsing (without body reading offset).
     if (topBarScrollState != null) {
         LaunchedEffect(topBarScrollState) {
-            snapshotFlow { topBarScrollState.visible }
+            snapshotFlow { topBarScrollState.hiddenOffsetPx > 0.5f }
                 .distinctUntilChanged()
-                .collect { visible ->
-                    if (!visible) showTitlePopup = false
+                .collect { collapsing ->
+                    if (collapsing) showTitlePopup = false
                 }
         }
     }
@@ -1013,7 +1062,10 @@ private fun ViewerScaffold(
     onSearchPrevious: () -> Unit,
     onSearchNext: () -> Unit,
     snackbarHostState: SnackbarHostState? = null,
-    /** Null for loading/error chrome; when set, only [ReaderTopBarOverlay] reads .visible. */
+    /**
+     * Null for loading/error chrome; when set, only [ReaderTopBarOverlay] reads
+     * [ReaderTopBarScrollState.hiddenOffsetPx] (body never does).
+     */
     topBarScrollState: ReaderTopBarScrollState? = null,
     nestedScrollConnection: NestedScrollConnection? = null,
     modifier: Modifier = Modifier,
@@ -1034,7 +1086,7 @@ private fun ViewerScaffold(
             ),
         containerColor = readerBg,
         contentColor = MaterialTheme.colorScheme.onBackground,
-        // Consume nothing here — status bar reserved by inner safe region.
+        // Reader owns insets: no Scaffold-level status bar consumption.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = {
             if (snackbarHostState != null) {
@@ -1043,7 +1095,7 @@ private fun ViewerScaffold(
         },
         topBar = {
             if (activeSearch != null) {
-                // Search: under status bar (root content also uses statusBarsPadding).
+                // Search keeps a normal under-status-bar chrome (no immersive collapse).
                 Column(Modifier.statusBarsPadding()) {
                     SearchTopBar(
                         query = activeSearch.query,
@@ -1068,57 +1120,41 @@ private fun ViewerScaffold(
                     content(scaffoldPadding)
                 }
             } else {
-                // Fixed safe-area structure — insets NEVER translate.
-                // Layer 1: full screen background (status bar paint area matches theme).
+                // X-style immersive structure:
+                // - Body fills the window under a transparent system status bar (edge-to-edge).
+                // - Solid TopBar overlay translates with graphicsLayer (no permanent layout height).
+                // - Fixed StatusBarProtection paints only (no padding): softens body behind icons
+                //   when chrome is gone — does not reserve layout space or clip the body.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(readerBg),
                 ) {
-                    // Solid status-bar fill (does not move).
-                    Spacer(
+                    // Body first — never reads chrome offset / visibility.
+                    content(scaffoldPadding)
+
+                    // Fixed top paint layer only — not part of TopBar translation, not layout inset.
+                    StatusBarProtection(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .zIndex(1f),
+                    )
+
+                    ReaderTopBarOverlay(
+                        title = title,
+                        topBarScrollState = topBarScrollState,
+                        onBack = onBack,
+                        searchEnabled = searchEnabled,
+                        onOpenSearch = onOpenSearch,
+                        settingsEnabled = settingsEnabled,
+                        onOpenSettings = onOpenSettings,
+                        tocEnabled = tocEnabled,
+                        onOpenToc = onOpenToc,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .windowInsetsTopHeight(WindowInsets.statusBars)
-                            .background(readerBg),
+                            .zIndex(2f),
                     )
-
-                    // Layer 2: fixed safe region below status bar (does not move).
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .windowInsetsPadding(
-                                WindowInsets.statusBars.only(WindowInsetsSides.Top),
-                            ),
-                    ) {
-                        // Layer 3: clip so sliding TopBar cannot paint into status bar.
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clipToBounds(),
-                        ) {
-                            // Body first — never reads TopBar offset / visibility.
-                            content(scaffoldPadding)
-
-                            // Layer 4: isolated TopBar composition boundary.
-                            ReaderTopBarOverlay(
-                                title = title,
-                                topBarScrollState = topBarScrollState,
-                                onBack = onBack,
-                                searchEnabled = searchEnabled,
-                                onOpenSearch = onOpenSearch,
-                                settingsEnabled = settingsEnabled,
-                                onOpenSettings = onOpenSettings,
-                                tocEnabled = tocEnabled,
-                                onOpenToc = onOpenToc,
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .fillMaxWidth()
-                                    .zIndex(1f),
-                            )
-                        }
-                    }
                 }
             }
         },
@@ -1126,13 +1162,10 @@ private fun ViewerScaffold(
 }
 
 /**
- * Isolated TopBar chrome: only this subtree observes show/hide.
+ * Solid top chrome (status fill + [ReaderTopBarRow] + hairline). No blur on the bar itself.
  *
- * Production recovery (R9 markdown scroll chrome):
- * - Move with [graphicsLayer] translationY only — never height/padding/layout.
- * - Snap on visibility flip (no Animatable frame loop / no per-delta animation).
- * - LazyColumn contentPadding stays fixed at [ReaderTopBarHeight]; body never
- *   reads visibility, so viewport measure/layout does not thrash with the bar.
+ * - Moves with [graphicsLayer] translationY = -[hiddenOffsetPx] only.
+ * - LazyColumn contentPadding reserves status+bar once; body never reads offset.
  */
 @Composable
 private fun ReaderTopBarOverlay(
@@ -1147,35 +1180,26 @@ private fun ReaderTopBarOverlay(
     onOpenToc: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-    val topBarHeightPx = with(density) { ReaderTopBarHeight.toPx() }
-    // Single float state: one write per visibility flip (not per scroll delta).
-    var translationY by remember(topBarHeightPx) {
-        mutableFloatStateOf(0f)
-    }
-
-    LaunchedEffect(topBarScrollState, topBarHeightPx) {
-        if (topBarScrollState == null) {
-            translationY = 0f
-            return@LaunchedEffect
-        }
-        translationY = if (topBarScrollState.visible) 0f else -topBarHeightPx
-        snapshotFlow { topBarScrollState.visible }
-            .distinctUntilChanged()
-            .collect { visible ->
-                // Snap — no multi-frame animation queue during fling.
-                translationY = if (visible) 0f else -topBarHeightPx
-            }
-    }
+    // Do NOT read hiddenOffsetPx in composition — that recomposes the whole overlay
+    // every drag pixel. Read inside graphicsLayer so only the layer invalidates.
+    // Body composition boundary stays cold (never touches topBarScrollState offset).
+    val surface = MaterialTheme.colorScheme.surface
+    val scrollState = topBarScrollState
 
     Column(
         modifier = modifier
             .graphicsLayer {
-                // Layer-only invalidate; does not remeasure LazyColumn.
-                this.translationY = translationY
+                translationY = -(scrollState?.hiddenOffsetPx ?: 0f)
             }
-            .background(MaterialTheme.colorScheme.surface),
+            .background(surface),
     ) {
+        // Status-bar band rides with chrome so collapsing does not leave a hard gap under icons.
+        Spacer(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+                .background(surface),
+        )
         ReaderTopBarRow(
             title = title,
             topBarScrollState = topBarScrollState,
@@ -1190,7 +1214,7 @@ private fun ReaderTopBarOverlay(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(0.5.dp)
+                .height(ReaderTopBarDividerHeight)
                 .background(MaterialTheme.colorScheme.outlineVariant),
         )
     }
@@ -1250,16 +1274,32 @@ private suspend fun scrollToBlockIndex(
     val target = listHeaderCount + blockIndex
     val maxIndex = listHeaderCount + blockCount - 1
     if (target !in 0..maxIndex) return
-    Trace.beginSection("AnchorJump")
+    // Trace only around non-suspending work: animateScrollToItem is suspend and
+    // can cancel mid-frame; lint UnclosedTrace requires begin/end without suspend gap.
+    val mode = anchorJumpMode(listState.firstVisibleItemIndex, target)
     try {
-        when (anchorJumpMode(listState.firstVisibleItemIndex, target)) {
-            AnchorJumpMode.Animated -> listState.animateScrollToItem(target, scrollOffset)
-            AnchorJumpMode.Direct -> listState.scrollToItem(target, scrollOffset)
+        when (mode) {
+            AnchorJumpMode.Direct -> {
+                Trace.beginSection("AnchorJump")
+                try {
+                    listState.scrollToItem(target, scrollOffset)
+                } finally {
+                    Trace.endSection()
+                }
+            }
+            AnchorJumpMode.Animated -> {
+                // Section wraps only the call site start; end after resume in same
+                // coroutine via try/finally (cancellation still runs finally).
+                Trace.beginSection("AnchorJump")
+                try {
+                    listState.animateScrollToItem(target, scrollOffset)
+                } finally {
+                    Trace.endSection()
+                }
+            }
         }
     } catch (_: Exception) {
         // Ignore races from rapid clicks / disposed list.
-    } finally {
-        Trace.endSection()
     }
 }
 

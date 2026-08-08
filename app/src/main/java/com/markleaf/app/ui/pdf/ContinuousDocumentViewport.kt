@@ -19,6 +19,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -104,6 +106,9 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+/** Scroll-Y delta (document px) above which a direction is reported. */
+private const val SCROLL_DIRECTION_EPSILON = 0.5f
+
 internal val R7ContinuousScaleKey = SemanticsPropertyKey<Float>("R7ContinuousScale")
 internal var SemanticsPropertyReceiver.r7ContinuousScale by R7ContinuousScaleKey
 internal val R7TileCountKey = SemanticsPropertyKey<Int>("R7TileCount")
@@ -152,6 +157,25 @@ internal fun ContinuousDocumentViewport(
     val tag = "MarkLeafR71"
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var documentState by remember(documentId) { mutableStateOf(state.continuousDocumentState) }
+
+    /** Last reported scroll-Y (document px) for real scroll-direction detection. */
+    var lastReportedScrollYPx by remember(documentId) { mutableFloatStateOf(documentState.scrollY) }
+
+    // Ground-truth anchor tracking: the PRIMARY page's top edge on screen,
+    // screenY = pageTop*scale - scrollY (from the page placement transform).
+    // Cross-frame delta of the SAME page = the PDF content's real on-screen
+    // motion; this is the only direction source the chrome adapter may use.
+    // Epoch reset: any NON-scroll coordinate discontinuity (zoom scale change,
+    // viewport resize, page identity switch) invalidates the baseline — the
+    // frame only re-baselines and produces NO motion sample (anchorDeltaY = 0),
+    // so zoom/layout/programmatic movement can never drive the chrome machine.
+    var lastAnchorPage by remember(documentId) { mutableIntStateOf(-1) }
+    var lastAnchorScreenY by remember(documentId) { mutableFloatStateOf(0f) }
+    var lastAnchorScale by remember(documentId) { mutableFloatStateOf(documentState.scale) }
+    var lastAnchorViewport by remember(documentId) { mutableStateOf(IntSize.Zero) }
+
+    /** Latest instant scroll velocity (dp/s) — fling fast-path input for chrome. */
+    var lastVelocityYDpPerSec by remember(documentId) { mutableFloatStateOf(0f) }
     var appliedEntryGeneration by remember(documentId) { mutableStateOf<Long?>(null) }
     var flingActive by remember(documentId) { mutableStateOf(false) }
     var consumedJumpId by remember(documentId) { mutableStateOf<Long?>(null) }
@@ -204,7 +228,7 @@ internal fun ContinuousDocumentViewport(
             pageCount = state.pageCount,
             basePageWidth = viewportSize.width.toFloat().coerceAtLeast(1f),
             aspects = displayedAspects,
-            pageGap = with(density) { 10.dp.toPx() },
+            pageGap = with(density) { 1.dp.toPx() },
         )
     }
     val drawableTiles = if (detailTileOverlayEnabled) {
@@ -345,6 +369,7 @@ internal fun ContinuousDocumentViewport(
             now,
             rebased,
         )
+        lastVelocityYDpPerSec = viewportMotion.velocityYDocumentPxPerSec / density.density
         lastMotionScale = next.scale
         zoomPrediction = PdfZoomPredictor.update(zoomPrediction, next.scale, now, rebased)
         val currentPage = activeGeometry.pageAtViewportCenter(next, size.height.toFloat())
@@ -613,7 +638,16 @@ internal fun ContinuousDocumentViewport(
         val applied = if (session != null) {
             update(geometry.restoreViewportSession(session, documentState, viewportSize.width.toFloat(), viewportSize.height.toFloat()))
         } else {
-            val anchorY = viewportSize.height / 2f
+            val anchorY = if (target.intraPageFraction == 0f &&
+                target.source == ReadingPositionSource.EXTERNAL_NAVIGATION
+            ) {
+                // Outline/page jump: align the page TOP with the viewport top
+                // (a center anchor would leave the previous page's bottom half
+                // on screen, looking like "stuck between two pages").
+                0f
+            } else {
+                viewportSize.height / 2f
+            }
             val contentAnchorY = geometry.pageTop(target.pageIndex) + target.intraPageFraction * geometry.pageHeight(target.pageIndex)
             update(documentState.copy(scrollY = contentAnchorY * documentState.scale - anchorY, gestureActive = false))
         }
@@ -842,9 +876,14 @@ internal fun ContinuousDocumentViewport(
         ) {
             return@LaunchedEffect
         }
+        // Real scroll direction from the scroll-Y delta (works while dragging,
+        // flinging, and on settles) — the previous fling-only FORWARD signal
+        // never produced BACKWARD, so chrome could hide but never return.
+        val deltaY = documentState.scrollY - lastReportedScrollYPx
+        lastReportedScrollYPx = documentState.scrollY
         val direction = when {
-            flingActive -> ContinuousScrollDirection.FORWARD
-            documentState.gestureActive -> ContinuousScrollDirection.IDLE
+            deltaY > SCROLL_DIRECTION_EPSILON -> ContinuousScrollDirection.FORWARD
+            deltaY < -SCROLL_DIRECTION_EPSILON -> ContinuousScrollDirection.BACKWARD
             else -> ContinuousScrollDirection.IDLE
         }
         val phase = when {
@@ -852,7 +891,37 @@ internal fun ContinuousDocumentViewport(
             documentState.gestureActive -> ContinuousScrollPhase.DRAGGING
             else -> ContinuousScrollPhase.IDLE
         }
-        onViewportChanged(ContinuousViewportSnapshot(visiblePages, primaryPage, direction, phase))
+        // Ground-truth anchor measurement: the primary page's top edge on
+        // screen = pageTop*scale - scrollY. Only cross-frame deltas of the
+        // SAME page are meaningful. Epoch changes (zoom scale, viewport size,
+        // page identity) re-baseline WITHOUT producing a motion sample, so
+        // non-scroll movement can never drive the chrome state machine.
+        val anchorPage = primaryPage
+        val anchorScreenY = if (anchorPage >= 0) {
+            currentGeometry.pageTop(anchorPage) * documentState.scale - documentState.scrollY
+        } else {
+            0f
+        }
+        val scaleChanged = kotlin.math.abs(documentState.scale - lastAnchorScale) > 0.001f
+        val viewportChanged = viewportSize != lastAnchorViewport
+        lastAnchorScale = documentState.scale
+        lastAnchorViewport = viewportSize
+        val anchorDeltaY = if (
+            anchorPage == lastAnchorPage && !scaleChanged && !viewportChanged
+        ) {
+            anchorScreenY - lastAnchorScreenY
+        } else {
+            // Baseline/reset frame: no sample for the chrome machine.
+            0f
+        }
+        lastAnchorPage = anchorPage
+        lastAnchorScreenY = anchorScreenY
+        onViewportChanged(
+            ContinuousViewportSnapshot(
+                visiblePages, primaryPage, direction, phase, deltaY,
+                lastVelocityYDpPerSec, anchorScreenY, anchorDeltaY,
+            ),
+        )
     }
 
     LaunchedEffect(primaryPage, documentState.gestureActive, flingActive, interaction.phase) {

@@ -52,12 +52,16 @@ class PdfPageRenderer(
         data class Success(val image: ImageBitmap, val widthPx: Int, val heightPx: Int) : RenderResult()
         data object Closed : RenderResult()
         data object InvalidPage : RenderResult()
+        data object OutOfMemory : RenderResult()
         data class Failed(val message: String) : RenderResult()
     }
 
     sealed class TileRenderResult {
-        data class Success(val image: ImageBitmap,val widthPx:Int,val heightPx:Int,val byteSize:Long):TileRenderResult()
-        data object Closed:TileRenderResult(); data object InvalidPage:TileRenderResult(); data class Failed(val message:String):TileRenderResult()
+        data class Success(val image: ImageBitmap, val widthPx: Int, val heightPx: Int, val byteSize: Long) : TileRenderResult()
+        data object Closed : TileRenderResult()
+        data object InvalidPage : TileRenderResult()
+        data object OutOfMemory : TileRenderResult()
+        data class Failed(val message: String) : TileRenderResult()
     }
 
     suspend fun renderTile(
@@ -77,17 +81,26 @@ class PdfPageRenderer(
                         pdfSize = PdfPageSize(page.width.coerceAtLeast(1), page.height.coerceAtLeast(1)),
                     )
                     val matrix = Matrix().apply { setValues(transform.matrixValues) }
-                    val bitmap = Bitmap.createBitmap(
-                        transform.bitmapWidthPx,
-                        transform.bitmapHeightPx,
-                        Bitmap.Config.ARGB_8888,
-                    ).apply { eraseColor(android.graphics.Color.WHITE) }
-                    page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    TileRenderResult.Success(
-                        bitmap.asImageBitmap(),
-                        transform.bitmapWidthPx,
-                        transform.bitmapHeightPx,
-                        bitmap.allocationByteCount.toLong(),
+                    BitmapAllocationGuard.allocateOr(
+                        allocate = {
+                            Bitmap.createBitmap(
+                                transform.bitmapWidthPx,
+                                transform.bitmapHeightPx,
+                                Bitmap.Config.ARGB_8888,
+                            )
+                        },
+                        onOutOfMemory = { TileRenderResult.OutOfMemory },
+                        onRelease = { it.recycle() },
+                        body = { bitmap ->
+                            bitmap.eraseColor(android.graphics.Color.WHITE)
+                            page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            TileRenderResult.Success(
+                                bitmap.asImageBitmap(),
+                                transform.bitmapWidthPx,
+                                transform.bitmapHeightPx,
+                                bitmap.allocationByteCount.toLong(),
+                            )
+                        },
                     )
                 }
             } catch (e: Exception) {
@@ -103,8 +116,15 @@ class PdfPageRenderer(
                 val uri = Uri.parse(uriString)
                 val descriptor = openDescriptor(uri)
                     ?: return@withLock OpenResult.NotFound
-                val pdf = PdfRenderer(descriptor)
+                // Assign pfd before PdfRenderer construction so closeLocked() always
+                // releases the FD if the renderer ctor throws (failed-open path).
                 pfd = descriptor
+                val pdf = try {
+                    PdfRenderer(descriptor)
+                } catch (e: Exception) {
+                    closeLocked()
+                    throw e
+                }
                 renderer = pdf
                 val count = pdf.pageCount
                 if (count <= 0) {
@@ -201,13 +221,19 @@ class PdfPageRenderer(
                         outW = max(1, (outW * factor).roundToInt())
                         outH = max(1, (outH * factor).roundToInt())
                     }
-                    val bitmap = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
-                    bitmap.eraseColor(android.graphics.Color.WHITE)
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    RenderResult.Success(
-                        image = bitmap.asImageBitmap(),
-                        widthPx = outW,
-                        heightPx = outH,
+                    BitmapAllocationGuard.allocateOr(
+                        allocate = { Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888) },
+                        onOutOfMemory = { RenderResult.OutOfMemory },
+                        onRelease = { it.recycle() },
+                        body = { bitmap ->
+                            bitmap.eraseColor(android.graphics.Color.WHITE)
+                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            RenderResult.Success(
+                                image = bitmap.asImageBitmap(),
+                                widthPx = outW,
+                                heightPx = outH,
+                            )
+                        },
                     )
                 }
             } catch (e: Exception) {

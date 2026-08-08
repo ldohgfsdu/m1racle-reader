@@ -39,7 +39,22 @@ class R7ContinuousViewportTest {
         assertFalse(source.contains("ContinuousPointerEpochReducer.frame("))
         assertFalse(source.contains("calculateZoom()"))
         assertTrue(source.contains("onContinuousViewportChanged").not())
-        assertTrue(source.contains("onViewportChanged(ContinuousViewportSnapshot"))
+        assertTrue(source.contains("onViewportChanged("))
+        assertTrue(source.contains("ContinuousViewportSnapshot("))
+        assertTrue(source.contains("anchorDeltaY"))
+        // Epoch reset: zoom scale / viewport size / page identity changes
+        // re-baseline WITHOUT producing a motion sample (no chrome feedback loop).
+        assertTrue(source.contains("lastAnchorScale"))
+        assertTrue(source.contains("scaleChanged"))
+        assertTrue(source.contains("viewportChanged"))
+    }
+
+    /** R25 closure (ported from R62): cold continuous pages render a solid
+     *  white background, never a CircularProgressIndicator. */
+    @Test fun `V2 cold pages use white background not spinner`() {
+        val source = viewportSource()
+        assertTrue(source.contains("Color.White"))
+        assertFalse(source.contains("CircularProgressIndicator"))
     }
 
     private fun screenSource(): String = source("PdfViewerScreen.kt")

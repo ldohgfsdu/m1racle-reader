@@ -84,7 +84,10 @@ object InlineMarkdownParser {
         val end = text.length
         while (i < end) {
             when (val c = text[i]) {
-                '`', '*', '[', '!', '\\', '<' -> return true
+                // '&' (HTML entities) and breaks must also take the slow path:
+                // the fast path returns the raw string, but toPlainText decodes
+                // entities and maps breaks to spaces — offsets would drift.
+                '`', '*', '[', '!', '\\', '<', '&', '\n', '\r' -> return true
                 '_' -> {
                     // "__" is strong; a single mid-word "_" is plain text.
                     val next = text.getOrNull(i + 1)
@@ -141,6 +144,45 @@ object InlineMarkdownParser {
             buildString { appendPlain(text, 0, text.length) }
         } catch (_: Exception) {
             text
+        }
+    }
+
+    /**
+     * Collect link destinations from inline Markdown (same walk as [parse]).
+     * Skips images (`![alt](url)`). Code spans are not scanned for links.
+     * Used to register heading `#fragment` targets such as `## [德篇](#de-pian)`.
+     */
+    fun extractLinkDestinations(text: String): List<String> {
+        if (text.isEmpty() || !text.contains('[')) return emptyList()
+        return try {
+            val result = mutableListOf<String>()
+            var i = 0
+            val end = text.length
+            while (i < end) {
+                when {
+                    text[i] == '`' -> {
+                        val close = text.indexOf('`', i + 1)
+                        i = if (close == -1 || close >= end) i + 1 else close + 1
+                    }
+                    text[i] == '!' && i + 1 < end && text[i + 1] == '[' -> {
+                        val link = tryParseLink(text, i + 1, end)
+                        i = link?.endExclusive ?: (i + 1)
+                    }
+                    text[i] == '[' -> {
+                        val link = tryParseLink(text, i, end)
+                        if (link == null) {
+                            i++
+                        } else {
+                            result += text.substring(link.urlStart, link.urlEnd).trim()
+                            i = link.endExclusive
+                        }
+                    }
+                    else -> i++
+                }
+            }
+            result
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
@@ -216,13 +258,23 @@ object InlineMarkdownParser {
                     }
                 }
                 source[i] == '_' -> {
-                    val close = indexOfSingleDelimiter(source, i + 1, end, '_')
-                    if (close == -1) {
+                    // Mid-word "_" is never emphasis — keep literal (matches appendInline).
+                    val prev = if (i > start) source[i - 1] else null
+                    val next = if (i + 1 < end) source[i + 1] else null
+                    val midWord = prev != null && prev.isLetterOrDigit() &&
+                        next != null && next.isLetterOrDigit()
+                    if (midWord) {
                         append('_')
                         i++
                     } else {
-                        appendPlain(source, i + 1, close)
-                        i = close + 1
+                        val close = indexOfSingleDelimiter(source, i + 1, end, '_')
+                        if (close == -1) {
+                            append('_')
+                            i++
+                        } else {
+                            appendPlain(source, i + 1, close)
+                            i = close + 1
+                        }
                     }
                 }
 
@@ -285,6 +337,20 @@ object InlineMarkdownParser {
         var i = start
         while (i < end) {
             when {
+                // Image: ![alt](url) — alt text only (matches toPlainText).
+                source[i] == '!' && i + 1 < end && source[i + 1] == '[' -> {
+                    val link = tryParseLink(source, i + 1, end)
+                    if (link == null) {
+                        append('!')
+                        i++
+                    } else {
+                        val alt = source.substring(link.titleStart, link.titleEnd)
+                        val plainAlt = toPlainText(alt).trim()
+                        if (plainAlt.isNotEmpty()) append(plainAlt)
+                        i = link.endExclusive
+                    }
+                }
+
                 // Inline code: `code`
                 source[i] == '`' -> {
                     val close = source.indexOf('`', i + 1)
@@ -385,8 +451,57 @@ object InlineMarkdownParser {
                 }
 
                 else -> {
-                    append(source[i])
-                    i++
+                    // Keep the plain walk identical to appendPlain so the
+                    // rendered text equals the searchable text (offsets match):
+                    // breaks → space, escapes, HTML tags skipped, entities decoded.
+                    when {
+                        // Soft/hard break → space
+                        source[i] == '\n' || source[i] == '\r' -> {
+                            append(' ')
+                            i++
+                        }
+
+                        // Escape: \X → X
+                        source[i] == '\\' && i + 1 < end -> {
+                            append(source[i + 1])
+                            i += 2
+                        }
+
+                        // Skip crude HTML tags
+                        source[i] == '<' -> {
+                            val close = source.indexOf('>', i + 1)
+                            if (close == -1 || close >= end) {
+                                append('<')
+                                i++
+                            } else {
+                                i = close + 1
+                            }
+                        }
+
+                        // Basic HTML entities
+                        source[i] == '&' -> {
+                            val semi = source.indexOf(';', i + 1)
+                            if (semi != -1 && semi < end && semi - i < 10) {
+                                val ent = source.substring(i + 1, semi)
+                                val decoded = decodeHtmlEntity(ent)
+                                if (decoded != null) {
+                                    append(decoded)
+                                    i = semi + 1
+                                } else {
+                                    append('&')
+                                    i++
+                                }
+                            } else {
+                                append('&')
+                                i++
+                            }
+                        }
+
+                        else -> {
+                            append(source[i])
+                            i++
+                        }
+                    }
                 }
             }
         }

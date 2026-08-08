@@ -18,7 +18,7 @@ import com.markleaf.app.search.SearchMatch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 sealed class ViewerUiState {
@@ -119,6 +118,9 @@ class ViewerViewModel(
     override fun onCleared() {
         searchJob?.cancel()
         searchJob = null
+        // Bounded final flush: the last known position survives scope
+        // cancellation (single NonCancellable write, at most once).
+        positionSaver.flushFinal()
         super.onCleared()
     }
 
@@ -282,25 +284,24 @@ class ViewerViewModel(
 
     /**
      * Persist absolute LazyList indices (including any list header items).
-     * Uses [NonCancellable] so a final save on leave is not dropped when the scope cancels.
+     * Latest-wins and cancellable for high-frequency calls; the bounded final
+     * flush on [onCleared] guarantees the last known position is persisted.
      */
+    private val positionSaver = ReadingPositionSaver(viewModelScope) { index, offset, progress ->
+        repository.updateReadingPosition(
+            id = documentId,
+            lastScrollIndex = index,
+            lastScrollOffset = offset,
+            readingProgress = progress,
+        )
+    }
+
     fun saveReadingPosition(
         lastScrollIndex: Int,
         lastScrollOffset: Int,
         readingProgress: Float,
     ) {
-        viewModelScope.launch(NonCancellable + Dispatchers.IO) {
-            try {
-                repository.updateReadingPosition(
-                    id = documentId,
-                    lastScrollIndex = lastScrollIndex,
-                    lastScrollOffset = lastScrollOffset,
-                    readingProgress = readingProgress,
-                )
-            } catch (_: Exception) {
-                // Never crash on background save.
-            }
-        }
+        positionSaver.save(lastScrollIndex, lastScrollOffset, readingProgress)
     }
 
     private fun load() {
@@ -350,6 +351,14 @@ class ViewerViewModel(
                             } else {
                                 listOf("paragraph-0")
                             },
+                        )
+                    }
+
+                    if (parseResult.ignoredTrailingHtmlAnchors.isNotEmpty()) {
+                        android.util.Log.w(
+                            "MARKDOWN_TOC",
+                            "html_anchor_trailing_ignored documentId=${entity.id} " +
+                                "ids=${parseResult.ignoredTrailingHtmlAnchors.joinToString(",")}",
                         )
                     }
 

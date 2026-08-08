@@ -88,6 +88,15 @@ class PdfPageBitmapCache {
         map.clear()
     }
 
+    /**
+     * OOM recovery hook: drop every non-HIGH entry (previews and lower tiers),
+     * keeping high-quality primary pages on screen. Never throws.
+     */
+    fun trimMemory() {
+        val victims = map.filter { it.value.tier != QualityTier.HIGH }.keys.toList()
+        victims.forEach { map.remove(it) }
+    }
+
     fun keys(): Set<Int> = map.keys.toSet()
 
     /**

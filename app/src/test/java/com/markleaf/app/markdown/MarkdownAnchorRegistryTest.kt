@@ -53,4 +53,19 @@ class MarkdownAnchorRegistryTest {
             result.anchorRegistry.resolve("#一、心电图纸与正常波形")?.blockIndex,
         )
     }
+
+    @Test
+    fun linkedHeading_slugUsesPlainTitleNotRawMarkdown() {
+        val result = MarkdownParser.parse("## [检查结果](#check-result)")
+
+        assertEquals("检查结果", result.toc.single().title)
+        assertEquals("检查结果", result.toc.single().anchor)
+        assertEquals(0, result.anchorRegistry.resolve("检查结果")?.blockIndex)
+        assertEquals(0, result.anchorRegistry.resolve("check-result")?.blockIndex)
+        // Must not slug the raw brackets / fragment into the primary id.
+        assertNull(
+            result.anchorRegistry.targets
+                .firstOrNull { it.anchorId.contains("check-result") && it.anchorId != "check-result" },
+        )
+    }
 }

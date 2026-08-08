@@ -1,8 +1,7 @@
 package com.markleaf.app.pdf.export
 
 import android.util.Log
-import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
-import com.tom_roush.pdfbox.io.MemoryUsageSetting
+import com.markleaf.app.pdf.PdfBoxRuntime
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +10,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -19,21 +17,14 @@ import kotlin.coroutines.coroutineContext
  * (content streams preserved — not rasterized screenshots).
  *
  * Uses temp-file memory mode so large source PDFs are not fully heap-loaded.
+ * Outline detection shares [PdfBoxRuntime] init; display still uses PdfRenderer.
  */
 object PdfPageExtractor {
 
     private const val TAG = "PdfPageExtractor"
-    private val pdfBoxReady = AtomicBoolean(false)
 
     fun ensureInit(context: android.content.Context) {
-        if (pdfBoxReady.compareAndSet(false, true)) {
-            try {
-                PDFBoxResourceLoader.init(context.applicationContext)
-            } catch (t: Throwable) {
-                Log.w(TAG, "PDFBox init failed", t)
-                pdfBoxReady.set(false)
-            }
-        }
+        PdfBoxRuntime.ensureInit(context)
     }
 
     sealed class ExtractResult {
@@ -56,17 +47,22 @@ object PdfPageExtractor {
         onProgress: suspend (current: Int, total: Int) -> Unit = { _, _ -> },
         isCancelled: () -> Boolean = { false },
     ): ExtractResult = withContext(Dispatchers.IO) {
-        ensureInit(context)
+        if (!PdfBoxRuntime.ensureInit(context)) {
+            return@withContext ExtractResult.Failed("PDF 组件初始化失败")
+        }
         if (startIndex0 < 0 || endIndex0 < startIndex0) {
             return@withContext ExtractResult.Failed("非法页面范围")
         }
         val total = endIndex0 - startIndex0 + 1
-        try {
-            val mem = try {
-                MemoryUsageSetting.setupTempFileOnly()
+        // Remove partial output on cancel/failure
+        fun cleanupPartial() {
+            try {
+                if (outputFile.exists()) outputFile.delete()
             } catch (_: Throwable) {
-                MemoryUsageSetting.setupMainMemoryOnly()
             }
+        }
+        try {
+            val mem = PdfBoxRuntime.memorySetting()
             sourceStream.use { input ->
                 PDDocument.load(input, mem).use { source ->
                     val srcPages = source.numberOfPages
@@ -79,6 +75,7 @@ object PdfPageExtractor {
                         for (i in 0 until total) {
                             coroutineContext.ensureActive()
                             if (isCancelled()) {
+                                cleanupPartial()
                                 return@withContext ExtractResult.Cancelled
                             }
                             val srcIndex = startIndex0 + i
@@ -87,6 +84,7 @@ object PdfPageExtractor {
                                 dest.importPage(page)
                             } catch (t: Throwable) {
                                 Log.e(TAG, "importPage failed at $srcIndex", t)
+                                cleanupPartial()
                                 return@withContext ExtractResult.Failed(
                                     "复制第 ${srcIndex + 1} 页失败: ${t.message ?: t.javaClass.simpleName}",
                                 )
@@ -94,6 +92,7 @@ object PdfPageExtractor {
                             onProgress(i + 1, total)
                         }
                         if (isCancelled()) {
+                            cleanupPartial()
                             return@withContext ExtractResult.Cancelled
                         }
                         dest.save(outputFile)
@@ -103,8 +102,9 @@ object PdfPageExtractor {
             // Verify page count
             try {
                 FileInputStream(outputFile).use { verifyIn ->
-                    PDDocument.load(verifyIn, MemoryUsageSetting.setupTempFileOnly()).use { v ->
+                    PDDocument.load(verifyIn, PdfBoxRuntime.memorySetting()).use { v ->
                         if (v.numberOfPages != total) {
+                            cleanupPartial()
                             return@withContext ExtractResult.Failed(
                                 "导出 PDF 页数不符: 期望 $total, 实际 ${v.numberOfPages}",
                             )
@@ -113,13 +113,16 @@ object PdfPageExtractor {
                 }
             } catch (t: Throwable) {
                 Log.w(TAG, "verify open failed", t)
+                cleanupPartial()
                 return@withContext ExtractResult.Failed("导出 PDF 无法重新打开校验")
             }
             ExtractResult.Success(total)
         } catch (e: CancellationException) {
+            cleanupPartial()
             ExtractResult.Cancelled
         } catch (t: Throwable) {
             Log.e(TAG, "extract failed", t)
+            cleanupPartial()
             ExtractResult.Failed(
                 when (t) {
                     is OutOfMemoryError -> "内存不足，无法导出该范围"

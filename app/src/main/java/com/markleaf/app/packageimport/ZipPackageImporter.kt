@@ -20,6 +20,11 @@ object ZipPackageImporter {
 
     private val IMAGE_EXTS = setOf("png", "jpg", "jpeg", "webp")
 
+    /** Hard caps against zip bombs / resource exhaustion (host-testable). */
+    const val MAX_ENTRY_COUNT: Int = 5_000
+    const val MAX_TOTAL_UNCOMPRESSED_BYTES: Long = 200L * 1024L * 1024L // 200 MiB
+    const val MAX_SINGLE_ENTRY_BYTES: Long = 80L * 1024L * 1024L // 80 MiB
+
     data class ExtractResult(
         val packageRoot: File,
         val entryFile: File,
@@ -28,7 +33,7 @@ object ZipPackageImporter {
 
     /**
      * Extract [zipStream] into [destDir] (created/cleared by caller as needed).
-     * @throws SecurityException on Zip Slip
+     * @throws SecurityException on Zip Slip or size-limit violation
      * @throws IllegalArgumentException if no Markdown entry
      */
     fun extract(zipStream: InputStream, destDir: File): ExtractResult {
@@ -37,6 +42,8 @@ object ZipPackageImporter {
         }
         destDir.mkdirs()
         val rootCanon = destDir.canonicalFile
+        var entryCount = 0
+        var totalBytes = 0L
 
         ZipInputStream(zipStream.buffered()).use { zis ->
             var entry = zis.nextEntry
@@ -46,6 +53,10 @@ object ZipPackageImporter {
                     zis.closeEntry()
                     entry = zis.nextEntry
                     continue
+                }
+                entryCount++
+                if (entryCount > MAX_ENTRY_COUNT) {
+                    throw SecurityException("ZIP entry count exceeds limit ($MAX_ENTRY_COUNT)")
                 }
                 val cleaned = name.trimStart('/')
                 if (cleaned.isEmpty() || cleaned.contains("..")) {
@@ -59,7 +70,13 @@ object ZipPackageImporter {
                     outFile.mkdirs()
                 } else {
                     outFile.parentFile?.mkdirs()
-                    outFile.outputStream().use { out -> zis.copyTo(out) }
+                    val written = copyWithLimit(zis, outFile, MAX_SINGLE_ENTRY_BYTES)
+                    totalBytes += written
+                    if (totalBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                        throw SecurityException(
+                            "ZIP total uncompressed size exceeds limit ($MAX_TOTAL_UNCOMPRESSED_BYTES)",
+                        )
+                    }
                 }
                 zis.closeEntry()
                 entry = zis.nextEntry
@@ -70,6 +87,27 @@ object ZipPackageImporter {
             ?: throw IllegalArgumentException("ZIP 中未找到 Markdown 入口文件")
         val rel = entry.relativeTo(destDir).path.replace('\\', '/')
         return ExtractResult(packageRoot = destDir.canonicalFile, entryFile = entry.canonicalFile, entryRelativePath = rel)
+    }
+
+    /**
+     * Copy stream to [outFile] aborting if more than [maxBytes] are written.
+     * @return bytes written
+     */
+    internal fun copyWithLimit(input: InputStream, outFile: File, maxBytes: Long): Long {
+        var written = 0L
+        val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+        outFile.outputStream().use { out ->
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                written += n
+                if (written > maxBytes) {
+                    throw SecurityException("ZIP entry exceeds size limit ($maxBytes)")
+                }
+                out.write(buf, 0, n)
+            }
+        }
+        return written
     }
 
     fun resolveEntrypoint(packageRoot: File): File? {

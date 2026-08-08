@@ -38,9 +38,6 @@ sealed class ChapterExportState {
 class ChapterPackageExporter(
     private val context: Context,
 ) {
-    @Volatile
-    var cancelRequested: Boolean = false
-
     private val appContext = context.applicationContext
 
     suspend fun export(
@@ -51,9 +48,9 @@ class ChapterPackageExporter(
         allNodes: List<TextbookOutlineNodeEntity>,
         printAnchors: List<PdfPrintPageAnchorEntity>,
         outputUri: Uri,
+        cancellation: ExportCancellationToken,
         onState: (ChapterExportState) -> Unit,
     ): ChapterExportState = withContext(Dispatchers.IO) {
-        cancelRequested = false
         val workDir = File(appContext.cacheDir, "chapter_export_${System.currentTimeMillis()}")
         try {
             onState(ChapterExportState.Preparing)
@@ -88,7 +85,7 @@ class ChapterPackageExporter(
                     FileOutputStream(sourceTemp).use { out ->
                         val buf = ByteArray(64 * 1024)
                         while (true) {
-                            if (cancelRequested || !coroutineContext.isActive) {
+                            if (cancellation.isCancelled() || !coroutineContext.isActive) {
                                 return@withContext cancel(workDir, onState)
                             }
                             val n = src.read(buf)
@@ -107,7 +104,7 @@ class ChapterPackageExporter(
             }
             val sourceShaHex = sourceSha.digest().toHex()
 
-            if (cancelRequested) return@withContext cancel(workDir, onState)
+            if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
 
             val extract = FileInputStream(sourceTemp).use { srcIn ->
                 PdfPageExtractor.extractPageRange(
@@ -119,7 +116,7 @@ class ChapterPackageExporter(
                     onProgress = { cur, tot ->
                         onState(ChapterExportState.CopyingPages(cur, tot))
                     },
-                    isCancelled = { cancelRequested || !coroutineContext.isActive },
+                    isCancelled = { cancellation.isCancelled() || !coroutineContext.isActive },
                 )
             }
 
@@ -142,7 +139,7 @@ class ChapterPackageExporter(
             // Drop full source temp ASAP (do not pack into ZIP)
             sourceTemp.delete()
 
-            if (cancelRequested) return@withContext cancel(workDir, onState)
+            if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
             onState(ChapterExportState.BuildingMetadata)
 
             val iso = isoNow()
@@ -178,7 +175,7 @@ class ChapterPackageExporter(
                 Charsets.UTF_8,
             )
 
-            if (cancelRequested) return@withContext cancel(workDir, onState)
+            if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
             onState(ChapterExportState.WritingArchive)
 
             val zipTmp = File(workDir, "package.zip")

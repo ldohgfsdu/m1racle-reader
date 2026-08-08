@@ -33,6 +33,7 @@ fun MarkdownBlockView(
                 block = block,
                 settings = settings,
                 searchHighlights = searchHighlights,
+                onLinkClick = onLinkClick,
                 modifier = modifier,
             )
             is MarkdownBlock.Paragraph -> ParagraphBlockView(
@@ -69,6 +70,7 @@ fun MarkdownBlockView(
                 searchHighlights = searchHighlights,
                 stableTableId = stableBlockId,
                 layoutCache = tableLayoutCache,
+                onLinkClick = onLinkClick,
                 modifier = modifier,
             )
             is MarkdownBlock.Image -> ImageBlockView(

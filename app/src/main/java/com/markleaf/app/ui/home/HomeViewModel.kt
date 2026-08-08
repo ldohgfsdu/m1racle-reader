@@ -8,12 +8,15 @@ import com.markleaf.app.data.local.DocumentEntity
 import com.markleaf.app.data.repository.DocumentRepository
 import com.markleaf.app.data.repository.ImportResult
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
@@ -30,45 +33,53 @@ class HomeViewModel(
     private val repository: DocumentRepository,
 ) : ViewModel() {
 
-    val uiState: StateFlow<HomeUiState> = repository
-        .observeRecentDocuments()
-        .map { list ->
-            HomeUiState(
-                documents = list,
-                isEmpty = list.isEmpty(),
-            )
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = HomeUiState(),
+    /**
+     * Ids removed optimistically so LazyColumn reflows before Room Flow emits.
+     * Prevents residual blank/half-card slots after delete.
+     */
+    private val pendingDeleteIds = MutableStateFlow<Set<String>>(emptySet())
+
+    val uiState: StateFlow<HomeUiState> = combine(
+        repository.observeRecentDocuments(),
+        pendingDeleteIds,
+    ) { source, pending ->
+        val visible = HomeListUpdate.visibleDocuments(source, pending)
+        HomeUiState(
+            documents = visible,
+            isEmpty = visible.isEmpty(),
         )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = HomeUiState(),
+    )
 
     private val _events = MutableSharedFlow<HomeEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<HomeEvent> = _events.asSharedFlow()
 
     fun deleteDocument(id: String) {
+        // Instant reflow — drop from UI before Room IO completes.
+        pendingDeleteIds.update { it + id }
         viewModelScope.launch {
-            repository.deleteById(id)
+            try {
+                repository.deleteById(id)
+                // Wait until source no longer contains id, then clear pending entry.
+                repository.observeRecentDocuments().first { docs ->
+                    docs.none { it.id == id }
+                }
+                pendingDeleteIds.update { it - id }
+            } catch (_: Exception) {
+                pendingDeleteIds.update { it - id }
+            }
         }
     }
 
-    /**
-     * Called after the user picks a document via SAF [OpenDocument].
-     * Repository work runs off the main thread; the list refreshes via Flow.
-     */
     fun onImportDocument(uri: Uri) {
         viewModelScope.launch {
             when (repository.importDocument(uri)) {
-                is ImportResult.Success -> {
-                    // Room Flow updates the list automatically.
-                }
-                ImportResult.UnsupportedFormat -> {
-                    _events.emit(HomeEvent.UnsupportedFormat)
-                }
-                ImportResult.ReadFailed -> {
-                    _events.emit(HomeEvent.ReadFailed)
-                }
+                is ImportResult.Success -> Unit
+                ImportResult.UnsupportedFormat -> _events.emit(HomeEvent.UnsupportedFormat)
+                ImportResult.ReadFailed -> _events.emit(HomeEvent.ReadFailed)
             }
         }
     }
@@ -81,7 +92,7 @@ class HomeViewModel(
             if (modelClass.isAssignableFrom(HomeViewModel::class.java)) {
                 return HomeViewModel(repository) as T
             }
-            throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
+            throw IllegalArgumentException("Unknown ViewModel: $modelClass")
         }
     }
 }

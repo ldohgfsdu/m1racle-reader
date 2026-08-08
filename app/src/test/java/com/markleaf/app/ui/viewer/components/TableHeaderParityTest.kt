@@ -40,6 +40,7 @@ class TableHeaderParityTest {
             it.platformStyle == PlatformTextStyle(includeFontPadding = false)
         })
         assertTrue(threeHeaderCells.all { it.textDirection == TextDirection.ContentOrLtr })
+        // Default style Start; per-cell TableAlignment overwrites at render via tableColumnTextAlign.
         assertTrue(threeHeaderCells.all { it.textAlign == TextAlign.Start })
         threeHeaderCells.forEach { assertSame(resolved, it) }
         assertEquals(FontWeight.Normal, body.fontWeight)
@@ -57,9 +58,11 @@ class TableHeaderParityTest {
         assertTrue(headerRow.contains("alignByBaseline()"))
         assertFalse(headerRow.contains("height(IntrinsicSize.Min)"))
         assertFalse(headerRow.contains("fillMaxHeight()"))
-        assertTrue(headerRow.contains("textAlign = TextAlign.Start"))
-        assertTrue(headerRow.contains("softWrap = true"))
-        assertTrue(headerRow.contains("maxLines = Int.MAX_VALUE"))
+        // Column alignment is shared with body — not forced Start for every header cell.
+        assertTrue(headerRow.contains("tableColumnTextAlign(alignment)"))
+        assertTrue(headerRow.contains("alignments: List<TableAlignment>"))
+        assertTrue(source.contains("softWrap = true"))
+        assertTrue(source.contains("maxLines = Int.MAX_VALUE"))
         assertFalse(headerRow.contains("widthIn"))
         assertFalse(headerRow.contains("minimumInteractiveComponentSize"))
         assertFalse(headerRow.contains("scaleX"))

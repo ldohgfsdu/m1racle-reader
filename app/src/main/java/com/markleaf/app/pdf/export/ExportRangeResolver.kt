@@ -201,4 +201,42 @@ object ExportRangeResolver {
             .ifBlank { "export" }
         return sanitizeFileName("${docBase}_$pathPart", 100) + ".zip"
     }
+
+    fun defaultPdfName(documentDisplayName: String, pathTitles: List<String>): String {
+        val zip = defaultZipName(documentDisplayName, pathTitles)
+        return zip.removeSuffix(".zip") + ".pdf"
+    }
+
+    fun defaultExportName(
+        format: ChapterExportFormat,
+        documentDisplayName: String,
+        pathTitles: List<String>,
+    ): String = when (format) {
+        ChapterExportFormat.ZIP_PACKAGE -> defaultZipName(documentDisplayName, pathTitles)
+        ChapterExportFormat.PDF_ANNOTATED -> defaultPdfName(documentDisplayName, pathTitles)
+    }
+}
+
+/** User-selectable chapter export format. */
+enum class ChapterExportFormat {
+    /** medlearn-source-chapter ZIP: source.pdf + JSON metadata. */
+    ZIP_PACKAGE,
+    /** Single PDF of the range with chapter title + page stamps. */
+    PDF_ANNOTATED,
+    ;
+
+    fun mimeType(): String = when (this) {
+        ZIP_PACKAGE -> "application/zip"
+        PDF_ANNOTATED -> "application/pdf"
+    }
+
+    fun labelZh(): String = when (this) {
+        ZIP_PACKAGE -> "ZIP 处理包（PDF + 元数据 JSON）"
+        PDF_ANNOTATED -> "纯 PDF（标注章节与页码）"
+    }
+
+    fun hintZh(): String = when (this) {
+        ZIP_PACKAGE -> "适合下游/Medlearn：含 source.pdf、manifest、目录与校验"
+        PDF_ANNOTATED -> "适合直接阅读分享：首页封面 + 每页页脚章节与页码"
+    }
 }

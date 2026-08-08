@@ -2,184 +2,172 @@ package com.markleaf.app.ui.viewer
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.unit.Velocity
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pure-logic coverage for thresholded top-bar show/hide and nestedScroll observe-only policy.
+ * Pure-logic coverage for continuous top-chrome collapse and nestedScroll observe-only policy.
  */
 class ReaderTopBarScrollStateTest {
 
-    private var nowMs = 1_000_000L
-
     private fun state(
-        hide: Float = 32f,
-        show: Float = 88f,
+        maxHide: Float = 100f,
         jitter: Float = 12f,
-        cooldownMs: Long = 0L,
+        flingThreshold: Float = 1200f,
+        settleFraction: Float = 0.5f,
     ) = ReaderTopBarScrollState(
-        hideThresholdPx = hide,
-        showThresholdPx = show,
+        maxHiddenOffsetPx = maxHide,
         jitterIgnorePx = jitter,
-        cooldownMs = cooldownMs,
-        uptimeMillis = { nowMs },
+        flingVelocityThresholdPxPerSec = flingThreshold,
+        settleHideFraction = settleFraction,
     )
 
     @Test
-    fun startsVisible() {
-        assertTrue(state().visible)
-    }
-
-    @Test
-    fun belowHideThreshold_stateUnchanged() {
-        val s = state(hide = 32f)
-        s.onUserDragDelta(-20f)
-        assertTrue(s.visible)
-    }
-
-    @Test
-    fun dragDownPastThreshold_hidesOnce() {
+    fun startsFullyShown() {
         val s = state()
-        s.onUserDragDelta(-20f)
-        assertTrue(s.visible)
-        s.onUserDragDelta(-20f)
-        assertFalse(s.visible)
-        // Further continuous down deltas must not re-toggle or thrash.
-        s.onUserDragDelta(-40f)
-        s.onUserDragDelta(-40f)
-        assertFalse(s.visible)
-    }
-
-    @Test
-    fun continuousDownDeltas_doNotRestartHideAfterFlip() {
-        val s = state(hide = 30f, cooldownMs = 0L)
-        s.onUserDragDelta(-30f)
-        assertFalse(s.visible)
-        // Same direction after hide: still hidden, single flip only.
-        repeat(20) { s.onUserDragDelta(-15f) }
-        assertFalse(s.visible)
-    }
-
-    @Test
-    fun slowDownDrag_accumulatesSubJitterDeltasAndHides() {
-        val s = state(hide = 32f, jitter = 12f)
-        repeat(3) { s.onUserDragDelta(-8f) }
-        assertTrue(s.visible)
-        s.onUserDragDelta(-8f)
-        assertFalse(s.visible)
-    }
-
-    @Test
-    fun slowUpDrag_accumulatesSubJitterDeltasAndShows() {
-        val s = state(hide = 32f, show = 88f, jitter = 12f)
-        repeat(4) { s.onUserDragDelta(-8f) }
-        assertFalse(s.visible)
-        repeat(10) { s.onUserDragDelta(8f) }
-        assertFalse(s.visible)
-        s.onUserDragDelta(8f)
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
+        assertEquals(0f, s.collapseFraction, 0.001f)
         assertTrue(s.visible)
     }
 
     @Test
-    fun reversalBelowJitter_doesNotClearHideProgress() {
-        val s = state(hide = 30f, jitter = 12f)
-        s.onUserDragDelta(-20f)
-        s.onUserDragDelta(5f)
+    fun slowUpDrag_increasesHiddenOffsetPixelSync() {
+        val s = state(maxHide = 100f)
         s.onUserDragDelta(-10f)
+        assertEquals(10f, s.hiddenOffsetPx, 0.001f)
+        s.onUserDragDelta(-7f)
+        assertEquals(17f, s.hiddenOffsetPx, 0.001f)
         assertFalse(s.visible)
     }
 
     @Test
-    fun accumulatedReversalAtJitter_clearsHideProgress() {
-        val s = state(hide = 30f, jitter = 12f)
-        s.onUserDragDelta(-20f)
-        s.onUserDragDelta(6f)
-        s.onUserDragDelta(6f)
-        s.onUserDragDelta(-20f)
-        assertTrue(s.visible)
-        s.onUserDragDelta(-10f)
-        assertFalse(s.visible)
-    }
-
-    @Test
-    fun dragUpPastThreshold_showsOnceAfterHide() {
-        val s = state()
+    fun slowDownDrag_decreasesHiddenOffsetPixelSync() {
+        val s = state(maxHide = 100f)
         s.onUserDragDelta(-40f)
-        assertFalse(s.visible)
-        s.onUserDragDelta(50f)
-        assertFalse(s.visible)
-        s.onUserDragDelta(50f)
-        assertTrue(s.visible)
-        // Further continuous up deltas must not re-toggle.
-        s.onUserDragDelta(50f)
+        s.onUserDragDelta(15f)
+        assertEquals(25f, s.hiddenOffsetPx, 0.001f)
+        s.onUserDragDelta(30f)
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
         assertTrue(s.visible)
     }
 
     @Test
-    fun reverseWhileAccumulatingUp_clearsShowCounter() {
-        val s = state(hide = 30f, show = 40f)
-        s.onUserDragDelta(-30f)
-        assertFalse(s.visible)
-        s.onUserDragDelta(30f) // accumulate toward show, not enough
-        assertFalse(s.visible)
-        s.onUserDragDelta(-20f) // reverse down → clear up accumulator
-        assertFalse(s.visible)
-        s.onUserDragDelta(30f) // must re-accumulate from zero
-        assertFalse(s.visible)
+    fun neverBelowZero() {
+        val s = state(maxHide = 50f)
         s.onUserDragDelta(20f)
-        assertTrue(s.visible)
+        s.onUserDragDelta(40f)
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
     }
 
     @Test
-    fun forceShow_restoresVisibleAndClearsAccumulators() {
-        val s = state()
-        s.onUserDragDelta(-40f)
-        assertFalse(s.visible)
-        s.forceShow()
-        assertTrue(s.visible)
-        // After forceShow, need full threshold again to hide.
+    fun neverAboveMaxHiddenOffset() {
+        val s = state(maxHide = 50f)
+        s.onUserDragDelta(-80f)
+        assertEquals(50f, s.hiddenOffsetPx, 0.001f)
         s.onUserDragDelta(-20f)
-        assertTrue(s.visible)
+        assertEquals(50f, s.hiddenOffsetPx, 0.001f)
     }
 
     @Test
-    fun forceShow_whenAlreadyVisible_stillClearsAccumulators() {
-        val s = state(hide = 30f)
-        s.onUserDragDelta(-20f) // partial hide accumulate
-        s.forceShow()
-        s.onUserDragDelta(-20f)
-        assertTrue(s.visible) // partial was cleared
+    fun reverseJitter_doesNotImmediatelyFlipDirection() {
+        val s = state(maxHide = 100f, jitter = 12f)
         s.onUserDragDelta(-30f)
-        assertFalse(s.visible)
+        assertEquals(30f, s.hiddenOffsetPx, 0.001f)
+        // Small reverse (show) below jitter — chrome must not move yet.
+        s.onUserDragDelta(5f)
+        s.onUserDragDelta(5f)
+        assertEquals(30f, s.hiddenOffsetPx, 0.001f)
     }
 
     @Test
-    fun reset_restoresVisibleAndClearsAll() {
-        val s = state()
+    fun reverseBeyondJitter_switchesDirection() {
+        val s = state(maxHide = 100f, jitter = 12f)
+        s.onUserDragDelta(-30f)
+        s.onUserDragDelta(6f)
+        s.onUserDragDelta(6f) // reverse noise hits 12 → apply this delta
+        assertEquals(24f, s.hiddenOffsetPx, 0.001f)
+        s.onUserDragDelta(10f)
+        assertEquals(14f, s.hiddenOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun forceShow_zerosOffsetAndNoise() {
+        val s = state(maxHide = 100f, jitter = 12f)
         s.onUserDragDelta(-40f)
-        assertFalse(s.visible)
+        s.onUserDragDelta(5f) // noise
+        s.forceShow()
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
+        assertTrue(s.visible)
+        // After forceShow, a small reverse does not inherit old noise.
+        s.onUserDragDelta(-10f)
+        assertEquals(10f, s.hiddenOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun reset_zerosOffsetAndAllGestureState() {
+        val s = state(maxHide = 80f)
+        s.onUserDragDelta(-50f)
+        s.recordFlingVelocity(-1200f)
+        s.reset()
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
+        assertEquals(0f, s.consumePendingFlingVelocity(), 0.001f)
+        s.onUserDragDelta(-20f)
+        assertEquals(20f, s.hiddenOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun updateMaxHiddenOffset_clampsCurrentOffset() {
+        val s = state(maxHide = 100f)
+        s.onUserDragDelta(-90f)
+        assertEquals(90f, s.hiddenOffsetPx, 0.001f)
+        s.updateMaxHiddenOffsetPx(40f)
+        assertEquals(40f, s.maxHiddenOffsetPx, 0.001f)
+        assertEquals(40f, s.hiddenOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun settle_strongUpFling_hidesFully() {
+        val s = state(maxHide = 100f, flingThreshold = 1200f)
+        s.onUserDragDelta(-20f)
+        assertEquals(100f, s.resolveSettleTarget(-1500f), 0.001f)
+    }
+
+    @Test
+    fun settle_strongDownFling_showsFully() {
+        val s = state(maxHide = 100f, flingThreshold = 1200f)
+        s.onUserDragDelta(-80f)
+        assertEquals(0f, s.resolveSettleTarget(1500f), 0.001f)
+    }
+
+    @Test
+    fun settle_lowSpeed_usesFractionThreshold() {
+        val s = state(maxHide = 100f, settleFraction = 0.5f)
+        s.onUserDragDelta(-60f)
+        assertEquals(100f, s.resolveSettleTarget(0f), 0.001f)
+        s.snapTo(40f)
+        assertEquals(0f, s.resolveSettleTarget(0f), 0.001f)
+    }
+
+    @Test
+    fun forceShow_afterPartialCollapse_restoresFully() {
+        val s = state(maxHide = 100f)
+        s.onUserDragDelta(-55f)
+        s.forceShow()
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
+        assertEquals(0f, s.collapseFraction, 0.001f)
+    }
+
+    @Test
+    fun reset_documentSwitch_startsFullyShown() {
+        val s = state(maxHide = 120f)
+        s.onUserDragDelta(-100f)
         s.reset()
         assertTrue(s.visible)
-        // Fresh document: full hide threshold required again.
-        s.onUserDragDelta(-20f)
-        assertTrue(s.visible)
-        s.onUserDragDelta(-20f)
-        assertFalse(s.visible)
-    }
-
-    @Test
-    fun cooldown_blocksImmediateRetrigger() {
-        val s = state(hide = 30f, show = 30f, cooldownMs = 250L)
-        s.onUserDragDelta(-30f)
-        assertFalse(s.visible)
-        nowMs += 100L
-        s.onUserDragDelta(30f)
-        assertFalse(s.visible) // still in cooldown
-        nowMs += 200L
-        s.onUserDragDelta(30f)
-        assertTrue(s.visible)
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
     }
 
     @Test
@@ -187,12 +175,13 @@ class ReaderTopBarScrollStateTest {
         val s = state()
         s.onUserDragDelta(Float.NaN)
         s.onUserDragDelta(Float.POSITIVE_INFINITY)
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
         assertTrue(s.visible)
     }
 
     @Test
     fun nestedScroll_userInput_doesNotConsumeOffset() {
-        val s = state(hide = 30f)
+        val s = state(maxHide = 100f)
         val conn = s.asNestedScrollConnection()
         val result = conn.onPostScroll(
             consumed = Offset(0f, -30f),
@@ -200,32 +189,58 @@ class ReaderTopBarScrollStateTest {
             source = NestedScrollSource.UserInput,
         )
         assertEquals(Offset.Zero, result)
-        assertFalse(s.visible)
+        assertEquals(30f, s.hiddenOffsetPx, 0.001f)
     }
 
     @Test
     fun nestedScroll_nonUserInput_ignored() {
-        val s = state(hide = 10f)
+        val s = state(maxHide = 100f)
         val conn = s.asNestedScrollConnection()
-        // Fling / side-effect sources must not toggle.
         val result = conn.onPostScroll(
             consumed = Offset(0f, -100f),
             available = Offset.Zero,
             source = NestedScrollSource.SideEffect,
         )
         assertEquals(Offset.Zero, result)
-        assertTrue(s.visible)
+        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
     }
 
     @Test
     fun nestedScroll_usesAvailableWhenConsumedZero() {
-        val s = state(hide = 30f)
+        val s = state(maxHide = 100f)
         val conn = s.asNestedScrollConnection()
         conn.onPostScroll(
             consumed = Offset.Zero,
-            available = Offset(0f, -30f),
+            available = Offset(0f, -25f),
             source = NestedScrollSource.UserInput,
         )
-        assertFalse(s.visible)
+        assertEquals(25f, s.hiddenOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun nestedScroll_postFling_recordsVelocityWithoutConsuming() = runBlocking {
+        val s = state(maxHide = 100f, flingThreshold = 1200f)
+        s.onUserDragDelta(-40f)
+        val conn = s.asNestedScrollConnection()
+        val result = conn.onPostFling(
+            consumed = Velocity.Zero,
+            available = Velocity(0f, -1500f),
+        )
+        assertEquals(Velocity.Zero, result)
+        assertEquals(100f, s.resolveSettleTarget(s.consumePendingFlingVelocity()), 0.001f)
+    }
+
+    @Test
+    fun sameDirection_continuesWithoutJitterGate() {
+        val s = state(maxHide = 100f, jitter = 12f)
+        repeat(8) { s.onUserDragDelta(-5f) }
+        assertEquals(40f, s.hiddenOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun collapseFraction_tracksOffset() {
+        val s = state(maxHide = 80f)
+        s.onUserDragDelta(-40f)
+        assertEquals(0.5f, s.collapseFraction, 0.001f)
     }
 }

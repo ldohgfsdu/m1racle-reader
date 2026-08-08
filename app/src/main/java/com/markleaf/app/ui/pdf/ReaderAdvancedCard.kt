@@ -1,0 +1,987 @@
+package com.markleaf.app.ui.pdf
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.markleaf.app.R
+import com.markleaf.app.pdf.outlineInitialRow
+import com.markleaf.app.pdf.thumbnailInitialRow
+import com.markleaf.app.data.local.PdfPrintPageAnchorEntity
+import com.markleaf.app.data.local.TextbookOutlineNodeEntity
+import com.markleaf.app.pdf.PrintPageResolver
+import com.markleaf.app.pdf.PdfThumbnailLoader
+import com.markleaf.app.pdf.TextbookOutlineResolver
+import com.markleaf.app.pdf.export.ChapterExportFormat
+import com.markleaf.app.pdf.export.ExportRangePlan
+import com.markleaf.app.data.local.TextbookOutlineNodeType
+import com.markleaf.app.pdf.export.ExportRangeResolver
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+data class OutlineEditorState(
+    val id: String?,
+    val parentId: String?,
+    val type: TextbookOutlineNodeType,
+    val title: String,
+    val startPageIndex: Int,
+    val endPageIndex: Int,
+)
+
+// ── Advanced Card data (aggregated by PdfViewerScreen; feature state stays
+//    in the feature, only presentation wiring lives here) ──────────────────
+
+data class TextbookPageAdvancedData(
+    val currentPdfHumanPage: Int,
+    val currentPrint: Int?,
+    val isExact: Boolean,
+    val onConfirm: (Int) -> Unit,
+    val onClear: () -> Unit,
+)
+
+data class OutlineAdvancedData(
+    val nodes: List<TextbookOutlineNodeEntity>,
+    val currentPageIndex: Int,
+    val hasEmbeddedDrafts: Boolean,
+    val onJumpToNode: (TextbookOutlineNodeEntity) -> Unit,
+    val onRequestEdit: (OutlineEditorState) -> Unit,
+    val onDelete: (String) -> Unit,
+    val onImportEmbedded: () -> Unit,
+)
+
+data class ThumbnailsAdvancedData(
+    val pageCount: Int,
+    val currentPageIndex: Int,
+    val printAnchors: List<PdfPrintPageAnchorEntity>,
+    val loader: PdfThumbnailLoader,
+    val rangePickMode: Boolean,
+    val onPageSelected: (Int) -> Unit,
+    val onRangePicked: ((start: Int, end: Int) -> Unit)?,
+)
+
+data class ExportAdvancedData(
+    val plan: ExportRangePlan?,
+    val documentPageCount: Int,
+    val allNodes: List<TextbookOutlineNodeEntity>,
+    val initialFormat: ChapterExportFormat,
+    val onSelectNode: (TextbookOutlineNodeEntity) -> Unit,
+    val onConfirm: (startIndex0: Int, endIndex0: Int, format: ChapterExportFormat) -> Unit,
+)
+
+/** Aggregated payload for the Foreground Advanced Card. */
+data class ReaderAdvancedData(
+    val textbookPage: TextbookPageAdvancedData? = null,
+    val outline: OutlineAdvancedData? = null,
+    val thumbnails: ThumbnailsAdvancedData? = null,
+    val export: ExportAdvancedData? = null,
+)
+
+// R25.3: NestedCardHost (full-rect morph + parent de-emphasis) DELETED.
+// AdvancedGeometry (advancedMorphRect/computeAdvancedTargetRect) DELETED —
+// the only production geometry is AnchoredNestedGeometry + AnchoredNestedPopover.
+
+@Composable
+internal fun TextbookPageAdvancedContent(
+    params: TextbookPageAdvancedData,
+    onCancel: () -> Unit,
+    bodyMaxHeightDp: Dp,
+) {
+    var text by remember { mutableStateOf(params.currentPrint?.toString().orEmpty()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scheme = MaterialTheme.colorScheme
+    val muted = readerChromeMutedAlpha()
+    val invalidMsg = stringResource(R.string.pdf_print_invalid)
+    val stateLabel = when {
+        params.currentPrint == null -> stringResource(R.string.pdf_print_unset)
+        params.isExact -> stringResource(R.string.pdf_print_exact, params.currentPrint)
+        else -> stringResource(R.string.pdf_print_inferred, params.currentPrint)
+    }
+    val summary = stringResource(R.string.pdf_set_print_hint, params.currentPdfHumanPage) + " · " + stateLabel
+
+    // NEVER auto-focus / auto-show the IME on open. Only an explicit tap on
+    // the field requests focus (BasicTextField does that natively). Close path
+    // clears focus + hides keyboard in AnchoredNestedPopover.
+
+    fun submit() {
+        val n = text.trim().toIntOrNull()
+        if (n == null || n < 1) {
+            error = invalidMsg
+            return
+        }
+        error = null
+        params.onConfirm(n)
+    }
+
+    // Single in-body column (no sticky black Save pill clipped by card bounds).
+    // IME Done submits; optional full-height Save sits inside the measured body.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = bodyMaxHeightDp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = MenuRowHPad)
+            .padding(top = 12.dp, bottom = 20.dp),
+    ) {
+        Text(
+            text = summary,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
+            ),
+            color = scheme.onSurface.copy(alpha = muted),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            text = stringResource(R.string.pdf_print_label),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = scheme.onSurface.copy(alpha = muted),
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp))
+                .background(scheme.onSurface.copy(alpha = 0.05f))
+                .border(
+                    width = 1.dp,
+                    color = if (error != null) {
+                        scheme.error.copy(alpha = 0.55f)
+                    } else {
+                        scheme.onSurface.copy(alpha = 0.08f)
+                    },
+                    shape = RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp),
+                )
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            BasicTextField(
+                value = text,
+                onValueChange = {
+                    text = it.filter { ch -> ch.isDigit() }.take(6)
+                    error = null
+                },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = scheme.onSurface,
+                ),
+                cursorBrush = SolidColor(scheme.primary),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (text.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.pdf_print_label),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 15.sp,
+                                    color = scheme.onSurface.copy(alpha = muted),
+                                ),
+                            )
+                        }
+                        inner()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        val errorMsg = error
+        if (errorMsg != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = errorMsg,
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.error,
+                maxLines = 1,
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (params.isExact) {
+                TextButton(onClick = params.onClear) {
+                    Text(
+                        text = stringResource(R.string.pdf_print_clear),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                    )
+                }
+            }
+            TextButton(onClick = onCancel) {
+                Text(
+                    text = stringResource(R.string.pdf_dialog_cancel),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            // Full in-body save (≥44dp) — never a clipped absolute footer pill.
+            Button(
+                onClick = { submit() },
+                modifier = Modifier.height(44.dp),
+                shape = RoundedCornerShape(ReaderChromeTokens.CornerButtonDp.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.pdf_print_save),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+
+/**
+ * 教材目录 — fixed header + compact toolbar + internally scrolling list
+ * (R25 §8). Tapping a node jumps the PDF behind while the card STAYS open
+ * (continuous preview). R25.1 §3: initial scroll positions the current
+ * reading item near the upper-third of the viewport. The list is a weighted
+ * (fill=false) child of the body: it grows with its content up to the
+ * remaining body space, then scrolls internally — the card never becomes an
+ * unbounded ultra-long menu.
+ */
+@Composable
+internal fun OutlineAdvancedContent(
+    params: OutlineAdvancedData,
+    /** Cap for the scrolling list region; list scrolls inside, card does not grow. */
+    listMaxHeightDp: Dp = 360.dp,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val muted = readerChromeMutedAlpha()
+    val flatAll = remember(params.nodes) { TextbookOutlineResolver.flattenTree(params.nodes) }
+    val currentId = remember(params.nodes, params.currentPageIndex) {
+        TextbookOutlineResolver.deepestContaining(params.currentPageIndex, params.nodes)?.id
+    }
+    val listState = rememberLazyListState()
+    val currentIndex = flatAll.indexOfFirst { it.node.id == currentId }
+    LaunchedEffect(currentIndex) {
+        if (currentIndex >= 0) {
+            listState.scrollToItem(outlineInitialRow(currentIndex))
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.pdf_outline_count, flatAll.size),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = scheme.onSurface.copy(alpha = muted),
+            modifier = Modifier.padding(horizontal = MenuRowHPad),
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.padding(horizontal = MenuRowHPad),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(
+                onClick = params.onImportEmbedded,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                modifier = Modifier.height(36.dp),
+                shape = RoundedCornerShape(ReaderChromeTokens.CornerButtonDp.dp),
+            ) {
+                Text(
+                    stringResource(R.string.pdf_outline_scan_ready),
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                )
+            }
+            OutlinedButton(
+                onClick = {
+                    params.onRequestEdit(
+                        OutlineEditorState(
+                            id = null,
+                            parentId = null,
+                            type = TextbookOutlineNodeType.CHAPTER,
+                            title = "",
+                            startPageIndex = params.currentPageIndex,
+                            endPageIndex = params.currentPageIndex,
+                        ),
+                    )
+                },
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                modifier = Modifier.height(36.dp),
+                shape = RoundedCornerShape(ReaderChromeTokens.CornerButtonDp.dp),
+            ) {
+                Text(
+                    stringResource(R.string.pdf_outline_new_manual),
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        // Remaining-height LazyColumn: last item scrolls fully past corner clip.
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(bottom = 20.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(listMaxHeightDp),
+        ) {
+            items(flatAll, key = { it.node.id }) { row ->
+                val selected = row.node.id == currentId
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            params.onJumpToNode(row.node) // card stays open
+                        }
+                        .padding(
+                            start = MenuRowHPad + (row.depth * 24).dp,
+                            end = MenuRowHPad,
+                            top = 8.dp,
+                            bottom = 8.dp,
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = row.node.title,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            color = scheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.pdf_outline_page_range,
+                                row.node.startPageIndex + 1,
+                                row.node.endPageIndex + 1,
+                            ),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Normal,
+                            ),
+                            color = scheme.onSurface.copy(alpha = muted),
+                        )
+                    }
+                    if (selected) {
+                        // Current badge stays in-row on the right (never floating at card bottom).
+                        Text(
+                            text = stringResource(R.string.pdf_outline_current_badge),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            color = scheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 页面缩略图 — two-column grid inside the Advanced Card (R25 §9). R25.1 §3:
+ * opening from Main positions the grid around the current page (upper-third
+ * of the viewport), never from PDF 1. The grid is a weighted (fill=false)
+ * child: it caps at the remaining body space and scrolls internally — the
+ * card never grows beyond maxHeight.
+ */
+@Composable
+internal fun ThumbnailsAdvancedContent(
+    params: ThumbnailsAdvancedData,
+    gridMaxHeightDp: Dp = 360.dp,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val muted = readerChromeMutedAlpha()
+    val indices = remember(params.pageCount) { (0 until params.pageCount).toList() }
+    var rangeStart by remember { mutableStateOf<Int?>(null) }
+    val gridState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = thumbnailInitialRow(params.currentPageIndex),
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = if (params.rangePickMode) {
+                if (rangeStart == null) {
+                    stringResource(R.string.pdf_thumbs_range_pick_start)
+                } else {
+                    stringResource(R.string.pdf_thumbs_range_pick_end, rangeStart!! + 1)
+                }
+            } else {
+                stringResource(R.string.pdf_thumbs_status, params.currentPageIndex + 1, params.pageCount)
+            },
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = scheme.onSurface.copy(alpha = muted),
+            modifier = Modifier.padding(horizontal = MenuRowHPad),
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        // Fixed body height; grid scrolls inside and does not grow the Child.
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(
+                start = MenuRowHPad,
+                top = 4.dp,
+                end = MenuRowHPad,
+                bottom = 20.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(gridMaxHeightDp),
+        ) {
+            items(indices, key = { it }) { pageIndex ->
+                val print = PrintPageResolver.resolve(pageIndex, params.printAnchors)
+                val selected = if (params.rangePickMode) {
+                    pageIndex == rangeStart
+                } else {
+                    pageIndex == params.currentPageIndex
+                }
+                ThumbCell(
+                    pageIndex = pageIndex,
+                    selected = selected,
+                    printPage = print,
+                    loader = params.loader,
+                    onClick = {
+                        if (params.rangePickMode && params.onRangePicked != null) {
+                            val start = rangeStart
+                            if (start == null) {
+                                rangeStart = pageIndex
+                            } else {
+                                val a = minOf(start, pageIndex)
+                                val b = maxOf(start, pageIndex)
+                                params.onRangePicked(a, b)
+                            }
+                        } else {
+                            params.onPageSelected(pageIndex) // card stays open
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ThumbCell(
+    pageIndex: Int,
+    selected: Boolean,
+    printPage: Int?,
+    loader: PdfThumbnailLoader,
+    onClick: () -> Unit,
+) {
+    var ui by remember(pageIndex) { mutableStateOf<ThumbCellUi>(ThumbCellUi.Loading) }
+    var retryToken by remember(pageIndex) { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val scheme = MaterialTheme.colorScheme
+
+    LaunchedEffect(pageIndex, retryToken, loader) {
+        ui = ThumbCellUi.Loading
+        try {
+            when (val r = loader.load(pageIndex)) {
+                is PdfThumbnailLoader.ThumbResult.Ready -> ui = ThumbCellUi.Ready(r.image)
+                is PdfThumbnailLoader.ThumbResult.Failed -> ui = ThumbCellUi.Failed(r.message)
+                PdfThumbnailLoader.ThumbResult.Closed -> ui = ThumbCellUi.Failed("已关闭")
+                PdfThumbnailLoader.ThumbResult.Loading -> ui = ThumbCellUi.Loading
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ui = ThumbCellUi.Failed(e.message ?: "失败")
+        }
+    }
+
+    val muted = readerChromeMutedAlpha()
+    // Low-contrast selection: soft primary hairline, not a strong colored frame.
+    val borderColor = if (selected) {
+        scheme.primary.copy(alpha = 0.55f)
+    } else {
+        scheme.onSurface.copy(alpha = 0.06f)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = ui is ThumbCellUi.Ready, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.72f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (selected) scheme.primary.copy(alpha = 0.06f) else scheme.surfaceContainerHigh,
+                )
+                .border(
+                    width = if (selected) 1.5.dp else 1.dp,
+                    color = borderColor,
+                    shape = RoundedCornerShape(8.dp),
+                ),
+        ) {
+            when (val s = ui) {
+                ThumbCellUi.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+                is ThumbCellUi.Ready -> Image(
+                    bitmap = s.image,
+                    contentDescription = stringResource(R.string.pdf_thumb_cd, pageIndex + 1),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(2.dp),
+                )
+                is ThumbCellUi.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = stringResource(R.string.pdf_thumb_failed),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.error,
+                    )
+                }
+            }
+        }
+        Text(
+            text = stringResource(R.string.pdf_thumb_page, pageIndex + 1),
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            ),
+            color = if (selected) scheme.primary else scheme.onSurface.copy(alpha = muted + 0.15f),
+            maxLines = 1,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        if (printPage != null) {
+            Text(
+                text = stringResource(R.string.pdf_thumb_print, printPage),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                color = scheme.onSurface.copy(alpha = muted),
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+private sealed class ThumbCellUi {
+    data object Loading : ThumbCellUi()
+    data class Ready(val image: androidx.compose.ui.graphics.ImageBitmap) : ThumbCellUi()
+    data class Failed(val message: String) : ThumbCellUi()
+}
+
+/**
+ * 导出章节 — compact advanced task card (R25 §10, R25.1 §5). Business fields
+ * kept, explanatory redundancy compressed; sticky footer keeps
+ * 取消 / 选择保存位置 always visible.
+ */
+@Composable
+internal fun ExportAdvancedContent(
+    params: ExportAdvancedData,
+    onCancel: () -> Unit,
+    bodyMaxHeightDp: Dp,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val muted = readerChromeMutedAlpha()
+    val plan = params.plan
+    var startText by remember(plan) {
+        mutableStateOf((plan?.pdfPageStart1Based ?: 1).toString())
+    }
+    var endText by remember(plan) {
+        mutableStateOf((plan?.pdfPageEnd1Based ?: 1).toString())
+    }
+    var format by remember(plan, params.initialFormat) { mutableStateOf(params.initialFormat) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var pickerExpanded by remember { mutableStateOf(false) }
+    val flat = remember(params.allNodes) {
+        TextbookOutlineResolver.flattenTree(params.allNodes)
+    }
+
+    fun submit() {
+        val s1 = startText.toIntOrNull()
+        val e1 = endText.toIntOrNull()
+        if (s1 == null || e1 == null) {
+            error = "请输入有效整数页码"
+            return
+        }
+        val s0 = s1 - 1
+        val e0 = e1 - 1
+        val err = ExportRangeResolver.validateRange(s0, e0, params.documentPageCount)
+        if (err != null) {
+            error = err
+            return
+        }
+        params.onConfirm(s0, e0, format)
+    }
+
+    // Single scrolling body (actions included) so start/end fields are never
+    // clipped by a fixed footer against the card corner.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = bodyMaxHeightDp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = MenuRowHPad)
+            .padding(top = 12.dp, bottom = 20.dp),
+    ) {
+        if (plan == null) {
+            Text(
+                text = stringResource(R.string.pdf_export_no_nodes),
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                color = scheme.onSurface.copy(alpha = muted),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onCancel) {
+                    Text(stringResource(R.string.pdf_dialog_cancel))
+                }
+            }
+            return@Column
+        }
+        val summary = plan.pathTitles.joinToString(" / ").ifBlank { plan.node.title } +
+            " · PDF ${plan.pdfPageStart1Based}–${plan.pdfPageEnd1Based}"
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clickable { pickerExpanded = !pickerExpanded }
+                .padding(horizontal = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(20.dp)
+                    .rotate(if (pickerExpanded) 90f else 0f),
+                tint = scheme.onSurface.copy(alpha = muted),
+            )
+        }
+        AnimatedVisibility(visible = pickerExpanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                flat.forEach { row ->
+                    val selected = row.node.id == plan.node.id
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = selected,
+                                onClick = {
+                                    params.onSelectNode(row.node)
+                                    pickerExpanded = false
+                                    error = null
+                                },
+                                role = Role.RadioButton,
+                            )
+                            .padding(start = (row.depth * 16).dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = selected, onClick = null, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = row.node.title,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.pdf_outline_page_range,
+                                    row.node.startPageIndex + 1,
+                                    row.node.endPageIndex + 1,
+                                ),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp),
+                                color = scheme.onSurface.copy(alpha = muted),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        // Format radios: top-aligned, title ≤2 lines, hint secondary.
+        ChapterExportFormat.entries.forEach { option ->
+            val selected = format == option
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = selected,
+                        onClick = { format = option },
+                        role = Role.RadioButton,
+                    )
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                RadioButton(
+                    selected = selected,
+                    onClick = null,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .padding(top = 1.dp),
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = exportFormatTitle(option),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        color = scheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = exportFormatShortHint(option),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal,
+                        ),
+                        color = scheme.onSurface.copy(alpha = muted),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        // Start/end half-width fields, full height ≥52dp, never clipped.
+        Row(modifier = Modifier.fillMaxWidth()) {
+            ExportCompactField(
+                label = stringResource(R.string.pdf_export_start_page),
+                value = startText,
+                onValueChange = {
+                    startText = it.filter { c -> c.isDigit() }.take(6)
+                    error = null
+                },
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            ExportCompactField(
+                label = stringResource(R.string.pdf_export_end_page),
+                value = endText,
+                onValueChange = {
+                    endText = it.filter { c -> c.isDigit() }.take(6)
+                    error = null
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (error != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = error!!,
+                color = scheme.error,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onCancel) {
+                Text(
+                    stringResource(R.string.pdf_dialog_cancel),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+                onClick = { submit() },
+                modifier = Modifier.height(44.dp),
+                shape = RoundedCornerShape(ReaderChromeTokens.CornerButtonDp.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.pdf_export_confirm),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+/** Compact format titles — avoid unnatural mid-width hard breaks of long labels. */
+private fun exportFormatTitle(format: ChapterExportFormat): String = when (format) {
+    ChapterExportFormat.ZIP_PACKAGE -> "ZIP 处理包"
+    ChapterExportFormat.PDF_ANNOTATED -> "纯 PDF"
+}
+
+/** Secondary format hints (13–14sp). */
+private fun exportFormatShortHint(format: ChapterExportFormat): String = when (format) {
+    ChapterExportFormat.ZIP_PACKAGE -> "PDF + 元数据 JSON"
+    ChapterExportFormat.PDF_ANNOTATED -> "标注章节与页码"
+}
+
+@Composable
+private fun ExportCompactField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val muted = readerChromeMutedAlpha()
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = scheme.onSurface.copy(alpha = muted),
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp))
+                .background(scheme.onSurface.copy(alpha = 0.05f))
+                .border(
+                    width = 1.dp,
+                    color = scheme.onSurface.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp),
+                )
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = scheme.onSurface,
+                ),
+                cursorBrush = SolidColor(scheme.primary),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+private fun lerp(start: Float, stop: Float, fraction: Float): Float =
+    start + (stop - start) * fraction.coerceIn(0f, 1f)

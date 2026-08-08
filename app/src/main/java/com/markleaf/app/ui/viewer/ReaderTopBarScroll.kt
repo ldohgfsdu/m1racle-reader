@@ -1,121 +1,174 @@
 package com.markleaf.app.ui.viewer
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.unit.Velocity
+import kotlin.math.abs
 
 /**
- * Thresholded TopAppBar show/hide driven by NestedScrollSource.UserInput drag only.
+ * Continuous TopChrome collapse driven by NestedScrollSource.UserInput drag only.
  *
- * Design goals (R9 markdown chrome recovery):
- * - Observe scroll; never consume body deltas (always return [Offset.Zero]).
- * - Hysteresis: hide and show use separate thresholds so small reversals do not flicker.
- * - Small accumulated reversals below [jitterIgnorePx] do not reset progress.
- * - Cooldown after each flip suppresses animation/task thrash during fling bounce.
- * - Fling / postFling never toggle (UserInput only).
+ * Design goals (R9 chrome recovery + X-style immersive collapse):
+ * - Observe scroll; never consume body deltas (always return [Offset.Zero] / zero velocity).
+ * - Same-direction user deltas move [hiddenOffsetPx] 1:1 (pixel-sync with the finger).
+ * - Small reverse deltas accumulate as reverse noise; only after [jitterIgnorePx] does direction
+ *   switch and start moving the chrome the other way (R9 reverse-jitter semantics).
+ * - Fling / postFling never move chrome mid-stream; velocity is recorded for settle only.
  * - UI-layer only: no ViewModel / DB / SavedState writes.
  *
  * Drag conventions (Compose nested scroll):
- * - Content moves up (user scrolls down the document) → negative [dy]
- * - Content moves down (user scrolls up the document) → positive [dy]
+ * - Content moves up (user scrolls down the document) → negative [dy] → hide chrome
+ * - Content moves down (user scrolls up the document) → positive [dy] → show chrome
  */
 class ReaderTopBarScrollState(
-    private val hideThresholdPx: Float,
-    private val showThresholdPx: Float,
+    maxHiddenOffsetPx: Float,
     private val jitterIgnorePx: Float,
-    private val cooldownMs: Long = 250L,
+    /**
+     * Absolute fling velocity (px/s) above which settle prefers fully open/closed by direction
+     * instead of collapse fraction.
+     */
+    /**
+     * Higher than a low X-like flick so medium releases prefer fraction settle over
+     * hard velocity snap (reduces "magnet" feel while keeping decisive flings).
+     */
+    private val flingVelocityThresholdPxPerSec: Float = 1200f,
+    /** Fraction at which low-speed settle prefers fully hidden. */
+    private val settleHideFraction: Float = 0.5f,
     /** Injected for unit tests; production uses [android.os.SystemClock.uptimeMillis]. */
     private val uptimeMillis: () -> Long = { android.os.SystemClock.uptimeMillis() },
 ) {
-    var visible by mutableStateOf(true)
+    /**
+     * Total chrome height that must leave the screen: status bar inset + top bar (+ divider).
+     * Updated when density / orientation / insets change.
+     */
+    var maxHiddenOffsetPx by mutableFloatStateOf(maxHiddenOffsetPx.coerceAtLeast(0f))
         private set
 
-    private var accumulatedDownScroll = 0f
-    private var accumulatedUpScroll = 0f
-    private var accumulatedReverseScroll = 0f
-    private var lastToggleUptimeMs = 0L
+    /**
+     * Continuous hide distance in px. `0` = fully shown; [maxHiddenOffsetPx] = fully hidden.
+     */
+    var hiddenOffsetPx by mutableFloatStateOf(0f)
+        private set
+
+    val collapseFraction: Float
+        get() {
+            val max = maxHiddenOffsetPx
+            if (max <= 0f) return 0f
+            return (hiddenOffsetPx / max).coerceIn(0f, 1f)
+        }
 
     /**
-     * Force the bar visible and clear accumulators.
-     * Used at document top (settled), search mode, TOC/anchor jumps.
+     * Fully shown chrome. Kept for popup dismiss / forceShow call sites that only need a boolean.
+     * Continuous motion uses [hiddenOffsetPx] / [collapseFraction].
      */
-    fun forceShow() {
-        if (!visible) {
-            visible = true
-            lastToggleUptimeMs = uptimeMillis()
+    val visible: Boolean
+        get() = hiddenOffsetPx <= 0.5f
+
+    /** +1 last committed motion hides chrome; -1 shows; 0 none yet this gesture chain. */
+    private var committedSign = 0
+    private var reverseNoisePx = 0f
+
+    /** Last observed fling velocity Y (content direction); consumed by settle. */
+    private var pendingFlingVelocityY = 0f
+
+    fun updateMaxHiddenOffsetPx(maxPx: Float) {
+        val clampedMax = maxPx.coerceAtLeast(0f)
+        if (clampedMax == maxHiddenOffsetPx) {
+            hiddenOffsetPx = hiddenOffsetPx.coerceIn(0f, clampedMax)
+            return
         }
-        accumulatedDownScroll = 0f
-        accumulatedUpScroll = 0f
-        accumulatedReverseScroll = 0f
+        maxHiddenOffsetPx = clampedMax
+        hiddenOffsetPx = hiddenOffsetPx.coerceIn(0f, clampedMax)
     }
 
     /**
-     * Reset to initial visible state (e.g. document switch).
-     * Always clears accumulators and cooldown so the next document does not
-     * inherit a hidden bar or mid-gesture counters.
+     * Force the chrome fully shown and clear accumulators / fling residue.
+     * Used at document top (settled), search mode, TOC/anchor jumps.
+     */
+    fun forceShow() {
+        hiddenOffsetPx = 0f
+        clearGestureNoise()
+        pendingFlingVelocityY = 0f
+    }
+
+    /**
+     * Reset to initial fully-shown state (e.g. document switch).
      */
     fun reset() {
-        visible = true
-        accumulatedDownScroll = 0f
-        accumulatedUpScroll = 0f
-        accumulatedReverseScroll = 0f
-        lastToggleUptimeMs = 0L
+        hiddenOffsetPx = 0f
+        clearGestureNoise()
+        pendingFlingVelocityY = 0f
+    }
+
+    /**
+     * Snap chrome to an absolute offset (settle animation frames / tests).
+     */
+    fun snapTo(offsetPx: Float) {
+        hiddenOffsetPx = offsetPx.coerceIn(0f, maxHiddenOffsetPx)
     }
 
     /**
      * Apply one user-drag delta in pixels (Compose nested-scroll Y).
-     * Idempotent after threshold: further same-direction deltas do not re-toggle.
      */
     fun onUserDragDelta(dy: Float) {
-        if (!dy.isFinite() || dy == 0f) return
+        if (!dy.isFinite() || dy == 0f || maxHiddenOffsetPx <= 0f) return
 
-        val now = uptimeMillis()
-        if (now - lastToggleUptimeMs < cooldownMs) return
+        // wantSign +1: hide more; -1: show more
+        val wantSign = if (dy < 0f) 1 else -1
+        val amount = abs(dy)
 
-        if (visible) {
-            if (dy < 0f) {
-                // Every same-direction delta counts, including slow 120 Hz drags.
-                accumulatedReverseScroll = 0f
-                accumulatedDownScroll += -dy
-                if (accumulatedDownScroll >= hideThresholdPx) {
-                    visible = false
-                    accumulatedDownScroll = 0f
-                    accumulatedUpScroll = 0f
-                    accumulatedReverseScroll = 0f
-                    lastToggleUptimeMs = now
-                }
-            } else {
-                // Do not let a tiny hand tremor erase meaningful hide progress.
-                accumulatedReverseScroll += dy
-                if (accumulatedReverseScroll >= jitterIgnorePx) {
-                    accumulatedDownScroll = 0f
-                    accumulatedReverseScroll = 0f
-                }
-            }
-        } else {
-            if (dy > 0f) {
-                // Every same-direction delta counts, including slow 120 Hz drags.
-                accumulatedReverseScroll = 0f
-                accumulatedUpScroll += dy
-                if (accumulatedUpScroll >= showThresholdPx) {
-                    visible = true
-                    accumulatedDownScroll = 0f
-                    accumulatedUpScroll = 0f
-                    accumulatedReverseScroll = 0f
-                    lastToggleUptimeMs = now
-                }
-            } else {
-                // Do not let a tiny hand tremor erase meaningful show progress.
-                accumulatedReverseScroll += -dy
-                if (accumulatedReverseScroll >= jitterIgnorePx) {
-                    accumulatedUpScroll = 0f
-                    accumulatedReverseScroll = 0f
-                }
-            }
+        if (committedSign == 0 || wantSign == committedSign) {
+            committedSign = wantSign
+            reverseNoisePx = 0f
+            applySignedDelta(wantSign, amount)
+            return
         }
+
+        // Reverse against committed direction: tolerate small jitter without flipping chrome.
+        reverseNoisePx += amount
+        if (reverseNoisePx >= jitterIgnorePx) {
+            committedSign = wantSign
+            reverseNoisePx = 0f
+            applySignedDelta(wantSign, amount)
+        }
+    }
+
+    /**
+     * Record fling velocity for settle (does not move chrome).
+     * [velocityY] uses Compose nested-scroll convention (content motion).
+     */
+    fun recordFlingVelocity(velocityY: Float) {
+        if (velocityY.isFinite()) {
+            pendingFlingVelocityY = velocityY
+        }
+    }
+
+    fun consumePendingFlingVelocity(): Float {
+        val v = pendingFlingVelocityY
+        pendingFlingVelocityY = 0f
+        return v
+    }
+
+    /**
+     * Target offset after finger-up / fling end.
+     *
+     * - Strong content-up fling (velocityY negative, large) → fully hide
+     * - Strong content-down fling → fully show
+     * - Low speed → fraction threshold
+     */
+    fun resolveSettleTarget(velocityY: Float = consumePendingFlingVelocity()): Float {
+        val max = maxHiddenOffsetPx
+        if (max <= 0f) return 0f
+        if (!velocityY.isFinite()) {
+            return if (collapseFraction >= settleHideFraction) max else 0f
+        }
+        if (velocityY <= -flingVelocityThresholdPxPerSec) return max
+        if (velocityY >= flingVelocityThresholdPxPerSec) return 0f
+        return if (collapseFraction >= settleHideFraction) max else 0f
     }
 
     /**
@@ -137,5 +190,34 @@ class ReaderTopBarScrollState(
                 onUserDragDelta(dy)
                 return Offset.Zero
             }
+
+            override suspend fun onPostFling(
+                consumed: Velocity,
+                available: Velocity,
+            ): Velocity {
+                val vy = when {
+                    available.y != 0f -> available.y
+                    else -> consumed.y
+                }
+                recordFlingVelocity(vy)
+                return Velocity.Zero
+            }
         }
+
+    private fun applySignedDelta(sign: Int, amount: Float) {
+        if (sign > 0) {
+            hiddenOffsetPx = (hiddenOffsetPx + amount).coerceIn(0f, maxHiddenOffsetPx)
+        } else {
+            hiddenOffsetPx = (hiddenOffsetPx - amount).coerceIn(0f, maxHiddenOffsetPx)
+        }
+    }
+
+    private fun clearGestureNoise() {
+        committedSign = 0
+        reverseNoisePx = 0f
+    }
+
+    // Keep uptimeMillis referenced so production injection stays available for tests.
+    @Suppress("unused")
+    private fun nowMs(): Long = uptimeMillis()
 }

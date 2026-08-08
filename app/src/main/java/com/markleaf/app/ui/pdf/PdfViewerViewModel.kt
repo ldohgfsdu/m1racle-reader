@@ -23,10 +23,12 @@ import com.markleaf.app.pdf.BitmapMetadata
 import com.markleaf.app.pdf.PageBitmapEntry
 import com.markleaf.app.pdf.PageRenderRole
 import com.markleaf.app.pdf.PdfPageBitmapCache
+import com.markleaf.app.pdf.PdfChromePrefs
 import com.markleaf.app.pdf.PdfPageRenderer
 import com.markleaf.app.pdf.PdfReadingMode
 import com.markleaf.app.pdf.PdfReadingNavigation
 import com.markleaf.app.pdf.PdfReadingPrefs
+import com.markleaf.app.pdf.PdfTopBarMode
 import com.markleaf.app.pdf.PdfReadingPositionCodec
 import com.markleaf.app.pdf.PdfRenderQuality
 import com.markleaf.app.pdf.PdfViewportSessionState
@@ -66,10 +68,14 @@ import com.markleaf.app.pdf.TextbookOutlineResolver
 import com.markleaf.app.pdf.ThreePageStripState
 import com.markleaf.app.pdf.ZoomPanPhysics
 import com.markleaf.app.pdf.ZoomPanPhysicsProfile
+import com.markleaf.app.pdf.export.ChapterExportFormat
 import com.markleaf.app.pdf.export.ChapterExportState
 import com.markleaf.app.pdf.export.ChapterPackageExporter
+import com.markleaf.app.pdf.export.ExportCancellationToken
 import com.markleaf.app.pdf.export.ExportRangePlan
 import com.markleaf.app.pdf.export.ExportRangeResolver
+import com.markleaf.app.pdf.export.PdfAnnotatedExporter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -94,11 +100,6 @@ sealed class PdfViewerUiState {
         val renderError: String? = null,
         /** Anchors for this document (sorted optional). */
         val printAnchors: List<PdfPrintPageAnchorEntity> = emptyList(),
-        /**
-         * While user drags the scrubber: preview page (0-based), no re-render yet.
-         * Null when not scrubbing.
-         */
-        val scrubPreviewIndex: Int? = null,
         /** Textbook outline nodes (P0.3A). */
         val outlineNodes: List<TextbookOutlineNodeEntity> = emptyList(),
         val readingMode: PdfReadingMode = PdfReadingMode.default(),
@@ -124,19 +125,13 @@ sealed class PdfViewerUiState {
         val qualityTier: QualityTier = QualityTier.PREVIEW,
         /** Width bucket (px) of the latest primary render. */
         val renderWidthBucket: Int = 0,
-        /** True while a fast-scroll drag is active (preview-only renders). */
-        val fastScrollDragging: Boolean = false,
     ) : PdfViewerUiState() {
-        /** Page shown in chrome: scrub preview or actual page (1-based display helpers). */
-        val displayPageIndex: Int
-            get() = scrubPreviewIndex ?: pageIndex
-
         val pageLabel: String
-            get() = if (pageCount <= 0) "—" else "${displayPageIndex + 1} / $pageCount"
+            get() = if (pageCount <= 0) "—" else "${pageIndex + 1} / $pageCount"
 
         /** 0-based PDF index used for print resolution (never UI-only hacks). */
         val printResolvePageIndex: Int
-            get() = displayPageIndex
+            get() = pageIndex
 
         private val printResolve: PrintPageResolver.Result
             get() = PrintPageResolver.resolveDetailed(
@@ -156,7 +151,7 @@ sealed class PdfViewerUiState {
             get() = printResolve.isInferred
 
         val currentOutlineNode: TextbookOutlineNodeEntity?
-            get() = TextbookOutlineResolver.deepestContaining(displayPageIndex, outlineNodes)
+            get() = TextbookOutlineResolver.deepestContaining(pageIndex, outlineNodes)
 
         val outlinePath: List<TextbookOutlineNodeEntity>
             get() = TextbookOutlineResolver.pathToRoot(currentOutlineNode, outlineNodes)
@@ -164,8 +159,8 @@ sealed class PdfViewerUiState {
         val outlinePathLabel: String
             get() = TextbookOutlineResolver.pathLabel(outlinePath)
 
-        val canGoPrevious: Boolean get() = pageIndex > 0 && scrubPreviewIndex == null
-        val canGoNext: Boolean get() = pageIndex < pageCount - 1 && scrubPreviewIndex == null
+        val canGoPrevious: Boolean get() = pageIndex > 0
+        val canGoNext: Boolean get() = pageIndex < pageCount - 1
     }
 
     data class Error(
@@ -195,6 +190,18 @@ class PdfViewerViewModel(
     /** Separate renderer + LRU for sheet thumbnails (does not block main page). */
     private val thumbnailLoader = PdfThumbnailLoader(application.applicationContext)
     private val readingPrefs = PdfReadingPrefs(application.applicationContext)
+    private val chromePrefs = PdfChromePrefs(application.applicationContext)
+
+    private val _topBarMode = MutableStateFlow(chromePrefs.getTopBarMode())
+    val topBarMode: StateFlow<PdfTopBarMode> = _topBarMode.asStateFlow()
+
+    fun setTopBarMode(mode: PdfTopBarMode) {
+        if (_topBarMode.value == mode) return
+        chromePrefs.setTopBarMode(mode)
+        _topBarMode.value = mode
+    }
+
+    // Material style prefs removed (r26.1): Liquid Glass is the only chrome surface.
 
     private val _uiState = MutableStateFlow<PdfViewerUiState>(PdfViewerUiState.Loading)
     val uiState: StateFlow<PdfViewerUiState> = _uiState.asStateFlow()
@@ -211,12 +218,23 @@ class PdfViewerViewModel(
     private val _exportState = MutableStateFlow<ChapterExportState?>(null)
     val exportState: StateFlow<ChapterExportState?> = _exportState.asStateFlow()
 
+    /** Generation gate: late callbacks of cancelled exports never touch newer state. */
+    private val exportStateGate = ExportStateGate()
+
+    /** Cancellation token of the CURRENT export run (job-local, replaced per start). */
+    private var activeExportCancellation: ExportCancellationToken? = null
+
     private var exportJob: Job? = null
     private var pendingExportPlan: ExportRangePlan? = null
     private var lastExportSuggestedName: String? = null
+    private var pendingExportFormat: ChapterExportFormat = ChapterExportFormat.ZIP_PACKAGE
     private val chapterExporter = ChapterPackageExporter(application.applicationContext)
+    private val pdfAnnotatedExporter = PdfAnnotatedExporter(application.applicationContext)
 
-    /** Exposed for [PdfThumbnailSheet]; call [prepareThumbnails] before first use. */
+    val lastExportFormat: ChapterExportFormat
+        get() = pendingExportFormat
+
+    /** Exposed for the thumbnails Advanced Card; call [prepareThumbnails] first. */
     fun thumbnailLoader(): PdfThumbnailLoader = thumbnailLoader
 
     private var renderJob: Job? = null
@@ -252,9 +270,6 @@ class PdfViewerViewModel(
     private var lastPersistedReadingGeneration = -1L
     /** While true, continuous scroll must not update pageIndex chrome (zoom gesture). */
     private var suspendPageSettled: Boolean = false
-    /** Fast scroller drag: only preview renders. */
-    private var fastScrollDragging: Boolean = false
-    private var lastFastScrollEmitMs: Long = 0L
     /** UI supplies plain page indexes; VM stays independent of Compose layout types. */
     private var visibleContinuousPages: Set<Int> = emptySet()
     private var continuousDirection = ContinuousScrollDirection.IDLE
@@ -533,12 +548,10 @@ class PdfViewerViewModel(
         pageImage: ImageBitmap? = ready.pageImage,
         isRendering: Boolean = ready.isRendering,
         renderError: String? = ready.renderError,
-        scrubPreviewIndex: Int? = ready.scrubPreviewIndex,
         readingMode: PdfReadingMode = ready.readingMode,
         showPageButtons: Boolean = ready.showPageButtons,
         zoomScale: Float = this.zoomScale,
         qualityTier: QualityTier = this.qualityTier,
-        fastScrollDragging: Boolean = this.fastScrollDragging,
     ): PdfViewerUiState.Ready {
         val primaryBucket = pageCache.get(pageIndex)?.widthBucket
             ?: PdfRenderQuality.targetWidthPx(viewportWidthPx, QualityTier.PREVIEW)
@@ -552,14 +565,12 @@ class PdfViewerViewModel(
             pageBitmaps = pageCache.snapshotImages(),
             pageAspects = pageCache.snapshotAspects(),
             pageBitmapMetadata = snapshotPageMetadata(),
-            scrubPreviewIndex = scrubPreviewIndex,
             printAnchors = anchors,
             printSections = printSections,
             outlineNodes = outlineNodes,
             zoomScale = zoomScale,
             qualityTier = qualityTier,
             renderWidthBucket = primaryBucket,
-            fastScrollDragging = fastScrollDragging,
         )
     }
 
@@ -576,7 +587,6 @@ class PdfViewerViewModel(
         pageImage: ImageBitmap? = ready.pageImage,
         isRendering: Boolean = ready.isRendering,
         renderError: String? = ready.renderError,
-        scrubPreviewIndex: Int? = ready.scrubPreviewIndex,
         readingMode: PdfReadingMode = ready.readingMode,
         showPageButtons: Boolean = ready.showPageButtons,
         pageBitmaps: Map<Int, ImageBitmap> = ready.pageBitmaps,
@@ -590,7 +600,6 @@ class PdfViewerViewModel(
         tileEntries: Map<PdfTileKey, PdfTileEntry> = ready.tileEntries,
         tileDocumentGeneration: Long = ready.tileDocumentGeneration,
         continuousEntryState: ContinuousEntryState = ready.continuousEntryState,
-        fastScrollDragging: Boolean = ready.fastScrollDragging,
     ): PdfViewerUiState.Ready = ready.copy(
         pageIndex = pageIndex,
         pageImage = pageImage,
@@ -601,7 +610,6 @@ class PdfViewerViewModel(
         pageBitmaps = pageBitmaps,
         pageAspects = pageAspects,
         pageBitmapMetadata = pageBitmapMetadata,
-        scrubPreviewIndex = scrubPreviewIndex,
         printAnchors = anchors,
         printSections = printSections,
         outlineNodes = outlineNodes,
@@ -613,7 +621,6 @@ class PdfViewerViewModel(
         tileDocumentGeneration = tileDocumentGeneration,
         continuousEntryState = continuousEntryState,
         renderWidthBucket = renderWidthBucket,
-        fastScrollDragging = fastScrollDragging,
     )
 
     init {
@@ -638,7 +645,6 @@ class PdfViewerViewModel(
         if (clamped == viewportWidthPx) return
         viewportWidthPx = clamped
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
-        if (ready.scrubPreviewIndex != null) return
         // Viewport size change: re-request previews only; keep old bitmaps until replace.
         when (ready.readingMode) {
             PdfReadingMode.HORIZONTAL_PAGED -> requestRender(ready.pageIndex)
@@ -751,7 +757,17 @@ class PdfViewerViewModel(
         tileWorkerJob = viewModelScope.launch {
             for (ignored in tileWakeSignal) {
                 if (closed) break
-                drainTileQueue()
+                try {
+                    drainTileQueue()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Worker survival: a single unexpected drain failure must
+                    // never kill the tile pipeline permanently. OOM is already
+                    // contained at the bitmap boundary (BitmapAllocationGuard);
+                    // this catches only ordinary exceptions and keeps the loop.
+                    Log.e(ZOOM_LOG_TAG, "tile drain failed; continuing", e)
+                }
             }
         }
     }
@@ -766,6 +782,13 @@ class PdfViewerViewModel(
                         TileWorkQueue.RenderOutcome.Closed
                     PdfPageRenderer.TileRenderResult.InvalidPage ->
                         TileWorkQueue.RenderOutcome.InvalidPage
+                    PdfPageRenderer.TileRenderResult.OutOfMemory -> {
+                        // Bounded OOM recovery: free half the tile cache so the
+                        // next request has headroom; this tile fails explicitly.
+                        Log.w(ZOOM_LOG_TAG, "TILE_OOM: bitmap allocation failed, trimming cache")
+                        tileCache.trimTo(tileCache.bytes / 2)
+                        TileWorkQueue.RenderOutcome.Failed("渲染内存不足")
+                    }
                     is PdfPageRenderer.TileRenderResult.Failed ->
                         TileWorkQueue.RenderOutcome.Failed(result.message)
                 }
@@ -952,58 +975,10 @@ class PdfViewerViewModel(
     }
 
     /**
-     * Fast scroller drag (throttled by UI to ≥60ms). Preview-only; no high-tier work.
+     * goToPreviousPage / goToNextPage: manual paging in any mode.
+     * (The legacy fast-scroll drag funnel was deleted in the R25 closure —
+     * vertical continuous scrolling owns the viewport directly.)
      */
-    fun onFastScrollPreview(pageIndex: Int) {
-        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
-        if (ready.readingMode != PdfReadingMode.VERTICAL_CONTINUOUS) return
-        val now = System.currentTimeMillis()
-        if (now - lastFastScrollEmitMs < PdfRenderQuality.FAST_SCROLL_THROTTLE_MS) return
-        lastFastScrollEmitMs = now
-        val target = PdfReadingNavigation.clampPageIndex(pageIndex, ready.pageCount)
-        fastScrollDragging = true
-        primaryUpgradeJob?.cancel()
-        if (target != ready.pageIndex || ready.scrubPreviewIndex != target) {
-            _uiState.value = ReadyBase(
-                ready,
-                pageIndex = target,
-                scrubPreviewIndex = target,
-                isRendering = false,
-                fastScrollDragging = true,
-                pageBitmaps = ready.pageBitmaps,
-                pageAspects = ready.pageAspects,
-            )
-        }
-        // Only ensure previews for the jump target window — never hi-res along the path.
-        ensurePreviewAround(target)
-        emitPageJump(target, "fastScrollPreview")
-    }
-
-    fun onFastScrollFinished(pageIndex: Int) {
-        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
-        val target = PdfReadingNavigation.clampPageIndex(pageIndex, ready.pageCount)
-        fastScrollDragging = false
-        lastFastScrollEmitMs = 0L
-        _uiState.value = ReadyBase(
-            ready,
-            pageIndex = target,
-            scrubPreviewIndex = null,
-            isRendering = false,
-            fastScrollDragging = false,
-            pageBitmaps = ready.pageBitmaps,
-            pageAspects = ready.pageAspects,
-        )
-        recordStableReadingPosition(
-            _uiState.value as PdfViewerUiState.Ready,
-            target,
-            0f,
-            ReadingPositionSource.USER_CONTINUOUS_SCROLL,
-        )
-        emitPageJump(target, "fastScrollEnd")
-        ensurePreviewAround(target)
-        schedulePrimaryHiRes(target, reason = "fastScrollEnd")
-    }
-
     fun goToPreviousPage() {
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
         if (!ready.canGoPrevious) return
@@ -1024,7 +999,6 @@ class PdfViewerViewModel(
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
         val target = PdfReadingNavigation.clampPageIndex(pageIndex, ready.pageCount)
         if (target == ready.pageIndex &&
-            ready.scrubPreviewIndex == null &&
             (
                 (ready.readingMode == PdfReadingMode.HORIZONTAL_PAGED &&
                     ready.pageImage != null && !ready.isRendering) ||
@@ -1042,7 +1016,6 @@ class PdfViewerViewModel(
                     isRendering = true,
                     renderError = null,
                     pageImage = ready.pageBitmaps[target],
-                    scrubPreviewIndex = null,
                 )
                 recordStableReadingPosition(
                     _uiState.value as PdfViewerUiState.Ready,
@@ -1094,21 +1067,35 @@ class PdfViewerViewModel(
             mode = mode,
             nextGeneration = System.nanoTime(),
         )
-        val page = PdfReadingNavigation.pageAfterModeSwitch(modeSession.pageIndex, ready.pageCount)
+        // Product decision (R13): horizontal paging defaults to FitPage/Contain.
+        // The FIRST entry into horizontal mode (no previously committed
+        // horizontal session) starts at scale 1f = contain-fit for the current
+        // page, regardless of any zoom borrowed from the continuous session.
+        // Returning to horizontal after the user already zoomed there restores
+        // that user zoom (the saved horizontal session) untouched.
+        val effectiveModeSession = if (
+            mode == PdfReadingMode.HORIZONTAL_PAGED &&
+            viewportSessionTracker.latestForMode(PdfReadingMode.HORIZONTAL_PAGED) == null
+        ) {
+            modeSession.copy(scale = 1f)
+        } else {
+            modeSession
+        }
+        val page = PdfReadingNavigation.pageAfterModeSwitch(effectiveModeSession.pageIndex, ready.pageCount)
         if (isDebuggable) {
             Log.d(
                 "MarkLeafH14",
                 "H14_MODE_SWITCH_REQUEST from=${ready.readingMode} to=$mode " +
                     "pageBefore=${stableSession.pageIndex} pageAfter=$page " +
-                    "scaleBefore=${stableSession.scale} scaleAfter=${modeSession.scale} " +
-                    "anchorX=${modeSession.pageAnchorXFraction} " +
-                    "anchorY=${modeSession.pageAnchorYFraction} generation=${modeSession.generation}",
+                    "scaleBefore=${stableSession.scale} scaleAfter=${effectiveModeSession.scale} " +
+                    "anchorX=${effectiveModeSession.pageAnchorXFraction} " +
+                    "anchorY=${effectiveModeSession.pageAnchorYFraction} generation=${effectiveModeSession.generation}",
             )
         }
         val modeTarget = if (mode == PdfReadingMode.VERTICAL_CONTINUOUS) {
             continuousEntryRestore.requestRestore(
                 pageIndex = page,
-                intraPageFraction = modeSession.pageAnchorYFraction,
+                intraPageFraction = effectiveModeSession.pageAnchorYFraction,
                 source = ReadingPositionSource.MODE_SWITCH_RESTORE,
                 pageCount = ready.pageCount,
             )
@@ -1129,7 +1116,6 @@ class PdfViewerViewModel(
                     readingMode = mode,
                     isRendering = true,
                     pageImage = ready.pageBitmaps[page] ?: ready.pageImage,
-                    scrubPreviewIndex = null,
                     zoomScale = zoomScale,
                     qualityTier = qualityTier,
                     viewportSessionState = modeSession,
@@ -1151,7 +1137,6 @@ class PdfViewerViewModel(
                     pageIndex = restoredPage,
                     readingMode = mode,
                     isRendering = false,
-                    scrubPreviewIndex = null,
                     pageBitmaps = ready.pageBitmaps,
                     pageAspects = ready.pageAspects,
                     zoomScale = zoomScale,
@@ -1179,7 +1164,7 @@ class PdfViewerViewModel(
      * Never emits [PageJumpRequest]. Never clears bitmaps.
      */
     fun onVerticalPageSettled(position: ReadingPosition) {
-        if (suspendPageSettled || fastScrollDragging) return
+        if (suspendPageSettled) return
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
         if (ready.readingMode != PdfReadingMode.VERTICAL_CONTINUOUS) return
 
@@ -1227,7 +1212,6 @@ class PdfViewerViewModel(
             _uiState.value = ReadyBase(
                 current,
                 pageIndex = target,
-                scrubPreviewIndex = null,
                 pageImage = current.pageImage,
                 isRendering = false,
                 renderError = null,
@@ -1255,7 +1239,6 @@ class PdfViewerViewModel(
             ready,
             pageIndex = target,
             pageImage = ready.pageBitmaps[target],
-            scrubPreviewIndex = null,
             isRendering = ready.pageBitmaps[target] == null,
             renderError = null,
         )
@@ -1436,7 +1419,7 @@ class PdfViewerViewModel(
      */
     private fun schedulePrimaryHiRes(primary: Int, reason: String) {
         primaryUpgradeJob?.cancel()
-        if (fastScrollDragging || suspendPageSettled || continuousPhase != ContinuousScrollPhase.IDLE) return
+        if (suspendPageSettled || continuousPhase != ContinuousScrollPhase.IDLE) return
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
         if (ready.readingMode != PdfReadingMode.VERTICAL_CONTINUOUS) return
         if (ready.continuousEntryState.phase != com.markleaf.app.pdf.ContinuousEntryPhase.READY) return
@@ -1458,7 +1441,7 @@ class PdfViewerViewModel(
             if (lowerTierJob?.isActive == true && lowerTierKey?.tier != QualityTier.HIGH) {
                 lowerTierJob.join()
             }
-            if (suspendPageSettled || fastScrollDragging) return@launch
+            if (suspendPageSettled) return@launch
             val cur = _uiState.value as? PdfViewerUiState.Ready ?: return@launch
             if (cur.readingMode != PdfReadingMode.VERTICAL_CONTINUOUS) return@launch
             // Primary must still match settled page (user did not move on).
@@ -1528,27 +1511,6 @@ class PdfViewerViewModel(
         if (humanPage < 1 || humanPage > ready.pageCount) return false
         goToPage(humanPage - 1)
         return true
-    }
-
-    /** Scrubber drag: update label only. */
-    fun onScrubPreview(pageIndex: Int) {
-        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
-        val target = pageIndex.coerceIn(0, (ready.pageCount - 1).coerceAtLeast(0))
-        if (ready.scrubPreviewIndex == target) return
-        _uiState.value = ReadyBase(ready, scrubPreviewIndex = target)
-    }
-
-    /** Scrubber release: commit page + render. */
-    fun onScrubFinished(pageIndex: Int) {
-        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
-        val target = pageIndex.coerceIn(0, (ready.pageCount - 1).coerceAtLeast(0))
-        goToPage(target)
-    }
-
-    fun cancelScrub() {
-        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
-        if (ready.scrubPreviewIndex == null) return
-        _uiState.value = ReadyBase(ready, scrubPreviewIndex = null)
     }
 
     /**
@@ -1646,9 +1608,15 @@ class PdfViewerViewModel(
         _importMessage.value = null
     }
 
-    /** Open export confirm for a catalog node. */
+    /** Open export sheet for a catalog node (from export picker, not per-row outline icons). */
     fun beginExportNode(node: TextbookOutlineNodeEntity) {
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
+        if (isExportRunning()) {
+            // Never stack a new export flow over an in-flight progress dialog.
+            _importMessage.value = "正在导出，请等待完成或先取消"
+            return
+        }
+        clearTerminalExportDialogIfAny()
         val plan = ExportRangeResolver.plan(
             node = node,
             nodes = outlineNodes,
@@ -1657,6 +1625,46 @@ class PdfViewerViewModel(
         )
         _exportPlan.value = plan
         pendingExportPlan = plan
+    }
+
+    private fun isExportRunning(): Boolean {
+        val st = _exportState.value
+        return st is ChapterExportState.Preparing ||
+            st is ChapterExportState.CopyingPages ||
+            st is ChapterExportState.BuildingMetadata ||
+            st is ChapterExportState.WritingArchive
+    }
+
+    /**
+     * A terminal export dialog (Completed/Failed/Cancelled) must never stay
+     * on screen over a NEW export sheet: both dialogs would render at once
+     * and the stale one hides the fresh flow, making a second export look
+     * like it "just went back to reading".
+     */
+    private fun clearTerminalExportDialogIfAny() {
+        val st = _exportState.value
+        if (st is ChapterExportState.Completed ||
+            st is ChapterExportState.Failed ||
+            st is ChapterExportState.Cancelled
+        ) {
+            _exportState.value = null
+        }
+    }
+
+    /**
+     * Single export entry: default to deepest outline node covering the current page,
+     * otherwise the first root node. No outline nodes → snackbar only.
+     */
+    fun beginExportCurrent() {
+        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
+        if (outlineNodes.isEmpty()) {
+            _importMessage.value = "请先添加或导入目录，再导出章节"
+            return
+        }
+        val node = TextbookOutlineResolver.deepestContaining(ready.pageIndex, outlineNodes)
+            ?: outlineNodes.firstOrNull { it.parentId == null }
+            ?: outlineNodes.first()
+        beginExportNode(node)
     }
 
     fun dismissExportPlan() {
@@ -1669,16 +1677,25 @@ class PdfViewerViewModel(
     }
 
     fun cancelExport() {
-        chapterExporter.cancelRequested = true
+        // Bump the generation FIRST: the cancelled job's late onState
+        // callbacks (it may still run inside its IO block) must not touch
+        // the UI state of any subsequent export. The job-local cancellation
+        // token stops THIS run only — a newer export owns its own token.
+        exportStateGate.cancel()
+        activeExportCancellation?.cancel()
         exportJob?.cancel()
         _exportState.value = ChapterExportState.Cancelled
     }
 
     /**
-     * After user confirms range, prepare SAF suggested name.
+     * After user confirms range + format, prepare SAF suggested name.
      * Call [runExportToUri] when CreateDocument returns.
      */
-    fun confirmExportRange(startIndex0: Int, endIndex0: Int): String? {
+    fun confirmExportRange(
+        startIndex0: Int,
+        endIndex0: Int,
+        format: ChapterExportFormat = ChapterExportFormat.ZIP_PACKAGE,
+    ): String? {
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return null
         val base = pendingExportPlan ?: _exportPlan.value ?: return null
         val err = ExportRangeResolver.validateRange(startIndex0, endIndex0, ready.pageCount)
@@ -1695,37 +1712,65 @@ class PdfViewerViewModel(
             overrideEndIndex = endIndex0,
         )
         pendingExportPlan = plan
+        pendingExportFormat = format
         _exportPlan.value = null
-        val name = ExportRangeResolver.defaultZipName(
-            ready.document.displayName,
-            plan.pathTitles,
+        val name = ExportRangeResolver.defaultExportName(
+            format = format,
+            documentDisplayName = ready.document.displayName,
+            pathTitles = plan.pathTitles,
         )
         lastExportSuggestedName = name
         return name
     }
 
     fun suggestedExportFileName(): String =
-        lastExportSuggestedName ?: "chapter-package.zip"
+        lastExportSuggestedName
+            ?: ExportRangeResolver.defaultExportName(
+                pendingExportFormat,
+                "chapter",
+                emptyList(),
+            )
 
     fun runExportToUri(outputUri: Uri) {
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
         val plan = pendingExportPlan ?: return
         val uriStr = documentUri ?: return
+        val format = pendingExportFormat
         exportJob?.cancel()
-        chapterExporter.cancelRequested = false
+        // New generation: late callbacks of the previous job (still draining
+        // its IO block after cancel) become stale and are dropped by the gate.
+        // Each run owns its own cancellation token — the previous run's token
+        // is left cancelled, so it can never be re-enabled by this start.
+        val generation = exportStateGate.begin()
+        val cancellation = ExportCancellationToken()
+        activeExportCancellation = cancellation
         exportJob = viewModelScope.launch {
-            _exportState.value = ChapterExportState.Preparing
-            val result = chapterExporter.export(
-                sourceUri = Uri.parse(uriStr),
-                documentId = documentId,
-                documentDisplayName = ready.document.displayName,
-                plan = plan,
-                allNodes = outlineNodes,
-                printAnchors = anchors,
-                outputUri = outputUri,
-                onState = { _exportState.value = it },
-            )
-            _exportState.value = result
+            val onState: (ChapterExportState) -> Unit = { state ->
+                if (exportStateGate.isCurrent(generation)) _exportState.value = state
+            }
+            onState(ChapterExportState.Preparing)
+            val result = when (format) {
+                ChapterExportFormat.ZIP_PACKAGE -> chapterExporter.export(
+                    sourceUri = Uri.parse(uriStr),
+                    documentId = documentId,
+                    documentDisplayName = ready.document.displayName,
+                    plan = plan,
+                    allNodes = outlineNodes,
+                    printAnchors = anchors,
+                    outputUri = outputUri,
+                    cancellation = cancellation,
+                    onState = onState,
+                )
+                ChapterExportFormat.PDF_ANNOTATED -> pdfAnnotatedExporter.export(
+                    sourceUri = Uri.parse(uriStr),
+                    documentDisplayName = ready.document.displayName,
+                    plan = plan,
+                    outputUri = outputUri,
+                    cancellation = cancellation,
+                    onState = onState,
+                )
+            }
+            if (exportStateGate.isCurrent(generation)) _exportState.value = result
         }
     }
 
@@ -1740,6 +1785,25 @@ class PdfViewerViewModel(
             alreadyImported = com.markleaf.app.pdf.PdfEmbeddedOutlineImporter
                 .isAlreadyImported(cachedDrafts, outlineNodes),
         )
+    }
+
+    /**
+     * Force re-scan PDF bookmarks with PDFBox (user-triggered).
+     * Auto-open path skips when embedded outline already imported.
+     */
+    fun rescanEmbeddedOutline() {
+        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
+        val uri = documentUri ?: ready.document.uri
+        viewModelScope.launch {
+            try {
+                detectEmbeddedOutline(uri = uri, pageCount = ready.pageCount, force = true)
+                if (cachedDrafts.isNotEmpty()) {
+                    requestEmbeddedImportUi()
+                }
+            } catch (_: Throwable) {
+                _importMessage.value = "重新扫描目录失败"
+            }
+        }
     }
 
     fun importEmbeddedOutline(mode: OutlineImportMode) {
@@ -1821,7 +1885,6 @@ class PdfViewerViewModel(
             zoomScale = 1f
             qualityTier = QualityTier.PREVIEW
             suspendPageSettled = false
-            fastScrollDragging = false
             lastHiResPrimary = -1
 
             val entity = try {
@@ -1926,7 +1989,6 @@ class PdfViewerViewModel(
                         isRendering = readingMode == PdfReadingMode.HORIZONTAL_PAGED,
                         printAnchors = anchors,
                         printSections = printSections,
-                        scrubPreviewIndex = null,
                         outlineNodes = outlineNodes,
                         readingMode = readingMode,
                         showPageButtons = showPageButtons,
@@ -1942,7 +2004,6 @@ class PdfViewerViewModel(
                             viewportWidthPx,
                             QualityTier.PREVIEW,
                         ),
-                        fastScrollDragging = false,
                     )
                     when (readingMode) {
                         PdfReadingMode.HORIZONTAL_PAGED -> requestRender(restored)
@@ -1959,11 +2020,15 @@ class PdfViewerViewModel(
                         }
                     }
                     // Detect embedded PDF outline after first paint; never crash the reader.
+                    // Skip heavy PDFBox when this document already has imported embedded nodes.
                     launch {
                         try {
-                            // Let the first page render start before heavy PDFBox load.
                             kotlinx.coroutines.delay(400)
-                            detectEmbeddedOutline(entity.uri, pageCount)
+                            detectEmbeddedOutline(
+                                uri = entity.uri,
+                                pageCount = pageCount,
+                                force = false,
+                            )
                         } catch (_: Throwable) {
                             cachedDrafts = emptyList()
                             _embeddedOffer.value = null
@@ -1992,8 +2057,25 @@ class PdfViewerViewModel(
         }
     }
 
-    private suspend fun detectEmbeddedOutline(uri: String, pageCount: Int) {
+    private suspend fun detectEmbeddedOutline(
+        uri: String,
+        pageCount: Int,
+        force: Boolean,
+    ) {
         try {
+            // Lightweight path: already imported embedded bookmarks → skip PDFBox re-load.
+            // User can still force via [rescanEmbeddedOutline].
+            if (!force) {
+                val embeddedCount = outlineNodes.count {
+                    it.source == com.markleaf.app.data.local.OutlineNodeSource.PDF_EMBEDDED.name
+                }
+                if (embeddedCount > 0) {
+                    cachedDrafts = emptyList()
+                    _embeddedOffer.value = null
+                    return
+                }
+            }
+
             when (val parsed = PdfEmbeddedOutlineParser.parse(appContext, uri)) {
                 is PdfEmbeddedOutlineParser.ParseResult.Success -> {
                     val drafts = try {
@@ -2009,8 +2091,13 @@ class PdfViewerViewModel(
                     } catch (_: Throwable) {
                         false
                     }
+                    // Soft warning: some destinations unresolved but tree still usable.
+                    if (parsed.unresolvedDestinations > 0 && force) {
+                        _importMessage.value =
+                            "已解析目录，其中 ${parsed.unresolvedDestinations} 项页码为近似值"
+                    }
                     // Prompt when not fully imported yet, or when local tree empty (fresh).
-                    if (!already || outlineNodes.isEmpty()) {
+                    if (!already || outlineNodes.isEmpty() || force) {
                         _embeddedOffer.value = EmbeddedOutlineOffer(
                             drafts = drafts,
                             hasLocalNodes = outlineNodes.isNotEmpty(),
@@ -2020,14 +2107,21 @@ class PdfViewerViewModel(
                 }
                 PdfEmbeddedOutlineParser.ParseResult.None -> {
                     cachedDrafts = emptyList()
+                    if (force) {
+                        _importMessage.value = "此 PDF 没有可用的内置目录"
+                    }
                 }
                 is PdfEmbeddedOutlineParser.ParseResult.Failed -> {
                     cachedDrafts = emptyList()
+                    _embeddedOffer.value = null
+                    // Always surface failure (auto or force) so users know why directory is empty.
+                    _importMessage.value = parsed.message
                 }
             }
         } catch (_: Throwable) {
             cachedDrafts = emptyList()
             _embeddedOffer.value = null
+            _importMessage.value = "目录解析异常"
         }
     }
 
@@ -2224,6 +2318,22 @@ class PdfViewerViewModel(
                             current,
                             isRendering = false,
                             renderError = result.message,
+                        )
+                    }
+                }
+                PdfPageRenderer.RenderResult.OutOfMemory -> {
+                    // Bounded OOM recovery: trim page cache headroom, surface an
+                    // explicit error only when nothing is on screen, never loop.
+                    Log.w(ZOOM_LOG_TAG, "PAGE_OOM: full-page bitmap allocation failed, trimming cache")
+                    pageCache.trimMemory()
+                    if (current.pageIndex == pageIndex &&
+                        pageCache.image(pageIndex) == null &&
+                        current.pageImage == null
+                    ) {
+                        _uiState.value = ReadyBase(
+                            current,
+                            isRendering = false,
+                            renderError = "内存不足，无法渲染该页",
                         )
                     }
                 }

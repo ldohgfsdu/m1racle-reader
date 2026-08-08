@@ -8,6 +8,24 @@ data class ContinuousViewportSnapshot(
     val primaryPage: Int,
     val direction: ContinuousScrollDirection,
     val phase: ContinuousScrollPhase,
+    /** Scroll-Y delta (document px) since the previous snapshot — chrome hysteresis input. */
+    val scrollDeltaY: Float = 0f,
+    /** Instant scroll velocity (dp/s, positive = forward) — fling fast-path input. */
+    val velocityYDpPerSec: Float = 0f,
+    /**
+     * Ground truth: the primary page's top edge on screen (viewport coords,
+     * px). Derived from the page placement transform: screenY = pageTop*scale
+     * - scrollY. Content moving up makes this value SMALLER.
+     */
+    val contentAnchorScreenY: Float = 0f,
+    /**
+     * Measured cross-frame screen displacement of the SAME primary page's top
+     * edge (px). < 0 = PDF content visibly moves toward the screen top;
+     * > 0 = content moves toward the screen bottom. 0 = re-baseline frame
+     * (primary page changed) or no motion. This is the ONLY direction source
+     * the chrome adapter may use — raw scrollDeltaY sign is never semantic.
+     */
+    val contentAnchorDeltaY: Float = 0f,
 )
 
 object ContinuousViewportPolicy {

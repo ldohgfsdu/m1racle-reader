@@ -3,41 +3,34 @@ package com.markleaf.app.pdf
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
-import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Independent PDF **metadata / outline** reader.
- * Does **not** render pages — [PdfPageRenderer] remains the sole bitmap path.
+ * PDF **metadata / outline** reader (bookmarks only).
  *
- * Failures never propagate as process-killing Errors: large textbooks may OOM
- * if fully loaded; we use temp-file memory mode and catch [Throwable].
+ * Does **not** render pages — [PdfPageRenderer] remains the sole bitmap path.
+ * Chapter/page export still uses PDFBox via [com.markleaf.app.pdf.export.PdfPageExtractor].
+ *
+ * Perf notes:
+ * - Builds a page→index map once (O(pages)) instead of indexOf per bookmark.
+ * - Unresolved destinations fall back to the previous bookmark page (not always 0).
+ * - Failures never kill the reader process.
  */
 object PdfEmbeddedOutlineParser {
 
     private const val TAG = "PdfEmbeddedOutline"
-    private val pdfBoxReady = AtomicBoolean(false)
-
-    fun ensureInit(context: Context) {
-        if (pdfBoxReady.compareAndSet(false, true)) {
-            try {
-                PDFBoxResourceLoader.init(context.applicationContext)
-            } catch (t: Throwable) {
-                Log.w(TAG, "PDFBoxResourceLoader.init failed", t)
-                pdfBoxReady.set(false)
-            }
-        }
-    }
 
     sealed class ParseResult {
-        data class Success(val entries: List<EmbeddedOutlineEntry>) : ParseResult() {
+        data class Success(
+            val entries: List<EmbeddedOutlineEntry>,
+            /** Bookmarks whose PDF destination could not be resolved. */
+            val unresolvedDestinations: Int = 0,
+        ) : ParseResult() {
             val nodeCount: Int get() = entries.size
             val isEmpty: Boolean get() = entries.isEmpty()
         }
@@ -52,26 +45,25 @@ object PdfEmbeddedOutlineParser {
     suspend fun parse(context: Context, uriString: String): ParseResult =
         withContext(Dispatchers.IO) {
             try {
-                ensureInit(context)
+                if (!PdfBoxRuntime.ensureInit(context)) {
+                    return@withContext ParseResult.Failed("PDF 组件初始化失败")
+                }
                 val uri = Uri.parse(uriString)
                 val stream = when (uri.scheme?.lowercase(java.util.Locale.ROOT)) {
                     "file" -> {
                         val path = uri.path
-                        if (path.isNullOrEmpty()) null
-                        else {
+                        if (path.isNullOrEmpty()) {
+                            null
+                        } else {
                             val f = java.io.File(path)
                             if (f.isFile) f.inputStream() else null
                         }
                     }
                     else -> context.contentResolver.openInputStream(uri)
                 } ?: return@withContext ParseResult.Failed("无法打开文件")
+
                 stream.use { input ->
-                    // Prefer temp-file backed memory for large medical PDFs (avoids heap OOM).
-                    val loadSetting = try {
-                        MemoryUsageSetting.setupTempFileOnly()
-                    } catch (_: Throwable) {
-                        MemoryUsageSetting.setupMainMemoryOnly()
-                    }
+                    val loadSetting = PdfBoxRuntime.memorySetting()
                     PDDocument.load(input, loadSetting).use { doc ->
                         val outline: PDDocumentOutline? = try {
                             doc.documentCatalog?.documentOutline
@@ -95,8 +87,17 @@ object PdfEmbeddedOutlineParser {
                         if (pageCount <= 0) {
                             return@withContext ParseResult.None
                         }
+
+                        // Page→index once by *stable* COS dictionary identity
+                        // (PDPage wrappers are re-created on every access and
+                        // must never be used as keys; see OutlinePageIndexResolver).
+                        val resolver = OutlinePageIndexResolver(doc)
+
                         val entries = ArrayList<EmbeddedOutlineEntry>(256)
                         var order = 0
+                        var unresolved = 0
+                        var lastResolvedPage = 0
+
                         fun walk(node: PDOutlineNode, depth: Int, parentOrder: Int) {
                             if (depth > 32) return
                             var item: PDOutlineItem? = try {
@@ -112,8 +113,17 @@ object PdfEmbeddedOutlineParser {
                                 } catch (_: Throwable) {
                                     ""
                                 }.ifBlank { "未命名" }
-                                val pageIndex = resolvePageIndex(doc, item)
-                                    .coerceIn(0, pageCount - 1)
+
+                                val resolved = resolver.resolvePageIndex(item)
+                                val pageIndex = if (resolved >= 0) {
+                                    lastResolvedPage = resolved
+                                    resolved
+                                } else {
+                                    unresolved++
+                                    // Prefer previous bookmark page over hard-coding 0 for every miss.
+                                    lastResolvedPage.coerceIn(0, pageCount - 1)
+                                }.coerceIn(0, pageCount - 1)
+
                                 entries.add(
                                     EmbeddedOutlineEntry(
                                         title = title,
@@ -135,20 +145,17 @@ object PdfEmbeddedOutlineParser {
                                 }
                             }
                         }
+
                         try {
                             walk(outline, 0, -1)
                         } catch (t: Throwable) {
                             Log.w(TAG, "outline walk failed", t)
                         }
-                        if (entries.isEmpty()) {
-                            ParseResult.None
-                        } else {
-                            ParseResult.Success(entries)
-                        }
+
+                        decideOutcome(entries, unresolved)
                     }
                 }
             } catch (t: Throwable) {
-                // Includes OutOfMemoryError — do not crash the reader.
                 Log.e(TAG, "parse failed", t)
                 ParseResult.Failed(
                     when (t) {
@@ -160,13 +167,23 @@ object PdfEmbeddedOutlineParser {
             }
         }
 
-    private fun resolvePageIndex(doc: PDDocument, item: PDOutlineItem): Int {
-        return try {
-            val page = item.findDestinationPage(doc) ?: return 0
-            val idx = doc.pages.indexOf(page)
-            if (idx >= 0) idx else 0
-        } catch (_: Throwable) {
-            0
-        }
+    /**
+     * Failure policy for outline parsing (kept explicit & testable):
+     * - A single bad bookmark NEVER drops the whole outline: it degrades to
+     *   the previously resolved page and is counted as unresolved.
+     * - Only when the majority of bookmarks cannot be resolved
+     *   (unresolved * 2 >= entries.size) is the outline treated as untrusted
+     *   and surfaced to the user as a failure instead of silently wrong data.
+     */
+    internal fun decideOutcome(entries: List<EmbeddedOutlineEntry>, unresolved: Int): ParseResult = when {
+        entries.isEmpty() -> ParseResult.None
+        unresolved > 0 && unresolved * 2 >= entries.size ->
+            ParseResult.Failed(
+                "目录页码解析失败过多（$unresolved/${entries.size}），请检查 PDF 书签",
+            )
+        else -> ParseResult.Success(
+            entries = entries,
+            unresolvedDestinations = unresolved,
+        )
     }
 }

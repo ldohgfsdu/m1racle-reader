@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.PlatformTextStyle
@@ -60,6 +62,7 @@ fun TableBlockView(
     onHeaderCellLayout: ((Int, TableHeaderCellLayoutMetadata) -> Unit)? = null,
     stableTableId: String? = null,
     layoutCache: TableLayoutCache? = null,
+    onLinkClick: ((String) -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val density = LocalDensity.current
@@ -272,15 +275,19 @@ fun TableBlockView(
                 )
                 .testTag("markdown-table-scroll"),
         ) {
+            // Single shared width list for every row (header + body). Content never
+            // re-solves widths per cell at draw time; horizontal scroll when total > viewport.
             Column(modifier = Modifier.width(tableWidth)) {
                 TableHeaderRow(
                     cells = block.headers,
+                    alignments = block.alignments,
                     columnWidths = columnWidths,
                     resolvedHeaderTextStyle = resolvedHeaderTextStyle,
                     inlineStyles = inlineStyles,
                     horizontalPadding = tokens.horizontalCellPaddingDp.dp,
                     verticalPadding = tokens.verticalCellPaddingDp.dp,
                     onHeaderCellLayout = onHeaderCellLayout,
+                    onLinkClick = onLinkClick,
                     cellHighlight = { col ->
                         if (!hasSearch) {
                             BlockSearchHighlights.EmptyRanges
@@ -307,6 +314,7 @@ fun TableBlockView(
                         horizontalPadding = tokens.horizontalCellPaddingDp.dp,
                         verticalPadding = tokens.verticalCellPaddingDp.dp,
                         rowTag = "body-$rowIndex",
+                        onLinkClick = onLinkClick,
                         cellHighlight = { col ->
                             if (!hasSearch) {
                                 BlockSearchHighlights.EmptyRanges
@@ -346,30 +354,74 @@ data class TableHeaderCellLayoutMetadata(
     val lineCount: Int,
 )
 
+/**
+ * Header typography only (weight / platform style). Column [TextAlign] is applied
+ * per-cell from [TableAlignment] so header and body share the same alignment policy.
+ */
 internal fun resolveTableHeaderTextStyle(bodyStyle: TextStyle): TextStyle = bodyStyle.copy(
     fontFamily = FontFamily.Default,
     fontWeight = FontWeight.SemiBold,
     letterSpacing = 0.sp,
+    // Default; each cell overwrites with [tableColumnTextAlign].
     textAlign = TextAlign.Start,
     textDirection = TextDirection.ContentOrLtr,
     platformStyle = PlatformTextStyle(includeFontPadding = false),
 )
 
+/** Shared header/body mapping from GFM column alignment to Compose [TextAlign]. */
+internal fun tableColumnTextAlign(alignment: TableAlignment): TextAlign = when (alignment) {
+    TableAlignment.Start -> TextAlign.Start
+    TableAlignment.Center -> TextAlign.Center
+    TableAlignment.End -> TextAlign.End
+}
+
+/**
+ * Pure geometry for a cell's text box inside a fixed column width.
+ * Header and body must use the same [cellWidthPx] / padding / [alignment] so
+ * start/center/end edges line up regardless of different text lengths.
+ */
+internal data class TableCellTextPlacement(
+    val cellWidthPx: Float,
+    val paddingStartPx: Float,
+    val paddingEndPx: Float,
+    val textWidthPx: Float,
+    val alignment: TableAlignment,
+) {
+    val contentWidthPx: Float
+        get() = (cellWidthPx - paddingStartPx - paddingEndPx).coerceAtLeast(0f)
+
+    val textStartPx: Float
+        get() {
+            val free = (contentWidthPx - textWidthPx).coerceAtLeast(0f)
+            return paddingStartPx + when (alignment) {
+                TableAlignment.Start -> 0f
+                TableAlignment.Center -> free / 2f
+                TableAlignment.End -> free
+            }
+        }
+
+    val textEndPx: Float get() = textStartPx + textWidthPx.coerceAtMost(contentWidthPx)
+    val textCenterPx: Float get() = (textStartPx + textEndPx) / 2f
+}
+
 @Composable
 private fun TableHeaderRow(
     cells: List<String>,
+    alignments: List<TableAlignment>,
     columnWidths: List<Dp>,
     resolvedHeaderTextStyle: TextStyle,
     inlineStyles: InlineMarkdownStyles,
     horizontalPadding: Dp,
     verticalPadding: Dp,
     onHeaderCellLayout: ((Int, TableHeaderCellLayoutMetadata) -> Unit)?,
+    onLinkClick: ((String) -> Unit)? = null,
     cellHighlight: (Int) -> List<SearchHighlightRange> = { emptyList() },
     normalHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
     activeHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
 ) {
     Row(modifier = Modifier.testTag("markdown-table-row-header")) {
         columnWidths.forEachIndexed { column, width ->
+            val alignment = alignments.getOrElse(column) { TableAlignment.Start }
             val source = cells.getOrElse(column) { "" }
             val ranges = cellHighlight(column)
             val baseAnnotated = remember(source, inlineStyles) {
@@ -382,36 +434,37 @@ private fun TableHeaderRow(
                     baseAnnotated.withSearchHighlights(ranges, normalHl, activeHl)
                 }
             }
-            Text(
-                text = annotated,
-                modifier = Modifier
-                    .alignByBaseline()
-                    .width(width)
-                    .padding(horizontal = horizontalPadding, vertical = verticalPadding)
-                    .fillMaxWidth()
-                    .testTag("markdown-table-cell-header-$column"),
+            // Same geometry as body: fixed column width + identical horizontal padding.
+            val cellModifier = Modifier
+                .alignByBaseline()
+                .width(width)
+                .padding(horizontal = horizontalPadding, vertical = verticalPadding)
+                .fillMaxWidth()
+                .testTag("markdown-table-cell-header-$column")
+            val onLayout: (TextLayoutResult) -> Unit = { result ->
+                onHeaderCellLayout?.invoke(
+                    column,
+                    TableHeaderCellLayoutMetadata(
+                        fontSizeSp = resolvedHeaderTextStyle.fontSize.value,
+                        fontWeight = resolvedHeaderTextStyle.fontWeight,
+                        lineHeightSp = resolvedHeaderTextStyle.lineHeight.value,
+                        letterSpacingSp = resolvedHeaderTextStyle.letterSpacing.value,
+                        fontFamily = resolvedHeaderTextStyle.fontFamily,
+                        platformStyle = resolvedHeaderTextStyle.platformStyle,
+                        textDirection = resolvedHeaderTextStyle.textDirection,
+                        firstBaselinePx = result.firstBaseline,
+                        textHeightPx = result.size.height,
+                        lineCount = result.lineCount,
+                    ),
+                )
+            }
+            TableAnnotatedText(
+                annotated = annotated,
                 style = resolvedHeaderTextStyle,
-                textAlign = TextAlign.Start,
-                softWrap = true,
-                overflow = TextOverflow.Clip,
-                maxLines = Int.MAX_VALUE,
-                onTextLayout = { result ->
-                    onHeaderCellLayout?.invoke(
-                        column,
-                        TableHeaderCellLayoutMetadata(
-                            fontSizeSp = resolvedHeaderTextStyle.fontSize.value,
-                            fontWeight = resolvedHeaderTextStyle.fontWeight,
-                            lineHeightSp = resolvedHeaderTextStyle.lineHeight.value,
-                            letterSpacingSp = resolvedHeaderTextStyle.letterSpacing.value,
-                            fontFamily = resolvedHeaderTextStyle.fontFamily,
-                            platformStyle = resolvedHeaderTextStyle.platformStyle,
-                            textDirection = resolvedHeaderTextStyle.textDirection,
-                            firstBaselinePx = result.firstBaseline,
-                            textHeightPx = result.size.height,
-                            lineCount = result.lineCount,
-                        ),
-                    )
-                },
+                textAlign = tableColumnTextAlign(alignment),
+                onLinkClick = onLinkClick,
+                onTextLayout = onLayout,
+                modifier = cellModifier,
             )
         }
     }
@@ -428,6 +481,7 @@ private fun TableRow(
     verticalPadding: Dp,
     rowTag: String,
     modifier: Modifier = Modifier,
+    onLinkClick: ((String) -> Unit)? = null,
     cellHighlight: (Int) -> List<SearchHighlightRange> = { emptyList() },
     normalHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
     activeHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
@@ -445,6 +499,8 @@ private fun TableRow(
                 searchRanges = cellHighlight(column),
                 normalHl = normalHl,
                 activeHl = activeHl,
+                onLinkClick = onLinkClick,
+                // Same width + padding as header cells (shared columnWidths + tokens).
                 modifier = Modifier
                     .width(width)
                     .padding(horizontal = horizontalPadding, vertical = verticalPadding)
@@ -464,32 +520,82 @@ private fun TableCell(
     searchRanges: List<SearchHighlightRange> = emptyList(),
     normalHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
     activeHl: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
+    onLinkClick: ((String) -> Unit)? = null,
 ) {
     val baseAnnotated = remember(text, inlineStyles) {
         InlineMarkdownParser.parse(text.ifEmpty { " " }, inlineStyles)
     }
-    val annotated = if (searchRanges.isEmpty()) {
+    // Rendering text equals the search plain text, so offsets apply directly.
+    val rawRanges = searchRanges
+    val annotated = if (rawRanges.isEmpty()) {
         baseAnnotated
     } else {
-        remember(baseAnnotated, searchRanges, normalHl, activeHl) {
-            baseAnnotated.withSearchHighlights(searchRanges, normalHl, activeHl)
+        remember(baseAnnotated, rawRanges, normalHl, activeHl) {
+            baseAnnotated.withSearchHighlights(rawRanges, normalHl, activeHl)
         }
     }
     val resolvedStyle = style.copy(
         fontFamily = style.fontFamily ?: FontFamily.Default,
         fontWeight = style.fontWeight ?: FontWeight.Normal,
     )
-    Text(
-        text = annotated,
-        modifier = modifier.fillMaxWidth(),
+    TableAnnotatedText(
+        annotated = annotated,
         style = resolvedStyle,
-        textAlign = when (alignment) {
-            TableAlignment.Start -> TextAlign.Start
-            TableAlignment.Center -> TextAlign.Center
-            TableAlignment.End -> TextAlign.End
-        },
-        softWrap = true,
-        overflow = TextOverflow.Clip,
-        maxLines = Int.MAX_VALUE,
+        textAlign = tableColumnTextAlign(alignment),
+        onLinkClick = onLinkClick,
+        modifier = modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * Table cell text that activates inline Markdown link annotations when present.
+ * Keeps non-link cells on plain [Text] for lower cost.
+ */
+@Composable
+private fun TableAnnotatedText(
+    annotated: AnnotatedString,
+    style: TextStyle,
+    textAlign: TextAlign,
+    modifier: Modifier = Modifier,
+    onLinkClick: ((String) -> Unit)? = null,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
+) {
+    val hasLinks = remember(annotated, onLinkClick != null) {
+        onLinkClick != null && annotated.getStringAnnotations(
+            tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
+            start = 0,
+            end = annotated.length,
+        ).isNotEmpty()
+    }
+    val resolvedStyle = style.copy(textAlign = textAlign)
+    if (hasLinks) {
+        @Suppress("DEPRECATION")
+        ClickableText(
+            text = annotated,
+            style = resolvedStyle,
+            softWrap = true,
+            overflow = TextOverflow.Clip,
+            maxLines = Int.MAX_VALUE,
+            modifier = modifier,
+            onTextLayout = { onTextLayout?.invoke(it) },
+            onClick = { offset ->
+                annotated.getStringAnnotations(
+                    tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
+                    start = offset,
+                    end = offset,
+                ).firstOrNull()?.let { onLinkClick?.invoke(it.item) }
+            },
+        )
+    } else {
+        Text(
+            text = annotated,
+            modifier = modifier,
+            style = resolvedStyle,
+            textAlign = textAlign,
+            softWrap = true,
+            overflow = TextOverflow.Clip,
+            maxLines = Int.MAX_VALUE,
+            onTextLayout = { onTextLayout?.invoke(it) },
+        )
+    }
 }

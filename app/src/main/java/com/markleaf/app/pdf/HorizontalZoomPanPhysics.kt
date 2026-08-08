@@ -107,7 +107,13 @@ object HorizontalZoomPanPhysics {
             fittedHeight = availableHeight
             fittedWidth = availableHeight / aspect
         }
-        return HorizontalPageLayout(width, height, fittedWidth, fittedHeight, margin)
+        // Single-page paging centers the fitted page in the reading viewport:
+        // when the fitted page is shorter than the available height, its top
+        // sits at the vertical middle (equal margins above and below) instead
+        // of being glued to the top. When the page fills the height, it stays
+        // at the reading margin and the zoomed pan bounds take over.
+        val top = margin + ((availableHeight - fittedHeight) / 2f).coerceAtLeast(0f)
+        return HorizontalPageLayout(width, height, fittedWidth, fittedHeight, top)
     }
 
     /**

@@ -64,6 +64,45 @@ class ZipPackageImporterTest {
     }
 
     @Test
+    fun entryCountLimit_rejected() {
+        val baos = ByteArrayOutputStream()
+        ZipOutputStream(baos).use { zos ->
+            // Stay under limit with md + pad to exceed with empty dirs-as-files
+            zos.putNextEntry(ZipEntry("index.md"))
+            zos.write("# ok\n".toByteArray())
+            zos.closeEntry()
+            // Use a reduced limit simulation via many tiny entries — if MAX is 5000,
+            // create 5001 file entries.
+            val n = ZipPackageImporter.MAX_ENTRY_COUNT + 1
+            for (i in 0 until n) {
+                zos.putNextEntry(ZipEntry("pad/p$i.txt"))
+                zos.write(byteArrayOf(0x41))
+                zos.closeEntry()
+            }
+        }
+        val dest = tmp.newFolder("many")
+        try {
+            ZipPackageImporter.extract(ByteArrayInputStream(baos.toByteArray()), dest)
+            fail("expected SecurityException for entry count")
+        } catch (e: SecurityException) {
+            assertTrue(e.message!!.contains("entry count") || e.message!!.contains("limit"))
+        }
+    }
+
+    @Test
+    fun singleEntrySizeLimit_rejected() {
+        // Bypass MAX_SINGLE by calling copyWithLimit directly with tiny cap
+        val dest = tmp.newFile("big.bin")
+        val stream = ByteArrayInputStream(ByteArray(100) { 1 })
+        try {
+            ZipPackageImporter.copyWithLimit(stream, dest, maxBytes = 50)
+            fail("expected SecurityException")
+        } catch (e: SecurityException) {
+            assertTrue(e.message!!.contains("size limit"))
+        }
+    }
+
+    @Test
     fun duplicateExtract_overwritesSameDest() {
         val zip = buildZip("index.md" to "# V1\n")
         val dest = tmp.newFolder("dup")

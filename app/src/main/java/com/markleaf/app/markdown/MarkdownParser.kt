@@ -11,6 +11,13 @@ object MarkdownParser {
         val toc: List<TocItem>,
         val anchorRegistry: AnchorRegistry,
         val blockIds: List<String>,
+        /**
+         * Empty HTML anchors that appeared after the last renderable block.
+         * The registry only maps to block tops, so EOF anchors cannot be placed
+         * at document end / last-block bottom without mis-jumping to the last
+         * block top — they are intentionally ignored (fail-soft).
+         */
+        val ignoredTrailingHtmlAnchors: List<String> = emptyList(),
     )
 
     private val headingRegex = Regex("""^(#{1,6})\s+(.*)$""")
@@ -26,6 +33,22 @@ object MarkdownParser {
         """^!\[([^]]*)]\((\S+?)(?:\s+"([^"]*)")?\s*\)$""",
     )
 
+    /**
+     * Whole-line empty HTML anchor only, e.g. `<a id="x"></a>` / `<a name='y'></a>` /
+     * self-closing `<a id="x"/>`. Case-insensitive; allows attribute whitespace / quote style.
+     * Body content is not accepted (those stay as ordinary paragraph text).
+     */
+    private val emptyHtmlAnchorLineRegex = Regex(
+        """^<a\s+([^>]+?)(?:\s*/>|>\s*</a\s*>)$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Captures id= or name= values (double / single / unquoted). Prefer id when both present. */
+    private val htmlAnchorIdOrNameAttrRegex = Regex(
+        """\b(id|name)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))""",
+        RegexOption.IGNORE_CASE,
+    )
+
     fun parse(source: String): ParseResult = MarkdownPerformance.trace("MarkdownParse") {
         MarkdownPerformance.recordParse()
         val normalized = stripHtmlComments(source)
@@ -37,6 +60,41 @@ object MarkdownParser {
         val toc = mutableListOf<TocItem>()
         val anchorTargets = mutableListOf<MarkdownAnchorTarget>()
         val anchorCounts = mutableMapOf<String, Int>()
+        /** Empty HTML anchors waiting for the next renderable block (prefer heading). */
+        val pendingHtmlAnchors = mutableListOf<String>()
+
+        fun registerAnchor(anchorId: String, blockIndex: Int) {
+            val id = anchorId.trim()
+            if (id.isEmpty()) return
+            anchorTargets += MarkdownAnchorTarget(
+                anchorId = id,
+                blockIndex = blockIndex,
+                headingIndex = anchorTargets.size,
+            )
+            // Also index the slug form so authored #fragments resolve like headings.
+            val slug = MarkdownAnchorSlug.normalize(id)
+            if (slug.isNotEmpty() && slug != id) {
+                anchorTargets += MarkdownAnchorTarget(
+                    anchorId = slug,
+                    blockIndex = blockIndex,
+                    headingIndex = anchorTargets.size,
+                )
+            }
+        }
+
+        fun flushPendingHtmlAnchors(blockIndex: Int) {
+            if (pendingHtmlAnchors.isEmpty()) return
+            for (id in pendingHtmlAnchors) {
+                registerAnchor(id, blockIndex)
+            }
+            pendingHtmlAnchors.clear()
+        }
+
+        fun addBlock(block: MarkdownBlock) {
+            val index = blocks.size
+            blocks.add(block)
+            flushPendingHtmlAnchors(index)
+        }
 
         var i = 0
         while (i < lines.size) {
@@ -45,6 +103,16 @@ object MarkdownParser {
 
             // Blank lines separate blocks.
             if (trimmed.isEmpty()) {
+                i++
+                continue
+            }
+
+            // Standalone empty HTML anchors: invisible, no spacing; bind to next block.
+            val htmlAnchorId = matchEmptyHtmlAnchorId(trimmed)
+            if (htmlAnchorId != null) {
+                if (htmlAnchorId.isNotEmpty()) {
+                    pendingHtmlAnchors += htmlAnchorId
+                }
                 i++
                 continue
             }
@@ -68,7 +136,7 @@ object MarkdownParser {
                 if (!closed) {
                     // Unclosed fence: consume rest of file (no crash).
                 }
-                blocks.add(
+                addBlock(
                     MarkdownBlock.CodeBlock(
                         language = language,
                         code = codeLines.joinToString("\n"),
@@ -82,25 +150,34 @@ object MarkdownParser {
             if (headingMatch != null) {
                 val level = headingMatch.groupValues[1].length
                 val text = headingMatch.groupValues[2].trimEnd()
-                val anchor = makeAnchor(text, anchorCounts)
+                // TOC / slug use plain label text so ## [德篇](#de-pian) → title "德篇".
+                val plainTitle = normalizeHeadingPlainTitle(text)
+                val anchor = makeAnchor(
+                    text = plainTitle.ifBlank { text },
+                    counts = anchorCounts,
+                )
                 val blockIndex = blocks.size
-                blocks.add(
+                addBlock(
                     MarkdownBlock.Heading(
                         level = level,
+                        // Keep raw source so body still renders inline links / emphasis.
                         text = text,
                         anchor = anchor,
                     ),
                 )
-                anchorTargets += MarkdownAnchorTarget(
-                    anchorId = anchor,
-                    blockIndex = blockIndex,
-                    headingIndex = anchorTargets.size,
-                )
+                // Heading slug after pending HTML anchors so both ids map to this block.
+                registerAnchor(anchor, blockIndex)
+                // Also register authored #fragments inside the heading label.
+                for (fragment in inPageFragmentsFromInline(text)) {
+                    if (fragment != anchor) {
+                        registerAnchor(fragment, blockIndex)
+                    }
+                }
                 if (level in 1..3) {
                     toc.add(
                         TocItem(
                             level = level,
-                            title = text,
+                            title = plainTitle.ifBlank { text },
                             anchor = anchor,
                             blockIndex = blockIndex,
                         ),
@@ -112,7 +189,7 @@ object MarkdownParser {
 
             // Divider (plain --- without pipe table separators).
             if (dividerRegex.matchEntire(trimmed) != null) {
-                blocks.add(MarkdownBlock.Divider)
+                addBlock(MarkdownBlock.Divider)
                 i++
                 continue
             }
@@ -124,13 +201,13 @@ object MarkdownParser {
                 val source = imageMatch.groupValues[2].trim()
                 val title = imageMatch.groupValues[3].ifBlank { null }
                 if (source.isEmpty()) {
-                    blocks.add(
+                    addBlock(
                         MarkdownBlock.Paragraph(
                             text = if (alt.isNotBlank()) alt else "![ ]()",
                         ),
                     )
                 } else {
-                    blocks.add(
+                    addBlock(
                         MarkdownBlock.Image(
                             alt = alt,
                             source = source,
@@ -146,7 +223,7 @@ object MarkdownParser {
             if (i + 1 < lines.size && looksLikeTableStart(trimmed, lines[i + 1].trim())) {
                 val consumed = parseTable(lines, i)
                 if (consumed != null) {
-                    blocks.add(consumed.table)
+                    addBlock(consumed.table)
                     i = consumed.nextIndex
                     continue
                 }
@@ -166,7 +243,7 @@ object MarkdownParser {
                     quoteLines.add(qm.groupValues[1])
                     i++
                 }
-                blocks.add(
+                addBlock(
                     MarkdownBlock.Quote(
                         text = quoteLines.joinToString("\n").trimEnd(),
                     ),
@@ -185,7 +262,7 @@ object MarkdownParser {
                     i++
                 }
                 if (items.isNotEmpty()) {
-                    blocks.add(
+                    addBlock(
                         MarkdownBlock.ListBlock(
                             ordered = false,
                             items = items,
@@ -206,7 +283,7 @@ object MarkdownParser {
                     i++
                 }
                 if (items.isNotEmpty()) {
-                    blocks.add(
+                    addBlock(
                         MarkdownBlock.ListBlock(
                             ordered = true,
                             items = items,
@@ -231,8 +308,18 @@ object MarkdownParser {
             }
             val paraText = paraLines.joinToString("\n").trim()
             if (paraText.isNotEmpty()) {
-                blocks.add(MarkdownBlock.Paragraph(text = paraText))
+                addBlock(MarkdownBlock.Paragraph(text = paraText))
             }
+        }
+
+        // EOF-only empty HTML anchors: no next renderable block.
+        // Registry can only address a block *top*. Binding to lastIndex would
+        // jump to the last block's top (wrong vs document end / last-block
+        // bottom). Prefer fail-soft: drop + surface ids for logging.
+        val ignoredTrailing = if (pendingHtmlAnchors.isNotEmpty()) {
+            pendingHtmlAnchors.toList().also { pendingHtmlAnchors.clear() }
+        } else {
+            emptyList()
         }
 
         ParseResult(
@@ -240,7 +327,61 @@ object MarkdownParser {
             toc = toc.toList(),
             anchorRegistry = AnchorRegistry.fromTargets(anchorTargets),
             blockIds = blocks.mapIndexed { index, block -> block.blockId(index) },
+            ignoredTrailingHtmlAnchors = ignoredTrailing,
         )
+    }
+
+    /**
+     * If [trimmed] is a whole-line empty `<a id|name=…></a>` (or self-closing),
+     * return the id/name value (may be empty string). Prefer `id` over `name`.
+     * Null if not an empty anchor line.
+     */
+    internal fun matchEmptyHtmlAnchorId(trimmed: String): String? {
+        val match = emptyHtmlAnchorLineRegex.matchEntire(trimmed) ?: return null
+        val attrs = match.groupValues[1]
+        var idValue: String? = null
+        var nameValue: String? = null
+        for (attr in htmlAnchorIdOrNameAttrRegex.findAll(attrs)) {
+            val attrName = attr.groupValues[1].lowercase()
+            val value = attr.groupValues[2]
+                .ifEmpty { attr.groupValues[3] }
+                .ifEmpty { attr.groupValues[4] }
+            when (attrName) {
+                "id" -> if (idValue == null) idValue = value
+                "name" -> if (nameValue == null) nameValue = value
+            }
+        }
+        // Require id or name so unrelated empty tags are not silently dropped.
+        val resolved = idValue ?: nameValue ?: return null
+        return resolved
+    }
+
+    /**
+     * Side-TOC / slug display title: strip inline Markdown to plain label text.
+     * `## [德篇](#de-pian)` → `德篇`; does not mutate the original source file.
+     */
+    internal fun normalizeHeadingPlainTitle(source: String): String =
+        InlineMarkdownParser.toPlainText(source)
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+    /**
+     * In-page fragments authored as link destinations inside heading source text.
+     * Only `#…` destinations; external URLs are ignored.
+     */
+    internal fun inPageFragmentsFromInline(source: String): List<String> {
+        if (source.isEmpty()) return emptyList()
+        val seen = linkedSetOf<String>()
+        for (dest in InlineMarkdownParser.extractLinkDestinations(source)) {
+            when (val action = MarkdownLinkRouter.classify(dest)) {
+                is MarkdownLinkRouter.Action.InPageAnchor -> {
+                    val id = action.anchorId.trim()
+                    if (id.isNotEmpty()) seen += id
+                }
+                is MarkdownLinkRouter.Action.External -> Unit
+            }
+        }
+        return seen.toList()
     }
 
     private data class TableParse(
@@ -377,6 +518,7 @@ object MarkdownParser {
     private val HTML_COMMENT_REGEX = Regex("""<!--[\s\S]*?-->""")
 
     private fun isBlockStart(raw: String, trimmed: String): Boolean {
+        if (matchEmptyHtmlAnchorId(trimmed) != null) return true
         if (fenceOpenRegex.matchEntire(trimmed) != null) return true
         if (headingRegex.matchEntire(trimmed) != null) return true
         if (dividerRegex.matchEntire(trimmed) != null) return true

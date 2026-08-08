@@ -135,6 +135,15 @@ class DocumentRepository(
                 com.markleaf.app.share.DocumentIdentityIndex(context).removeByDocumentId(id)
             } catch (_: Exception) {
             }
+            // Markdown-package extract tree (ZIP textbooks). Orphan dirs accumulate if
+            // only Room rows are deleted — wipe best-effort after successful commit.
+            try {
+                val packageDir = java.io.File(context.filesDir, "packages/$id")
+                if (packageDir.exists()) {
+                    packageDir.deleteRecursively()
+                }
+            } catch (_: Exception) {
+            }
         }
     }
 

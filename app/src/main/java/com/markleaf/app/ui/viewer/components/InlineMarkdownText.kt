@@ -48,6 +48,9 @@ fun InlineMarkdownText(
         )
     }
     val hasSearch = searchRanges.isNotEmpty()
+    // Rendering text equals the search plain-text projection (parse keeps the
+    // same walk as toPlainText), so search offsets apply directly.
+    val rawRanges = searchRanges
     // Only subscribe to highlight theme when painting — avoids every Text reading
     // tertiaryContainer on the search-closed scroll path.
     val normalHl = if (hasSearch) searchMatchNormalBackground() else Color.Unspecified
@@ -59,15 +62,15 @@ fun InlineMarkdownText(
     }
     // Normal-only ranges key (ignore isActive) so next/prev does not rebuild all normal spans.
     val normalKey = if (hasSearch) {
-        remember(searchRanges) {
-            searchRanges.map { Triple(it.start, it.end, it.listItemIndex) }
+        remember(rawRanges) {
+            rawRanges.map { Triple(it.start, it.end, it.listItemIndex) }
         }
     } else {
         null
     }
     val activeKey = if (hasSearch) {
-        remember(searchRanges) {
-            searchRanges.firstOrNull { it.isActive }?.let { it.start to it.end }
+        remember(rawRanges) {
+            rawRanges.firstOrNull { it.isActive }?.let { it.start to it.end }
         }
     } else {
         null
@@ -76,7 +79,7 @@ fun InlineMarkdownText(
         baseAnnotated
     } else {
         val withNormals = remember(baseAnnotated, normalKey, normalHl) {
-            val normals = searchRanges.map {
+            val normals = rawRanges.map {
                 it.copy(isActive = false)
             }
             baseAnnotated.withSearchHighlights(normals, normalHl, activeHl)

@@ -57,23 +57,34 @@ class R7H1HorizontalZoomPanPhysicsTest {
         val layout = HorizontalZoomPanPhysics.fitPage(1000f, 800f, 0.5f, 8f)
         assertEquals(984f, layout.fittedWidthPx, 0.001f)
         assertEquals(492f, layout.fittedHeightPx, 0.001f)
-        assertEquals(8f, layout.contentTopPx, 0.001f)
+        // Short page: vertical centering adds the half-gap on top of the margin.
+        assertEquals(154f, layout.contentTopPx, 0.001f)
     }
 
     @Test
-    fun `horizontal page is top aligned instead of vertically centered`() {
+    fun `short horizontal page is vertically centered in the viewport`() {
         val layout = HorizontalZoomPanPhysics.fitPage(1000f, 800f, 0.5f, 8f)
-        val formerCenteredGap = (layout.viewportHeightPx - layout.fittedHeightPx) / 2f
-        assertEquals(8f, layout.contentTopPx, 0.001f)
-        assertTrue(layout.contentTopPx < formerCenteredGap / 10f)
+        val gap = (layout.viewportHeightPx - layout.fittedHeightPx) / 2f
+        assertEquals(154f, layout.contentTopPx, 0.001f)
+        assertTrue(kotlin.math.abs(layout.contentTopPx - gap) < 0.001f)
     }
 
     @Test
-    fun `short horizontal page has no large top spacer or gray block`() {
+    fun `short portrait page centers instead of leaving a large bottom gap`() {
         val layout = HorizontalZoomPanPhysics.fitPage(1200f, 2200f, 1.38f, 8f)
-        assertEquals(8f, layout.contentTopPx, 0.001f)
+        // fitted 1184x1633.92 inside 1200x2200: top = 8 + (2184-1633.92)/2
+        val expectedTop = 8f + (2184f - 1184f * 1.38f) / 2f
+        assertEquals(expectedTop, layout.contentTopPx, 0.001f)
         assertTrue((layout.viewportHeightPx - layout.fittedHeightPx) / 2f > 250f)
-        assertTrue(layout.contentTopPx <= 12f)
+        assertTrue(layout.contentTopPx > 250f)
+    }
+
+    @Test
+    fun `page filling the viewport height stays at the reading margin`() {
+        val layout = HorizontalZoomPanPhysics.fitPage(1000f, 800f, 1.5f, 8f)
+        // heightAtFullWidth = 984*1.5 = 1476 > 784 -> height fitted to 784.
+        assertEquals(784f, layout.fittedHeightPx, 0.001f)
+        assertEquals(8f, layout.contentTopPx, 0.001f)
     }
 
     @Test

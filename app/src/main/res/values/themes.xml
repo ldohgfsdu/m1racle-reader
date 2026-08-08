@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.MarkLeaf" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Transparent system bars: reader draws edge-to-edge (Activity also calls enableEdgeToEdge). -->
+    <style name="Theme.MarkLeaf" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
 </resources>
