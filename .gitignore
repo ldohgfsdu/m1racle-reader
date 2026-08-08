@@ -12,6 +12,31 @@
 *.ap_
 *.aab
 .external_inbox/
+.external_outbox/
 .shared_inbox/
 .local-backups/
 .memory/
+
+# Tooling / IDE / agent noise
+.kotlin/
+.qoder/
+.agent-menu-codex-path.work
+.reasonix/
+*.orig
+*.bak
+*.work
+markleaf-platform-home.png
+verify-external-compile.log
+mcps/
+ovisocr2-deploy/
+
+# Local build & delivery artifacts (dist/ is a delivery dir; release
+# checksums kept out of git at their generation locations only)
+dist/
+*.pftrace
+
+# Optional local docs dumps (uncomment if too noisy)
+# docs/R7_*.md
+# docs/R9_*.md
+# docs/R10_*.md
+# docs/R11_*.md
