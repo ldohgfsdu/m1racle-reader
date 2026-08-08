@@ -1,32 +1,40 @@
 # R7 H1 Horizontal Zoom-Pan Physics Handoff
 
-## Baseline ownership failure
+## Current authority
 
-`PdfHorizontalPagedArea` locally owned scale/offset. Pager was disabled above 1.01x, but the
-page transform detector used per-frame `scale * calculateZoom`, all-pointer pan, hard clamps,
-no pointer-set rebase, no resistance and no release physics. A second pointerInput observed the
-same stream for taps. New Pager pages could retain a detector that exited while VM page state
-was stale. Per-page transforms were reset on every page change.
+H1.1A supersedes the earlier centered-page/live-pinch display-offset implementation while keeping
+the accepted H1.1 X rubber-band constants and H1.2 deferral intact.
 
-## New state machine
+- Active object: `R7_H1_1A_TOP_ALIGN_AND_PINCH_X_BOUND_REBASE`.
+- Status: `implementation_complete_device_acceptance_pending`.
+- Current implementation, audit, device evidence and artifact details:
+  `docs/R7_H1_1A_TOP_ALIGN_AND_PINCH_X_BOUND_REBASE_REPORT.md`.
+- P0C1.4 and Android test-data isolation remain `device_accepted`; neither object was modified.
 
-- At <=1.01x Pager owns horizontal drag; above it inner pan owns and consumes it.
-- Stable two-pointer pair uses baseline span/focal math. Every pointer-set change is a
-  rebase-only frame and clears edge-handoff candidacy without changing transform.
-- In-range pan is 1:1. Only overflow uses `limit*(1-exp(-abs(x)/limit))`, limit 56dp.
-- Clear horizontal outward intent must accumulate 32dp at an edge before one explicit page
-  navigation. No `dispatchRawDelta` or residual velocity injection is used.
-- Release performs an official no-bounce medium-stiffness spring to the legal boundary.
-  Internal fling is intentionally omitted for this first device-tuning build to prevent the
-  reported small-release long flight; velocity policy remains clamped in pure logic.
-- Per-page scale/offset is retained in a document-scoped map during the horizontal session.
-- Active-page pointer handlers are keyed by the latest state page, preventing stale composed
-  pages from permanently losing gesture handling.
+## H1.1 contract
 
-Device validation is required for resistance feel, threshold, spring feel, exact page-image
-bounds and 2->1->2 continuity. This handoff does not claim subjective acceptance.
+- All horizontal-page pan physics use measured viewport pixels.
+- Fitted page width/height come from the real viewport and stable per-page aspect.
+- Legal X/Y offset, raw X edge pull and visual X overscroll are separate state.
+- Only horizontal residual edge pull uses a scale-independent 28dp saturating rubber band.
+- Y is hard-clamped at top/bottom and has no visual/raw overscroll or release spring.
+- Release springs visual X overscroll only; legal reading position stays fixed.
+- Pointer-set changes are rebase-only frames.
+- Horizontal pages are top-aligned with an 8dp content gap and top-center transform origin.
+- Live-pinch bounds are recomputed from legal X/Y plus a stable page-content anchor; visual X
+  overscroll never enters the new legal offset.
+- At or below 1.01x Pager owns horizontal drag. Above 1.01x inner pan owns the entire gesture.
+- Zoomed edge Pager handoff is deliberately absent.
 
-Directed device instrumentation passed 2/2 shared corridor/edge-threshold logic tests. True
-nested-scroll Pager takeover, fitted bitmap bounds and optional short decay remain open tuning
-items; therefore `R7_H1_HORIZONTAL_ZOOM_PAN_PHYSICS` remains `implementation_in_progress` and
-is not device accepted.
+## Pending acceptance
+
+Current objective device evidence shows the intended 8dp top gap, exact in-range 2x legal-delta
+consumption, a maximum sampled 27.94859dp X display pull, a 179ms X spring and no zoomed-edge page
+change. The user must still verify real two-finger 2x/3x live-pinch left-blank continuity,
+subjective drag feel and a fresh P0C1.4 hold-drag visual check. Do not mark H1.1A device accepted
+without that confirmation.
+
+## Next object (not started)
+
+`R7_H1_2_ZOOMED_EDGE_PAGER_HANDOFF` is deferred. Do not combine it with H1.1 tuning or change
+P0C1.4, persistence/Room, Pointer Epoch, tile geometry, cache parameters or R6 legacy code.

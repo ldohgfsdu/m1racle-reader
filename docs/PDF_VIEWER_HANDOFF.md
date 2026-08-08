@@ -7,6 +7,37 @@
 
 **Do not** modify Markdown, ZIP package pipeline, tables, OCR, knowledge points, or migrate to PDFium unless a later task explicitly expands scope.
 
+## H1.5 three-page-strip authoritative override (2026-07-15)
+
+The horizontal reader no longer uses `HorizontalPager` as a visual owner. The authoritative path is
+`PdfGestureTransformController` plus stable `ThreePageStripState` PREVIOUS/CURRENT/NEXT slots.
+All slots share one coordinate system and one `pageStripOffsetPx`; page index commits only after an
+exact 0 or +/-viewport settle, stable slot rotation, and zero rebase. At zoom, legal page pan
+consumes first and only residual X drives the strip. Neighbor base surfaces are retained before
+preview and their entering edges receive tile preheat.
+
+Host/build gates and isolated QA device automation pass (666/666 JVM; QA component 5/5; real
+reader/PdfRenderer 2/2). Human acceptance is still PENDING, so this is not `device_accepted`.
+See `docs/R7_H1_5_THREE_PAGE_STRIP_AND_CONTINUOUS_PAGE_TRANSITION_REPORT.md`.
+
+## H1.4 authoritative override (2026-07-15)
+
+The H1.4 product decision supersedes the older horizontal reset notes later in this document.
+`PdfGestureTransformController` plus `awaitPdfGestureLifecycle` is now the shared continuous and
+horizontal production gesture owner. The later H1.5 override above removes Horizontal Pager from
+the horizontal visual path entirely.
+
+- page commit preserves the document-session continuous Float scale;
+- NEXT enters at the target page's left legal edge, PREVIOUS at its right legal edge;
+- normalized vertical page-local anchor is preserved;
+- continuous/horizontal mode switches preserve page, scale and page-local anchor;
+- only explicit double-tap/user zoom returns to 1x;
+- the old `remember(state.pageIndex) { 1f }` and `pageCommitTransform() -> 1x` rules are obsolete.
+
+Host validation is 632/632 PASS, but H1.4 device/human validation is PENDING because `db04f865`
+was absent from adb on 2026-07-15. See
+`docs/R7_H1_4_UNIFIED_GESTURE_CONTROLLER_AND_SEAMLESS_MODE_CONTINUITY_REPORT.md`.
+
 ## P0-A implementation verification (2026-07-11)
 
 R4 continuous zoom/pan implementation and build complete. Device acceptance remains **PENDING**.
@@ -125,10 +156,10 @@ In `PdfVerticalContinuousArea`:
 
 In `PdfHorizontalPagedArea`:
 
-- `HorizontalPager` with `userScrollEnabled = scale <= 1.01f`
-- `var scale by remember(state.pageIndex)` — **resets to 1f when pageIndex changes**
-- `var offset by remember(state.pageIndex)`
-- `detectTransformGestures` on page for pinch/pan
+- `HorizontalPager` owns 1x paging and explicit zoomed edge handoff only
+- `PdfGestureTransformController` owns scale/legal/visual transform and stable pointer epochs
+- `PdfViewportSessionState` carries page/scale/page-local anchor across page and mode changes
+- `awaitPdfGestureLifecycle` is shared with `ContinuousDocumentViewport`
 - `detectTapGestures`: double-tap zoom; single tap edges/center for page/chrome
 - `LaunchedEffect(scale) { delay(200); onZoomScaleSettled(scale) }` — fires on every settled scale including init
 - Bottom semi-transparent overlay when `chromeVisible`
@@ -280,13 +311,15 @@ Each item: path → symbol → behavior → defect link → how next agent verif
 - **Why:** Flicker when top bar toggles or IME/insets change measured width.  
 - **Verify:** Ignore width changes below N px threshold; log calls during scroll/chrome toggle.
 
-### D6. Horizontal `scale`/`offset` keyed by `state.pageIndex`
+### D6. Horizontal page transform continuity (H1.4 supersedes the old reset rule)
 
 - **Path:** `PdfHorizontalPagedArea`  
-- **Symbols:** `var scale by remember(state.pageIndex) { 1f }`, `offset` same  
-- **Behavior:** Any pageIndex change resets zoom to 1×.  
-- **Why:** Expected for page change; also resets if `pageIndex` thrash from pager↔VM feedback loop.  
-- **Verify:** Log pageIndex during attempted swipe; if thrashing, fix settle/goToPage loop first.
+- **Symbols:** `PdfGestureTransformController`, `PdfViewportSessionState`,
+  `HorizontalZoomPanPhysics.restoreViewportSession`
+- **Behavior:** Page changes preserve session scale and normalized vertical anchor; NEXT/PREVIOUS
+  select the target legal X edge.
+- **Verify:** `H14_PAGE_COMMIT` must show equal before/after scale and anchor, with no intermediate
+  1x frame. Cancel must retain the outgoing transform.
 
 ### D7. Horizontal pointer handlers may steal Pager drag
 

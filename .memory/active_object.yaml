@@ -1,32 +1,27 @@
-id: R9_COMPOSE_LIST_VS_PDF_SCROLL_ISOLATION
-status: device_accepted
-overall_primary: SHARED_SCROLL_CHROME_ROOT_CAUSE_FOUND
-overall_primary_scope: markdown_only
-overall_secondary: SCREEN_SPECIFIC_ITEM_WORK_FOUND
-overall_secondary_scope: home_file_list_cards
-chrome_isolation: gain_proven
-chrome_production_fix: overlay_snap_auto_hide_accepted
-chrome_slow_drag_fix: accumulated_same_direction_delta_with_reversal_jitter
-first_entry_item_fix: plain_inline_parse_fast_path
-first_entry_item_dominant: paragraph
-first_entry_item_report: docs/R9_FIRST_ENTRY_ITEM_COST_CLOSED_LOOP_REPORT.md
-first_entry_item_artifacts: dist/r9-markdown-scroll-chrome/first-entry-item-fix/20260718-085401-post
-first_entry_item_apk: dist/r9-markdown-scroll-chrome/markleaf-qa-first-entry-item-fix.apk
-first_entry_item_apk_sha256: 7e3df156cba089de515e0b3b1a45ae8b2ca4e1674aee68413a3eca7ff61f19cf
-first_entry_item_auto: p99_33_to_30_legacy_jank_31_to_27p7
-first_entry_ab: COMPLETED_NO_DOMINANT_ISOLATION_WIN
-first_entry_ab_report: docs/R9_FIRST_ENTRY_PERF_AB_DIAGNOSTIC.md
-pdf_continuous_production: unmodified
-pdf_formal_ft_control: VALID
-device: 198.18.0.1:37173
-adb_retest: PASS_FUNCTIONAL_AND_GFXINFO_20260718
-adb_retest_report: docs/R9_MARKDOWN_SCROLL_CHROME_ADB_RETEST.md
-performance_gate: DEVICE_ACCEPTED
-human_feel: PASS_20260719
-report: docs/R9_MARKDOWN_SCROLL_CHROME_RECOVERY_REPORT.md
-isolation_report: docs/R9_COMPOSE_LIST_VS_PDF_SCROLL_ISOLATION_REPORT.md
-closed_loop_report: docs/R9_FIRST_ENTRY_ITEM_COST_CLOSED_LOOP_REPORT.md
-next_home_candidate: R10_HOME_LIST_CARD_PERFORMANCE
-commit: done_in_r9_closure_commit
-push: not_done
-updated: 2026-07-19
+id: HOME_ALIGN_UNIFIED_LIQUID_CONTROLS
+status: implemented_automated_verified_device_pending
+scope: home_alignment_24dp_rail_fab_and_menu_reader_liquid_glass
+note: >
+  Home alignment + floating-control material unification (no redesign):
+  1) ONE 24dp content rail — brand block / section title / cards / menu all at
+  PageHorizontal=24dp; empty-state header bug fixed (was flush at x=0, now same
+  rail). 2) FAB = 56dp rounded square (corner 20, plus 26dp onSurface) using the
+  SHARED markLeafLiquidSurface + LiquidSurfaceLevel.Control — exactly the PDF
+  reader chrome material (alpha/blur/lens/highlight/shadow/pressed), real
+  backdrop sampling from Scaffold slot; no home-specific material invented.
+  3) ··· menu = same-source liquid glass (Control soft plate in Popup window,
+  no cross-window sampling) + Control edge highlight border 0.5dp/α0.55, corner
+  10dp = PDF chrome menu-row corner, right-edge aligned to anchor expanding
+  left. 4) Cards stay solid tonal (never liquid). KEPT: single LazyColumn
+  header item, stable keys, optimistic delete reflow, no animateItem.
+  Reader/shared liquid untouched (home only re-calls the shared entry).
+  Files: HomeScreen.kt, HomeDesignTokens.kt, HomeLayoutContractTest.kt,
+  ReaderChromeMaterialTest.kt (home assertion only).
+  Report: docs/HOME_ALIGN_LIQUID_CONTROLS_REPORT.md
+builds:
+  release_apk: .external_outbox/markleaf-release-latest.apk
+  delivered_to: /storage/emulated/0/Download/markleaf-release-latest.apk
+  sha256: c160765055481208caea30e393ea213b3b8ec3b2ba50c7af129ba0a27568cd13
+  report: docs/HOME_ALIGN_LIQUID_CONTROLS_REPORT.md
+commit: not_committed
+updated: 2026-08-07
