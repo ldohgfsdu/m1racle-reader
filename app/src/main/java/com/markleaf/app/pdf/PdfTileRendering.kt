@@ -542,16 +542,20 @@ class PdfTileLru(private val maxBytes: Long = 56L * 1024 * 1024) {
     /**
      * OOM recovery hook: evict oldest entries (access order) until the cache
      * holds at most [budgetBytes]. Never throws; called at the renderer OOM
-     * boundary so the next tile request has headroom.
+     * boundary so the next tile request has headroom. Returns the evicted
+     * entries (oldest first) so callers can drop them from published overlays.
      */
-    fun trimTo(budgetBytes: Long) {
+    fun trimTo(budgetBytes: Long): List<PdfTileEntry> {
         val budget = budgetBytes.coerceAtLeast(0)
+        val evicted = mutableListOf<PdfTileEntry>()
         val it = map.entries.iterator()
         while (bytes > budget && it.hasNext()) {
             val entry = it.next()
             it.remove()
             bytes -= entry.value.byteSize
+            evicted += entry.value
         }
+        return evicted
     }
 }
 

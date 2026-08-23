@@ -41,6 +41,7 @@ import com.markleaf.app.pdf.PdfTilePlan
 import com.markleaf.app.pdf.PdfTileLru
 import com.markleaf.app.pdf.PageLayoutSize
 import com.markleaf.app.pdf.TileOverlaySnapshot
+import com.markleaf.app.pdf.purgedWithout
 import com.markleaf.app.pdf.TileRenderHealthTracker
 import com.markleaf.app.pdf.TileRenderPipelinePolicy
 import com.markleaf.app.pdf.TileWorkQueue
@@ -799,11 +800,17 @@ class PdfViewerViewModel(
                     if (current.readingMode == PdfReadingMode.HORIZONTAL_PAGED) {
                         HorizontalRealPathTelemetry.onTileReady()
                     }
+                    // Pin only tiles the pipeline still owns (queued/in-flight).
+                    // Published overlay entries must stay evictable — pinning the
+                    // snapshot itself made the victim scan a no-op and the cache
+                    // grew unbounded. Evicted keys are mirrored out of the overlay
+                    // below, so display state never resurrects freed tiles.
                     val evicted = tileCache.put(
                         entry,
-                        tileWorkQueue.activeKeys() + _tileOverlaySnapshot.value.entries.keys,
+                        tileWorkQueue.activeKeys(),
                     )
                     pendingTileSwaps[entry.key] = entry
+                    purgeEvictedFromOverlaySnapshot(evicted)
                     scheduleTileOverlayPublish()
                     if (isDebuggable) {
                         Log.d(
@@ -828,6 +835,18 @@ class PdfViewerViewModel(
             },
             isReady = { _uiState.value is PdfViewerUiState.Ready },
         )
+    }
+
+    /**
+     * Eviction mirror: remove LRU-evicted keys from the published overlay so
+     * (a) their bitmaps become collectable immediately and (b) the next
+     * [PdfTileLru.put] cannot see them as pinned. No-op when nothing matched.
+     */
+    private fun purgeEvictedFromOverlaySnapshot(evicted: List<PdfTileEntry>) {
+        if (evicted.isEmpty()) return
+        _tileOverlaySnapshot.value.purgedWithout(evicted.mapTo(hashSetOf()) { it.key })?.let {
+            _tileOverlaySnapshot.value = it
+        }
     }
 
     /** Publish all tiles completed in one display interval as one overlay-only snapshot. */

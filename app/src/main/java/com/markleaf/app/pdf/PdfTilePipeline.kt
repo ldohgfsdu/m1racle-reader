@@ -42,6 +42,16 @@ data class TileOverlaySnapshot(
     val publishedAtNanos: Long = 0L,
 )
 
+/**
+ * Eviction mirror: drop [keys] from a published overlay snapshot so display
+ * state can never pin entries the LRU has already evicted. Returns null when
+ * nothing matches (no allocation, no sequence bump).
+ */
+internal fun TileOverlaySnapshot.purgedWithout(keys: Set<PdfTileKey>): TileOverlaySnapshot? {
+    if (keys.isEmpty() || entries.keys.none { it in keys }) return null
+    return copy(sequence = sequence + 1, entries = entries - keys)
+}
+
 /** Lock-free one-slot conflation used by the production viewport producer. */
 class LatestViewportConflator<T> {
     private val latest = AtomicReference<T?>(null)
