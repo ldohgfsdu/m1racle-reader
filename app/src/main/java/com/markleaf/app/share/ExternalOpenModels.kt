@@ -59,6 +59,13 @@ sealed class PreparedOpen {
         val mimeType: String?,
         val stagedFile: File,
         val documentTypeName: String,
+        /**
+         * Batch B-0: the payload is a zip textbook package — commit must route
+         * it through [com.markleaf.app.packageimport.ZipPackageImporter]
+         * extraction (MARKDOWN_PACKAGE, entry-md uri), never register the raw
+         * archive as a plain MARKDOWN document.
+         */
+        val isZipPackage: Boolean = false,
     ) : PreparedOpen()
 }
 

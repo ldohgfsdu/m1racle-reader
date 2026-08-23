@@ -184,6 +184,10 @@ open class ExternalDocumentImporter(
                 return@withContext PrepareOutcome.Failed("临时文件落盘失败")
             }
 
+            val isZipPackage = DocumentType.isZipFileName(displayName) ||
+                DocumentType.isZipFileName(provider.lastPathSegment) ||
+                DocumentType.isZipMime(mime)
+
             PrepareOutcome.Success(
                 PreparedOpen.NewContent(
                     documentId = documentId,
@@ -194,7 +198,14 @@ open class ExternalDocumentImporter(
                     externalKey = externalKey,
                     mimeType = mime,
                     stagedFile = stagedFinal,
-                    documentTypeName = documentType.name,
+                    documentTypeName = if (isZipPackage) {
+                        // Batch B-0: zip payloads commit as extracted packages,
+                        // never as plain markdown documents.
+                        DocumentType.MARKDOWN_PACKAGE.name
+                    } else {
+                        documentType.name
+                    },
+                    isZipPackage = isZipPackage,
                 ),
             )
         } catch (e: Exception) {
@@ -239,6 +250,9 @@ open class ExternalDocumentImporter(
                     )
                 }
                 is PreparedOpen.NewContent -> {
+                    if (prepared.isZipPackage) {
+                        return@withContext commitZipPackage(prepared)
+                    }
                     if (!prepared.stagedFile.isFile) {
                         return@withContext CommitOutcome.Failed("准备的文件已丢失")
                     }
@@ -384,6 +398,120 @@ open class ExternalDocumentImporter(
             prepared.stagedFile.delete()
         }
     }
+
+    /**
+     * Batch B-0: zip textbook packages delivered over VIEW/SEND commit through
+     * the SAME extraction pipeline as the FAB/SAF route
+     * ([com.markleaf.app.packageimport.ZipPackageImporter]) — the entity is a
+     * MARKDOWN_PACKAGE whose uri points at the extracted entry markdown, and
+     * the staged binary archive is consumed. Extraction caps (entry count /
+     * total / single-entry) apply unchanged; failures clean up both the
+     * package tree and the staged copy.
+     */
+    private suspend fun commitZipPackage(prepared: PreparedOpen.NewContent): CommitOutcome =
+        withContext(Dispatchers.IO) {
+            if (!prepared.stagedFile.isFile) {
+                return@withContext CommitOutcome.Failed("准备的文件已丢失")
+            }
+            val destDir = File(context.filesDir, "packages/${prepared.documentId}")
+            val extracted = try {
+                prepared.stagedFile.inputStream().use { stream ->
+                    com.markleaf.app.packageimport.ZipPackageImporter.extract(stream, destDir)
+                }
+            } catch (e: SecurityException) {
+                destDir.deleteRecursively()
+                return@withContext CommitOutcome.Failed("教材包包含不安全条目")
+            } catch (e: IllegalArgumentException) {
+                destDir.deleteRecursively()
+                return@withContext CommitOutcome.Failed("教材包超出大小或条目限制")
+            } catch (e: Exception) {
+                destDir.deleteRecursively()
+                return@withContext CommitOutcome.Failed("教材包读取失败")
+            }
+
+            // The binary staging copy is superseded by the extracted package tree.
+            prepared.stagedFile.delete()
+            prepared.stagedFile.parentFile
+                ?.takeIf { it.isDirectory && (it.listFiles()?.isEmpty() ?: true) }
+                ?.delete()
+
+            val entry = extracted.entryFile
+            val mdText = try {
+                entry.readText(Charsets.UTF_8)
+            } catch (_: Exception) {
+                ""
+            }
+            val h1Title = com.markleaf.app.packageimport.ZipPackageImporter.extractFirstH1(mdText)
+            val entrySize = entry.length().takeIf { it > 0 }
+            val packageSize = com.markleaf.app.packageimport.ZipPackageImporter
+                .packageTotalSize(extracted.packageRoot).takeIf { it > 0 }
+
+            // Label rules mirror DocumentRepository.importZipPackage.
+            val zipLabel = prepared.displayName
+                .removeSuffix(".zip").removeSuffix(".ZIP")
+                .trim()
+                .takeIf { it.isNotEmpty() && it != "未命名文档" }
+            val listName = zipLabel ?: "Markdown 教材包"
+
+            try {
+                val existingRow = repository.getDocumentById(prepared.documentId)
+                val now = System.currentTimeMillis()
+                val resolvedSize = entrySize ?: packageSize ?: prepared.sizeBytes
+                val entity = if (existingRow != null) {
+                    existingRow.copy(
+                        displayName = listName,
+                        uri = Uri.fromFile(entry).toString(),
+                        mimeType = prepared.mimeType ?: "application/zip",
+                        fileSize = resolvedSize,
+                        lastOpenedAt = now,
+                        documentType = DocumentType.MARKDOWN_PACKAGE.name,
+                        title = h1Title ?: existingRow.title,
+                    )
+                } else {
+                    DocumentEntity(
+                        id = prepared.documentId,
+                        displayName = listName,
+                        uri = Uri.fromFile(entry).toString(),
+                        mimeType = prepared.mimeType ?: "application/zip",
+                        fileSize = resolvedSize,
+                        lastOpenedAt = now,
+                        createdAt = now,
+                        lastScrollIndex = 0,
+                        lastScrollOffset = 0,
+                        readingProgress = 0f,
+                        title = h1Title,
+                        headingCount = 0,
+                        documentType = DocumentType.MARKDOWN_PACKAGE.name,
+                        pageCount = 0,
+                    )
+                }
+                if (forceRoomUpsertFailure) {
+                    throw IllegalStateException("Room 写入失败")
+                }
+                repository.upsert(entity)
+                runCatching {
+                    identityIndex.bind(
+                        documentId = prepared.documentId,
+                        canonicalUriIdentity = prepared.externalKey,
+                        sha256 = prepared.contentSha256,
+                        sizeBytes = prepared.sizeBytes,
+                        mimeType = prepared.mimeType,
+                    )
+                }
+                CommitOutcome.Success(
+                    documentId = prepared.documentId,
+                    isPdf = false,
+                    displayName = listName,
+                    sizeBytes = resolvedSize,
+                    contentSha256 = prepared.contentSha256,
+                    reusedExisting = existingRow != null,
+                    bringToFrontOnly = false,
+                )
+            } catch (e: Exception) {
+                destDir.deleteRecursively()
+                CommitOutcome.Failed(e.message ?: "提交失败")
+            }
+        }
 
     private suspend fun resolveExistingByUri(
         externalKey: String,
