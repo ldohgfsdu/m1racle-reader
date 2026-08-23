@@ -14,8 +14,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -27,7 +32,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
+
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsTopHeight
@@ -71,6 +76,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -292,15 +298,12 @@ private fun ViewerSuccessScreen(
     /*
      * Index coordinate system (MUST stay consistent):
      * - Room lastScrollIndex / LazyListState use ABSOLUTE list item indices
-     * - Optional preview header occupies index 0 when isTruncated || isParseFallback
+     * - Optional parser-fallback header occupies index 0 when isParseFallback
      * - Markdown blocks start at listHeaderCount
      * - TOC jump target = listHeaderCount + TocItem.blockIndex
      * - Active TOC uses (firstVisibleItemIndex - listHeaderCount) as content index
      */
-    val listHeaderCount = when {
-        state.isTruncated || state.isParseFallback -> 1
-        else -> 0
-    }
+    val listHeaderCount = if (state.isParseFallback) 1 else 0
     val totalListItems = listHeaderCount + state.blocks.size
 
     val restoredIndex = remember(state.document.id, totalListItems) {
@@ -404,6 +407,9 @@ private fun ViewerSuccessScreen(
             .distinctUntilChanged()
             .collectLatest { scrolling ->
                 if (scrolling) return@collectLatest
+                topBarScrollState.onScrollIdle()
+                // Wait one frame so onPostFling can record velocity before settle.
+                withFrameNanos { }
                 if (listState.firstVisibleItemIndex == 0 &&
                     listState.firstVisibleItemScrollOffset <= 0
                 ) {
@@ -516,7 +522,10 @@ private fun ViewerSuccessScreen(
             settingsEnabled = true,
             onOpenSettings = { showSettings = true },
             searchEnabled = true,
-            onOpenSearch = viewModel::openSearch,
+            onOpenSearch = {
+                topBarScrollState.forceShow()
+                viewModel.openSearch()
+            },
             searchState = searchState,
             onSearchQueryChange = viewModel::onSearchQueryChange,
             onCloseSearch = viewModel::closeSearch,
@@ -546,7 +555,6 @@ private fun ViewerSuccessScreen(
                 snackbarHostState = snackbarHostState,
                 listHeaderCount = listHeaderCount,
                 innerPadding = innerPadding,
-                searchActive = searchState.isActive,
                 tableLayoutCache = tableLayoutCache,
                 onAnchorJump = topBarScrollState::forceShow,
             )
@@ -578,7 +586,6 @@ private fun ReaderDocumentBody(
     snackbarHostState: SnackbarHostState,
     listHeaderCount: Int,
     innerPadding: PaddingValues,
-    searchActive: Boolean,
     tableLayoutCache: TableLayoutCache,
     onAnchorJump: () -> Unit,
 ) {
@@ -589,11 +596,7 @@ private fun ReaderDocumentBody(
     // Initial top chrome reservation lives in LazyColumn contentPadding only — never as a
     // fixed outer Box padding — so fully-hidden chrome leaves zero permanent top blank.
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val listTopInset = if (searchActive) {
-        8.dp
-    } else {
-        statusBarTop + ReaderTopBarHeight + ReaderTopBarDividerHeight + 8.dp
-    }
+    val listTopInset = statusBarTop + ReaderTopBarHeight + ReaderTopBarDividerHeight + 8.dp
     val navBottom = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
@@ -699,14 +702,6 @@ private fun ReaderDocumentBody(
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (state.isTruncated) {
-                        Text(
-                            text = stringResource(R.string.viewer_preview_notice),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(bottom = 12.dp),
-                        )
-                    }
                     Text(
                         text = stringResource(R.string.viewer_empty_document),
                         style = MaterialTheme.typography.bodyLarge,
@@ -728,19 +723,13 @@ private fun ReaderDocumentBody(
                     bottom = listBottomInset,
                 ),
             ) {
-                if (state.isTruncated || state.isParseFallback) {
+                if (state.isParseFallback) {
                     item(
                         key = "list_header_notice",
                         contentType = "notice",
                     ) {
-                        val notice = when {
-                            state.isParseFallback ->
-                                stringResource(R.string.viewer_parse_fallback_notice)
-                            else ->
-                                stringResource(R.string.viewer_preview_notice)
-                        }
                         Text(
-                            text = notice,
+                            text = stringResource(R.string.viewer_parse_fallback_notice),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(bottom = 12.dp),
@@ -1093,84 +1082,58 @@ private fun ViewerScaffold(
                 SnackbarHost(hostState = snackbarHostState)
             }
         },
-        topBar = {
-            if (activeSearch != null) {
-                // Search keeps a normal under-status-bar chrome (no immersive collapse).
-                Column(Modifier.statusBarsPadding()) {
-                    SearchTopBar(
-                        query = activeSearch.query,
-                        matchLabel = activeSearch.counterLabel,
-                        hasMatches = activeSearch.matches.isNotEmpty(),
-                        onQueryChange = onSearchQueryChange,
-                        onClose = onCloseSearch,
-                        onPrevious = onSearchPrevious,
-                        onNext = onSearchNext,
-                    )
-                }
-            }
-        },
+        topBar = {},
         content = { scaffoldPadding ->
-            if (activeSearch != null) {
-                // Search: Scaffold topBar already under statusBars; body uses scaffold padding only.
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(readerBg),
-                ) {
-                    content(scaffoldPadding)
-                }
-            } else {
-                // X-style immersive structure:
-                // - Body fills the window under a transparent system status bar (edge-to-edge).
-                // - Solid TopBar overlay translates with graphicsLayer (no permanent layout height).
-                // - Fixed StatusBarProtection paints only (no padding): softens body behind icons
-                //   when chrome is gone — does not reserve layout space or clip the body.
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(readerBg),
-                ) {
-                    // Body first — never reads chrome offset / visibility.
-                    content(scaffoldPadding)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(readerBg),
+            ) {
+                content(scaffoldPadding)
 
-                    // Fixed top paint layer only — not part of TopBar translation, not layout inset.
-                    StatusBarProtection(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .zIndex(1f),
-                    )
+                StatusBarProtection(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(1f),
+                )
 
-                    ReaderTopBarOverlay(
-                        title = title,
-                        topBarScrollState = topBarScrollState,
-                        onBack = onBack,
-                        searchEnabled = searchEnabled,
-                        onOpenSearch = onOpenSearch,
-                        settingsEnabled = settingsEnabled,
-                        onOpenSettings = onOpenSettings,
-                        tocEnabled = tocEnabled,
-                        onOpenToc = onOpenToc,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .zIndex(2f),
-                    )
-                }
+                ReaderTopBarOverlay(
+                    title = title,
+                    topBarScrollState = if (activeSearch != null) null else topBarScrollState,
+                    searchState = activeSearch,
+                    onBack = onBack,
+                    searchEnabled = searchEnabled,
+                    onOpenSearch = onOpenSearch,
+                    settingsEnabled = settingsEnabled,
+                    onOpenSettings = onOpenSettings,
+                    tocEnabled = tocEnabled,
+                    onOpenToc = onOpenToc,
+                    onSearchQueryChange = onSearchQueryChange,
+                    onCloseSearch = onCloseSearch,
+                    onSearchPrevious = onSearchPrevious,
+                    onSearchNext = onSearchNext,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .zIndex(2f),
+                )
             }
         },
     )
 }
 
 /**
- * Solid top chrome (status fill + [ReaderTopBarRow] + hairline). No blur on the bar itself.
+ * Solid top chrome (status fill + reading row or in-bar search).
  *
  * - Moves with [graphicsLayer] translationY = -[hiddenOffsetPx] only.
+ * - Search replaces the reading row in place (same 56dp) so the body does not jump.
  * - LazyColumn contentPadding reserves status+bar once; body never reads offset.
  */
 @Composable
 private fun ReaderTopBarOverlay(
     title: String,
     topBarScrollState: ReaderTopBarScrollState?,
+    searchState: DocumentSearchUiState?,
     onBack: () -> Unit,
     searchEnabled: Boolean,
     onOpenSearch: () -> Unit,
@@ -1178,13 +1141,17 @@ private fun ReaderTopBarOverlay(
     onOpenSettings: () -> Unit,
     tocEnabled: Boolean,
     onOpenToc: () -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onCloseSearch: () -> Unit,
+    onSearchPrevious: () -> Unit,
+    onSearchNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Do NOT read hiddenOffsetPx in composition — that recomposes the whole overlay
     // every drag pixel. Read inside graphicsLayer so only the layer invalidates.
-    // Body composition boundary stays cold (never touches topBarScrollState offset).
     val surface = MaterialTheme.colorScheme.surface
     val scrollState = topBarScrollState
+    val searching = searchState != null
 
     Column(
         modifier = modifier
@@ -1193,24 +1160,43 @@ private fun ReaderTopBarOverlay(
             }
             .background(surface),
     ) {
-        // Status-bar band rides with chrome so collapsing does not leave a hard gap under icons.
         Spacer(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsTopHeight(WindowInsets.statusBars)
                 .background(surface),
         )
-        ReaderTopBarRow(
-            title = title,
-            topBarScrollState = topBarScrollState,
-            onBack = onBack,
-            searchEnabled = searchEnabled,
-            onOpenSearch = onOpenSearch,
-            settingsEnabled = settingsEnabled,
-            onOpenSettings = onOpenSettings,
-            tocEnabled = tocEnabled,
-            onOpenToc = onOpenToc,
-        )
+        AnimatedContent(
+            targetState = searching,
+            transitionSpec = {
+                fadeIn(tween(200)) togetherWith fadeOut(tween(120))
+            },
+            label = "readerSearchChrome",
+        ) { showSearch ->
+            if (showSearch && searchState != null) {
+                SearchTopBar(
+                    query = searchState.query,
+                    matchLabel = searchState.counterLabel,
+                    hasMatches = searchState.matches.isNotEmpty(),
+                    onQueryChange = onSearchQueryChange,
+                    onClose = onCloseSearch,
+                    onPrevious = onSearchPrevious,
+                    onNext = onSearchNext,
+                )
+            } else {
+                ReaderTopBarRow(
+                    title = title,
+                    topBarScrollState = topBarScrollState,
+                    onBack = onBack,
+                    searchEnabled = searchEnabled,
+                    onOpenSearch = onOpenSearch,
+                    settingsEnabled = settingsEnabled,
+                    onOpenSettings = onOpenSettings,
+                    tocEnabled = tocEnabled,
+                    onOpenToc = onOpenToc,
+                )
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()

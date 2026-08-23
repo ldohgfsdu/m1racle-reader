@@ -20,9 +20,11 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
+import java.io.InputStream
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
@@ -445,11 +447,11 @@ class DocumentRepository(
     }
 
     /**
-     * Read plain text from a SAF URI for Markdown preview.
-     * Caps at [MAX_PREVIEW_BYTES] so huge files do not fill memory.
+     * Reads the complete UTF-8 Markdown document from a SAF or app-private URI.
+     * Oversized input fails explicitly instead of silently returning partial text.
      * Runs on [Dispatchers.IO]; never throws to callers.
      */
-    suspend fun readDocumentText(uriString: String): Result<DocumentTextPreview> =
+    suspend fun readDocumentText(uriString: String): Result<String> =
         withContext(Dispatchers.IO) {
             try {
                 val uri = Uri.parse(uriString)
@@ -457,23 +459,10 @@ class DocumentRepository(
                     ?: return@withContext Result.failure(DocumentReadException.NotFound)
 
                 input.use { stream ->
-                    val buffer = ByteArray(MAX_PREVIEW_BYTES + 1)
-                    var total = 0
-                    while (total < buffer.size) {
-                        val read = stream.read(buffer, total, buffer.size - total)
-                        if (read < 0) break
-                        total += read
-                    }
-                    val truncated = total > MAX_PREVIEW_BYTES
-                    val length = minOf(total, MAX_PREVIEW_BYTES)
-                    val text = String(buffer, 0, length, Charsets.UTF_8)
-                    Result.success(
-                        DocumentTextPreview(
-                            text = text,
-                            isTruncated = truncated,
-                        ),
-                    )
+                    Result.success(readUtf8TextFully(stream))
                 }
+            } catch (e: DocumentReadException.TooLarge) {
+                Result.failure(e)
             } catch (_: SecurityException) {
                 Result.failure(DocumentReadException.PermissionDenied)
             } catch (_: FileNotFoundException) {
@@ -785,8 +774,11 @@ class DocumentRepository(
     )
 
     companion object {
-        /** Preview cap: 200KB of raw bytes. */
-        const val MAX_PREVIEW_BYTES: Int = 200 * 1024
+        /**
+         * Full-read safety ceiling. 32 MiB is far beyond the old 200 KiB preview
+         * while keeping the current full-document parser inside a bounded heap.
+         */
+        const val MAX_MARKDOWN_BYTES: Int = 32 * 1024 * 1024
 
         private val ALLOWED_EXTENSIONS = listOf(".md", ".markdown", ".txt", ".zip")
 
@@ -816,20 +808,37 @@ class DocumentRepository(
     }
 }
 
+internal fun readUtf8TextFully(
+    input: InputStream,
+    maxBytes: Int = DocumentRepository.MAX_MARKDOWN_BYTES,
+): String {
+    require(maxBytes > 0) { "maxBytes must be positive" }
+    val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
+    val buffer = ByteArray(64 * 1024)
+    var total = 0
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) break
+        if (read == 0) continue
+        if (read > maxBytes - total) {
+            throw DocumentReadException.TooLarge(maxBytes)
+        }
+        output.write(buffer, 0, read)
+        total += read
+    }
+    return output.toString(Charsets.UTF_8.name())
+}
+
 sealed class ImportResult {
     data class Success(val document: DocumentEntity) : ImportResult()
     data object UnsupportedFormat : ImportResult()
     data object ReadFailed : ImportResult()
 }
 
-data class DocumentTextPreview(
-    val text: String,
-    val isTruncated: Boolean,
-)
-
 sealed class DocumentReadException : Exception() {
     data object NotFound : DocumentReadException()
     data object PermissionDenied : DocumentReadException()
+    data class TooLarge(val maxBytes: Int) : DocumentReadException()
     data class Failed(val causeError: Throwable? = null) : DocumentReadException() {
         override val cause: Throwable?
             get() = causeError

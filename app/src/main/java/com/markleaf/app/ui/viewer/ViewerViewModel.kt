@@ -37,7 +37,6 @@ sealed class ViewerUiState {
         val toc: List<TocItem>,
         val anchorRegistry: AnchorRegistry,
         val blockIds: List<String>,
-        val isTruncated: Boolean,
         /** True when parser failed and content is a raw-text fallback block. */
         val isParseFallback: Boolean = false,
     ) : ViewerUiState()
@@ -330,23 +329,23 @@ class ViewerViewModel(
 
             val textResult = repository.readDocumentText(entity.uri)
             textResult.fold(
-                onSuccess = { preview ->
+                onSuccess = { text ->
                     var parseFallback = false
                     val parseResult = try {
                         withContext(Dispatchers.Default) {
-                            MarkdownParser.parse(preview.text)
+                            MarkdownParser.parse(text)
                         }
                     } catch (_: Exception) {
                         parseFallback = true
                         MarkdownParser.ParseResult(
-                            blocks = if (preview.text.isBlank()) {
+                            blocks = if (text.isBlank()) {
                                 emptyList()
                             } else {
-                                listOf(MarkdownBlock.Paragraph(preview.text))
+                                listOf(MarkdownBlock.Paragraph(text))
                             },
                             toc = emptyList(),
                             anchorRegistry = AnchorRegistry.Empty,
-                            blockIds = if (preview.text.isBlank()) {
+                            blockIds = if (text.isBlank()) {
                                 emptyList()
                             } else {
                                 listOf("paragraph-0")
@@ -390,7 +389,6 @@ class ViewerViewModel(
                         toc = parseResult.toc,
                         anchorRegistry = parseResult.anchorRegistry,
                         blockIds = parseResult.blockIds,
-                        isTruncated = preview.isTruncated,
                         isParseFallback = parseFallback,
                     )
                     // Re-run search if user is already in search mode (rare race after reload).
@@ -406,6 +404,8 @@ class ViewerViewModel(
                             "文件可能已被移动或删除"
                         is DocumentReadException.PermissionDenied ->
                             "文件访问权限已失效，请重新导入"
+                        is DocumentReadException.TooLarge ->
+                            "Markdown 文件过大，当前最多支持 ${error.maxBytes / (1024 * 1024)} MB"
                         else ->
                             "无法读取该文件，请重新选择"
                     }
