@@ -289,7 +289,13 @@ internal fun ContinuousDocumentViewport(
     val interactionActive = interaction.phase == ContinuousInteractionPhase.PINCHING ||
         interaction.phase == ContinuousInteractionPhase.SETTLING
 
-    LaunchedEffect(state.pageBitmaps, state.pageAspects, state.pageBitmapMetadata, interaction.phase) {
+    LaunchedEffect(
+        state.pageBitmaps,
+        state.pageAspects,
+        state.pageBitmapMetadata,
+        interaction.phase,
+        lastAnchorPage,
+    ) {
         val phase = interaction.phase
         val newBitmaps = state.pageBitmaps
         val newMetadata = state.pageBitmapMetadata
@@ -380,6 +386,48 @@ internal fun ContinuousDocumentViewport(
     val currentGeometryReady by rememberUpdatedState(geometryReady)
     val currentViewportSize by rememberUpdatedState(viewportSize)
     val currentTileDocumentGeneration by rememberUpdatedState(state.tileDocumentGeneration)
+
+    // Batch B-1: display-mirror retention — shrink displayedBitmaps/Metadata/
+    // Aspects to the anchor±1 window (+ visibly composed pages during pinch)
+    // once gestures settle. The cache side already windows itself; without this
+    // the mirror grew one bitmap per visited page for the whole composition.
+    LaunchedEffect(
+        displayedBitmaps,
+        pendingBitmaps,
+        interaction.phase,
+        lastAnchorPage,
+        documentState.scale,
+    ) {
+        val geometry = currentGeometry
+        val phaseAllowsPrune =
+            interaction.phase == ContinuousInteractionPhase.IDLE ||
+                interaction.phase == ContinuousInteractionPhase.SETTLING
+        if (!phaseAllowsPrune || !currentGeometryReady || geometry.pageCount <= 0) return@LaunchedEffect
+        val anchor = lastAnchorPage.coerceIn(0, geometry.pageCount - 1)
+        val zoomComposed = if (documentState.scale > 1f) {
+            geometry.composedPages(
+                documentState.copy(gestureActive = false),
+                currentViewportSize.height.toFloat(),
+                prefetchPages = 0,
+            ).toSet()
+        } else {
+            emptySet()
+        }
+        val keep = DisplayedBitmapRetentionPolicy.retentionSet(
+            anchorPage = anchor,
+            pageCount = geometry.pageCount,
+            zoomComposed = zoomComposed,
+        )
+        val prunedDisplayed = DisplayedBitmapRetentionPolicy.prune(displayedBitmaps, keep)
+        if (prunedDisplayed !== displayedBitmaps) {
+            displayedBitmaps = prunedDisplayed
+            displayedMetadata = DisplayedBitmapRetentionPolicy.prune(displayedMetadata, keep)
+            displayedAspects = DisplayedBitmapRetentionPolicy.prune(displayedAspects, keep)
+            pendingBitmaps = DisplayedBitmapRetentionPolicy.prune(pendingBitmaps, keep)
+            pendingMetadata = DisplayedBitmapRetentionPolicy.prune(pendingMetadata, keep)
+            pendingAspects = DisplayedBitmapRetentionPolicy.prune(pendingAspects, keep)
+        }
+    }
 
     fun tileInteractionPhase(pointerDown: Boolean): TileInteractionPhase = when {
         !detailTileOverlayEnabled -> TileInteractionPhase.DISABLED
