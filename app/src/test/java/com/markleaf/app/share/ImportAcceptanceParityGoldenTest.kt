@@ -64,7 +64,9 @@ import org.robolectric.annotation.GraphicsMode
  * Entry-level E2E pairs keep proving: extensionless text normalizes to
  * "<segment>.txt" via the shared resolve layer and is accepted by BOTH paths;
  * wrong-extension text is now rejected by BOTH paths (was B-only accept);
- * the 200 MB cap stays Path-B-prepare-only (explicit non-goal to unify here).
+ * the 200 MB source cap is unified across both entries as of policy batch 3
+ * (boundary matrix lives in ImportSizeLimitBoundaryTest; zip extraction caps
+ * stay independent).
  *
  * No Room query ever runs (linux-aarch64 has no Robolectric SQLite backend):
  * DAOs are fakes; the RoomDatabase instance is built but never queried.
@@ -412,21 +414,21 @@ class ImportAcceptanceParityGoldenTest {
         assertEquals(PrepareOutcome.Unsupported, outcome)
     }
 
-    /** D3 pair: >200 MB source over a .md name. */
+    /** D3 pair: >200 MB source over a .md name — unified in policy batch 3. */
     @Test
-    fun d3_pathA_importsHugeSourceWithoutCapToday() = runBlocking {
+    fun d3_pathA_rejectsHugeSourceAfterBatch3() = runBlocking {
         registerStub("d3a")
         val huge = 300L * 1024L * 1024L
         StubContentProvider.row = listOf("big.md", huge)
         StubContentProvider.type = "text/plain"
         val repo = installRepository()
 
+        // Pre-batch-3 Path A imported this without any cap; the unified source
+        // limit now rejects it exactly like the VIEW/SEND entry.
         val result = repo.importDocument(stubUri("d3a", "doc"))
 
-        val entity = (result as ImportResult.Success).document
-        assertEquals(huge, entity.fileSize)
-        assertEquals("big.md", entity.displayName)
-        assertEquals(1, fakeDao.upserts.size)
+        assertEquals(ImportResult.SourceTooLarge, result)
+        assertEquals(0, fakeDao.upserts.size)
     }
 
     @Test

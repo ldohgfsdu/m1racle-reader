@@ -33,6 +33,10 @@ sealed class HomeEvent {
 internal fun ImportResult.toHomeEvent(): HomeEvent = when (this) {
     is ImportResult.Success -> HomeEvent.OpenDocument(document)
     ImportResult.UnsupportedFormat -> HomeEvent.UnsupportedFormat
+    // UI frozen by policy-batch constraints: the dedicated "file too large"
+    // copy lands with the next UI-touching batch; until then it shares the
+    // generic failure toast.
+    ImportResult.SourceTooLarge -> HomeEvent.ReadFailed
     ImportResult.ReadFailed -> HomeEvent.ReadFailed
 }
 

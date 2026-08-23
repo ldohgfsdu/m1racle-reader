@@ -508,6 +508,19 @@ class DocumentRepository(
                 return@withContext ImportResult.UnsupportedFormat
             }
 
+            // Unified 200 MB source limit (import policy batch 3). Shared
+            // constant with the VIEW/SEND path; enforced on the provider hint
+            // when available, otherwise by a bounded drain of the source stream
+            // below (aborts past the cap, so worst-case read is cap + chunk).
+            val knownSize = resolvedMeta.sizeBytesHint
+                ?: when (uri.scheme?.lowercase(Locale.ROOT)) {
+                    "file" -> uri.path?.let { File(it).length().takeIf { len -> len > 0 } }
+                    else -> null
+                }
+            if (knownSize != null && knownSize > com.markleaf.app.share.ExternalDocumentImporter.MAX_BYTES) {
+                return@withContext ImportResult.SourceTooLarge
+            }
+
             val fileNameFromUri = when (uri.scheme?.lowercase(Locale.ROOT)) {
                 "file" -> uri.path?.let { File(it).name }
                 else -> null
@@ -538,9 +551,28 @@ class DocumentRepository(
                 )
             }
 
-            // Verify the URI is readable without loading full content.
-            openUriInputStream(uri)?.use { /* probe only */ }
-                ?: return@withContext ImportResult.ReadFailed
+            // Verify the URI is readable; when no usable size metadata exists,
+            // the same pass bound-verifies the source against the shared cap
+            // (applies to every document type, zip included — extraction caps
+            // in ZipPackageImporter remain independent, uncompressed-side bounds).
+            openUriInputStream(uri)?.use { input ->
+                if (knownSize == null) {
+                    val buf = ByteArray(64 * 1024)
+                    var seen = 0L
+                    while (true) {
+                        val n = try {
+                            input.read(buf)
+                        } catch (_: Exception) {
+                            -1
+                        }
+                        if (n < 0) break
+                        seen += n
+                        if (seen > com.markleaf.app.share.ExternalDocumentImporter.MAX_BYTES) {
+                            return@withContext ImportResult.SourceTooLarge
+                        }
+                    }
+                }
+            } ?: return@withContext ImportResult.ReadFailed
 
             val documentType = DocumentType.resolve(mimeType, displayName, pathSegment)
             // Note: the former "markdown requires known text extension" re-check
@@ -548,11 +580,7 @@ class DocumentRepository(
             // can only pass the gate with document extensions on its (resolved)
             // names, either via branch 1 or via ensureExtension normalization.
 
-            val resolvedSize = resolvedMeta.sizeBytesHint
-                ?: when (uri.scheme?.lowercase(Locale.ROOT)) {
-                    "file" -> uri.path?.let { File(it).length().takeIf { len -> len > 0 } }
-                    else -> null
-                }
+            val resolvedSize = knownSize
 
             val entity = if (existing != null) {
                 // Same file again: refresh open time + metadata; keep progress/title.
@@ -758,6 +786,13 @@ internal fun readUtf8TextFully(
 sealed class ImportResult {
     data class Success(val document: DocumentEntity) : ImportResult()
     data object UnsupportedFormat : ImportResult()
+
+    /**
+     * Source exceeded the shared 200 MB import limit
+     * ([com.markleaf.app.share.ExternalDocumentImporter.MAX_BYTES]) — the
+     * Path-A twin of PrepareOutcome.TooLarge (import policy batch 3).
+     */
+    data object SourceTooLarge : ImportResult()
     data object ReadFailed : ImportResult()
 }
 
