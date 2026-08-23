@@ -132,8 +132,21 @@ class PdfAnnotatedExporter(
                 }
             }
 
+            if (cancellation.isCancelled() || !coroutineContext.isActive) {
+                return@withContext cancel(workDir, onState)
+            }
+
+            // Per-chunk cancellation: never keep writing the user-selected
+            // destination after Cancelled; delete partial output best-effort.
             appContext.contentResolver.openOutputStream(outputUri)?.use { out ->
-                FileInputStream(outPdf).use { inp -> inp.copyTo(out) }
+                FileInputStream(outPdf).use { inp ->
+                    try {
+                        copyWithExportCancellation(inp, out, cancellation) { coroutineContext.isActive }
+                    } catch (ce: CancellationException) {
+                        deleteSafDocumentBestEffort(appContext.contentResolver, outputUri)
+                        throw ce
+                    }
+                }
             } ?: return@withContext fail("无法写入所选位置", workDir, onState)
 
             val name = ExportRangeResolver.defaultPdfName(documentDisplayName, plan.pathTitles)
@@ -143,6 +156,7 @@ class PdfAnnotatedExporter(
             done
         } catch (e: CancellationException) {
             cancel(workDir, onState)
+            throw e
         } catch (t: Throwable) {
             Log.e(TAG, "annotated export failed", t)
             fail(t.message ?: "导出失败", workDir, onState)

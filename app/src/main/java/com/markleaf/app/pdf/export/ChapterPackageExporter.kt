@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.markleaf.app.data.local.PdfPrintPageAnchorEntity
 import com.markleaf.app.data.local.TextbookOutlineNodeEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -188,12 +189,22 @@ class ChapterPackageExporter(
                     pageMapFile to "page_map.json",
                     checksumsFile to "checksums.json",
                 ),
-            )
+                cancellation,
+            ) { coroutineContext.isActive }
 
-            // Write to SAF URI
+            if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
+
+            // Write to SAF URI. Per-chunk cancellation: a cancelled export must
+            // never keep writing the user-selected destination after Cancelled
+            // is shown; partial output is deleted best-effort and CE rethrown.
             appContext.contentResolver.openOutputStream(outputUri)?.use { out ->
                 FileInputStream(zipTmp).use { inp ->
-                    inp.copyTo(out)
+                    try {
+                        copyWithExportCancellation(inp, out, cancellation) { coroutineContext.isActive }
+                    } catch (ce: CancellationException) {
+                        deleteSafDocumentBestEffort(appContext.contentResolver, outputUri)
+                        throw ce
+                    }
                 }
             } ?: return@withContext fail("无法写入所选位置", workDir, onState)
 
@@ -206,6 +217,9 @@ class ChapterPackageExporter(
             onState(done)
             cleanupDir(workDir)
             done
+        } catch (ce: CancellationException) {
+            cancel(workDir, onState)
+            throw ce
         } catch (t: Throwable) {
             Log.e("ChapterExport", "export failed", t)
             fail(t.message ?: "导出失败", workDir, onState)
@@ -271,15 +285,27 @@ class ChapterPackageExporter(
             return sdf.format(Date())
         }
 
-        fun zipFiles(zipFile: File, entries: List<Pair<File, String>>) {
+        fun zipFiles(
+            zipFile: File,
+            entries: List<Pair<File, String>>,
+            cancellation: ExportCancellationToken? = null,
+            jobActive: () -> Boolean = { true },
+        ) {
             ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zos ->
                 for ((file, name) in entries) {
                     // Fixed names only — reject path traversal
                     require(!name.contains("..") && !name.contains('/') && !name.contains('\\')) {
                         "illegal zip entry name"
                     }
+                    if (cancellation != null) throwIfExportCancelled(cancellation, jobActive)
                     zos.putNextEntry(ZipEntry(name))
-                    FileInputStream(file).use { it.copyTo(zos) }
+                    FileInputStream(file).use { inp ->
+                        if (cancellation == null) {
+                            inp.copyTo(zos)
+                        } else {
+                            copyWithExportCancellation(inp, zos, cancellation, jobActive)
+                        }
+                    }
                     zos.closeEntry()
                 }
             }
