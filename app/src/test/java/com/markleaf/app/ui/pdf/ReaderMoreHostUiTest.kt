@@ -183,9 +183,10 @@ class ReaderMoreHostUiTest {
         // Main parent still present (upper context).
         composeRule.onNodeWithText("阅读方式").assertExists()
         composeRule.onNodeWithText("阅读界面").assertExists()
-        // Nested body: empty outline still shows count line.
+        // Nested body: empty outline shows the dedicated empty-state guidance
+        // (count line only renders when the outline is non-empty).
         composeRule.onAllNodesWithText("教材目录").onFirst().assertExists()
-        composeRule.onNodeWithText("共 0 项 · 已绑定 PDF 页码").assertExists()
+        composeRule.onNodeWithText("暂无目录项 · 可扫描 PDF 或从当前页新建").assertExists()
     }
 
     @Test
