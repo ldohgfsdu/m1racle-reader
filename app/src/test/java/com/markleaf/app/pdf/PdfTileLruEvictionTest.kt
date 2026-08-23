@@ -144,6 +144,26 @@ class PdfTileLruEvictionTest {
     }
 
     @Test
+    fun `keySet is a live unmodifiable view with zero copy`() {
+        val cache = lru(200)
+        val a = entry(0)
+        cache.put(a, emptySet())
+
+        val view = cache.keySet()
+        assertEquals(setOf(a.key), view)
+        val b = entry(1)
+        cache.put(b, emptySet())
+        assertTrue("live view must reflect later mutation", b.key in view)
+
+        try {
+            (view as MutableSet).clear()
+            throw IllegalStateException("expected UnsupportedOperationException")
+        } catch (_: UnsupportedOperationException) {
+            // expected — callers must never mutate the cache through the view
+        }
+    }
+
+    @Test
     fun `re-putting an existing key replaces without double counting`() {
         val cache = lru(100)
         cache.put(entry(0), emptySet())

@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -63,6 +64,7 @@ import com.markleaf.app.pdf.ContinuousGestureSnapshotPayload
 import com.markleaf.app.pdf.ContinuousInteractionPhase
 import com.markleaf.app.pdf.ContinuousInteractionReducer
 import com.markleaf.app.pdf.ContinuousInteractionTransaction
+import com.markleaf.app.pdf.PdfTileKey
 import com.markleaf.app.pdf.ContinuousScrollDirection
 import com.markleaf.app.pdf.ContinuousScrollPhase
 import com.markleaf.app.pdf.ContinuousViewportSnapshot
@@ -149,12 +151,16 @@ internal fun ContinuousDocumentViewport(
     val showBaseLayer = !isDebuggable || BuildConfig.DETAIL_TILE_BASE_LAYER_ENABLED
     val detailTileOverlayAlpha = if (isDebuggable) BuildConfig.DETAIL_TILE_OVERLAY_ALPHA else 1f
     val showTileDiagnostics = isDebuggable && BuildConfig.DETAIL_TILE_DIAGNOSTICS_ENABLED
-    val externalTileEntries = if (tileOverlaySnapshots != null) {
-        val overlaySnapshot by tileOverlaySnapshots.collectAsStateWithLifecycle()
-        overlaySnapshot.entries
+    // P1-7: consume the published overlay as a whole snapshot and index it once
+    // per sequence — consumers read pre-grouped per-page lists instead of
+    // filtering the entire cache in every composition / measure pass.
+    val externalOverlaySnapshot: TileOverlaySnapshot? = if (tileOverlaySnapshots != null) {
+        tileOverlaySnapshots.collectAsStateWithLifecycle().value
     } else {
-        state.tileEntries
+        null
     }
+    val tilesSource: Map<PdfTileKey, PdfTileEntry> =
+        externalOverlaySnapshot?.entries ?: state.tileEntries
     val tag = "MarkLeafR71"
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var documentState by remember(documentId) { mutableStateOf(state.continuousDocumentState) }
@@ -268,15 +274,16 @@ internal fun ContinuousDocumentViewport(
             }
         }
     }
-    val drawableTiles = if (detailTileOverlayEnabled) {
-        externalTileEntries.values.filter { tile ->
-            tile.key.documentGeneration == state.tileDocumentGeneration &&
-                tile.key.pageIndex in 0 until geometry.pageCount &&
-                tile.key.geometryGeneration == geometry.pageGeometryGeneration(tile.key.pageIndex) &&
-                tile.key.fittedPageWidthVersion == geometry.fittedPageWidthVersion
-        }
-    } else {
-        emptyList()
+    val tileIndex = remember(
+        externalOverlaySnapshot?.sequence, tilesSource, state.tileDocumentGeneration,
+        detailTileOverlayEnabled, geometry,
+    ) {
+        buildContinuousTileIndex(
+            source = tilesSource.values,
+            documentGeneration = state.tileDocumentGeneration,
+            geometry = geometry,
+            overlayEnabled = detailTileOverlayEnabled,
+        )
     }
 
     val interactionActive = interaction.phase == ContinuousInteractionPhase.PINCHING ||
@@ -837,10 +844,17 @@ internal fun ContinuousDocumentViewport(
         else -> requestedComposedRange.toSet()
     }
     val primaryPage = geometry.pageAtViewportCenter(renderDocumentState, viewportSize.height.toFloat())
+    // P1-1: the drive collector below outlives single compositions — route every
+    // per-composition value it needs through state holders so it never reads a
+    // stale captured local.
+    val currentVisiblePages by rememberUpdatedState(visiblePages)
+    val currentPrimaryAnchorPage by rememberUpdatedState(primaryPage)
+    val currentInteractionActive by rememberUpdatedState(interactionActive)
+    val currentOnViewportChanged by rememberUpdatedState(onViewportChanged)
     val snapshotPayload = ContinuousGestureSnapshotPayload(
         documentId = documentId,
-        composedPages = composedPages.toSet(),
-        visiblePages = visiblePages.toSet(),
+        composedPages = composedPages,
+        visiblePages = visiblePages,
         viewportPage = primaryPage,
         geometry = geometry,
         documentState = renderDocumentState,
@@ -880,14 +894,30 @@ internal fun ContinuousDocumentViewport(
         }
     }
 
-    LaunchedEffect(documentState.scrollX, documentState.scrollY, documentState.scale, documentState.gestureActive, interaction.phase, flingActive, visiblePages) {
-        // During a transformed document gesture only last-good bitmaps are moved by GPU.
-        // Re-entering IDLE below is what resumes existing R3 preview/HIGH scheduling.
-        if (currentEntryState.phase != ContinuousEntryPhase.READY ||
-            interactionActive || (documentState.gestureActive && documentState.scale > 1.001f)
-        ) {
-            return@LaunchedEffect
-        }
+    // P1-1: one long-lived collector. The trigger tuple is read as snapshot
+    // state, so per-frame float changes EMIT without cancelling/relaunching the
+    // coroutine (the old LaunchedEffect keys restarted it every frame), and
+    // unchanged tuples (e.g. identical visible-page sets) no longer re-emit.
+    LaunchedEffect(documentId) {
+        snapshotFlow {
+            ContinuousViewportDriveInputs(
+                scrollX = documentState.scrollX,
+                scrollY = documentState.scrollY,
+                scale = documentState.scale,
+                gestureActive = documentState.gestureActive,
+                interactionPhase = interaction.phase,
+                flingActive = flingActive,
+                visiblePages = currentVisiblePages,
+            )
+        }.collect { inputs ->
+            inputs // emission gate only; the body below reads live state.
+            // During a transformed document gesture only last-good bitmaps are moved by GPU.
+            // Re-entering IDLE below is what resumes existing R3 preview/HIGH scheduling.
+            if (currentEntryState.phase != ContinuousEntryPhase.READY ||
+                currentInteractionActive || (documentState.gestureActive && documentState.scale > 1.001f)
+            ) {
+                return@collect
+            }
         // Real scroll direction from the scroll-Y delta (works while dragging,
         // flinging, and on settles) — the previous fling-only FORWARD signal
         // never produced BACKWARD, so chrome could hide but never return.
@@ -908,7 +938,7 @@ internal fun ContinuousDocumentViewport(
         // SAME page are meaningful. Epoch changes (zoom scale, viewport size,
         // page identity) re-baseline WITHOUT producing a motion sample, so
         // non-scroll movement can never drive the chrome state machine.
-        val anchorPage = primaryPage
+        val anchorPage = currentPrimaryAnchorPage
         val anchorScreenY = if (anchorPage >= 0) {
             currentGeometry.pageTop(anchorPage) * documentState.scale - documentState.scrollY
         } else {
@@ -928,12 +958,13 @@ internal fun ContinuousDocumentViewport(
         }
         lastAnchorPage = anchorPage
         lastAnchorScreenY = anchorScreenY
-        onViewportChanged(
+        currentOnViewportChanged(
             ContinuousViewportSnapshot(
-                visiblePages, primaryPage, direction, phase, deltaY,
+                currentVisiblePages, currentPrimaryAnchorPage, direction, phase, deltaY,
                 lastVelocityYDpPerSec, anchorScreenY, anchorDeltaY,
             ),
         )
+        }
     }
 
     LaunchedEffect(primaryPage, documentState.gestureActive, flingActive, interaction.phase) {
@@ -978,7 +1009,7 @@ internal fun ContinuousDocumentViewport(
         modifier = modifier
             .clipToBounds()
             .testTag("r7-continuous-viewport")
-            .semantics { r7ContinuousScale = renderDocumentState.scale; r7TileCount = drawableTiles.size }
+            .semantics { r7ContinuousScale = renderDocumentState.scale; r7TileCount = tileIndex.total }
             .onSizeChanged {
                 viewportSize = it
                 onViewportWidthPx(it.width)
@@ -1330,7 +1361,7 @@ internal fun ContinuousDocumentViewport(
         val height = constraints.maxHeight.coerceAtLeast(1)
         val pages = composedPages
         val placeables = pages.associateWith { page ->
-            subcompose("$documentId|$page") {
+            subcompose(page) {
                 val bitmap = displayedBitmaps[page]
                 DocumentPage(
                     documentId = documentId,
@@ -1343,7 +1374,7 @@ internal fun ContinuousDocumentViewport(
                     onEnsure = { onEnsureAround(page) },
                     onRetry = { onRetryPage(page) },
                     hasError = page == state.pageIndex && state.renderError != null,
-                    tiles = PdfTileDisplay.forPage(drawableTiles, page),
+                    tiles = tileIndex.forPage(page),
                     showBaseLayer = showBaseLayer,
                     tileOverlayAlpha = detailTileOverlayAlpha,
                     showTileDiagnostics = showTileDiagnostics,
@@ -1365,6 +1396,47 @@ internal fun ContinuousDocumentViewport(
             }
         }
     }
+}
+
+/** Trigger tuple for the continuous-viewport drive collector (P1-1). */
+private data class ContinuousViewportDriveInputs(
+    val scrollX: Float,
+    val scrollY: Float,
+    val scale: Float,
+    val gestureActive: Boolean,
+    val interactionPhase: ContinuousInteractionPhase,
+    val flingActive: Boolean,
+    val visiblePages: Set<Int>,
+)
+
+/** Pre-grouped drawable tiles for one overlay publication (P1-7 hot-path index). */
+internal class ContinuousTileIndex(private val byPage: Map<Int, List<PdfTileEntry>>) {
+    val total: Int = byPage.values.sumOf { it.size }
+
+    fun forPage(page: Int): List<PdfTileEntry> = byPage[page].orEmpty()
+}
+
+internal fun buildContinuousTileIndex(
+    source: Collection<PdfTileEntry>,
+    documentGeneration: Long,
+    geometry: ContinuousDocumentGeometry,
+    overlayEnabled: Boolean,
+): ContinuousTileIndex {
+    if (!overlayEnabled) return ContinuousTileIndex(emptyMap())
+    val filtered = ArrayList<PdfTileEntry>(source.size)
+    for (tile in source) {
+        val page = tile.key.pageIndex
+        if (tile.key.documentGeneration != documentGeneration) continue
+        if (page !in 0 until geometry.pageCount) continue
+        if (tile.key.geometryGeneration != geometry.pageGeometryGeneration(page)) continue
+        if (tile.key.fittedPageWidthVersion != geometry.fittedPageWidthVersion) continue
+        filtered += tile
+    }
+    val byPage = HashMap<Int, List<PdfTileEntry>>(filtered.size)
+    for ((page, list) in filtered.groupBy { it.key.pageIndex }) {
+        byPage[page] = PdfTileDisplay.forPage(list, page)
+    }
+    return ContinuousTileIndex(byPage)
 }
 
 private class ContinuousDocumentGestureState {

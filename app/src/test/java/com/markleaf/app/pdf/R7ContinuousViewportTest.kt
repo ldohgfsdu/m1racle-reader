@@ -39,7 +39,12 @@ class R7ContinuousViewportTest {
         assertFalse(source.contains("ContinuousPointerEpochReducer.frame("))
         assertFalse(source.contains("calculateZoom()"))
         assertTrue(source.contains("onContinuousViewportChanged").not())
-        assertTrue(source.contains("onViewportChanged("))
+        // P1-1: the R3 viewport callback is retained through a state holder so
+        // the single long-lived drive collector never reads a stale lambda.
+        assertTrue(
+            source.contains("rememberUpdatedState(onViewportChanged)") &&
+                source.contains("currentOnViewportChanged("),
+        )
         assertTrue(source.contains("ContinuousViewportSnapshot("))
         assertTrue(source.contains("anchorDeltaY"))
         // Epoch reset: zoom scale / viewport size / page identity changes

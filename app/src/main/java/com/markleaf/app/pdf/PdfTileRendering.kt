@@ -520,6 +520,13 @@ class PdfTileLru(private val maxBytes: Long = 56L * 1024 * 1024) {
     fun get(key: PdfTileKey): PdfTileEntry? = map[key]
     fun snapshot(): Map<PdfTileKey, PdfTileEntry> = map.toMap()
 
+    /**
+     * Zero-copy live view of cached keys (P1-6). All [PdfTileLru] access is
+     * confined to the Main dispatcher, so an unmodifiable backing-view is safe
+     * for planner coverage checks — no per-tick full-map copy.
+     */
+    fun keySet(): Set<PdfTileKey> = java.util.Collections.unmodifiableSet(map.keys)
+
     fun put(entry: PdfTileEntry, pinned: Set<PdfTileKey>): List<PdfTileEntry> {
         map.remove(entry.key)?.let { bytes -= it.byteSize }
         map[entry.key] = entry

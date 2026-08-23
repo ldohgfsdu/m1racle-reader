@@ -54,8 +54,12 @@ class R71FrameStabilityTest {
 
     @Test fun `subcompose identity excludes transform and bitmap fields`() {
         val source = viewportSource()
-        assertTrue(source.contains("subcompose(\"\$documentId|\$page\")"))
-        assertFalse(source.contains("subcompose(\"\$documentId|\$page|"))
+        // P1-3: page-only slot identity — strictly less volatile than the old
+        // "documentId|page" key; transform/bitmap fields must stay out of it.
+        assertTrue(source.contains("subcompose(page)"))
+        // Old composite key prefix must be gone entirely (no interpolated
+        // identity parts in subcompose keys).
+        assertFalse(source.contains("subcompose(\""))
     }
 
     @Test fun `pointer loop has no render or viewport publish`() {

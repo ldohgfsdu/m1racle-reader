@@ -1828,11 +1828,24 @@ internal fun PdfHorizontalPagedArea(
     val currentOnEnsureAround by rememberUpdatedState(onEnsureAround)
     val currentOnViewportSessionSettled by rememberUpdatedState(onViewportSessionSettled)
     val currentOnViewportSessionPreview by rememberUpdatedState(onViewportSessionPreview)
-    val horizontalOverlaySnapshot = if (tileOverlaySnapshots != null) {
-        val snapshot by tileOverlaySnapshots.collectAsStateWithLifecycle()
-        snapshot
+    // P1-7: group overlay tiles once per published sequence; the per-slot
+    // filter below drops from O(whole cache) to O(per-page tiles). The
+    // non-flow fallback wrapper is remembered instead of re-allocated per
+    // composition.
+    val collectedHorizontalOverlay: TileOverlaySnapshot? = if (tileOverlaySnapshots != null) {
+        tileOverlaySnapshots.collectAsStateWithLifecycle().value
     } else {
-        TileOverlaySnapshot(entries = state.tileEntries)
+        null
+    }
+    val horizontalOverlaySnapshot = collectedHorizontalOverlay
+        ?: remember(state.tileEntries) { TileOverlaySnapshot(entries = state.tileEntries) }
+    val horizontalTilesByPage = remember(
+        collectedHorizontalOverlay?.sequence, state.tileEntries, state.tileDocumentGeneration,
+    ) {
+        (collectedHorizontalOverlay?.entries ?: state.tileEntries)
+            .values
+            .filter { it.key.documentGeneration == state.tileDocumentGeneration }
+            .groupBy { it.key.pageIndex }
     }
     val currentHorizontalOverlaySnapshot by rememberUpdatedState(horizontalOverlaySnapshot)
     val horizontalViewportConflator = remember(state.document.id) {
@@ -2461,10 +2474,8 @@ internal fun PdfHorizontalPagedArea(
                 rotation = 0,
             )
             val horizontalTiles = PdfTileDisplay.forPage(
-                horizontalOverlaySnapshot.entries.values.filter { tile ->
-                    tile.key.documentGeneration == state.tileDocumentGeneration &&
-                        tile.key.pageIndex == page &&
-                        tile.key.geometryGeneration == fittedGeometry &&
+                horizontalTilesByPage[page].orEmpty().filter { tile ->
+                    tile.key.geometryGeneration == fittedGeometry &&
                         tile.key.fittedPageWidthVersion == fittedPage.fittedWidthPx.roundToInt()
                 },
                 page,

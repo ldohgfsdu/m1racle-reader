@@ -718,7 +718,7 @@ class PdfViewerViewModel(
         val cacheHitKeys: Set<PdfTileKey> = requests.mapTo(mutableSetOf()) { it.key }
             .filter { tileCache.get(it) != null }.toSet()
         val now = System.nanoTime()
-        val coverage = TileRenderPipelinePolicy.coverage(latestVisibleTileKeys, tileCache.snapshot().keys)
+        val coverage = TileRenderPipelinePolicy.coverage(latestVisibleTileKeys, tileCache.keySet())
         tileHealthTracker.onViewport(plan.snapshot, coverage)
         if (isDebuggable) {
             requests.filter { it.priority == com.markleaf.app.pdf.TilePriority.PAGE_AHEAD && it.key in cacheHitKeys }
