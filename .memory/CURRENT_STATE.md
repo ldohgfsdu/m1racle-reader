@@ -20,6 +20,7 @@
   - **Phase 1（F1/F2/F3，08-23）**：15 天未提交工作按功能边界拆成 12 个显式路径提交（398536a..374df83，树与快照逐字节一致校验通过）；qa 变体补 `ui-test-manifest`，`:app:testQaUnitTest` 恢复为绿色默认测试入口；ReaderMoreHostUiTest 空态断言对齐现行设计。
   - **Phase 2（F4/F5，08-23）**：PRD/README/AGENTS.md 口径同步为「本地文档阅读器」现状。
   - **Phase 3（A2-P0，08-23，f15ed94..4ed0ade）**：P0-1 tile LRU 淘汰恢复（pinned 收窄为管线键 + 淘汰镜像清除 overlay 发布物）；P0-2 导出取消语义（zip/copy 逐块检查点、CE 一律重抛、部分 SAF 输出尽力删除）。性能只读审查矩阵见会话记录；其余 P1 未动。
+  - **Phase 4（A2 热路径，08-23）**：CDV 驱动效果改 snapshotFlow 单收集器（消除每帧协程重启）；payload 去冗余集合拷贝；subcompose 页键化 + 每发布序列一次 tile 索引（连续/横排两消费端）；planner 改零拷贝 keySet。测试 1094 全绿；帧率收益待设备 profiling 确认。
 
 ## 验证基线（automated_verified）
 
