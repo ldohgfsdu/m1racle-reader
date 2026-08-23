@@ -5,9 +5,10 @@ import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.markleaf.app.MarkLeafApplication
+import com.markleaf.app.share.CommitOutcome
 import com.markleaf.app.share.ExternalDocumentImporter
-import com.markleaf.app.share.ExternalImportOutcome
 import com.markleaf.app.share.ExternalOpenCoordinator
+import com.markleaf.app.share.PrepareOutcome
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,6 +31,14 @@ class ExternalOpenSingleSessionInstrumentedTest {
     private lateinit var importer: ExternalDocumentImporter
     private lateinit var coordinator: ExternalOpenCoordinator
 
+    /** prepare + commit in one step (activeDocumentId=null), mirroring the production two-phase path. */
+    private suspend fun importOnce(uri: Uri, mime: String = "application/pdf"): CommitOutcome {
+        val prep = importer.prepare(uri, mime, activeDocumentId = null)
+        val prepared = (prep as? PrepareOutcome.Success)?.prepared
+            ?: error("prepare did not succeed: $prep")
+        return importer.commitPrepared(prepared)
+    }
+
     @Before
     fun setup() {
         assertEquals("com.markleaf.app.qa", context.packageName)
@@ -47,12 +56,10 @@ class ExternalOpenSingleSessionInstrumentedTest {
     @Test
     fun APP_COLD_START_EXTERNAL_OPEN_imports_named_pdf_once() = runBlocking {
         val uri = ExternalOpenFixtureProvider.uriFor("甲号教材.pdf")
-        val outcome = importer.import(uri, "application/pdf")
-        assertTrue(outcome is ExternalImportOutcome.Success)
-        val ok = outcome as ExternalImportOutcome.Success
+        val ok = importOnce(uri) as CommitOutcome.Success
         assertEquals("甲号教材.pdf", ok.displayName)
         assertTrue(ok.sizeBytes > 0)
-        val again = importer.import(uri, "application/pdf") as ExternalImportOutcome.Success
+        val again = importOnce(uri) as CommitOutcome.Success
         assertEquals(ok.documentId, again.documentId)
         val count = app.documentRepository.getAllDocuments().count { it.displayName == "甲号教材.pdf" }
         assertEquals(1, count)
@@ -62,8 +69,8 @@ class ExternalOpenSingleSessionInstrumentedTest {
     fun REOPEN_SAME_EXTERNAL_FILE_three_times_single_row() = runBlocking {
         val uri = ExternalOpenFixtureProvider.uriFor("乙号讲义.pdf")
         repeat(3) {
-            val o = importer.import(uri, "application/pdf")
-            assertTrue(o is ExternalImportOutcome.Success)
+            val o = importOnce(uri)
+            assertTrue(o is CommitOutcome.Success)
         }
         val rows = app.documentRepository.getAllDocuments().filter { it.displayName == "乙号讲义.pdf" }
         assertEquals(1, rows.size)
@@ -74,10 +81,10 @@ class ExternalOpenSingleSessionInstrumentedTest {
         // Different fixture names → different content pads in provider; force different content
         // by using A vs B padding. Same display name via two files is hard without two paths;
         // use two names then rename check sizes/hashes differ for A vs B.
-        val a = importer.import(ExternalOpenFixtureProvider.uriFor("样本A.pdf"), "application/pdf")
-            as ExternalImportOutcome.Success
-        val b = importer.import(ExternalOpenFixtureProvider.uriFor("样本B.pdf"), "application/pdf")
-            as ExternalImportOutcome.Success
+        val a = importOnce(ExternalOpenFixtureProvider.uriFor("样本A.pdf"))
+            as CommitOutcome.Success
+        val b = importOnce(ExternalOpenFixtureProvider.uriFor("样本B.pdf"))
+            as CommitOutcome.Success
         assertNotEquals(a.documentId, b.documentId)
         assertNotEquals(a.contentSha256, b.contentSha256)
         assertNotEquals(a.sizeBytes, b.sizeBytes)
@@ -88,7 +95,7 @@ class ExternalOpenSingleSessionInstrumentedTest {
         val uri = ExternalOpenFixtureProvider.uriFor("无尺寸.pdf", omitSize = true)
         val card = importer.probeIncomingCard(uri, "application/pdf")
         // probe may still see AFD length; final import must have size
-        val outcome = importer.import(uri, "application/pdf") as ExternalImportOutcome.Success
+        val outcome = importOnce(uri) as CommitOutcome.Success
         assertTrue(outcome.sizeBytes > 0)
         val doc = app.documentRepository.getDocumentById(outcome.documentId)!!
         assertTrue((doc.fileSize ?: 0) > 0)
@@ -144,10 +151,9 @@ class ExternalOpenSingleSessionInstrumentedTest {
 
     @Test
     fun open_pdf_A_then_B_confirm_replaces_active_session() = runBlocking {
-        val importA = importer.import(
+        val importA = importOnce(
             ExternalOpenFixtureProvider.uriFor("会话甲.pdf"),
-            "application/pdf",
-        ) as ExternalImportOutcome.Success
+        ) as CommitOutcome.Success
         coordinator.onViewerOpened(importA.documentId, "sess-a")
         assertEquals(importA.documentId, coordinator.activeDocumentId.value)
 
@@ -183,10 +189,9 @@ class ExternalOpenSingleSessionInstrumentedTest {
 
     @Test
     fun open_pdf_A_then_B_cancel_keeps_A() = runBlocking {
-        val importA = importer.import(
+        val importA = importOnce(
             ExternalOpenFixtureProvider.uriFor("保留甲.pdf"),
-            "application/pdf",
-        ) as ExternalImportOutcome.Success
+        ) as CommitOutcome.Success
         val countBefore = app.documentRepository.getAllDocuments().size
         coordinator.onViewerOpened(importA.documentId, "sess-keep-a")
         val intentB = Intent(Intent.ACTION_VIEW).setDataAndType(

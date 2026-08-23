@@ -20,9 +20,6 @@ enum class ReaderChromeSurfaceRole {
     Child,
 }
 
-/** @deprecated use [LocalLiquidBackdropHost]; kept as alias for Reader wiring. */
-typealias ReaderChromeBackdropHost = LiquidBackdropHost
-
 val LocalReaderChromeBackdropHost = LocalLiquidBackdropHost
 
 /**

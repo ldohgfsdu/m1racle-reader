@@ -280,9 +280,10 @@ open class ExternalDocumentImporter(
                     repository.upsert(entity)
                     // Room now owns the reference; failure cleanup must no longer delete it.
                     promotedFinalFile = null
-                    val bound = if (forceIndexBindFailure) {
-                        false
-                    } else {
+                    // Index bind failure must not leave unidentifiable duplicates: Room is
+                    // authority and the document remains openable via its Room id, so a bind
+                    // error is swallowed here (best-effort rebuild happens on next prepare).
+                    if (!forceIndexBindFailure) {
                         runCatching {
                             identityIndex.bind(
                                 documentId = prepared.documentId,
@@ -291,11 +292,7 @@ open class ExternalDocumentImporter(
                                 sizeBytes = prepared.sizeBytes,
                                 mimeType = prepared.mimeType,
                             )
-                        }.getOrDefault(false)
-                    }
-                    // Index bind failure must not leave unidentifiable duplicates: Room is authority.
-                    if (!bound) {
-                        // Best-effort rebuild later; document remains openable via Room id.
+                        }
                     }
                     CommitOutcome.Success(
                         documentId = prepared.documentId,
@@ -319,30 +316,6 @@ open class ExternalDocumentImporter(
                 }
             }
             CommitOutcome.Failed(e.message ?: "提交失败")
-        }
-    }
-
-    /** Full import helper for tests / simple call sites (prepare + commit, no session). */
-    suspend fun import(
-        sourceUri: Uri,
-        intentType: String?,
-        grantFlags: Int = 0,
-    ): ExternalImportOutcome {
-        return when (val prep = prepare(sourceUri, intentType, grantFlags, activeDocumentId = null)) {
-            is PrepareOutcome.Success -> when (val c = commitPrepared(prep.prepared)) {
-                is CommitOutcome.Success -> ExternalImportOutcome.Success(
-                    documentId = c.documentId,
-                    isPdf = c.isPdf,
-                    displayName = c.displayName,
-                    sizeBytes = c.sizeBytes,
-                    contentSha256 = c.contentSha256,
-                    reusedExisting = c.reusedExisting,
-                )
-                is CommitOutcome.Failed -> ExternalImportOutcome.Failed(c.message)
-            }
-            PrepareOutcome.Unsupported -> ExternalImportOutcome.Unsupported
-            PrepareOutcome.TooLarge -> ExternalImportOutcome.TooLarge
-            is PrepareOutcome.Failed -> ExternalImportOutcome.Failed(prep.message)
         }
     }
 

@@ -138,9 +138,3 @@ object EmbeddedOutlineBuilder {
         }
     }
 }
-
-data class OutlineImportPlan(
-    val drafts: List<EmbeddedOutlineNodeDraft>,
-    val mode: OutlineImportMode,
-    val source: OutlineNodeSource = OutlineNodeSource.PDF_EMBEDDED,
-)

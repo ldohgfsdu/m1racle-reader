@@ -257,14 +257,6 @@ internal fun childRowIndex(state: ReaderMoreState): Int = when (state) {
     else -> -1
 }
 
-/** Collapsed-layout estimate — first-frame fallback only (real bounds win). */
-internal fun parentRowRect(rowTopPx: Float, menuWidthPx: Float, rowHeightPx: Float): Rect = Rect(
-    left = 0f,
-    top = rowTopPx,
-    right = menuWidthPx,
-    bottom = rowTopPx + rowHeightPx,
-)
-
 /**
  * R25.2 pure geometry: the parent card's real content height under a single
  * authoritative progress per section. Each section contributes

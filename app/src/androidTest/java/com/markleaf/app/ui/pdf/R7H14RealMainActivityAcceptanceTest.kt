@@ -93,7 +93,7 @@ class R7H14RealMainActivityAcceptanceTest {
     private fun selectMode(horizontal: Boolean) {
         clickNode(instrumentation.targetContext.getString(R.string.pdf_reading_mode_open))
         val label = instrumentation.targetContext.getString(
-            if (horizontal) R.string.pdf_reading_mode_horizontal else R.string.pdf_reading_mode_vertical,
+            if (horizontal) R.string.pdf_reading_mode_horizontal else R.string.pdf_reading_mode_continuous,
         )
         clickNode(label)
         SystemClock.sleep(350L)

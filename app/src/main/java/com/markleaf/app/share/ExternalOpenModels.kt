@@ -120,20 +120,3 @@ sealed class CommitOutcome {
 
     data class Failed(val message: String) : CommitOutcome()
 }
-
-/** @deprecated Prefer [PrepareOutcome] + [CommitOutcome]; kept for older call sites/tests. */
-sealed class ExternalImportOutcome {
-    data class Success(
-        val documentId: String,
-        val isPdf: Boolean,
-        val displayName: String,
-        val sizeBytes: Long,
-        val contentSha256: String,
-        val reusedExisting: Boolean,
-    ) : ExternalImportOutcome()
-
-    data object Unsupported : ExternalImportOutcome()
-    data object TooLarge : ExternalImportOutcome()
-    data class Failed(val message: String) : ExternalImportOutcome()
-    data object Cancelled : ExternalImportOutcome()
-}

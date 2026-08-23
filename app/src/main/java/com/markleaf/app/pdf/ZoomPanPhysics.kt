@@ -88,11 +88,6 @@ data class ZoomPanPanResult(
     val residualPx: ZoomPanPoint,
 )
 
-data class ZoomPanVelocity(
-    val xPxPerSecond: Float,
-    val yPxPerSecond: Float,
-)
-
 /** Pure spring state; adapters own clocks/coroutines while the kernel owns integration. */
 data class ZoomPanSpringState(
     val positionPx: ZoomPanPoint,

@@ -232,19 +232,8 @@ data class JumpCardParams(
     val onCancel: () -> Unit = {},
 )
 
-/** Print-page anchor section payload (rendered by the textbook-page form surface). */
-data class PrintPageSectionParams(
-    val currentPdfHumanPage: Int,
-    val currentPrint: Int?,
-    val isExact: Boolean,
-    val onConfirm: (Int) -> Unit,
-    val onClear: () -> Unit,
-)
 /** Duration of the menu card's reverse morph back into the circle (ms). */
 private const val MENU_CLOSE_MORPH_MS = 200L
-
-/** Serial child handover: old child collapses (180ms) + buffer before opening the next. */
-private const val MENU_CHILD_SWITCH_DELAY_MS = 260L
 
 @Composable
 fun PdfViewerScreen(

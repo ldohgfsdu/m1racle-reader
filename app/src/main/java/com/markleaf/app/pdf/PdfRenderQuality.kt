@@ -199,9 +199,6 @@ object PdfRenderQuality {
         return (c - 1).coerceAtLeast(0)..(c + 1).coerceAtMost(pageCount - 1)
     }
 
-    /** @deprecated use [keepRange] */
-    fun visibleRange(center: Int, pageCount: Int): IntRange = keepRange(center, pageCount)
-
     fun cacheKey(documentId: String, pageIndex: Int, renderWidthBucket: Int): String =
         "$documentId|$pageIndex|$renderWidthBucket"
 
@@ -211,7 +208,5 @@ object PdfRenderQuality {
         val h = (w * aspectHw.coerceIn(0.4f, 3f)).roundToInt().toLong().coerceAtLeast(1L)
         return w * h * 4L
     }
-
-    fun tierOrdinal(tier: QualityTier): Int = tier.ordinal
 }
     const val SCROLL_PREVIEW_MAX_PX = 640

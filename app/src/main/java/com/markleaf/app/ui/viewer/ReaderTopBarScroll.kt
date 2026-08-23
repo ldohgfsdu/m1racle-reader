@@ -38,8 +38,6 @@ class ReaderTopBarScrollState(
     private val flingVelocityThresholdPxPerSec: Float = 900f,
     /** Fraction at which low-speed settle prefers fully hidden. */
     private val settleHideFraction: Float = 0.28f,
-    /** Injected for unit tests; production uses [android.os.SystemClock.uptimeMillis]. */
-    private val uptimeMillis: () -> Long = { android.os.SystemClock.uptimeMillis() },
 ) {
     /**
      * Total chrome height that must leave the screen: status bar inset + top bar (+ divider).
@@ -228,8 +226,4 @@ class ReaderTopBarScrollState(
         committedSign = 0
         reverseNoisePx = 0f
     }
-
-    // Keep uptimeMillis referenced so production injection stays available for tests.
-    @Suppress("unused")
-    private fun nowMs(): Long = uptimeMillis()
 }

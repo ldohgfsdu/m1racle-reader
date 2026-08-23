@@ -3,8 +3,6 @@ package com.markleaf.app.search
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 
 /**
  * One UTF-16 half-open highlight range on a single searchable text unit
@@ -48,9 +46,6 @@ data class BlockSearchHighlights(
         val EmptyRanges: List<SearchHighlightRange> = emptyList()
     }
 }
-
-/** Shared empty match list for map lookups. */
-private val EmptyMatchList: List<SearchMatch> = emptyList()
 
 /**
  * Group search hits by [SearchMatch.blockIndex]. Call only when [matches] changes —
@@ -129,43 +124,4 @@ fun AnnotatedString.withSearchHighlights(
         if (r.isActive) add(r, activeColor)
     }
     return builder.toAnnotatedString()
-}
-
-/**
- * Build plain AnnotatedString with multi-range search highlights (code / plain heading fallback).
- */
-fun highlightPlainTextMulti(
-    text: String,
-    ranges: List<SearchHighlightRange>,
-    normalColor: Color,
-    activeColor: Color,
-): AnnotatedString {
-    if (text.isEmpty()) return AnnotatedString("")
-    if (ranges.isEmpty()) return AnnotatedString(text)
-    val base = AnnotatedString(text)
-    return base.withSearchHighlights(ranges, normalColor, activeColor)
-}
-
-/**
- * Legacy single-range helper (tests / simple call sites).
- */
-fun highlightPlainText(
-    text: String,
-    activeStart: Int?,
-    activeEnd: Int?,
-    highlightColor: Color,
-): AnnotatedString {
-    if (text.isEmpty()) return AnnotatedString("")
-    if (activeStart == null || activeEnd == null ||
-        !isValidHighlightRange(activeStart, activeEnd, text.length)
-    ) {
-        return AnnotatedString(text)
-    }
-    return buildAnnotatedString {
-        append(text.substring(0, activeStart))
-        withStyle(SpanStyle(background = highlightColor)) {
-            append(text.substring(activeStart, activeEnd))
-        }
-        append(text.substring(activeEnd))
-    }
 }
