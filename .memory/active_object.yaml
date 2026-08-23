@@ -1,7 +1,11 @@
 id: HOME_ALIGN_UNIFIED_LIQUID_CONTROLS
-status: implemented_automated_verified_device_pending
+status: closed_automated_verified_device_pending
 scope: home_alignment_24dp_rail_fab_and_menu_reader_liquid_glass
 note: >
+  CLOSED as active dev item 2026-08-23: code committed in F1 audit batch
+  (398536a..374df83); suite green; device visual calibration still pending
+  (adb offline). Kept here only until a new active object is declared.
+  Delivered scope (historical):
   Home alignment + floating-control material unification (no redesign):
   1) ONE 24dp content rail — brand block / section title / cards / menu all at
   PageHorizontal=24dp; empty-state header bug fixed (was flush at x=0, now same
@@ -21,7 +25,7 @@ note: >
 builds:
   release_apk: .external_outbox/markleaf-release-latest.apk
   delivered_to: /storage/emulated/0/Download/markleaf-release-latest.apk
-  sha256: c160765055481208caea30e393ea213b3b8ec3b2ba50c7af129ba0a27568cd13
+  sha256: 4f5b60a9d7aafc61cd5ae531d51d01894ba15a70ca29c05ec66a104ea366a632
   report: docs/HOME_ALIGN_LIQUID_CONTROLS_REPORT.md
-commit: not_committed
-updated: 2026-08-07
+commit: committed_F1_audit_batch_2026-08-23
+updated: 2026-08-23

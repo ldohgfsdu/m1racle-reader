@@ -1,124 +1,49 @@
 # CURRENT_STATE
 
-**Updated:** 2026-08-08
+**Updated:** 2026-08-23
 
-**A0 repo baseline:** 2026-08-08 — HEAD 80fbf69（R10 close）之后的全量未提交工作（R11–R26、HOME 系列、外部打开、PDF 稳定性）已按 AUDIT_FULL_20260808_REVIEWED.md §4 分类，分 4 个 commit 提交（hygiene / production+tests / build+version / docs+governance）。Session 过程报告（docs/R*、HOME_*）未入库，留待决策。后续批次 A1（P0 正确性）待批准后开始。
+本文件只描述**当前**工程状态；过程细节以 `docs/` 已入库报告与 git 历史为准（单一事实源），不再在此重复。
 
-## Active: Home alignment + unified liquid floating controls (24dp rail, FAB/menu = Reader liquid)
+## 产品现状（code = source of truth）
 
-### Delivered (code = source of truth)
-- **ONE 24dp content rail**: `PageHorizontal` 16→24dp — brand block (墨阅 MarkLeaf / subtitle / 最近文件), section title, card surfaces all start/end at 24dp via LazyColumn contentPadding. Empty-state header bug fixed (was flush at x=0; now padded to same rail).
-- **FAB = 56dp rounded square** (corner 20, plus 26dp onSurface) using SHARED `markLeafLiquidSurface` + `LiquidSurfaceLevel.Control` — the exact PDF reader chrome material (α0.50 / blur 14 / lens 14·28 / shadow 8 / highlight 0.5·0.55 / pressed boost), real backdrop sampling from Scaffold slot; no home-specific material invented. Position right 20dp / bottom safe+20dp; list bottom inset nav+96dp.
-- **··· menu = same-source liquid glass**: Popup + shared surface (Control soft plate, `sampleBackdrop = false`, no cross-window sampling) + Control edge-highlight border (0.5dp/α0.55), corner 10dp = PDF chrome menu-row corner, 140×48dp single row, right-edge aligned to anchor expanding left.
-- **Cards stay solid tonal** (surfaceContainerLow, no backdrop) — liquid only on FAB/menu.
-- **KEPT**: single LazyColumn header item, `key = { doc -> doc.id }`, no animateItem, optimistic delete reflow, no fixed header/nested scroll.
-- **UNTOUCHED**: `MarkLeafLiquidSurface.kt`, `ReaderChromeMaterial.kt`, all Reader chrome, `backdrop:2.0.0` dependency.
+墨阅 MarkLeaf：Android 本地优先文档阅读器（无 INTERNET 权限、无账号/广告/云同步）。
 
-### Verification
-- `HomeLayoutContractTest` (9, incl. 24dp rail + empty-state padding + liquid-only-on-floating-controls negatives + menu corner/highlight/right-align) / `HomeListUpdateTest` (6) / `ReaderChromeMaterialTest` (7, home assertion updated to reuse-shared-liquid) PASS; full unit suite green (107 suites).
-- assembleRelease PASS → Download `markleaf-release-latest.apk` (sha256 c1607650…).
-- Device visual calibration (rail alignment / title start lines / ··· right edges / FAB rounded-square liquid / no glass-wave regressions): PENDING — adb offline.
-- Report: `docs/HOME_ALIGN_LIQUID_CONTROLS_REPORT.md`
+- **Markdown 阅读**：自研块解析器（标题/列表/引用/代码块+轻量高亮/表格/图片）、TOC 锚点跳转、文档内搜索+高亮、全文读取（32MiB 上限，无截断预览态）、安全相对路径图片、阅读位置恢复、字号/行高/边距设置。
+- **PDF 阅读**：Android PdfRenderer 渲染 + PDFBox（元数据/大纲）+ backdrop 液态玻璃 chrome；连续/单页模式、缩放手势、教材页码绑定、目录/缩略图/章节导出（ZIP_PACKAGE / PDF_ANNOTATED）；沉浸式系统栏。
+- **文档获取**：SAF 导入、外部 VIEW/SEND 打开（md/pdf/x-pdf/octet-stream/zip，pending/ack 导航防旋转丢失）、`.zip` Markdown 包导入（Zip-Slip/炸弹防护）。
+- **数据**：Room（schema v6）最近阅读 + PDF 视口会话字段；删除记录清理 App 自管副本（`files/library`、`files/packages`），永不触碰用户源文件。
 
-### Key files
-HomeScreen.kt, HomeDesignTokens.kt, HomeLayoutContractTest.kt, ReaderChromeMaterialTest.kt
+## 工程状态 2026-08-23
 
-## Previous: Home final polish — design frozen (section gap + card −5~8% + FAB 56dp)
+- HEAD `b840438`；工作树干净。审计整改两阶段已完成：
+  - **Phase 0（A0 baseline，08-08）**：R10 后全部工作分类入库（commits d09e04a..abb31f4）。
+  - **Phase 1（F1/F2/F3，08-23）**：15 天未提交工作按功能边界拆成 12 个显式路径提交（398536a..374df83，树与快照逐字节一致校验通过）；qa 变体补 `ui-test-manifest`，`:app:testQaUnitTest` 恢复为绿色默认测试入口；ReaderMoreHostUiTest 空态断言对齐现行设计。
+  - **Phase 2（F4/F5，08-23）**：PRD/README/AGENTS.md 口径同步为「本地文档阅读器」现状。
+  - **Phase 3（A2-P0，08-23，f15ed94..4ed0ade）**：P0-1 tile LRU 淘汰恢复（pinned 收窄为管线键 + 淘汰镜像清除 overlay 发布物）；P0-2 导出取消语义（zip/copy 逐块检查点、CE 一律重抛、部分 SAF 输出尽力删除）。性能只读审查矩阵见会话记录；其余 P1 未动。
 
-### Delivered (code = source of truth)
-- **Section continuity**: removed global `spacedBy`; per-item spacing — header item bottom padding `HeaderToFirstCardGap = 2dp` (tightened 6dp from 8), cards keep `CardGap = 8dp`. Brand typography untouched.
-- **Card −5.4%** (93 → 88dp single-line, gate 5–8%): v-padding top 12→11 / bottom 10→9 (−2dp), title lineHeight 22→21sp (font stays 18sp, maxLines 2), title→type 6→5, meta→progress 8→7; radius 20 / gap 8 / progress 3 unchanged. No forced equal heights.
-- **FAB 56dp** (58→56), radius 20, white plus 26dp, right & bottom insets both 20dp (Scaffold 16 + extra 4); list bottom inset nav+96dp clears it.
-- **Overflow**: unchanged single composable — 48dp invisible touch / 22dp glyph, uniform by construction.
-- **KEPT**: single LazyColumn header item, `key = { doc -> doc.id }`, no animateItem, optimistic delete reflow, no liquid on home.
-- **UNTOUCHED**: `MarkLeafLiquidSurface.kt`, `ReaderChromeMaterial.kt`, all Reader chrome, `backdrop:2.0.0` dependency.
+## 验证基线（automated_verified）
 
-### Verification
-- `HomeLayoutContractTest` (9, incl. gap-tightening math + density gate: computed card height 88dp, 5–8% band, title 18sp assertion) / `HomeListUpdateTest` (6) / `ReaderChromeMaterialTest` (7) PASS; full unit suite green (107 suites).
-- assembleRelease PASS → Download `markleaf-release-latest.apk` (sha256 f24898b7…).
-- Device visual + fast-scroll verification (default / menu / mid-scroll / bottom FAB + scroll video): PENDING — adb offline. NO further home design iterations.
-- Report: `docs/HOME_FINAL_POLISH_REPORT.md`
+- `:app:testQaUnitTest`：1082 tests / 0 failures（含 PdfTileLruEvictionTest、TileOverlayPurgeTest、ExportCancellationIoTest；JDK17 必需；默认 JAVA_HOME=25 会构建失败）。
+- `:app:assembleRelease`：PASS → `.external_outbox/markleaf-release-latest.apk`（~11.5MB，minify+shrink，versionCode=21）→ 强制交付 `/storage/emulated/0/Download/markleaf-release-latest.apk`。
+- 隐私门禁：manifest 零权限（含无 INTERNET），`ReleaseHygieneHostTest` 强制；QA 组件仅存在于 `.qa` 沙箱变体。
 
-### Key files
-HomeScreen.kt, HomeDesignTokens.kt, HomeLayoutContractTest.kt
+## Pending（device_pending / 待决策）
 
-## Previous: Home density + popup closure (no restructure, no Reader)
+- adb 离线：Home 对齐+液态浮控视觉、PDF 沉浸栏实机行为、滚动帧率实测 —— 全部 device_pending。
+- 审计批次未消化项（见 `.external_outbox/AUDIT_FULL_20260808_REVIEWED.md` §4.2）：A2 lifecycle → A3 chrome → A4 consolidation → B 性能（需设备 profiling）→ C 发布收口（keystore/体积 gate/benchmark 重建）。
 
-### Delivered (code = source of truth)
-- **Card density -15%**: ~109dp → ~93dp (single-line title). Radius 24→20dp, gap 12→8dp, padding 16h / top 12 / bottom 10, title 18sp/22sp lh maxLines=2, type/meta 12sp with lh14, progress 3dp. Overflow switched from Row (40dp touch inflated row 1) to **Box overlay**: text block end-padded 48dp + bare ··· aligned TopEnd → 48dp invisible touch / 22dp glyph never inflates card height.
-- **FAB**: 58dp / 20dp radius / white plus 26dp, right 20dp, bottom = safe area +20dp, list bottom inset nav+96dp.
-- **Delete menu = utility popup**: M3 DropdownMenu 140dp wide (min 140 / max 160), single 48dp row, 16dp row padding (M3 12 + 4), 22dp icon, 12dp icon gap (M3), 12dp radius, `surfaceContainer` + 2dp shadow; right-edge aligned to ··· anchor via `offset = DpOffset(-MenuAnchorOverhang=92dp)` expanding leftward — never covers large title span.
-- **KEPT**: single LazyColumn (header item scrolls away), `key = { doc -> doc.id }`, no animateItem, optimistic delete reflow, `wic.show(all)`, no liquid on home.
-- **UNTOUCHED**: `MarkLeafLiquidSurface.kt`, `ReaderChromeMaterial.kt`, all Reader chrome, `backdrop:2.0.0` dependency.
+## 历史索引（细节见对应已入库文档）
 
-### Verification
-- `HomeLayoutContractTest` (8, new density/popup bands + overlay layout + right-align math) / `HomeListUpdateTest` (6) / `ReaderChromeMaterialTest` (7) PASS; full unit suite green (107 suites).
-- assembleRelease PASS → Download `markleaf-release-latest.apk` (sha256 e2400987…).
-- Device screenshots (default / menu open / mid-scroll / bottom FAB) + scroll video: PENDING — adb offline.
-- Report: `docs/HOME_DENSITY_POPUP_CLOSURE_REPORT.md`
+| 主题 | 文档 |
+|---|---|
+| Home 布局/密度/液态浮控迭代 | docs/HOME_*.md（6 份） |
+| PDF chrome R11–R26 | docs/R11..R26_*.md |
+| PDF 手势/几何 R7 系列 | docs/R7_*.md |
+| Markdown 搜索/锚点/表格 R8–R9 | docs/R8_*.md, docs/MARKLEAF_MARKDOWN_*.md |
+| 外部打开会话 | docs/MARKLEAF_EXTERNAL_OPEN_*.md |
+| 发布就绪快照（07-21，历史） | docs/RELEASE_READINESS.md |
+| 全面工程审计底稿 | .external_outbox/AUDIT_FULL_20260808*.md |
 
-### Key files
-HomeScreen.kt, HomeDesignTokens.kt, HomeLayoutContractTest.kt
+## Active object
 
-## Previous: Home plain Material restore (remove Home Liquid, keep Reader Liquid)
-
-### Delivered (code = source of truth)
-- **Home has NO Liquid Glass anymore** (targeted UI revert, no git reset): bare `MoreVert` overflow icon (40dp touch / 24dp glyph, no surface/highlight/shadow), M3 `DropdownMenu` delete menu (12dp corner, `surfaceContainer`, 2dp shadow, anchored at ···), M3 `FloatingActionButton` 62dp / 22dp corner / `scheme.primary` (near-black #171717 in light) + white 28dp +, right margin 20dp, bottom = safe area +20dp.
-- `HomeLiquidControls.kt` DELETED (LiquidFab / LiquidIconButton / LiquidPopover / LiquidMenuItem gone). Home backdrop host (`rememberLayerBackdrop` / `layerBackdrop` / `LocalLiquidBackdropHost`) removed from HomeScreen.
-- Cards: tonal `surfaceContainerLow`, 24dp radius, compact 4-row (title 20sp ≤1 line → type 12sp → meta 12sp → 3dp progress), padding 16h/8v, gap 12dp.
-- **KEPT (not rolled back)**: single LazyColumn with header item scrolling away; stable `key = { doc -> doc.id }`; no animateItem; optimistic delete + `HomeListUpdate` reflow; `wic.show(all)` system bars.
-- **UNTOUCHED**: `MarkLeafLiquidSurface.kt`, `ReaderChromeMaterial.kt`, all Reader chrome, `io.github.kyant0:backdrop:2.0.0` dependency.
-
-### Verification
-- `HomeLayoutContractTest` (7) / `HomeListUpdateTest` (6) / `ReaderChromeMaterialTest` (7, Reader assertions unchanged) PASS; full unit suite green (107 suites).
-- assembleRelease PASS → Download `markleaf-release-latest.apk` (sha256 78df3216…).
-- Device screenshots (default / delete menu open / bottom FAB): PENDING — adb offline.
-- Report: `docs/HOME_PLAIN_CONTROLS_RESTORE_REPORT.md`
-
-### Key files
-HomeScreen.kt, HomeDesignTokens.kt, HomeLayoutContractTest.kt (Reader/common liquid files untouched)
-
-## Previous: Home visual closure (Quiet/Primary/Popover Liquid levels + single LazyColumn) — SUPERSEDED by plain restore
-
-### Delivered (code = source of truth)
-- **Named Liquid control levels** in shared `MarkLeafLiquidSurface.kt`: `QuietControl` (home ···, α0.36/shadow3dp/quiet highlight) → `PrimaryControl` (home FAB, α0.44/shadow6dp/lens depth) → `Popover` (α0.56/shadow10dp). All home floating controls reference the named levels; no per-component hardcoded material. Reader Control/Parent/Foreground tokens untouched (frozen). Shared `pressed` boost (α +0.06, highlight +0.18) on `markLeafLiquidSurface`.
-- **Single LazyColumn home**: brand header (墨阅 MarkLeaf / subtitle / 最近文件) is `item(key = "home_brand_header")` inside the same LazyColumn as cards — no fixed header, no clip boundary; old fixed-header + separate-list structure removed; dead `HomeHeaderScrollState` (+test) deleted.
-- **Card polish**: 24dp radius, 16/14dp padding, title 20sp → type 14sp (8dp) → meta 14sp (6dp) → progress (12dp). Quiet ··· = 40dp touch / 36dp glass core / 18dp icon; pressed/selected enhances.
-- **FAB**: 60dp, corner 24dp, icon 28dp, right 20dp, bottom = safe area + 20dp; list bottom inset nav+96dp clears it.
-- Popover stays Liquid Glass (Popover level, soft plate in Popup window).
-
-### Verification
-- `HomeLayoutContractTest` / `HomeListUpdateTest` / `ReaderChromeMaterialTest` PASS; full unit suite green (107 suites).
-- assembleRelease PASS → Download `markleaf-release-latest.apk` (sha256 bd7954c8…).
-- Device screenshots (default / scrolling brand leaving / popover open / bottom FAB clearance): PENDING — adb offline.
-- Report: `docs/HOME_VISUAL_CLOSURE_REPORT.md`
-
-### Key files
-HomeScreen.kt, HomeDesignTokens.kt, HomeLiquidControls.kt, MarkLeafLiquidSurface.kt, HomeLayoutContractTest.kt
-
-## Previous: Liquid-only Reader chrome + unified anchored advanced child navigation (r26.1)
-
-### Delivered (code = source of truth)
-- **Liquid only**: `ReaderChromeMaterial.kt` — Liquid is the only surface language; FROSTED/LIQUID dual material, material prefs key, and 阅读界面 material rows **removed** (r26.1). All Reader chrome goes through `Modifier.readerChromeSurface` → `markLeafLiquidSurface`.
-- **Glass-on-glass**: `io.github.kyant0:backdrop:2.0.0` — root `layerBackdrop` on PDF content, Parent `exportedBackdrop`, Child samples export (official pattern).
-- **Unified ReaderMore nav** (no BottomSheet handoff): exclusive `ReaderMoreState` — `CLOSED / MAIN / INLINE_READING_MODE / INLINE_READING_UI / PREPARING_CHILD_* / CHILD_*`.
-- **Four advanced tasks** (page mapping / TOC / thumbnails / export) open as `AnchoredNestedPopover` child-cards morphing from their own canonical Main source row (2..5); collapse returns to the same row. Death of BottomSheet handoff for catalog/thumbnails/export.
-- **Two-phase**: Basic → `PREPARING_*` → wait Main six-row layout stable → re-capture canonical source bounds → `CHILD_*`. No BasicExpanded temp coordinates, no fixed-offset compensation.
-- ParentCard stays 220dp compact six-row geometry in AdvancedOpen (`childRowIndex` rows only keep layout slot; Child header owns the visible instance).
-- Back priority: `AdvancedOpen → Main`, `BasicExpanded → Main`, `Main → close`. Page tap closes topmost surface.
-- Non-bottom-sheet system dialogs remain: `ChapterExportProgressDialog`, `OutlineEditDialog`, `EmbeddedOutlineImportDialog` (only export progress is the system-flow dialog).
-
-### Verification
-- Unit `*ReaderMore*` / `*Chrome*` / `*Geometry*` filters: PASS (`unit-reader-more.log`)
-- Extended transition matrix: Main→4 Advanced direct, Basic→4 Advanced via PREPARING, AdvancedA→AdvancedB direct, Back chain (see tests)
-- assembleRelease: PASS
-- APK: Download `markleaf-release-latest.apk`
-- Device screenshots / recordings: PENDING (`adb` empty / devices offline)
-
-### Stale memory/doc corrections
-- `.memory/active_object.yaml`: removed `READER_CHROME_MATERIAL_DUAL` (FROSTED default / LIQUID optional) — old memory no longer drives implementation.
-- `docs/READER_CHROME_MATERIAL_REPORT.md`: rewritten as Liquid-only current facts (code-first).
-- Dead BottomSheet imports / material preference strings removed from `PdfViewerScreen.kt` / `strings.xml`.
-
-### Key files
-ReaderChromeMaterial.kt, ReaderMoreHost.kt, ReaderMoreTransitions.kt, AnchoredNestedPopover.kt, ReaderMoreStateMachine(.kt + test), PdfViewerScreen.kt, MarkLeafLiquidSurface.kt
+见 `.memory/active_object.yaml`（HOME_ALIGN_UNIFIED_LIQUID_CONTROLS：implemented_automated_verified_device_pending，代码已随 F1 批次入库）。
