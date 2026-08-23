@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
  *
  * Room + private files are authority; [DocumentIdentityIndex] is rebuildable.
  */
-class ExternalDocumentImporter(
+open class ExternalDocumentImporter(
     private val context: Context,
     private val repository: DocumentRepository,
     private val identityIndex: DocumentIdentityIndex = DocumentIdentityIndex(context),
@@ -42,7 +42,7 @@ class ExternalDocumentImporter(
 
     val index: DocumentIdentityIndex get() = identityIndex
 
-    suspend fun prepare(
+    open suspend fun prepare(
         sourceUri: Uri,
         intentType: String?,
         grantFlags: Int = 0,
@@ -186,7 +186,8 @@ class ExternalDocumentImporter(
     /**
      * PHASE 2 body for library/DB only — does not clear active session (caller does after success).
      */
-    suspend fun commitPrepared(prepared: PreparedOpen): CommitOutcome = withContext(Dispatchers.IO) {
+    open suspend fun commitPrepared(prepared: PreparedOpen): CommitOutcome = withContext(Dispatchers.IO) {
+        var promotedFinalFile: File? = null
         try {
             when (prepared) {
                 is PreparedOpen.CurrentActive -> CommitOutcome.Success(
@@ -225,13 +226,23 @@ class ExternalDocumentImporter(
                         prepared.stagedFile.parentFile,
                         prepared.stagedFile.name.removeSuffix(".importing"),
                     )
-                    if (finalFile.exists()) finalFile.delete()
-                    if (!prepared.stagedFile.renameTo(finalFile)) {
-                        prepared.stagedFile.copyTo(finalFile, overwrite = true)
+                    val canReuseExistingFinal = finalFile.isFile &&
+                        finalFile.length() == prepared.sizeBytes
+                    if (canReuseExistingFinal) {
                         prepared.stagedFile.delete()
+                    } else {
+                        if (finalFile.exists() && !finalFile.delete()) {
+                            throw IllegalStateException("无法替换最终文件")
+                        }
+                        // Track before promotion so a partial copy is also removed on failure.
+                        promotedFinalFile = finalFile
+                        if (!prepared.stagedFile.renameTo(finalFile)) {
+                            prepared.stagedFile.copyTo(finalFile, overwrite = true)
+                            prepared.stagedFile.delete()
+                        }
                     }
                     if (!finalFile.isFile) {
-                        return@withContext CommitOutcome.Failed("最终文件写入失败")
+                        throw IllegalStateException("最终文件写入失败")
                     }
                     val now = System.currentTimeMillis()
                     val localUri = Uri.fromFile(finalFile).toString()
@@ -264,20 +275,23 @@ class ExternalDocumentImporter(
                         )
                     }
                     if (forceRoomUpsertFailure) {
-                        finalFile.delete()
-                        return@withContext CommitOutcome.Failed("Room 写入失败")
+                        throw IllegalStateException("Room 写入失败")
                     }
                     repository.upsert(entity)
+                    // Room now owns the reference; failure cleanup must no longer delete it.
+                    promotedFinalFile = null
                     val bound = if (forceIndexBindFailure) {
                         false
                     } else {
-                        identityIndex.bind(
-                            documentId = prepared.documentId,
-                            canonicalUriIdentity = prepared.externalKey,
-                            sha256 = prepared.contentSha256,
-                            sizeBytes = prepared.sizeBytes,
-                            mimeType = prepared.mimeType,
-                        )
+                        runCatching {
+                            identityIndex.bind(
+                                documentId = prepared.documentId,
+                                canonicalUriIdentity = prepared.externalKey,
+                                sha256 = prepared.contentSha256,
+                                sizeBytes = prepared.sizeBytes,
+                                mimeType = prepared.mimeType,
+                            )
+                        }.getOrDefault(false)
                     }
                     // Index bind failure must not leave unidentifiable duplicates: Room is authority.
                     if (!bound) {
@@ -295,9 +309,14 @@ class ExternalDocumentImporter(
                 }
             }
         } catch (e: Exception) {
-            // Cleanup staged file for new content
+            // Roll back both possible names. After promotion the staged path no
+            // longer exists, so deleting it alone leaves an orphan final file.
             if (prepared is PreparedOpen.NewContent) {
                 prepared.stagedFile.delete()
+                promotedFinalFile?.let { promoted ->
+                    promoted.delete()
+                    promoted.parentFile?.delete()
+                }
             }
             CommitOutcome.Failed(e.message ?: "提交失败")
         }
@@ -331,7 +350,7 @@ class ExternalDocumentImporter(
      * Metadata-only probe for the confirm dialog. Does not copy, write Room, or touch lastOpened.
      * [documentId] is set only when the identity index points at a live Room row.
      */
-    suspend fun probeIncomingCard(sourceUri: Uri, intentType: String?): DocumentIdentityCard {
+    open suspend fun probeIncomingCard(sourceUri: Uri, intentType: String?): DocumentIdentityCard {
         val provider = queryProviderMetadata(sourceUri, intentType)
         val resolved = ExternalUriMetadata.resolve(provider, intentType)
         val isPdf = DocumentType.resolve(resolved.mimeType, resolved.displayName, provider.lastPathSegment) ==
@@ -367,7 +386,7 @@ class ExternalDocumentImporter(
         )
     }
 
-    fun discardPrepared(prepared: PreparedOpen?) {
+    open fun discardPrepared(prepared: PreparedOpen?) {
         if (prepared is PreparedOpen.NewContent) {
             prepared.stagedFile.delete()
         }

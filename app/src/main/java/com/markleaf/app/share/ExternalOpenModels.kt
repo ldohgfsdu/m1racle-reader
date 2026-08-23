@@ -79,20 +79,25 @@ data class PendingExternalOpen(
     val prepared: PreparedOpen? = null,
 )
 
-sealed class ExternalOpenUiEffect {
-    /**
-     * Atomic navigation: replace any current viewer with this document in one nav transaction.
-     * [bringToFrontOnly] means do not reset route state if already showing this document.
-     */
-    data class NavigateToDocument(
-        val documentId: String,
-        val isPdf: Boolean,
-        val bringToFrontOnly: Boolean = false,
-    ) : ExternalOpenUiEffect()
+/**
+ * Replay-latest navigation request held by [ExternalOpenCoordinator.pendingNavigation]
+ * until the UI performs it and calls [ExternalOpenCoordinator.ackNavigation].
+ *
+ * [requestId] ties ack to the delivery that produced this request, so a stale ack
+ * (e.g. a slower UI from a previous rotation) can never clear a newer request.
+ */
+data class NavigationRequest(
+    val requestId: String,
+    val documentId: String,
+    val isPdf: Boolean,
+    val bringToFrontOnly: Boolean = false,
+)
 
+sealed class ExternalOpenUiEffect {
     data class Toast(val message: String) : ExternalOpenUiEffect()
     data class ToastUnsupported(val fileName: String, val mime: String?) : ExternalOpenUiEffect()
     data object ToastSendMultiple : ExternalOpenUiEffect()
+    data object ToastTextRequiresFile : ExternalOpenUiEffect()
 }
 
 sealed class PrepareOutcome {

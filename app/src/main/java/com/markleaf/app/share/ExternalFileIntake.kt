@@ -20,6 +20,7 @@ object ExternalFileIntake {
 
     private val ALLOWED_MIMES = setOf(
         "application/pdf",
+        "application/x-pdf",
         "application/zip",
         "application/x-zip-compressed",
         "application/x-zip",
@@ -176,7 +177,7 @@ object ExternalFileIntake {
             lower.endsWith(".txt") -> return "txt"
         }
         return when (mime?.lowercase(Locale.ROOT)) {
-            "application/pdf" -> "pdf"
+            "application/pdf", "application/x-pdf" -> "pdf"
             "application/zip", "application/x-zip-compressed", "application/x-zip" -> "zip"
             "text/markdown", "text/x-markdown" -> "md"
             "text/plain" -> "txt"

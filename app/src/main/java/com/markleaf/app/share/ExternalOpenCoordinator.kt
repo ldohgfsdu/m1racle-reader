@@ -48,12 +48,46 @@ class ExternalOpenCoordinator(
     private val _effects = MutableSharedFlow<ExternalOpenUiEffect>(extraBufferCapacity = 8)
     val effects: SharedFlow<ExternalOpenUiEffect> = _effects.asSharedFlow()
 
+    /**
+     * Replay-latest navigation slot. Unlike [effects] (fire-and-forget SharedFlow,
+     * replay=0), this StateFlow keeps the request across the no-subscriber window of
+     * an Activity rotation: the recreated UI re-reads the value, navigates once, and
+     * acks with the request id. ack with a stale id is a no-op (last-wins).
+     */
+    private val _pendingNavigation = MutableStateFlow<NavigationRequest?>(null)
+    val pendingNavigation: StateFlow<NavigationRequest?> = _pendingNavigation.asStateFlow()
+
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     /** Must succeed before session switch; failure aborts commit and keeps old viewer. */
     @Volatile
     var progressFlushHook: (suspend (documentId: String) -> Unit)? = null
+
+    /**
+     * Publish the navigation the UI must perform. Only the matching [NavigationRequest.requestId]
+     * may clear the slot, so an ack racing a newer request (last-wins) never clears it.
+     */
+    private fun setPendingNavigation(
+        requestId: String,
+        documentId: String,
+        isPdf: Boolean,
+        bringToFrontOnly: Boolean,
+    ) {
+        _pendingNavigation.value = NavigationRequest(
+            requestId = requestId,
+            documentId = documentId,
+            isPdf = isPdf,
+            bringToFrontOnly = bringToFrontOnly,
+        )
+    }
+
+    /** Idempotent: clears the slot only when it still holds the same request. */
+    fun ackNavigation(requestId: String) {
+        if (_pendingNavigation.value?.requestId == requestId) {
+            _pendingNavigation.value = null
+        }
+    }
 
     fun onViewerOpened(documentId: String, sessionId: String) {
         _activeDocumentId.value = documentId
@@ -80,8 +114,9 @@ class ExternalOpenCoordinator(
     }
 
     /**
-     * @param allowActivityRecreateReplay false for MainActivity onCreate when
-     * savedInstanceState != null (rotation must not re-fire). onNewIntent always true.
+     * @param allowActivityRecreateReplay false for a restored Activity. The same-process
+     * coordinator suppresses handled events; a new-process coordinator has no handled state
+     * and therefore recovers the launch Intent. onNewIntent always passes true.
      */
     suspend fun onIncomingIntent(intent: Intent?, allowActivityRecreateReplay: Boolean = true) {
         if (intent == null) return
@@ -90,7 +125,20 @@ class ExternalOpenCoordinator(
             return
         }
         if (!ExternalIntentUri.isExternalOpenAction(intent.action)) return
-        val uri = ExternalIntentUri.extract(intent) ?: return
+        val uri = ExternalIntentUri.extract(intent)
+        if (uri == null) {
+            if (ExternalIntentUri.isTextOnlySend(intent)) {
+                val textEventId = makeEventId(intent.action, null, intent.type)
+                mutex.withLock {
+                    if (!allowActivityRecreateReplay && handledEventIds.contains(textEventId.value)) {
+                        return@withLock
+                    }
+                    handledEventIds.add(textEventId.value)
+                    _effects.emit(ExternalOpenUiEffect.ToastTextRequiresFile)
+                }
+            }
+            return
+        }
         val eventId = makeEventId(intent.action, uri, intent.type)
 
         mutex.withLock {
@@ -133,12 +181,11 @@ class ExternalOpenCoordinator(
             )
             if (path == ExternalOpenPath.BRING_TO_FRONT && currentDoc != null) {
                 handledEventIds.add(eventId.value)
-                _effects.emit(
-                    ExternalOpenUiEffect.NavigateToDocument(
-                        documentId = currentDoc.id,
-                        isPdf = currentDoc.isPdf,
-                        bringToFrontOnly = true,
-                    ),
+                setPendingNavigation(
+                    requestId = eventId.value,
+                    documentId = currentDoc.id,
+                    isPdf = currentDoc.isPdf,
+                    bringToFrontOnly = true,
                 )
                 return
             }
@@ -180,8 +227,12 @@ class ExternalOpenCoordinator(
         if (intent == null) return
         if (!ExternalIntentUri.isExternalOpenAction(intent.action)) return
         if (ExternalIntentUri.isSendMultiple(intent)) return
-        val uri = ExternalIntentUri.extract(intent) ?: return
-        val eventId = makeEventId(intent.action, uri, intent.type)
+        val uri = ExternalIntentUri.extract(intent)
+        val eventId = when {
+            uri != null -> makeEventId(intent.action, uri, intent.type)
+            ExternalIntentUri.isTextOnlySend(intent) -> makeEventId(intent.action, null, intent.type)
+            else -> return
+        }
         handledEventIds.remove(eventId.value)
     }
 
@@ -221,12 +272,11 @@ class ExternalOpenCoordinator(
                     if (prepared is PreparedOpen.CurrentActive) {
                         handledEventIds.add(pending.eventId.value)
                         _pending.value = null
-                        _effects.emit(
-                            ExternalOpenUiEffect.NavigateToDocument(
-                                documentId = prepared.documentId,
-                                isPdf = prepared.isPdf,
-                                bringToFrontOnly = true,
-                            ),
+                        setPendingNavigation(
+                            requestId = pending.eventId.value,
+                            documentId = prepared.documentId,
+                            isPdf = prepared.isPdf,
+                            bringToFrontOnly = true,
                         )
                         return
                     }
@@ -273,12 +323,11 @@ class ExternalOpenCoordinator(
                             _activeViewerSessionId.value = sessionId
                             handledEventIds.add(pending.eventId.value)
                             _pending.value = null
-                            _effects.emit(
-                                ExternalOpenUiEffect.NavigateToDocument(
-                                    documentId = commit.documentId,
-                                    isPdf = commit.isPdf,
-                                    bringToFrontOnly = commit.bringToFrontOnly,
-                                ),
+                            setPendingNavigation(
+                                requestId = pending.eventId.value,
+                                documentId = commit.documentId,
+                                isPdf = commit.isPdf,
+                                bringToFrontOnly = commit.bringToFrontOnly,
                             )
                         }
                         is CommitOutcome.Failed -> {

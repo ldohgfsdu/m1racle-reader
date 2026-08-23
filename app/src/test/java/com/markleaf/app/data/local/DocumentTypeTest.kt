@@ -24,6 +24,14 @@ class DocumentTypeTest {
     }
 
     @Test
+    fun resolve_pdfExtension_overridesIncorrectTextMime() {
+        assertEquals(
+            DocumentType.PDF,
+            DocumentType.resolve("text/plain", "provider-labelled-wrong.pdf"),
+        )
+    }
+
+    @Test
     fun resolve_markdownExtension_isMarkdown() {
         assertEquals(
             DocumentType.MARKDOWN,

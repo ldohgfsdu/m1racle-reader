@@ -35,13 +35,9 @@ enum class DocumentType {
                 return PDF
             }
             if (hasPdfExtension(displayName) || hasPdfExtension(pathSegment)) {
-                // Some providers return octet-stream / empty mime for PDFs.
-                if (mime.isEmpty() ||
-                    mime == "application/octet-stream" ||
-                    mime.startsWith("application/")
-                ) {
-                    return PDF
-                }
+                // Provider MIME is frequently generic or wrong. A concrete .pdf
+                // display/path name is stronger file identity than text/plain.
+                return PDF
             }
             return MARKDOWN
         }

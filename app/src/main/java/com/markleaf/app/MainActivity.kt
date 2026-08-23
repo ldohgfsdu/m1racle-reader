@@ -1,8 +1,8 @@
 package com.markleaf.app
 
 import android.content.Intent
-import android.os.Build
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -54,12 +54,15 @@ class MainActivity : ComponentActivity() {
         val app = application as MarkLeafApplication
         val coordinator = app.externalOpenCoordinator
 
-        // Only cold-start / process recreate with a fresh task should consume the
-        // launch Intent. Rotation (savedInstanceState != null) must not re-fire.
-        if (savedInstanceState == null) {
-            lifecycleScope.launch {
-                coordinator.onIncomingIntent(intent, allowActivityRecreateReplay = true)
-            }
+        // Always dispatch the launch Intent. A restored Activity can belong either
+        // to the same process (rotation: coordinator already handled it) or a new
+        // process (coordinator is empty and must recover it). The coordinator owns
+        // that distinction; skipping here loses external opens after process death.
+        lifecycleScope.launch {
+            coordinator.onIncomingIntent(
+                intent,
+                allowActivityRecreateReplay = savedInstanceState == null,
+            )
         }
 
         setContent {
@@ -75,14 +78,6 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) {
                         coordinator.effects.collectLatest { effect ->
                             when (effect) {
-                                is ExternalOpenUiEffect.NavigateToDocument -> {
-                                    navigateReplaceViewer(
-                                        navController = navController,
-                                        documentId = effect.documentId,
-                                        isPdf = effect.isPdf,
-                                        bringToFrontOnly = effect.bringToFrontOnly,
-                                    )
-                                }
                                 is ExternalOpenUiEffect.Toast -> toast(effect.message)
                                 is ExternalOpenUiEffect.ToastUnsupported -> {
                                     toast(
@@ -95,6 +90,27 @@ class MainActivity : ComponentActivity() {
                                 }
                                 ExternalOpenUiEffect.ToastSendMultiple ->
                                     toast(getString(R.string.error_send_multiple_not_supported))
+                                ExternalOpenUiEffect.ToastTextRequiresFile ->
+                                    toast(getString(R.string.error_send_text_requires_file))
+                            }
+                        }
+                    }
+
+                    // Replay-latest navigation: survives the no-subscriber window of a
+                    // rotation. ack even if navigation throws, so a request never wedges.
+                    LaunchedEffect(Unit) {
+                        coordinator.pendingNavigation.collectLatest { req ->
+                            if (req != null) {
+                                try {
+                                    navigateReplaceViewer(
+                                        navController = navController,
+                                        documentId = req.documentId,
+                                        isPdf = req.isPdf,
+                                        bringToFrontOnly = req.bringToFrontOnly,
+                                    )
+                                } finally {
+                                    coordinator.ackNavigation(req.requestId)
+                                }
                             }
                         }
                     }
@@ -164,6 +180,12 @@ class MainActivity : ComponentActivity() {
         requestHighestRefreshRate()
     }
 
+    /**
+     * Night mode must not recreate the activity: PDF/Markdown would remount
+     * at page 0 (list/pager state is not saveable; restore can be clobbered
+     * by the first viewport callback). Compose already swaps [MarkLeafTheme]
+     * via [androidx.compose.foundation.isSystemInDarkTheme].
+     */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         applyEdgeToEdge()

@@ -78,6 +78,15 @@ class ExternalUriMetadataTest {
     }
 
     @Test
+    fun legacyPdfMimeGeneratesPdfName() {
+        val (name, source) = ExternalUriMetadata.resolveDisplayName(
+            ProviderMetadata(displayName = null, lastPathSegment = null, mimeType = "application/x-pdf"),
+        )
+        assertEquals("document.pdf", name)
+        assertEquals(ResolvedExternalMetadata.NameSource.MIME_GENERATED, source)
+    }
+
+    @Test
     fun unnamedOnlyAsLastResort() {
         val (name, source) = ExternalUriMetadata.resolveDisplayName(
             ProviderMetadata(displayName = null, lastPathSegment = null, mimeType = null),

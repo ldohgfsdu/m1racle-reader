@@ -39,6 +39,13 @@ object ExternalIntentUri {
         return null
     }
 
+    /** ACTION_SEND containing raw text but no file URI is outside the local-file reader scope. */
+    fun isTextOnlySend(intent: Intent?): Boolean {
+        if (intent?.action != Intent.ACTION_SEND || isSendMultiple(intent)) return false
+        if (extractSend(intent) != null) return false
+        return !intent.getCharSequenceExtra(Intent.EXTRA_TEXT).isNullOrEmpty()
+    }
+
     fun isExternalOpenAction(action: String?): Boolean =
         action == Intent.ACTION_VIEW ||
             action == Intent.ACTION_SEND ||
