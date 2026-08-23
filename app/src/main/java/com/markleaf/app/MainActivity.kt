@@ -2,6 +2,7 @@ package com.markleaf.app
 
 import android.content.Intent
 import android.os.Build
+import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -34,6 +35,7 @@ import com.markleaf.app.share.ExternalOpenPhase
 import com.markleaf.app.share.ExternalOpenUiEffect
 import com.markleaf.app.share.FileSizeFormatter
 import com.markleaf.app.share.PendingExternalOpen
+import com.markleaf.app.ui.common.clearContrastScrim
 import com.markleaf.app.ui.navigation.MarkLeafNavGraph
 import com.markleaf.app.ui.navigation.Routes
 import com.markleaf.app.ui.theme.MarkLeafTheme
@@ -45,18 +47,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Fully transparent system bars so reader content can draw behind status icons (X-style).
-        // Zero light/dark scrims — no OEM "status bar protection" band from Activity defaults.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.auto(
-                lightScrim = AndroidColor.TRANSPARENT,
-                darkScrim = AndroidColor.TRANSPARENT,
-            ),
-            navigationBarStyle = SystemBarStyle.auto(
-                lightScrim = AndroidColor.TRANSPARENT,
-                darkScrim = AndroidColor.TRANSPARENT,
-            ),
-        )
+        applyEdgeToEdge()
         requestHighestRefreshRate()
         ReaderPerformanceExperiments.configure(intent)
 
@@ -171,6 +162,28 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         requestHighestRefreshRate()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyEdgeToEdge()
+        requestHighestRefreshRate()
+    }
+
+    private fun applyEdgeToEdge() {
+        // Fully transparent system bars so reader content can draw behind status icons (X-style).
+        // Zero light/dark scrims — no OEM "status bar protection" band from Activity defaults.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                lightScrim = AndroidColor.TRANSPARENT,
+                darkScrim = AndroidColor.TRANSPARENT,
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                lightScrim = AndroidColor.TRANSPARENT,
+                darkScrim = AndroidColor.TRANSPARENT,
+            ),
+        )
+        window.clearContrastScrim(window.decorView)
     }
 
     /**
