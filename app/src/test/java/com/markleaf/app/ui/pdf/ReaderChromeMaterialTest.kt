@@ -3,6 +3,9 @@ package com.markleaf.app.ui.pdf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
+import com.markleaf.app.ui.common.LiquidGlassTokens
+import com.markleaf.app.ui.common.LiquidSurfaceLevel
+import com.markleaf.app.ui.common.resolvedSurfaceAlpha
 import com.markleaf.app.ui.common.shapeSupportsLiquidLens
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -34,6 +37,63 @@ class ReaderChromeMaterialTest {
         assertFalse(screen.contains("pdf_chrome_material_frosted"))
         assertFalse(screen.contains("setChromeMaterialStyle"))
         assertTrue(material.contains("markLeafLiquidSurface") || material.contains("LiquidSurfaceLevel"))
+    }
+
+    @Test
+    fun `parent menu fill stays translucent glass not a solid plate`() {
+        assertEquals(0.60f, LiquidGlassTokens.ParentSurfaceAlpha, 0.001f)
+        assertEquals(0.50f, LiquidGlassTokens.ControlSurfaceAlpha, 0.001f)
+        assertEquals(
+            0.60f,
+            resolvedSurfaceAlpha(LiquidSurfaceLevel.Parent, pressed = false),
+            0.001f,
+        )
+        assertEquals(
+            0.50f,
+            resolvedSurfaceAlpha(LiquidSurfaceLevel.Control, pressed = false),
+            0.001f,
+        )
+        assertTrue(
+            "reference frost is milky but still see-through",
+            resolvedSurfaceAlpha(LiquidSurfaceLevel.Parent, pressed = false) in 0.55f..0.75f,
+        )
+    }
+
+    @Test
+    fun `reader glass follows Kyant dialog regular frost`() {
+        assertEquals(0.60f, LiquidGlassTokens.ParentSurfaceAlpha, 0.001f)
+        assertEquals(0.66f, LiquidGlassTokens.ForegroundSurfaceAlpha, 0.001f)
+        assertEquals(0.58f, LiquidGlassTokens.ParentDarkSurfaceAlpha, 0.001f)
+        assertEquals(0.20f, LiquidGlassTokens.LightBrightness, 0.001f)
+        assertEquals(-0.08f, LiquidGlassTokens.DarkBrightness, 0.001f)
+        val darkParent = resolvedSurfaceAlpha(
+            LiquidSurfaceLevel.Parent,
+            pressed = false,
+            dark = true,
+        )
+        assertEquals(0.58f, darkParent, 0.001f)
+        assertTrue(
+            "night frost stays see-through, not a solid plate",
+            darkParent in 0.50f..0.70f,
+        )
+        val common = commonSource("MarkLeafLiquidSurface.kt")
+        val liquidDraw = common.substringAfter("private fun liquidDraw")
+        assertTrue(liquidDraw.contains("colorControls("))
+        assertTrue(liquidDraw.contains("Highlight.Plain"))
+        assertTrue(liquidDraw.contains("LightSurfaceTint"))
+        assertTrue(liquidDraw.contains("DarkHighlightAlpha"))
+        assertFalse(liquidDraw.contains("vibrancy()"))
+        assertFalse(common.contains("DarkSurfaceAlphaBoost"))
+    }
+
+    @Test
+    fun `child overlay samples parent export for stacked glass`() {
+        val material = source("ReaderChromeMaterial.kt")
+        val common = commonSource("MarkLeafLiquidSurface.kt")
+        assertTrue(material.contains("ReaderChromeSurfaceRole.Child -> LiquidSurfaceLevel.Foreground"))
+        assertTrue(material.contains("exportForChild = role == ReaderChromeSurfaceRole.Parent"))
+        assertTrue(common.contains("rememberCombinedBackdrop(host.root, host.parentExport)"))
+        assertFalse(material.contains("exportForChild = false"))
     }
 
     @Test
@@ -79,6 +139,34 @@ class ReaderChromeMaterialTest {
         assertFalse(shapeSupportsLiquidLens(capsule))
         assertTrue(shapeSupportsLiquidLens(CircleShape))
         assertTrue(shapeSupportsLiquidLens(RoundedCornerShape(28.dp)))
+    }
+
+    @Test
+    fun `capsule press indication is on the pill header not the morphing card`() {
+        val screen = source("PdfViewerScreen.kt")
+        val start = screen.indexOf("private fun PdfInfoCapsule")
+        val end = screen.indexOf("private fun JumpPageBody")
+        assertTrue(start >= 0 && end > start)
+        val capsule = screen.substring(start, end)
+        val headerIdx = capsule.indexOf(".height(44.dp)")
+        val clickableIdx = capsule.indexOf("clickable(")
+        assertTrue("capsule header must be 44dp", headerIdx >= 0)
+        assertTrue("capsule still has a clickable", clickableIdx >= 0)
+        assertTrue(
+            "clickable must sit on the 44dp pill, not the expanding card",
+            clickableIdx > headerIdx,
+        )
+        val surfaceWindow = capsule.substring(0, headerIdx)
+        assertFalse(
+            "morphing Column/surface must not own clickable indication",
+            surfaceWindow.contains("clickable("),
+        )
+        assertTrue(capsule.contains("indication = null"))
+        assertTrue(capsule.contains("capsuleLocalPressHighlight"))
+        assertTrue(
+            "pill clip keeps the highlight inside the capsule silhouette",
+            capsule.contains("clip(RoundedCornerShape(22.dp))"),
+        )
     }
 
     @Test

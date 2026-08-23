@@ -38,6 +38,9 @@ fun Modifier.readerChromeSurface(
     val liquidLevel = when (role) {
         ReaderChromeSurfaceRole.Chrome -> LiquidSurfaceLevel.Control
         ReaderChromeSurfaceRole.Parent -> LiquidSurfaceLevel.Parent
+        // Nested child samples the parent's exported glass so the two cards
+        // stack (glass-on-glass) instead of the child floating as a separate
+        // plate over the PDF.
         ReaderChromeSurfaceRole.Child -> LiquidSurfaceLevel.Foreground
     }
     return markLeafLiquidSurface(

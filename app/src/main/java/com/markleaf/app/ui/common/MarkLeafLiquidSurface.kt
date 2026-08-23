@@ -17,10 +17,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
 
@@ -61,29 +62,49 @@ val LocalLiquidBackdropHost =
 
 /**
  * Shared liquid tokens.
- * Reader levels (Control/Parent/Foreground) are frozen (r26.1); Home control
- * levels (QuietControl/PrimaryControl/Popover) are the active tuning surface.
+ *
+ * Reader cards follow Kyant catalog **Dialog** (light Regular frost):
+ * brightness lift + blur + mild lens + Highlight.Plain + FAFAFA@~0.60.
+ * That is the milky popover in the WeiXin reference — not a thick plate
+ * and not a hollow specular rim.
  */
 object LiquidGlassTokens {
-    // ── Reader levels (frozen — do not retune) ────────────────────────────
-    const val ParentSurfaceAlpha = 0.48f
-    const val ForegroundSurfaceAlpha = 0.58f
+    // ── Reader levels (Dialog-style Regular frost) ───────────────────────
+    const val ParentSurfaceAlpha = 0.60f
+    const val ForegroundSurfaceAlpha = 0.66f
     const val ControlSurfaceAlpha = 0.50f
+    /** Night Regular frost: charcoal plate, page glyphs still ghost through. */
+    const val ParentDarkSurfaceAlpha = 0.58f
+    const val ForegroundDarkSurfaceAlpha = 0.64f
+    const val ControlDarkSurfaceAlpha = 0.48f
 
-    val ParentBlur = 18.dp
-    val ForegroundBlur = 20.dp
-    val ControlBlur = 14.dp
+    val ParentBlur = 16.dp
+    val ForegroundBlur = 16.dp
+    val ControlBlur = 12.dp
 
-    val ParentLensHeight = 18.dp
-    val ParentLensAmount = 36.dp
-    val ForegroundLensHeight = 20.dp
-    val ForegroundLensAmount = 40.dp
-    val ControlLensHeight = 14.dp
-    val ControlLensAmount = 28.dp
+    val ParentLensHeight = 16.dp
+    val ParentLensAmount = 32.dp
+    val ForegroundLensHeight = 16.dp
+    val ForegroundLensAmount = 32.dp
+    val ControlLensHeight = 10.dp
+    val ControlLensAmount = 20.dp
 
-    val ParentShadow = 12.dp
-    val ForegroundShadow = 16.dp
+    val ParentShadow = 16.dp
+    val ForegroundShadow = 18.dp
     val ControlShadow = 8.dp
+
+    /** Dialog light surface tint (not pure white). */
+    val LightSurfaceTint = Color(0xFFFAFAFA)
+    /** Night Regular frost — graphite, not pitch black. */
+    val DarkSurfaceTint = Color(0xFF1C1C1C)
+    const val LightBrightness = 0.20f
+    /** Slightly darken the sampled page so the card reads as frost, not gray film. */
+    const val DarkBrightness = -0.08f
+    const val RecipeSaturation = 1.25f
+    const val DarkSaturation = 1.10f
+    const val DarkHighlightAlpha = 0.20f
+    const val DarkShadowAlpha = 0.42f
+    const val LightShadowAlpha = 0.10f
 
     // ── Home floating control levels (quiet → primary → popover) ─────────
     const val QuietControlSurfaceAlpha = 0.36f
@@ -108,6 +129,7 @@ object LiquidGlassTokens {
     /** Pressed/selected boost — coverage + edge highlight/refraction. */
     const val PressedSurfaceAlphaBoost = 0.06f
     const val PressedHighlightAlphaBoost = 0.18f
+
 }
 
 /** Resolved per-level liquid parameters (single source of truth). */
@@ -122,6 +144,26 @@ internal data class LiquidLevelTokens(
     val highlightAlpha: Float,
     val depthEffect: Boolean,
 )
+
+internal fun resolvedSurfaceAlpha(
+    level: LiquidSurfaceLevel,
+    pressed: Boolean,
+    dark: Boolean = false,
+): Float {
+    val base = if (dark) {
+        when (level) {
+            LiquidSurfaceLevel.Parent -> LiquidGlassTokens.ParentDarkSurfaceAlpha
+            LiquidSurfaceLevel.Foreground -> LiquidGlassTokens.ForegroundDarkSurfaceAlpha
+            LiquidSurfaceLevel.Control -> LiquidGlassTokens.ControlDarkSurfaceAlpha
+            LiquidSurfaceLevel.Popover -> 0.56f
+            else -> liquidLevelTokens(level).surfaceAlpha
+        }
+    } else {
+        liquidLevelTokens(level).surfaceAlpha
+    }
+    val boost = if (pressed) LiquidGlassTokens.PressedSurfaceAlphaBoost else 0f
+    return (base + boost).coerceIn(0f, 0.92f)
+}
 
 internal fun liquidLevelTokens(level: LiquidSurfaceLevel): LiquidLevelTokens = when (level) {
     LiquidSurfaceLevel.QuietControl -> LiquidLevelTokens(
@@ -161,7 +203,7 @@ internal fun liquidLevelTokens(level: LiquidSurfaceLevel): LiquidLevelTokens = w
         lensAmount = LiquidGlassTokens.ControlLensAmount,
         shadow = LiquidGlassTokens.ControlShadow,
         highlightWidth = 0.5.dp,
-        highlightAlpha = 0.55f,
+        highlightAlpha = 0.30f,
         depthEffect = false,
     )
     LiquidSurfaceLevel.Parent -> LiquidLevelTokens(
@@ -171,8 +213,8 @@ internal fun liquidLevelTokens(level: LiquidSurfaceLevel): LiquidLevelTokens = w
         lensAmount = LiquidGlassTokens.ParentLensAmount,
         shadow = LiquidGlassTokens.ParentShadow,
         highlightWidth = 0.5.dp,
-        highlightAlpha = 0.55f,
-        depthEffect = true,
+        highlightAlpha = 0.30f,
+        depthEffect = false,
     )
     LiquidSurfaceLevel.Foreground -> LiquidLevelTokens(
         surfaceAlpha = LiquidGlassTokens.ForegroundSurfaceAlpha,
@@ -181,8 +223,8 @@ internal fun liquidLevelTokens(level: LiquidSurfaceLevel): LiquidLevelTokens = w
         lensAmount = LiquidGlassTokens.ForegroundLensAmount,
         shadow = LiquidGlassTokens.ForegroundShadow,
         highlightWidth = 0.5.dp,
-        highlightAlpha = 0.55f,
-        depthEffect = true,
+        highlightAlpha = 0.30f,
+        depthEffect = false,
     )
 }
 
@@ -235,10 +277,12 @@ private fun softFallbackSurface(
     // Fallback without backdrop sampling — used only if host missing.
     val dark = isSystemInDarkTheme()
     val tokens = liquidLevelTokens(level)
-    val alpha = (tokens.surfaceAlpha +
-        if (pressed) LiquidGlassTokens.PressedSurfaceAlphaBoost else 0f)
-        .coerceIn(0f, 0.92f)
-    val color = if (dark) Color.Black.copy(alpha = alpha) else Color.White.copy(alpha = alpha)
+    val alpha = resolvedSurfaceAlpha(level, pressed, dark)
+    val color = if (dark) {
+        LiquidGlassTokens.DarkSurfaceTint.copy(alpha = alpha)
+    } else {
+        LiquidGlassTokens.LightSurfaceTint.copy(alpha = alpha)
+    }
     return Modifier
         .shadow(elevation = tokens.shadow, shape = shape)
         .clip(shape)
@@ -257,9 +301,12 @@ private fun liquidDraw(
     val density = LocalDensity.current
     val dark = isSystemInDarkTheme()
     val tokens = liquidLevelTokens(level)
-    val backdrop: Backdrop = when (level) {
-        LiquidSurfaceLevel.Foreground -> host.parentExport
-        else -> host.root
+    // Child samples PDF + parent glass. parentExport alone is empty past the
+    // parent bounds, so the nested card would read as fully see-through.
+    val backdrop: Backdrop = if (level == LiquidSurfaceLevel.Foreground) {
+        rememberCombinedBackdrop(host.root, host.parentExport)
+    } else {
+        host.root
     }
     val exported: LayerBackdrop? =
         if (exportForChild && level == LiquidSurfaceLevel.Parent) host.parentExport else null
@@ -267,26 +314,47 @@ private fun liquidDraw(
     val blurPx = with(density) { tokens.blur.toPx() }
     val lensH = with(density) { tokens.lensHeight.toPx() }
     val lensA = with(density) { tokens.lensAmount.toPx() }
-    val surfaceAlpha = (tokens.surfaceAlpha +
-        if (pressed) LiquidGlassTokens.PressedSurfaceAlphaBoost else 0f)
-        .coerceIn(0f, 0.92f)
+    val surfaceAlpha = resolvedSurfaceAlpha(level, pressed, dark)
     val surfaceColor = if (dark) {
-        Color.Black.copy(alpha = surfaceAlpha)
+        LiquidGlassTokens.DarkSurfaceTint.copy(alpha = surfaceAlpha)
     } else {
-        Color.White.copy(alpha = surfaceAlpha)
+        LiquidGlassTokens.LightSurfaceTint.copy(alpha = surfaceAlpha)
     }
-    val softShadow = Shadow(radius = tokens.shadow, color = Color.Black.copy(alpha = 0.12f))
-    val highlightAlpha = (tokens.highlightAlpha +
-        if (pressed) LiquidGlassTokens.PressedHighlightAlphaBoost else 0f)
-        .coerceIn(0f, 0.9f)
-    val edgeHighlight = Highlight(width = tokens.highlightWidth, alpha = highlightAlpha)
+    val softShadow = Shadow(
+        radius = tokens.shadow,
+        color = Color.Black.copy(
+            alpha = if (dark) {
+                LiquidGlassTokens.DarkShadowAlpha
+            } else {
+                LiquidGlassTokens.LightShadowAlpha
+            },
+        ),
+    )
+    val highlightAlpha = (
+        if (dark) LiquidGlassTokens.DarkHighlightAlpha else tokens.highlightAlpha
+        ) + if (pressed) LiquidGlassTokens.PressedHighlightAlphaBoost else 0f
+    val edgeHighlight = Highlight.Plain.copy(
+        width = tokens.highlightWidth,
+        alpha = highlightAlpha.coerceIn(0f, 0.7f),
+    )
     val allowLens = shapeSupportsLiquidLens(shape)
 
     return modifier.drawBackdrop(
         backdrop = backdrop,
         shape = { shape },
         effects = {
-            vibrancy()
+            colorControls(
+                brightness = if (dark) {
+                    LiquidGlassTokens.DarkBrightness
+                } else {
+                    LiquidGlassTokens.LightBrightness
+                },
+                saturation = if (dark) {
+                    LiquidGlassTokens.DarkSaturation
+                } else {
+                    LiquidGlassTokens.RecipeSaturation
+                },
+            )
             blur(blurPx)
             if (allowLens && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 lens(
