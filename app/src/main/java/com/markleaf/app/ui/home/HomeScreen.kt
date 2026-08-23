@@ -145,6 +145,10 @@ fun HomeScreen(
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             val message = when (event) {
+                is HomeEvent.OpenDocument -> {
+                    onOpenDocument(event.document)
+                    return@collect
+                }
                 HomeEvent.UnsupportedFormat ->
                     context.getString(R.string.error_unsupported_format)
                 HomeEvent.ReadFailed ->

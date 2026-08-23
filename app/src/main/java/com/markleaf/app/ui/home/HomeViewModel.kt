@@ -25,8 +25,15 @@ data class HomeUiState(
 )
 
 sealed class HomeEvent {
+    data class OpenDocument(val document: DocumentEntity) : HomeEvent()
     data object UnsupportedFormat : HomeEvent()
     data object ReadFailed : HomeEvent()
+}
+
+internal fun ImportResult.toHomeEvent(): HomeEvent = when (this) {
+    is ImportResult.Success -> HomeEvent.OpenDocument(document)
+    ImportResult.UnsupportedFormat -> HomeEvent.UnsupportedFormat
+    ImportResult.ReadFailed -> HomeEvent.ReadFailed
 }
 
 class HomeViewModel(
@@ -76,11 +83,7 @@ class HomeViewModel(
 
     fun onImportDocument(uri: Uri) {
         viewModelScope.launch {
-            when (repository.importDocument(uri)) {
-                is ImportResult.Success -> Unit
-                ImportResult.UnsupportedFormat -> _events.emit(HomeEvent.UnsupportedFormat)
-                ImportResult.ReadFailed -> _events.emit(HomeEvent.ReadFailed)
-            }
+            _events.emit(repository.importDocument(uri).toHomeEvent())
         }
     }
 
