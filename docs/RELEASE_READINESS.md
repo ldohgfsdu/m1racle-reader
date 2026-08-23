@@ -1,5 +1,7 @@
 # MarkLeaf Release Candidate — INTERIM / DEVICE BLOCKED
 
+> **历史快照（2026-07-21）**：本文记录当时的发布就绪评估，不代表当前状态；当前工程与交付状态见 `.memory/CURRENT_STATE.md` 与 `docs/APK_DELIVERY.md`。
+
 **Date:** 2026-07-21 (continued host validation)  
 **Status line (required):** **host gates passed / device and full release validation incomplete**  
 **Not a final verdict:** do **not** treat this as `accepted` / `conditionally accepted` / `rejected`.

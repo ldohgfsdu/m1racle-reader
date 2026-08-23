@@ -1,5 +1,7 @@
 # 墨阅 MarkLeaf — MVP 验收清单（Release Gate）
 
+> **历史记录（2026-07-10，Markdown MVP 时期验收）**：仅证明当时基线；当前功能范围与验证状态见 `.memory/CURRENT_STATE.md` 与 docs/ 下各专项报告。
+
 - **版本：** v0.1.0（`versionCode=1`，`versionName=0.1.0`）  
 - **验收日：** 2026-07-10  
 - **结论：** **通过** — 可称为 **v0.1.0 MVP** 发布候选（debug APK）  

@@ -1,10 +1,10 @@
 # MarkLeaf
 
-Android 本地优先 Markdown 阅读器（墨阅）。
+Android 本地优先文档阅读器（墨阅）：Markdown + PDF。
 
 ## Scope
 
-Follow `docs/PRD.md`. MVP is local Markdown reading only.
+Follow `docs/PRD.md`（2026-08-23 范围修订版）：本地 Markdown + PDF 阅读；编辑、云同步、全文索引、EPUB 等明确不做。
 
 - No INTERNET permission
 - No ads / analytics / accounts / cloud sync
