@@ -17,8 +17,8 @@ class ReaderTopBarScrollStateTest {
     private fun state(
         maxHide: Float = 100f,
         jitter: Float = 12f,
-        flingThreshold: Float = 1200f,
-        settleFraction: Float = 0.5f,
+        flingThreshold: Float = 900f,
+        settleFraction: Float = 0.28f,
     ) = ReaderTopBarScrollState(
         maxHiddenOffsetPx = maxHide,
         jitterIgnorePx = jitter,
@@ -145,11 +145,18 @@ class ReaderTopBarScrollStateTest {
 
     @Test
     fun settle_lowSpeed_usesFractionThreshold() {
-        val s = state(maxHide = 100f, settleFraction = 0.5f)
+        val s = state(maxHide = 100f, settleFraction = 0.28f)
         s.onUserDragDelta(-60f)
         assertEquals(100f, s.resolveSettleTarget(0f), 0.001f)
-        s.snapTo(40f)
+        s.snapTo(20f)
         assertEquals(0f, s.resolveSettleTarget(0f), 0.001f)
+    }
+
+    @Test
+    fun settle_weakUpFling_finishesHideOnceCollapseStarted() {
+        val s = state(maxHide = 100f, flingThreshold = 900f)
+        s.onUserDragDelta(-25f)
+        assertEquals(100f, s.resolveSettleTarget(-200f), 0.001f)
     }
 
     @Test
@@ -193,16 +200,26 @@ class ReaderTopBarScrollStateTest {
     }
 
     @Test
-    fun nestedScroll_nonUserInput_ignored() {
+    fun nestedScroll_flingInertia_hidesChrome() {
         val s = state(maxHide = 100f)
         val conn = s.asNestedScrollConnection()
         val result = conn.onPostScroll(
-            consumed = Offset(0f, -100f),
+            consumed = Offset(0f, -40f),
             available = Offset.Zero,
             source = NestedScrollSource.SideEffect,
         )
         assertEquals(Offset.Zero, result)
-        assertEquals(0f, s.hiddenOffsetPx, 0.001f)
+        assertEquals(40f, s.hiddenOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun onScrollIdle_clearsReverseJitter() {
+        val s = state(maxHide = 100f, jitter = 12f)
+        s.onUserDragDelta(-30f)
+        s.onUserDragDelta(5f)
+        s.onScrollIdle()
+        s.onUserDragDelta(5f)
+        assertEquals(25f, s.hiddenOffsetPx, 0.001f)
     }
 
     @Test

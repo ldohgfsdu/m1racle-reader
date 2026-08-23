@@ -35,9 +35,9 @@ class ReaderTopBarScrollState(
      * Higher than a low X-like flick so medium releases prefer fraction settle over
      * hard velocity snap (reduces "magnet" feel while keeping decisive flings).
      */
-    private val flingVelocityThresholdPxPerSec: Float = 1200f,
+    private val flingVelocityThresholdPxPerSec: Float = 900f,
     /** Fraction at which low-speed settle prefers fully hidden. */
-    private val settleHideFraction: Float = 0.5f,
+    private val settleHideFraction: Float = 0.28f,
     /** Injected for unit tests; production uses [android.os.SystemClock.uptimeMillis]. */
     private val uptimeMillis: () -> Long = { android.os.SystemClock.uptimeMillis() },
 ) {
@@ -153,11 +153,17 @@ class ReaderTopBarScrollState(
         return v
     }
 
+    /** Call when the list reports idle, before settle — drop reverse-jitter residue. */
+    fun onScrollIdle() {
+        clearGestureNoise()
+    }
+
     /**
      * Target offset after finger-up / fling end.
      *
      * - Strong content-up fling (velocityY negative, large) → fully hide
      * - Strong content-down fling → fully show
+     * - Weak up-fling that already started collapsing → finish hiding
      * - Low speed → fraction threshold
      */
     fun resolveSettleTarget(velocityY: Float = consumePendingFlingVelocity()): Float {
@@ -168,6 +174,8 @@ class ReaderTopBarScrollState(
         }
         if (velocityY <= -flingVelocityThresholdPxPerSec) return max
         if (velocityY >= flingVelocityThresholdPxPerSec) return 0f
+        if (velocityY < 0f && collapseFraction >= 0.18f) return max
+        if (velocityY > 0f) return 0f
         return if (collapseFraction >= settleHideFraction) max else 0f
     }
 
@@ -182,7 +190,11 @@ class ReaderTopBarScrollState(
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                if (source != NestedScrollSource.UserInput) {
+                // UserInput = finger; SideEffect = fling/inertia. Ignoring inertia left
+                // the bar half-open after a flick, then settle snapped it back to shown.
+                if (source != NestedScrollSource.UserInput &&
+                    source != NestedScrollSource.SideEffect
+                ) {
                     return Offset.Zero
                 }
                 // Prefer consumed (list actually moved); fall back to available for edge overscroll.
