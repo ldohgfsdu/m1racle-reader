@@ -3,7 +3,6 @@ package com.markleaf.app.share
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.OpenableColumns
 import com.markleaf.app.data.local.DocumentEntity
 import com.markleaf.app.data.local.DocumentType
 import com.markleaf.app.data.repository.DocumentRepository
@@ -38,6 +37,21 @@ open class ExternalDocumentImporter(
 ) {
     companion object {
         const val MAX_BYTES: Long = ExternalFileIntake.MAX_BYTES
+
+        /**
+         * Single import-side staged-file name sanitizer (A3-3a: the
+         * ExternalFileIntake twin was deleted with its dead call path).
+         * Pure function; JVM-testable golden lock in
+         * [ExternalDocumentImporterSanitizeGoldenTest].
+         */
+        internal fun sanitizeFileName(name: String, fallbackExt: String): String {
+            val base = name.substringAfterLast('/').substringAfterLast('\\')
+                .replace(Regex("""[^\w.\-()（）\u4e00-\u9fff\s]+"""), "_")
+                .trim()
+                .take(120)
+                .ifBlank { "file.$fallbackExt" }
+            return if (base.contains('.')) base else "$base.$fallbackExt"
+        }
     }
 
     val index: DocumentIdentityIndex get() = identityIndex
@@ -483,61 +497,7 @@ open class ExternalDocumentImporter(
     }
 
     private fun queryProviderMetadata(uri: Uri, intentType: String?): ProviderMetadata {
-        var displayName: String? = null
-        var size: Long? = null
-        try {
-            context.contentResolver.query(
-                uri,
-                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-                null,
-                null,
-                null,
-            )?.use { c ->
-                if (c.moveToFirst()) {
-                    val ni = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (ni >= 0 && !c.isNull(ni)) displayName = c.getString(ni)
-                    val si = c.getColumnIndex(OpenableColumns.SIZE)
-                    if (si >= 0 && !c.isNull(si)) size = c.getLong(si)
-                }
-            }
-        } catch (_: Exception) {
-        }
-
-        var afdLen: Long? = null
-        try {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-                val len = afd.length
-                if (len >= 0L) afdLen = len
-            }
-        } catch (_: Exception) {
-        }
-
-        var pfdStat: Long? = null
-        try {
-            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                val s = pfd.statSize
-                if (s >= 0L) pfdStat = s
-            }
-        } catch (_: Exception) {
-        }
-
-        val mime = intentType?.takeIf { it.isNotBlank() }
-            ?: try {
-                context.contentResolver.getType(uri)
-            } catch (_: Exception) {
-                null
-            }
-
-        return ProviderMetadata(
-            displayName = displayName,
-            size = size,
-            mimeType = mime,
-            scheme = uri.scheme,
-            authority = uri.authority,
-            lastPathSegment = uri.lastPathSegment,
-            assetFileDescriptorLength = afdLen,
-            parcelFileDescriptorStatSize = pfdStat,
-        )
+        return ProviderMetadataSource.collect(context.contentResolver, uri, intentType)
     }
 
     private fun openStream(uri: Uri): InputStream? {
@@ -549,14 +509,5 @@ open class ExternalDocumentImporter(
             }
             else -> context.contentResolver.openInputStream(uri)
         }
-    }
-
-    private fun sanitizeFileName(name: String, fallbackExt: String): String {
-        val base = name.substringAfterLast('/').substringAfterLast('\\')
-            .replace(Regex("""[^\w.\-()（）\u4e00-\u9fff\s]+"""), "_")
-            .trim()
-            .take(120)
-            .ifBlank { "file.$fallbackExt" }
-        return if (base.contains('.')) base else "$base.$fallbackExt"
     }
 }

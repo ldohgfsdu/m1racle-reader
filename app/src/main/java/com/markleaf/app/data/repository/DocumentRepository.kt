@@ -3,7 +3,6 @@ package com.markleaf.app.data.repository
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.OpenableColumns
 import com.markleaf.app.data.local.DocumentDao
 import com.markleaf.app.data.local.DocumentEntity
 import com.markleaf.app.data.local.DocumentType
@@ -491,20 +490,14 @@ class DocumentRepository(
         try {
             takeReadPermission(uri)
 
-            val metadata = queryMetadata(uri)
-            val mimeType = context.contentResolver.getType(uri) ?: metadata.mimeType
-            val pathSegment = uri.lastPathSegment
+            val metadata = applyFileUriEnrichment(
+                com.markleaf.app.share.ProviderMetadataSource.collect(context.contentResolver, uri),
+                uri,
+            )
+            val mimeType = metadata.mimeType
+            val pathSegment = metadata.lastPathSegment
             val resolvedMeta = com.markleaf.app.share.ExternalUriMetadata.resolve(
-                com.markleaf.app.share.ProviderMetadata(
-                    displayName = metadata.displayName,
-                    size = metadata.size,
-                    mimeType = mimeType,
-                    scheme = uri.scheme,
-                    authority = uri.authority,
-                    lastPathSegment = pathSegment,
-                    assetFileDescriptorLength = metadata.assetFdLength,
-                    parcelFileDescriptorStatSize = metadata.pfdStatSize,
-                ),
+                metadata,
                 intentMime = mimeType,
             )
             val displayName = resolvedMeta.displayName
@@ -699,79 +692,25 @@ class DocumentRepository(
         }
     }
 
-    private fun queryMetadata(uri: Uri): FileMetadata {
-        var displayName: String? = null
-        var size: Long? = null
-        var mimeType: String? = null
-        var assetFdLength: Long? = null
-        var pfdStatSize: Long? = null
-
-        try {
-            context.contentResolver.query(
-                uri,
-                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
-                        displayName = cursor.getString(nameIndex)
-                    }
-                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
-                        size = cursor.getLong(sizeIndex)
-                    }
-                }
-            }
-        } catch (_: Exception) {
-        }
-
-        try {
-            mimeType = context.contentResolver.getType(uri)
-        } catch (_: Exception) {
-        }
-
-        try {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-                val len = afd.length
-                if (len >= 0L) assetFdLength = len
-            }
-        } catch (_: Exception) {
-        }
-
-        try {
-            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                val s = pfd.statSize
-                if (s >= 0L) pfdStatSize = s
-            }
-        } catch (_: Exception) {
-        }
-
-        // file:// path segment / length fallbacks
-        if (uri.scheme.equals("file", ignoreCase = true)) {
-            val f = uri.path?.let { File(it) }
-            if (displayName.isNullOrBlank()) displayName = f?.name
-            if ((size == null || size!! < 0) && f != null && f.isFile) size = f.length()
-        }
-
-        return FileMetadata(
-            displayName = displayName,
-            size = size,
-            mimeType = mimeType,
-            assetFdLength = assetFdLength,
-            pfdStatSize = pfdStatSize,
-        )
+    /**
+     * A3-3a: provider metadata probing is owned by
+     * [com.markleaf.app.share.ProviderMetadataSource.collect]; this repository-side
+     * step only re-applies the legacy file:// enrichment (name from path, size from
+     * the real file) on top of the collected probe — identical conditions to the
+     * former private queryMetadata fallback.
+     */
+    internal fun applyFileUriEnrichment(
+        base: com.markleaf.app.share.ProviderMetadata,
+        uri: Uri,
+    ): com.markleaf.app.share.ProviderMetadata {
+        if (!uri.scheme.equals("file", ignoreCase = true)) return base
+        val f = uri.path?.let { File(it) }
+        var displayName = base.displayName
+        var size = base.size
+        if (displayName.isNullOrBlank()) displayName = f?.name
+        if ((size == null || size < 0L) && f != null && f.isFile) size = f.length()
+        return base.copy(displayName = displayName, size = size)
     }
-
-    private data class FileMetadata(
-        val displayName: String?,
-        val size: Long?,
-        val mimeType: String? = null,
-        val assetFdLength: Long? = null,
-        val pfdStatSize: Long? = null,
-    )
 
     companion object {
         /**
