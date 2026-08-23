@@ -313,6 +313,11 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.room:room-testing:2.6.1")
+    // Unit tests run against the QA build type (testBuildType = "qa"), so the
+    // manifest that declares ComponentActivity for Compose/Robolectric rules
+    // must ship with QA too — debugImplementation alone left testQaUnitTest
+    // unable to resolve any createComposeRule() activity.
+    add("qaImplementation", "androidx.compose.ui:ui-test-manifest")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
