@@ -269,10 +269,12 @@ class MainActivity : ComponentActivity() {
             attributes.setFrameRatePowerSavingsBalanced(false)
         }
         window.attributes = attributes
-        Log.i(
-            "MARKDOWN_REFRESH",
-            "preferredModeId=${preferred.modeId} refreshRate=${preferred.refreshRate}",
-        )
+        if (com.markleaf.app.BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) {
+            Log.i(
+                "MARKDOWN_REFRESH",
+                "preferredModeId=${preferred.modeId} refreshRate=${preferred.refreshRate}",
+            )
+        }
     }
 
     private fun toast(msg: String) {

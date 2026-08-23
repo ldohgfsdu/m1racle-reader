@@ -531,6 +531,7 @@ internal fun ReaderMoreHost(
     var lastTop by remember { mutableFloatStateOf(Float.NaN) }
     var lastRight by remember { mutableFloatStateOf(Float.NaN) }
     fun logBounds(tag: String, coords: LayoutCoordinates) {
+        if (!com.markleaf.app.BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) return
         val bounds = coords.boundsInWindow()
         if (lastTop.isNaN() || kotlin.math.abs(bounds.top - lastTop) > 0.5f ||
             kotlin.math.abs(bounds.right - lastRight) > 0.5f

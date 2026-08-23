@@ -1,5 +1,7 @@
 package com.markleaf.app.markdown
 
+import com.markleaf.app.BuildConfig
+
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -43,20 +45,39 @@ object MarkdownPerformance {
     private val blockComposeCount = ConcurrentHashMap<String, AtomicLong>()
     private val blockComposeNanos = ConcurrentHashMap<String, AtomicLong>()
 
-    fun recordParse() = parseCount.incrementAndGet()
+    // A2 release hygiene: recording (counters, nanoTime, Trace sections) is
+    // compiled against a per-variant constant — false in release, so R8 strips
+    // the bodies and their call-site costs; qa keeps the full instrumentation.
+    private val enabled get() = BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED
+
+    fun recordParse() {
+        if (!enabled) return
+        parseCount.incrementAndGet()
+    }
+
     fun recordTableSolve(durationNanos: Long, measuredCells: Long) {
+        if (!enabled) return
         tableSolveCount.incrementAndGet()
         tableSolveTotalNanos.addAndGet(durationNanos.coerceAtLeast(0L))
         cellMeasureCount.addAndGet(measuredCells.coerceAtLeast(0L))
     }
-    fun recordCacheHit() = cacheHitCount.incrementAndGet()
-    fun recordCacheMiss() = cacheMissCount.incrementAndGet()
+    fun recordCacheHit() {
+        if (!enabled) return
+        cacheHitCount.incrementAndGet()
+    }
+
+    fun recordCacheMiss() {
+        if (!enabled) return
+        cacheMissCount.incrementAndGet()
+    }
     fun recordInlineParse(usedFastPath: Boolean) {
+        if (!enabled) return
         inlineParseCount.incrementAndGet()
         if (usedFastPath) inlineParseFastPathCount.incrementAndGet()
     }
 
     fun recordBlockCompose(type: String, durationNanos: Long) {
+        if (!enabled) return
         val key = type.ifBlank { "unknown" }
         blockComposeCount.getOrPut(key) { AtomicLong() }.incrementAndGet()
         blockComposeNanos.getOrPut(key) { AtomicLong() }.addAndGet(durationNanos.coerceAtLeast(0L))
@@ -109,8 +130,9 @@ object MarkdownPerformance {
             "blocks=[$blocks]"
     }
 
-    /** QA log line for adb; no-op on hosts without android.util.Log. */
+    /** QA log line for adb; no-op unless the QA experiments flag is compiled in. */
     fun dumpBlockCompose(tag: String = "MarkdownBlockPerf") {
+        if (!enabled) return
         val line = formatBlockComposeSummary()
         try {
             Log.i(tag, line)
@@ -120,6 +142,8 @@ object MarkdownPerformance {
     }
 
     inline fun <T> trace(section: String, block: () -> T): T {
+        // BuildConfig field is a public constant: safe for a public-API inline.
+        if (!com.markleaf.app.BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) return block()
         val tracing = try {
             android.os.Trace.beginSection(section)
             true

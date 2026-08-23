@@ -1,5 +1,6 @@
 package com.markleaf.app.ui.pdf
 
+import com.markleaf.app.BuildConfig
 import com.markleaf.app.pdf.HorizontalPageTransitionDirection
 import com.markleaf.app.pdf.PdfTilePlan
 import com.markleaf.app.pdf.PageStripSlotRole
@@ -8,41 +9,64 @@ import com.markleaf.app.pdf.ThreePageStripPhysics
 import com.markleaf.app.pdf.ThreePageStripState
 import kotlin.math.abs
 
-/** Read-only observation point for QA. Production behavior never reads these counters. */
+/**
+ * Read-only observation point for QA. Production behavior never reads these
+ * counters, and every mutator early-returns unless the QA experiments flag is
+ * compiled in — release builds strip the bodies entirely (A2 release hygiene:
+ * no per-frame lock/copy on the gesture path).
+ */
 internal object HorizontalRealPathTelemetry {
+    private val enabled get() = BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED
     private val lock = Any()
     private var value = HorizontalRealPathSnapshot()
 
-    fun reset() = synchronized(lock) { value = HorizontalRealPathSnapshot() }
-    fun snapshot(): HorizontalRealPathSnapshot = synchronized(lock) { value }
+    fun reset() {
+        if (!enabled) return
+        synchronized(lock) { value = HorizontalRealPathSnapshot() }
+    }
 
-    fun onPointerDown() = synchronized(lock) { value = value.copy(pointerDown = true) }
-    fun onPointerUp() = synchronized(lock) { value = value.copy(pointerDown = false) }
+    fun snapshot(): HorizontalRealPathSnapshot =
+        if (!enabled) HorizontalRealPathSnapshot() else synchronized(lock) { value }
+
+    fun onPointerDown() {
+        if (!enabled) return
+        synchronized(lock) { value = value.copy(pointerDown = true) }
+    }
+
+    fun onPointerUp() {
+        if (!enabled) return
+        synchronized(lock) { value = value.copy(pointerDown = false) }
+    }
+
     fun onPageStripGestureStart(
         strip: ThreePageStripState,
         pageIndex: Int,
         offsetPx: Float,
         viewportWidthPx: Float,
-    ) = synchronized(lock) {
-        value = value.copy(
-            pointerDown = true,
-            pageStripFrames = 0,
-            pageStripRawInputAbsPx = 0f,
-            pageStripDisplayedDeltaAbsPx = 0f,
-            pageStripReverseDeltaCount = 0,
-            pageIndexAtPointerDown = pageIndex,
-            pageIndexDuringPointerDown = pageIndex,
-            previousSlotId = strip.previousSlotId,
-            currentSlotId = strip.currentSlotId,
-            nextSlotId = strip.nextSlotId,
-            displayedCurrentPageX = ThreePageStripPhysics.slotTranslationPx(
-                PageStripSlotRole.CURRENT,
-                viewportWidthPx,
-                offsetPx,
-            ),
-            displayedNeighborPageX = Float.NaN,
-        )
+    ) {
+        if (!enabled) return
+        synchronized(lock) {
+            value = value.copy(
+                pointerDown = true,
+                pageStripFrames = 0,
+                pageStripRawInputAbsPx = 0f,
+                pageStripDisplayedDeltaAbsPx = 0f,
+                pageStripReverseDeltaCount = 0,
+                pageIndexAtPointerDown = pageIndex,
+                pageIndexDuringPointerDown = pageIndex,
+                previousSlotId = strip.previousSlotId,
+                currentSlotId = strip.currentSlotId,
+                nextSlotId = strip.nextSlotId,
+                displayedCurrentPageX = ThreePageStripPhysics.slotTranslationPx(
+                    PageStripSlotRole.CURRENT,
+                    viewportWidthPx,
+                    offsetPx,
+                ),
+                displayedNeighborPageX = Float.NaN,
+            )
+        }
     }
+
     fun onPageStripFrame(
         rawDeltaX: Float,
         displayedDeltaX: Float,
@@ -51,53 +75,70 @@ internal object HorizontalRealPathTelemetry {
         pageIndex: Int,
         offsetPx: Float,
         viewportWidthPx: Float,
-    ) = synchronized(lock) {
-        val stripActive = transition.active || abs(displayedDeltaX) > 0.01f
-        val reverse = stripActive && abs(rawDeltaX) > 0.01f && abs(displayedDeltaX) > 0.01f &&
-            rawDeltaX * displayedDeltaX < 0f
-        val neighborRole = when (transition.direction) {
-            HorizontalPageTransitionDirection.PREVIOUS -> PageStripSlotRole.PREVIOUS
-            HorizontalPageTransitionDirection.NEXT -> PageStripSlotRole.NEXT
-            null -> null
-        }
-        value = value.copy(
-            pageStripFrames = value.pageStripFrames + if (stripActive) 1 else 0,
-            pageStripRawInputAbsPx = value.pageStripRawInputAbsPx +
-                if (stripActive) abs(rawDeltaX) else 0f,
-            pageStripDisplayedDeltaAbsPx = value.pageStripDisplayedDeltaAbsPx +
-                if (stripActive) abs(displayedDeltaX) else 0f,
-            pageStripReverseDeltaCount = value.pageStripReverseDeltaCount + if (reverse) 1 else 0,
-            pageIndexDuringPointerDown = pageIndex,
-            previousSlotId = strip.previousSlotId,
-            currentSlotId = strip.currentSlotId,
-            nextSlotId = strip.nextSlotId,
-            displayedCurrentPageX = offsetPx,
-            displayedNeighborPageX = neighborRole?.let {
-                ThreePageStripPhysics.slotTranslationPx(it, viewportWidthPx, offsetPx)
-            } ?: Float.NaN,
-        )
-    }
-    fun onGestureFrame() = synchronized(lock) {
-        value = value.copy(gestureFrames = value.gestureFrames + 1)
-    }
-    fun onPlan(plan: PdfTilePlan) = synchronized(lock) {
-        value = value.copy(
-            tileRequestsBeforeRelease = value.tileRequestsBeforeRelease +
-                if (value.pointerDown) plan.requests.size else 0,
-            pageAheadRequestsBeforeRelease = value.pageAheadRequestsBeforeRelease +
-                if (value.pointerDown) plan.requests.count {
-                    it.priority == com.markleaf.app.pdf.TilePriority.PAGE_AHEAD
-                } else 0,
-        )
-    }
-    fun onTileReady() = synchronized(lock) {
-        if (value.pointerDown) {
-            value = value.copy(tileReadyBeforeRelease = value.tileReadyBeforeRelease + 1)
+    ) {
+        if (!enabled) return
+        synchronized(lock) {
+            val stripActive = transition.active || abs(displayedDeltaX) > 0.01f
+            val reverse = stripActive && abs(rawDeltaX) > 0.01f && abs(displayedDeltaX) > 0.01f &&
+                rawDeltaX * displayedDeltaX < 0f
+            val neighborRole = when (transition.direction) {
+                HorizontalPageTransitionDirection.PREVIOUS -> PageStripSlotRole.PREVIOUS
+                HorizontalPageTransitionDirection.NEXT -> PageStripSlotRole.NEXT
+                null -> null
+            }
+            value = value.copy(
+                pageStripFrames = value.pageStripFrames + if (stripActive) 1 else 0,
+                pageStripRawInputAbsPx = value.pageStripRawInputAbsPx +
+                    if (stripActive) abs(rawDeltaX) else 0f,
+                pageStripDisplayedDeltaAbsPx = value.pageStripDisplayedDeltaAbsPx +
+                    if (stripActive) abs(displayedDeltaX) else 0f,
+                pageStripReverseDeltaCount = value.pageStripReverseDeltaCount + if (reverse) 1 else 0,
+                pageIndexDuringPointerDown = pageIndex,
+                previousSlotId = strip.previousSlotId,
+                currentSlotId = strip.currentSlotId,
+                nextSlotId = strip.nextSlotId,
+                displayedCurrentPageX = offsetPx,
+                displayedNeighborPageX = neighborRole?.let {
+                    ThreePageStripPhysics.slotTranslationPx(it, viewportWidthPx, offsetPx)
+                } ?: Float.NaN,
+            )
         }
     }
-    fun onTileSwap(count: Int) = synchronized(lock) {
-        if (value.pointerDown) {
-            value = value.copy(tileSwapBeforeRelease = value.tileSwapBeforeRelease + count)
+
+    fun onGestureFrame() {
+        if (!enabled) return
+        synchronized(lock) { value = value.copy(gestureFrames = value.gestureFrames + 1) }
+    }
+
+    fun onPlan(plan: PdfTilePlan) {
+        if (!enabled) return
+        synchronized(lock) {
+            value = value.copy(
+                tileRequestsBeforeRelease = value.tileRequestsBeforeRelease +
+                    if (value.pointerDown) plan.requests.size else 0,
+                pageAheadRequestsBeforeRelease = value.pageAheadRequestsBeforeRelease +
+                    if (value.pointerDown) plan.requests.count {
+                        it.priority == com.markleaf.app.pdf.TilePriority.PAGE_AHEAD
+                    } else 0,
+            )
+        }
+    }
+
+    fun onTileReady() {
+        if (!enabled) return
+        synchronized(lock) {
+            if (value.pointerDown) {
+                value = value.copy(tileReadyBeforeRelease = value.tileReadyBeforeRelease + 1)
+            }
+        }
+    }
+
+    fun onTileSwap(count: Int) {
+        if (!enabled) return
+        synchronized(lock) {
+            if (value.pointerDown) {
+                value = value.copy(tileSwapBeforeRelease = value.tileSwapBeforeRelease + count)
+            }
         }
     }
 }

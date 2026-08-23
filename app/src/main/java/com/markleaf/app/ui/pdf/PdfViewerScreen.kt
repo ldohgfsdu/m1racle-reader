@@ -158,6 +158,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.markleaf.app.BuildConfig
 import com.markleaf.app.R
 import com.markleaf.app.ui.common.clearContrastScrim
 import com.markleaf.app.pdf.PdfChromeLevel
@@ -282,12 +283,14 @@ fun PdfViewerScreen(
     var chromeLevel by remember { mutableStateOf(com.markleaf.app.pdf.PdfChromeLevel.FULL) }
     fun applyChromeChange(c: com.markleaf.app.pdf.ChromeStateChange) {
         chromeLevel = c.levelAfter
-        Log.i(
-            "CHROME_STATE",
-            "userGestureId=${c.userGestureId} dir=${c.direction} rawDelta=${c.rawDeltaPx} " +
-                "anchorDeltaY=${c.anchorDeltaY} effectiveDistanceDp=${c.effectiveDistanceDp} " +
-                "levelBefore=${c.levelBefore} levelAfter=${c.levelAfter} reason=${c.reason}",
-        )
+        if (BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) {
+            Log.i(
+                "CHROME_STATE",
+                "userGestureId=${c.userGestureId} dir=${c.direction} rawDelta=${c.rawDeltaPx} " +
+                    "anchorDeltaY=${c.anchorDeltaY} effectiveDistanceDp=${c.effectiveDistanceDp} " +
+                    "levelBefore=${c.levelBefore} levelAfter=${c.levelAfter} reason=${c.reason}",
+            )
+        }
     }
 
 
@@ -362,7 +365,9 @@ fun PdfViewerScreen(
     DisposableEffect(view) {
         onDispose {
             applyPdfSystemBars(view, com.markleaf.app.pdf.PdfTopBarMode.NORMAL)
-            Log.i("PDF_SYSBARS", "leave reader → restore all system bars")
+            if (BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) {
+                Log.i("PDF_SYSBARS", "leave reader → restore all system bars")
+            }
         }
     }
 
@@ -868,7 +873,8 @@ fun PdfViewerScreen(
                                             // measured on-screen anchor motion. MUST match
                                             // the eye: content visibly up => anchorDeltaY < 0,
                                             // visibly down => anchorDeltaY > 0.
-                                            if (chromeDebuggable && dir != null &&
+                                            if (BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED &&
+                                                chromeDebuggable && dir != null &&
                                                 now - lastChromeDirLogMs >= 80L
                                             ) {
                                                 lastChromeDirLogMs = now
@@ -1050,7 +1056,9 @@ private fun applyPdfSystemBars(view: android.view.View, mode: com.markleaf.app.p
         }
     }
     activity.window.clearContrastScrim(view)
-    Log.i("PDF_SYSBARS", "apply topBarMode=$mode wic behavior=" + wic.systemBarsBehavior)
+    if (BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) {
+        Log.i("PDF_SYSBARS", "apply topBarMode=$mode wic behavior=" + wic.systemBarsBehavior)
+    }
 }
 
 private fun pdfStatusBarVisiblePx(view: android.view.View): Int {
@@ -1499,11 +1507,13 @@ private fun PdfInfoCapsule(
                     lastCapsuleAnchor[0] != anchor[0] ||
                     lastCapsuleAnchor[1] != anchor[1]
                 ) {
-                    Log.i(
-                        "CAPSULE_SURFACE",
-                        "expanded=$expanded top=${anchor[0]} centerX=${anchor[1]} " +
-                            "w=${surfaceWidthDp.value.toInt()}",
-                    )
+                    if (BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) {
+                        Log.i(
+                            "CAPSULE_SURFACE",
+                            "expanded=$expanded top=${anchor[0]} centerX=${anchor[1]} " +
+                                "w=${surfaceWidthDp.value.toInt()}",
+                        )
+                    }
                     lastCapsuleAnchor = anchor
                 }
             },
