@@ -1,6 +1,7 @@
-# A2 Validation Closure Draft（验证收口草稿）
+# A2 Validation Closure — CLOSED_WITH_PENDING_ITEMS
 
-**状态**：DRAFT — 待人工补录两项后转正式 Closure
+**状态**：**CLOSED_WITH_PENDING_ITEMS**（2026-08-23）
+A2 两批代码修复（P0-1/P0-2 + CDV 热路径）验证收口；Export Cancellation 保持 **PENDING**，不阻塞关闭，遗留项转入独立 Issue 跟踪。
 **代码基线**：HEAD `b6b8454`（A2 Batch 1 `f15ed94..4ed0ade`，Batch 2 `b066991`）
 **构建产物**：`.external_outbox/markleaf-release-latest.apk`
 SHA-256 `dff3b3cf4c2e7785d98e8cce4ebbaffc60297277a5a41ea9896d7bff4778de1e`（11,509,615 B，versionCode 21 / v0.1.0）
@@ -34,9 +35,11 @@ SHA-256 `dff3b3cf4c2e7785d98e8cce4ebbaffc60297277a5a41ea9896d7bff4778de1e`（11,
 
 > 无法确认则本项保持 **PENDING**，不阻塞其他项收口。
 
-## 3. 发现的问题（均已开独立记录，不在 A2 处理）
+## 3. 发现的问题（已转入独立 Issue，不在 A2 处理）
 
-### 3.1 百度网盘「打开方式」候选缺失墨阅 —— 诊断记录（只读，不改 manifest）
+> 详情与后续推进以独立记录为准：`docs/ISSUE_NETDISK_INTENT_COMPATIBILITY.md`、`docs/ISSUE_TOC_OUTLINE_UX_REDESIGN.md`
+
+### 3.1 百度网盘「打开方式」候选缺失墨阅 —— 摘要（详见 ISSUE-001）
 
 **静态事实（当前 VIEW 过滤器）**：
 `scheme=content` AND `mimeType ∈ {application/pdf, application/x-pdf, application/octet-stream,
@@ -58,7 +61,7 @@ application/zip, application/x-zip-compressed, text/markdown, text/x-markdown, t
 
 **判读映射**：E3 有墨阅 + E2 没有 → H1/H2（可评估加兼容过滤器）；E3/E2 都没有 → H3 或安装身份问题；待 E4 定案。修复动作在证据到位前**不做**。
 
-### 3.2 TOC 目录排版交互重构 —— Issue 记录（等待产品确认，不实现）
+### 3.2 TOC 目录排版交互重构 —— 摘要（详见 ISSUE-002）
 
 **需求描述（用户原话归纳）**：当前节应位于当前章之下；顶部为当前章标题，下方节列表独立滚动；手势先滚节列表，触顶/底后再带动外层章列表滚动。
 
@@ -76,9 +79,9 @@ application/zip, application/x-zip-compressed, text/markdown, text/x-markdown, t
 - `sshpass 1.10` 经 apt 安装于构建主机（root 下 Termux `pkg` 不可用）；仅作为主机侧环境工具存在，**不加入任何项目构建/依赖/脚本**。
 - 构建主机约束重申：默认 JDK 25 会使 Gradle 失败，须 `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64`。
 
-## 5. 收口条件
+## 5. 收口说明
 
-- [ ] §2.1 三问得到回答 → 第 2 项定 PASS/FAIL
-- [ ] E1–E3 提供 → 网盘问题定性（修复另立批次）
-- [ ] Q1–Q3 产品拍板 → TOC 重构另立批次
-- 以上均不影响：**A2 两批代码修复本身维持已验证状态收口**。
+- A2 Performance Validation：**CLOSED_WITH_PENDING_ITEMS**（本文件即最终态）。
+- Export Cancellation：PENDING 遗留，三问回答后在 §2.1 补录定 PASS/FAIL，不影响关闭。
+- 百度网盘 Intent 兼容性 / TOC Outline 重构：转入独立 Issue，等待证据/产品确认后另立批次。
+- 本文件此后仅做补录（§2.1），不再承载新问题。

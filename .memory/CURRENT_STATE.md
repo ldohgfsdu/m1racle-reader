@@ -21,7 +21,7 @@
   - **Phase 2（F4/F5，08-23）**：PRD/README/AGENTS.md 口径同步为「本地文档阅读器」现状。
   - **Phase 3（A2-P0，08-23，f15ed94..4ed0ade）**：P0-1 tile LRU 淘汰恢复（pinned 收窄为管线键 + 淘汰镜像清除 overlay 发布物）；P0-2 导出取消语义（zip/copy 逐块检查点、CE 一律重抛、部分 SAF 输出尽力删除）。性能只读审查矩阵见会话记录；其余 P1 未动。
   - **Phase 4（A2 热路径，08-23）**：CDV 驱动效果改 snapshotFlow 单收集器（消除每帧协程重启）；payload 去冗余集合拷贝；subcompose 页键化 + 每发布序列一次 tile 索引（连续/横排两消费端）；planner 改零拷贝 keySet。测试 1094 全绿；帧率收益待设备 profiling 确认。
-  - **Phase 5（A2 验证记录，08-23）**：人工验证（无 adb）内存/fling/缩放 PASS；导出取消 PENDING（三问待补）；百度网盘打不开=诊断记录待证据 E1-E4（docs/A2_VALIDATION_CLOSURE_DRAFT.md §3.1）；TOC 排版重构=Issue 待产品确认 Q1-Q3（§3.2）。sshpass 记录为主机环境工具，不入项目。
+  - **Phase 5（A2 验证记录，08-23）→ CLOSED_WITH_PENDING_ITEMS**：人工验证内存/fling/缩放 PASS；导出取消 PENDING 不阻塞关闭（三问待补录至 closure §2.1）。遗留项独立跟踪：docs/ISSUE_NETDISK_INTENT_COMPATIBILITY.md（待证据 E1-E4）、docs/ISSUE_TOC_OUTLINE_UX_REDESIGN.md（待产品 Q1-Q3）。sshpass 记录为主机环境工具，不入项目。等待下一阶段指令。
 
 ## 验证基线（automated_verified）
 
