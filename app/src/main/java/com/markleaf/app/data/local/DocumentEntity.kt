@@ -5,7 +5,9 @@ import androidx.room.PrimaryKey
 
 /**
  * Recent-read document record (Room).
- * Deleting a row only removes the history entry — never the source file.
+ * Deleting a row never removes a user-owned source file. App-managed copies and
+ * extracted package trees are lifecycle-owned by the repository and are cleaned
+ * up with the record.
  *
  * Reading progress fields are shared:
  * - Markdown: [lastScrollIndex]/[lastScrollOffset] = LazyColumn position

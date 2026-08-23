@@ -20,6 +20,7 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /**
  * P0A lifecycle hardening: deleteById transaction consistency.
@@ -52,14 +53,14 @@ class DeleteByIdTransactionTest {
         db.close()
     }
 
-    private fun seedDocument(docId: String) {
+    private fun seedDocument(docId: String, uri: String = "file:///test.pdf") {
         val now = System.currentTimeMillis()
         runBlocking {
             db.documentDao().upsert(
                 DocumentEntity(
                     id = docId,
                     displayName = "test-pdf",
-                    uri = "file:///test.pdf",
+                    uri = uri,
                     mimeType = "application/pdf",
                     fileSize = 1024L,
                     lastOpenedAt = now,
@@ -209,6 +210,30 @@ class DeleteByIdTransactionTest {
         assertTrue("outline empty", db.textbookOutlineNodeDao().listForDocument("doc-success").isEmpty())
         assertTrue("anchor empty", db.pdfPrintPageAnchorDao().listForDocument("doc-success").isEmpty())
     }
+
+    @Test
+    fun success_deletesManagedLibraryCopy_butNeverUserOwnedSource() = runBlocking {
+        val managedDir = File(context.filesDir, "library/test-content").apply { mkdirs() }
+        val managedCopy = File(managedDir, "managed.pdf").apply { writeBytes(byteArrayOf(1)) }
+        seedDocument("doc-managed", managedCopy.toURI().toString())
+        repository().deleteById("doc-managed")
+        assertTrue("managed private copy deleted", !managedCopy.exists())
+        assertTrue("empty content directory deleted", !managedDir.exists())
+
+        val userOwnedSource = File(context.cacheDir, "user-owned.md").apply { writeText("# Keep") }
+        seedDocument("doc-user-owned", userOwnedSource.toURI().toString())
+        repository().deleteById("doc-user-owned")
+        assertTrue("source outside files/library survives", userOwnedSource.isFile)
+        userOwnedSource.delete()
+    }
+
+    private fun repository() = DocumentRepository(
+        context = context,
+        db = db,
+        documentDao = db.documentDao(),
+        pdfPrintPageAnchorDao = db.pdfPrintPageAnchorDao(),
+        textbookOutlineNodeDao = db.textbookOutlineNodeDao(),
+    )
 
     /**
      * Step 1 (outline delete) fails → document and anchor must survive (rollback).

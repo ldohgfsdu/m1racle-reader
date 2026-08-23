@@ -29,7 +29,9 @@ import java.util.UUID
 
 /**
  * Data access for recent-read documents.
- * Delete only removes history rows — never the on-disk source file.
+ * Delete never touches a user-owned source file. App-managed copies under
+ * `files/library`, and extracted package trees under `files/packages`, are
+ * removed after the database transaction commits.
  */
 class DocumentRepository(
     private val context: Context,
@@ -116,6 +118,7 @@ class DocumentRepository(
 
     suspend fun deleteById(id: String) {
         withContext(Dispatchers.IO) {
+            val document = documentDao.getById(id)
             // P0A: wrap three-step delete in a Room transaction so a failure
             // in any step rolls back all prior steps. The FK CASCADE would
             // eventually clean up outline/anchor on document delete, but
@@ -143,6 +146,19 @@ class DocumentRepository(
                     packageDir.deleteRecursively()
                 }
             } catch (_: Exception) {
+            }
+            // External VIEW/SEND intake owns copies under files/library. Once the
+            // final Room reference is gone, remove that private copy as well. The
+            // canonical-path guard in deleteAppPrivateLibraryCopy prevents this
+            // from ever deleting a user-owned SAF/file source outside the sandbox.
+            if (document != null) {
+                try {
+                    val stillReferenced = documentDao.getAll().any { it.uri == document.uri }
+                    if (!stillReferenced) {
+                        deleteAppPrivateLibraryCopy(context.filesDir, document.uri)
+                    }
+                } catch (_: Exception) {
+                }
             }
         }
     }
