@@ -799,7 +799,10 @@ class PdfViewerViewModel(
                     if (current.readingMode == PdfReadingMode.HORIZONTAL_PAGED) {
                         HorizontalRealPathTelemetry.onTileReady()
                     }
-                    val evicted = tileCache.put(entry, tileWorkQueue.activeKeys())
+                    val evicted = tileCache.put(
+                        entry,
+                        tileWorkQueue.activeKeys() + _tileOverlaySnapshot.value.entries.keys,
+                    )
                     pendingTileSwaps[entry.key] = entry
                     scheduleTileOverlayPublish()
                     if (isDebuggable) {

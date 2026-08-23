@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -190,6 +191,7 @@ internal fun AnchoredNestedPopover(
             .offset { IntOffset(localLeft.roundToInt(), localTop.roundToInt()) }
             .width(widthDp)
             .height(heightDp)
+            .clip(RoundedCornerShape(cornerDp))
             .clipToBounds()
             // r26 §15: the child card's own area must consume pointer events —
             // taps on blank card space must never fall through to the PDF or
@@ -225,6 +227,7 @@ internal fun AnchoredNestedPopover(
                     .fillMaxWidth()
                     .weight(1f, fill = false)
                     .graphicsLayer {
+                        clip = true
                         alpha = bodyAlpha
                         translationY = (1f - bodyAlpha) * bodySlidePx
                     },
@@ -322,17 +325,13 @@ private fun NestedChildBody(
         ReaderMoreState.CHILD_TOC -> {
             val outline = data.outline
             if (outline != null) {
-                // Count (~18dp) + toolbar (~36dp) + spacers ≈ 80dp chrome above list.
-                val listMax = (bodyMaxHeightDp - 80.dp).coerceAtLeast(120.dp)
-                OutlineAdvancedContent(params = outline, listMaxHeightDp = listMax)
+                OutlineAdvancedContent(params = outline, bodyMaxHeightDp = bodyMaxHeightDp)
             }
         }
         ReaderMoreState.CHILD_THUMBNAILS -> {
             val thumbs = data.thumbnails
             if (thumbs != null) {
-                // Status line + spacer ≈ 28dp above grid.
-                val gridMax = (bodyMaxHeightDp - 28.dp).coerceAtLeast(140.dp)
-                ThumbnailsAdvancedContent(params = thumbs, gridMaxHeightDp = gridMax)
+                ThumbnailsAdvancedContent(params = thumbs, bodyMaxHeightDp = bodyMaxHeightDp)
             }
         }
         ReaderMoreState.CHILD_EXPORT -> {

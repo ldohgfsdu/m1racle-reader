@@ -54,6 +54,18 @@ class R7P0c1PredictiveTilesTest {
     @Test fun `bucket hysteresis holds near midpoint`() =
         assertEquals(2, PdfZoomBuckets.index(2.35f, 2))
 
+    @Test fun `idle 1x preheats the next sharper bucket`() {
+        assertEquals(listOf(1), PdfTileDisplay.bucketsToRequest(1f, 0, 0, pinching = false))
+    }
+
+    @Test fun `pinch from 1x requests current and next buckets`() {
+        assertEquals(listOf(0, 1), PdfTileDisplay.bucketsToRequest(1.05f, 0, 0, pinching = true))
+    }
+
+    @Test fun `live zoom requests current and predicted without extra idle preheat`() {
+        assertEquals(listOf(2, 3), PdfTileDisplay.bucketsToRequest(2f, 2, 3, pinching = true))
+    }
+
     @Test fun `zoom predictor looks ahead upward`() {
         var prediction = PdfZoomPredictor.update(ZoomPrediction(), 2f, 1_000_000_000, false)
         prediction = PdfZoomPredictor.update(prediction, 2.2f, 1_100_000_000, false)

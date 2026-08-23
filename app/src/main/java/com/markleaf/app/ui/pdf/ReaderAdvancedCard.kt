@@ -30,12 +30,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,7 +53,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,11 +87,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.markleaf.app.R
-import com.markleaf.app.pdf.outlineInitialRow
-import com.markleaf.app.pdf.thumbnailInitialRow
+import com.markleaf.app.pdf.ThumbnailGridColumns
+import com.markleaf.app.pdf.thumbnailInitialItemIndex
 import com.markleaf.app.data.local.PdfPrintPageAnchorEntity
 import com.markleaf.app.data.local.TextbookOutlineNodeEntity
-import com.markleaf.app.pdf.PrintPageResolver
 import com.markleaf.app.pdf.PdfThumbnailLoader
 import com.markleaf.app.pdf.TextbookOutlineResolver
 import com.markleaf.app.pdf.export.ChapterExportFormat
@@ -203,7 +201,7 @@ internal fun TextbookPageAdvancedContent(
             .heightIn(max = bodyMaxHeightDp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = MenuRowHPad)
-            .padding(top = 12.dp, bottom = 20.dp),
+            .padding(top = 8.dp, bottom = 16.dp),
     ) {
         Text(
             text = summary,
@@ -215,20 +213,11 @@ internal fun TextbookPageAdvancedContent(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(modifier = Modifier.height(14.dp))
-        Text(
-            text = stringResource(R.string.pdf_print_label),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-            color = scheme.onSurface.copy(alpha = muted),
-        )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(48.dp)
                 .clip(RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp))
                 .background(scheme.onSurface.copy(alpha = 0.05f))
                 .border(
@@ -288,7 +277,7 @@ internal fun TextbookPageAdvancedContent(
                 maxLines = 1,
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
@@ -330,19 +319,14 @@ internal fun TextbookPageAdvancedContent(
 
 
 /**
- * 教材目录 — fixed header + compact toolbar + internally scrolling list
- * (R25 §8). Tapping a node jumps the PDF behind while the card STAYS open
- * (continuous preview). R25.1 §3: initial scroll positions the current
- * reading item near the upper-third of the viewport. The list is a weighted
- * (fill=false) child of the body: it grows with its content up to the
- * remaining body space, then scrolls internally — the card never becomes an
- * unbounded ultra-long menu.
+ * 教材目录 — complete flattened catalog in one list.
+ * Opens with the current 章 at the top; later 章/节 stay in order and
+ * scroll with the same list. Current row keeps the marker. Not sticky.
  */
 @Composable
 internal fun OutlineAdvancedContent(
     params: OutlineAdvancedData,
-    /** Cap for the scrolling list region; list scrolls inside, card does not grow. */
-    listMaxHeightDp: Dp = 360.dp,
+    bodyMaxHeightDp: Dp = 360.dp,
 ) {
     val scheme = MaterialTheme.colorScheme
     val muted = readerChromeMutedAlpha()
@@ -350,41 +334,49 @@ internal fun OutlineAdvancedContent(
     val currentId = remember(params.nodes, params.currentPageIndex) {
         TextbookOutlineResolver.deepestContaining(params.currentPageIndex, params.nodes)?.id
     }
-    val listState = rememberLazyListState()
-    val currentIndex = flatAll.indexOfFirst { it.node.id == currentId }
-    LaunchedEffect(currentIndex) {
-        if (currentIndex >= 0) {
-            listState.scrollToItem(outlineInitialRow(currentIndex))
-        }
+    val startIndex = remember(flatAll, currentId) {
+        TextbookOutlineResolver.outlineScrollStartIndex(flatAll, currentId).coerceAtLeast(0)
     }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = startIndex)
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = stringResource(R.string.pdf_outline_count, flatAll.size),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-            color = scheme.onSurface.copy(alpha = muted),
-            modifier = Modifier.padding(horizontal = MenuRowHPad),
-        )
-        Spacer(modifier = Modifier.height(10.dp))
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(bodyMaxHeightDp),
+    ) {
         Row(
-            modifier = Modifier.padding(horizontal = MenuRowHPad),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .padding(start = MenuRowHPad, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedButton(
+            Text(
+                text = if (flatAll.isEmpty()) {
+                    stringResource(R.string.pdf_outline_count_empty)
+                } else {
+                    stringResource(R.string.pdf_outline_count, flatAll.size)
+                },
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+                color = scheme.onSurface.copy(alpha = muted),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
                 onClick = params.onImportEmbedded,
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                modifier = Modifier.height(36.dp),
-                shape = RoundedCornerShape(ReaderChromeTokens.CornerButtonDp.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier = Modifier.height(32.dp),
             ) {
                 Text(
                     stringResource(R.string.pdf_outline_scan_ready),
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
                 )
             }
-            OutlinedButton(
+            TextButton(
                 onClick = {
                     params.onRequestEdit(
                         OutlineEditorState(
@@ -397,103 +389,110 @@ internal fun OutlineAdvancedContent(
                         ),
                     )
                 },
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                modifier = Modifier.height(36.dp),
-                shape = RoundedCornerShape(ReaderChromeTokens.CornerButtonDp.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier = Modifier.height(32.dp),
             ) {
                 Text(
-                    stringResource(R.string.pdf_outline_new_manual),
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                    stringResource(R.string.pdf_outline_new_short),
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
                 )
             }
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        // Remaining-height LazyColumn: last item scrolls fully past corner clip.
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(bottom = 20.dp),
+            contentPadding = PaddingValues(bottom = 16.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(listMaxHeightDp),
+                .weight(1f),
         ) {
             items(flatAll, key = { it.node.id }) { row ->
-                val selected = row.node.id == currentId
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            params.onJumpToNode(row.node) // card stays open
-                        }
-                        .padding(
-                            start = MenuRowHPad + (row.depth * 24).dp,
-                            end = MenuRowHPad,
-                            top = 8.dp,
-                            bottom = 8.dp,
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = row.node.title,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            color = scheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = stringResource(
-                                R.string.pdf_outline_page_range,
-                                row.node.startPageIndex + 1,
-                                row.node.endPageIndex + 1,
-                            ),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Normal,
-                            ),
-                            color = scheme.onSurface.copy(alpha = muted),
-                        )
-                    }
-                    if (selected) {
-                        // Current badge stays in-row on the right (never floating at card bottom).
-                        Text(
-                            text = stringResource(R.string.pdf_outline_current_badge),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            color = scheme.primary,
-                        )
-                    }
-                }
+                OutlineNodeRow(
+                    row = row,
+                    selected = row.node.id == currentId,
+                    onClick = { params.onJumpToNode(row.node) },
+                )
             }
         }
     }
 }
 
+@Composable
+private fun OutlineNodeRow(
+    row: TextbookOutlineResolver.FlatRow,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val rowBg = if (selected) scheme.primary.copy(alpha = 0.16f) else Color.Transparent
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+            .clickable(onClick = onClick)
+            .padding(end = MenuRowHPad)
+            .height(AdvancedChildLayoutSpec.OutlineRowHeightDp.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .width(3.dp)
+                .height(16.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (selected) scheme.primary else Color.Transparent),
+        )
+        Text(
+            text = row.node.title,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 14.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+            color = if (selected) scheme.primary else scheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp + (row.depth * 14).dp),
+        )
+        if (selected) {
+            Text(
+                text = stringResource(R.string.pdf_outline_current_badge),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = scheme.onPrimary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(scheme.primary)
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+            )
+        }
+    }
+}
+
 /**
- * 页面缩略图 — two-column grid inside the Advanced Card (R25 §9). R25.1 §3:
- * opening from Main positions the grid around the current page (upper-third
- * of the viewport), never from PDF 1. The grid is a weighted (fill=false)
- * child: it caps at the remaining body space and scrolls internally — the
- * card never grows beyond maxHeight.
+ * 页面缩略图 — compact 3-col grid. Current page is the first visible cell;
+ * the page image fills the cell (no letterbox, no caption stack).
  */
 @Composable
 internal fun ThumbnailsAdvancedContent(
     params: ThumbnailsAdvancedData,
-    gridMaxHeightDp: Dp = 360.dp,
+    bodyMaxHeightDp: Dp = 360.dp,
 ) {
     val scheme = MaterialTheme.colorScheme
     val muted = readerChromeMutedAlpha()
     val indices = remember(params.pageCount) { (0 until params.pageCount).toList() }
     var rangeStart by remember { mutableStateOf<Int?>(null) }
     val gridState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = thumbnailInitialRow(params.currentPageIndex),
+        initialFirstVisibleItemIndex = thumbnailInitialItemIndex(params.currentPageIndex),
     )
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(bodyMaxHeightDp),
+    ) {
         Text(
             text = if (params.rangePickMode) {
                 if (rangeStart == null) {
@@ -509,27 +508,26 @@ internal fun ThumbnailsAdvancedContent(
                 fontWeight = FontWeight.Medium,
             ),
             color = scheme.onSurface.copy(alpha = muted),
-            modifier = Modifier.padding(horizontal = MenuRowHPad),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = MenuRowHPad, vertical = 6.dp),
         )
-        Spacer(modifier = Modifier.height(10.dp))
-        // Fixed body height; grid scrolls inside and does not grow the Child.
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(ThumbnailGridColumns),
             contentPadding = PaddingValues(
-                start = MenuRowHPad,
-                top = 4.dp,
-                end = MenuRowHPad,
-                bottom = 20.dp,
+                start = 10.dp,
+                top = 2.dp,
+                end = 10.dp,
+                bottom = 12.dp,
             ),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
-            verticalArrangement = Arrangement.spacedBy(22.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(gridMaxHeightDp),
+                .weight(1f),
         ) {
             items(indices, key = { it }) { pageIndex ->
-                val print = PrintPageResolver.resolve(pageIndex, params.printAnchors)
                 val selected = if (params.rangePickMode) {
                     pageIndex == rangeStart
                 } else {
@@ -538,7 +536,6 @@ internal fun ThumbnailsAdvancedContent(
                 ThumbCell(
                     pageIndex = pageIndex,
                     selected = selected,
-                    printPage = print,
                     loader = params.loader,
                     onClick = {
                         if (params.rangePickMode && params.onRangePicked != null) {
@@ -564,7 +561,6 @@ internal fun ThumbnailsAdvancedContent(
 internal fun ThumbCell(
     pageIndex: Int,
     selected: Boolean,
-    printPage: Int?,
     loader: PdfThumbnailLoader,
     onClick: () -> Unit,
 ) {
@@ -589,75 +585,59 @@ internal fun ThumbCell(
         }
     }
 
-    val muted = readerChromeMutedAlpha()
-    // Low-contrast selection: soft primary hairline, not a strong colored frame.
     val borderColor = if (selected) {
-        scheme.primary.copy(alpha = 0.55f)
+        scheme.primary.copy(alpha = 0.85f)
     } else {
-        scheme.onSurface.copy(alpha = 0.06f)
+        scheme.onSurface.copy(alpha = 0.08f)
     }
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = ui is ThumbCellUi.Ready, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .aspectRatio(0.707f)
+            .clip(RoundedCornerShape(6.dp))
+            .background(scheme.surfaceContainerHigh)
+            .clickable(enabled = ui is ThumbCellUi.Ready, onClick = onClick)
+            .border(
+                width = if (selected) 2.dp else 0.5.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(6.dp),
+            ),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.72f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(
-                    if (selected) scheme.primary.copy(alpha = 0.06f) else scheme.surfaceContainerHigh,
+        when (val s = ui) {
+            ThumbCellUi.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
                 )
-                .border(
-                    width = if (selected) 1.5.dp else 1.dp,
-                    color = borderColor,
-                    shape = RoundedCornerShape(8.dp),
-                ),
-        ) {
-            when (val s = ui) {
-                ThumbCellUi.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        strokeWidth = 2.dp,
-                    )
-                }
-                is ThumbCellUi.Ready -> Image(
-                    bitmap = s.image,
-                    contentDescription = stringResource(R.string.pdf_thumb_cd, pageIndex + 1),
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(2.dp),
+            }
+            is ThumbCellUi.Ready -> Image(
+                bitmap = s.image,
+                contentDescription = stringResource(R.string.pdf_thumb_cd, pageIndex + 1),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            is ThumbCellUi.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.pdf_thumb_failed),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.error,
                 )
-                is ThumbCellUi.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.pdf_thumb_failed),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = scheme.error,
-                    )
-                }
             }
         }
         Text(
-            text = stringResource(R.string.pdf_thumb_page, pageIndex + 1),
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 13.sp,
-                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            text = "${pageIndex + 1}",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
             ),
-            color = if (selected) scheme.primary else scheme.onSurface.copy(alpha = muted + 0.15f),
-            maxLines = 1,
-            modifier = Modifier.padding(top = 6.dp),
+            color = Color.White,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(4.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color.Black.copy(alpha = 0.45f))
+                .padding(horizontal = 4.dp, vertical = 1.dp),
         )
-        if (printPage != null) {
-            Text(
-                text = stringResource(R.string.pdf_thumb_print, printPage),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                color = scheme.onSurface.copy(alpha = muted),
-                maxLines = 1,
-            )
-        }
     }
 }
 
@@ -719,7 +699,7 @@ internal fun ExportAdvancedContent(
             .heightIn(max = bodyMaxHeightDp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = MenuRowHPad)
-            .padding(top = 12.dp, bottom = 20.dp),
+            .padding(top = 8.dp, bottom = 16.dp),
     ) {
         if (plan == null) {
             Text(
@@ -812,7 +792,7 @@ internal fun ExportAdvancedContent(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         // Format radios: top-aligned, title ≤2 lines, hint secondary.
         ChapterExportFormat.entries.forEach { option ->
             val selected = format == option
@@ -824,7 +804,7 @@ internal fun ExportAdvancedContent(
                         onClick = { format = option },
                         role = Role.RadioButton,
                     )
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 RadioButton(
@@ -859,8 +839,8 @@ internal fun ExportAdvancedContent(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        // Start/end half-width fields, full height ≥52dp, never clipped.
+        Spacer(modifier = Modifier.height(8.dp))
+        // Start/end half-width fields; list/actions stay in one scroll.
         Row(modifier = Modifier.fillMaxWidth()) {
             ExportCompactField(
                 label = stringResource(R.string.pdf_export_start_page),
@@ -890,7 +870,7 @@ internal fun ExportAdvancedContent(
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
@@ -955,7 +935,7 @@ private fun ExportCompactField(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(48.dp)
                 .clip(RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp))
                 .background(scheme.onSurface.copy(alpha = 0.05f))
                 .border(

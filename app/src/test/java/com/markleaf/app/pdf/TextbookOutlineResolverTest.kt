@@ -86,4 +86,74 @@ class TextbookOutlineResolverTest {
         assertEquals(2 to 5, TextbookOutlineResolver.normalizeRange(5, 2, 10))
         assertEquals(0 to 9, TextbookOutlineResolver.normalizeRange(-1, 99, 10))
     }
+
+    @Test
+    fun outlineScrollStartIndex_chapterAtTopThenSectionFollows() {
+        val nodes = listOf(
+            node("ch3", null, 0, 99, "第三章", sort = 1),
+            node("s1", "ch3", 0, 9, "第一节", sort = 1),
+            node("s2", "ch3", 10, 19, "第二节", sort = 2),
+            node("s5", "ch3", 40, 49, "第五节", sort = 5),
+        )
+        val flat = TextbookOutlineResolver.flattenTree(nodes)
+        val current = TextbookOutlineResolver.deepestContaining(42, nodes)!!
+        assertEquals("s5", current.id)
+        val start = TextbookOutlineResolver.outlineScrollStartIndex(flat, current.id)
+        assertEquals("ch3", flat[start].node.id)
+        assertEquals("s5", flat[TextbookOutlineResolver.outlineCurrentIndex(flat, current.id)].node.id)
+        assertTrue(start < TextbookOutlineResolver.outlineCurrentIndex(flat, current.id))
+    }
+
+    @Test
+    fun outlineScrollStartIndex_rootChapterIsFirstRow() {
+        val nodes = listOf(
+            node("ch1", null, 0, 20, "第一章"),
+            node("ch2", null, 21, 40, "第二章"),
+        )
+        val flat = TextbookOutlineResolver.flattenTree(nodes)
+        val current = TextbookOutlineResolver.deepestContaining(25, nodes)!!
+        assertEquals("ch2", current.id)
+        assertEquals(1, TextbookOutlineResolver.outlineScrollStartIndex(flat, current.id))
+        assertEquals(
+            null,
+            TextbookOutlineResolver.outlineImmediateParentIndex(flat, 1),
+        )
+    }
+
+    @Test
+    fun outlineScrollStartIndex_threeLevelUsesImmediateParent() {
+        val nodes = listOf(
+            node("part", null, 0, 99, "第一篇"),
+            node("ch", "part", 0, 50, "第三章"),
+            node("sec", "ch", 20, 30, "第五节"),
+        )
+        val flat = TextbookOutlineResolver.flattenTree(nodes)
+        val current = TextbookOutlineResolver.deepestContaining(22, nodes)!!
+        val start = TextbookOutlineResolver.outlineScrollStartIndex(flat, current.id)
+        assertEquals("sec", current.id)
+        assertEquals("ch", flat[start].node.id)
+    }
+
+    @Test
+    fun flattenTree_isCompleteCatalogAcrossChapters() {
+        val nodes = listOf(
+            node("ch1", null, 0, 19, "第一章", sort = 1),
+            node("s1", "ch1", 0, 9, "第一节", sort = 1),
+            node("ch3", null, 20, 99, "第三章", sort = 2),
+            node("s1b", "ch3", 20, 29, "第一节", sort = 1),
+            node("s5", "ch3", 40, 49, "第五节", sort = 5),
+            node("ch4", null, 100, 120, "第四章", sort = 3),
+        )
+        val flat = TextbookOutlineResolver.flattenTree(nodes)
+        assertEquals(
+            listOf("ch1", "s1", "ch3", "s1b", "s5", "ch4"),
+            flat.map { it.node.id },
+        )
+        val current = TextbookOutlineResolver.deepestContaining(42, nodes)!!
+        assertEquals("s5", current.id)
+        val start = TextbookOutlineResolver.outlineScrollStartIndex(flat, current.id)
+        assertEquals("ch3", flat[start].node.id)
+        assertTrue(flat.drop(start).map { it.node.id }.contains("ch4"))
+        assertTrue(flat.take(start).map { it.node.id }.contains("ch1"))
+    }
 }

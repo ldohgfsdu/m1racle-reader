@@ -284,6 +284,41 @@ class ContinuousDocumentGeometry private constructor(
         return anchorY >= visibleTop && anchorY <= visibleBottom
     }
 
+    /**
+     * After page heights change (real aspect replacing the 1.414 placeholder),
+     * keep the document point that was at the viewport top. Without this,
+     * later pages shift under a stale scrollY and continuous scroll jumps.
+     */
+    fun remapStatePreservingViewportTop(
+        old: ContinuousDocumentGeometry,
+        state: ContinuousDocumentState,
+        viewportWidth: Float,
+        viewportHeight: Float,
+    ): ContinuousDocumentState {
+        if (pageCount <= 0 || old.pageCount != pageCount) {
+            return clamp(state, viewportWidth, viewportHeight)
+        }
+        val scale = state.scale.coerceAtLeast(0.0001f)
+        val documentYAtTop = state.scrollY / scale
+        val page = old.pageAtDocumentY(documentYAtTop)
+        val oldHeight = old.pageHeight(page).coerceAtLeast(0.0001f)
+        val fraction = (documentYAtTop - old.pageTop(page)) / oldHeight
+        val newDocumentY = pageTop(page) + fraction * pageHeight(page)
+        val widthRatio = if (old.basePageWidth > 0.0001f) {
+            basePageWidth / old.basePageWidth
+        } else {
+            1f
+        }
+        return clamp(
+            state.copy(
+                scrollX = state.scrollX * widthRatio,
+                scrollY = newDocumentY * scale,
+            ),
+            viewportWidth,
+            viewportHeight,
+        )
+    }
+
     fun pageAtDocumentY(documentY: Float): Int {
         if (pageCount == 0) return 0
         var low = 0

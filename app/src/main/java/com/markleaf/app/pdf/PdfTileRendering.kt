@@ -247,6 +247,50 @@ object PdfZoomBuckets {
     }
 }
 
+/**
+ * On-screen tile coverage across zoom-bucket changes.
+ *
+ * Tile grids differ per bucket, so last-good coverage cannot be matched by
+ * tileX/tileY. Draw every ready tile for the page, low-res first, so a live
+ * bucket jump never opens a hole of upsampled 1× text (the white-glyph flash).
+ */
+object PdfTileDisplay {
+    fun forPage(
+        tiles: Collection<PdfTileEntry>,
+        pageIndex: Int,
+    ): List<PdfTileEntry> = tiles.filter { it.key.pageIndex == pageIndex }
+        .sortedWith(
+            compareBy<PdfTileEntry> { it.key.zoomBucket }
+                .thenBy { it.key.tileY }
+                .thenBy { it.key.tileX },
+        )
+
+    /**
+     * Live pinch/zoom requests the current and predicted buckets. At 1×, also
+     * preheat the next sharper bucket so the first upsample is already covered.
+     */
+    fun bucketsToRequest(
+        scale: Float,
+        currentBucket: Int,
+        targetBucket: Int,
+        pinching: Boolean,
+    ): List<Int> {
+        val last = PdfZoomBuckets.scales.lastIndex
+        val current = currentBucket.coerceIn(0, last)
+        val target = targetBucket.coerceIn(0, last)
+        val buckets = linkedSetOf<Int>()
+        val live = scale > 1.01f || pinching
+        if (live) {
+            buckets += current
+            buckets += target
+        }
+        if (!live || current == 0) {
+            buckets += (current + 1).coerceAtMost(last)
+        }
+        return buckets.toList()
+    }
+}
+
 data class ZoomPrediction(
     val velocity: Float = 0f,
     val lastScale: Float = 1f,

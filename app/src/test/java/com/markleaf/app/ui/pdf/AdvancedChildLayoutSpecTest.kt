@@ -1,6 +1,7 @@
 package com.markleaf.app.ui.pdf
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,6 +28,21 @@ class AdvancedChildLayoutSpecTest {
         assertTrue(export >= AdvancedChildLayoutSpec.HeaderHeightDp + 280f)
         // PageMapping includes header + field + full save action room.
         assertTrue(page >= AdvancedChildLayoutSpec.HeaderHeightDp + 160f)
+        assertTrue("PageMapping stays wrap-ish", page <= AdvancedChildLayoutSpec.HeaderHeightDp + 190f)
+    }
+
+    @Test
+    fun `toc and thumbs lists own remaining body height`() {
+        val card = java.io.File("app/src/main/java/com/markleaf/app/ui/pdf/ReaderAdvancedCard.kt").let {
+            if (it.isFile) it else java.io.File("/root/code/MarkLeaf/app/src/main/java/com/markleaf/app/ui/pdf/ReaderAdvancedCard.kt")
+        }.readText()
+        val pop = java.io.File("app/src/main/java/com/markleaf/app/ui/pdf/AnchoredNestedPopover.kt").let {
+            if (it.isFile) it else java.io.File("/root/code/MarkLeaf/app/src/main/java/com/markleaf/app/ui/pdf/AnchoredNestedPopover.kt")
+        }.readText()
+        assertTrue(card.contains(".weight(1f)"))
+        assertTrue(pop.contains("bodyMaxHeightDp = bodyMaxHeightDp"))
+        assertFalse(pop.contains("bodyMaxHeightDp - 80"))
+        assertFalse(pop.contains("bodyMaxHeightDp - 28"))
     }
 
     @Test

@@ -185,6 +185,22 @@ class R7P0c14GestureRenderDecouplingTest {
         assertTrue(TileRenderPipelinePolicy.requiresFullInvalidation(old, old.copy(documentGeneration = 2)))
     }
 
+    @Test fun `display keeps last-good lower bucket under a live bucket jump`() {
+        fun entry(page: Int, bucket: Int, x: Int) = PdfTileEntry(
+            key().copy(pageIndex = page, zoomBucket = bucket, tileX = x),
+            bitmap,
+            PageLayoutRect(0f, 0f, 64f, 64f),
+            TilePixelRect(0, 0, 64, 64),
+            1, 1, 64,
+        )
+        val drawn = PdfTileDisplay.forPage(
+            listOf(entry(0, 2, 0), entry(0, 1, 0), entry(1, 1, 0)),
+            pageIndex = 0,
+        )
+        assertEquals(listOf(1, 2), drawn.map { it.key.zoomBucket })
+        assertTrue(drawn.none { it.key.pageIndex != 0 })
+    }
+
     @Test fun `overlay snapshot preserves exact tile bitmap identity`() {
         val entry = PdfTileEntry(key(), bitmap, PageLayoutRect(0f, 0f, 64f, 64f), TilePixelRect(0, 0, 64, 64), 1, 1, 64)
         val overlay = TileOverlaySnapshot(1, mapOf(entry.key to entry), 2)

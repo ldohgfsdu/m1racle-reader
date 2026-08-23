@@ -58,10 +58,69 @@ class ContinuousDocumentGeometryTest {
         assertEquals(2, geometry.pageAtViewportCenter(ContinuousDocumentState(scrollY = 2400f), 800f))
     }
 
+    @Test
+    fun `aspect update remaps scroll so viewport top stays on the same page point`() {
+        val old = ContinuousDocumentGeometry.create(
+            pageCount = 20,
+            basePageWidth = 1000f,
+            aspects = emptyMap(),
+            pageGap = 20f,
+        )
+        val state = ContinuousDocumentState(scale = 1f, scrollY = old.pageTop(10))
+        val taller = ContinuousDocumentGeometry.create(
+            pageCount = 20,
+            basePageWidth = 1000f,
+            aspects = mapOf(5 to 2.5f),
+            pageGap = 20f,
+        )
+        assertTrue(
+            "a taller early page must push later page tops down",
+            taller.pageTop(10) > old.pageTop(10) + 1f,
+        )
+        val remapped = taller.remapStatePreservingViewportTop(old, state, 1000f, 800f)
+        assertEquals(taller.pageTop(10), remapped.scrollY, 0.5f)
+        assertEquals(10, taller.pageAtDocumentY(remapped.scrollY))
+        val unmappedCenter = taller.pageAtViewportCenter(state, 800f)
+        assertTrue(
+            "stale scrollY under new geometry must not stay on page 10",
+            unmappedCenter != 10,
+        )
+    }
+
     @Test fun `pan is unified document state not page state`() {
         val moved = geometry.panBy(ContinuousDocumentState(scale = 2f, scrollX = 500f, scrollY = 900f), -100f, 200f, 1000f, 800f)
         assertEquals(600f, moved.scrollX, 0f)
         assertEquals(700f, moved.scrollY, 0f)
         assertFalse(moved.gestureActive)
+    }
+
+    @Test fun `pure vertical pan at zoom keeps scrollX`() {
+        val start = ContinuousDocumentState(scale = 2f, scrollX = 640f, scrollY = 1_200f)
+        val moved = geometry.panBy(start, 0f, -180f, 1000f, 800f)
+        assertEquals(640f, moved.scrollX, 0f)
+        assertEquals(1_380f, moved.scrollY, 0f)
+    }
+
+    @Test fun `aspect remap at zoom keeps horizontal scroll when width is unchanged`() {
+        val old = ContinuousDocumentGeometry.create(
+            pageCount = 20,
+            basePageWidth = 1000f,
+            aspects = emptyMap(),
+            pageGap = 20f,
+        )
+        val state = ContinuousDocumentState(
+            scale = 2f,
+            scrollX = 400f,
+            scrollY = old.pageTop(10) * 2f,
+        )
+        val taller = ContinuousDocumentGeometry.create(
+            pageCount = 20,
+            basePageWidth = 1000f,
+            aspects = mapOf(5 to 2.5f),
+            pageGap = 20f,
+        )
+        val remapped = taller.remapStatePreservingViewportTop(old, state, 1000f, 800f)
+        assertEquals(400f, remapped.scrollX, 0.01f)
+        assertEquals(2f, remapped.scale, 0f)
     }
 }

@@ -4,7 +4,6 @@ import android.graphics.Paint
 import android.content.pm.ApplicationInfo
 import android.util.Log
 import com.markleaf.app.BuildConfig
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.MutatorMutex
@@ -39,7 +38,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +45,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
@@ -56,6 +55,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.markleaf.app.pdf.BitmapMetadata
 import com.markleaf.app.pdf.ContinuousDocumentGeometry
 import com.markleaf.app.pdf.ContinuousDocumentState
+import com.markleaf.app.pdf.ContinuousLayoutMath
 import com.markleaf.app.pdf.ContinuousEntryPhase
 import com.markleaf.app.pdf.ContinuousGestureCapture
 import com.markleaf.app.pdf.ContinuousGestureCoordinator
@@ -69,6 +69,7 @@ import com.markleaf.app.pdf.ContinuousViewportSnapshot
 import com.markleaf.app.pdf.DisplayMergePolicy
 import com.markleaf.app.pdf.PdfGestureTransformController
 import com.markleaf.app.pdf.PdfTileEntry
+import com.markleaf.app.pdf.PdfTileDisplay
 import com.markleaf.app.pdf.PdfTilePlanner
 import com.markleaf.app.pdf.PdfTileRequest
 import com.markleaf.app.pdf.PdfTilePlan
@@ -230,6 +231,42 @@ internal fun ContinuousDocumentViewport(
             aspects = displayedAspects,
             pageGap = with(density) { 1.dp.toPx() },
         )
+    }
+    var geometryEpoch by remember(documentId) { mutableStateOf(geometry) }
+    val alignedDocumentState = if (
+        geometryEpoch !== geometry &&
+        geometryEpoch.pageCount == geometry.pageCount &&
+        viewportSize.width > 0 &&
+        viewportSize.height > 0
+    ) {
+        geometry.remapStatePreservingViewportTop(
+            geometryEpoch,
+            documentState,
+            viewportSize.width.toFloat(),
+            viewportSize.height.toFloat(),
+        )
+    } else {
+        documentState
+    }
+    SideEffect {
+        if (geometryEpoch !== geometry) {
+            // Mid-gesture writes fight the pointer epoch (baseTransform + absolute
+            // delta) and jump the page; keep remapping for render only until lift.
+            if (documentState.gestureActive) return@SideEffect
+            geometryEpoch = geometry
+            if (alignedDocumentState != documentState) {
+                documentState = alignedDocumentState
+                sharedGestureController.replaceTransform(
+                    ZoomPanTransform(
+                        scale = alignedDocumentState.scale,
+                        legalOffsetPx = ZoomPanPoint(
+                            -alignedDocumentState.scrollX,
+                            -alignedDocumentState.scrollY,
+                        ),
+                    ),
+                )
+            }
+        }
     }
     val drawableTiles = if (detailTileOverlayEnabled) {
         externalTileEntries.values.filter { tile ->
@@ -456,7 +493,13 @@ internal fun ContinuousDocumentViewport(
             val plannerNow = System.nanoTime()
             val all = mutableListOf<PdfTileRequest>()
             val sizes = mutableMapOf<Int, PageLayoutSize>()
-            if (snapshot.scale > 1.01f) views.forEach { view ->
+            val requestBuckets = PdfTileDisplay.bucketsToRequest(
+                snapshot.scale,
+                currentBucket,
+                targetBucket,
+                pinching = snapshot.interactionPhase == TileInteractionPhase.PINCHING,
+            )
+            if (requestBuckets.isNotEmpty()) views.forEach { view ->
                 sizes[view.pageIndex] = view.pageSize
                 val focus = snapshot.focalPointViewport?.let { focal ->
                     val documentX = snapshot.viewportRectDocument.left + focal.x / snapshot.scale
@@ -484,8 +527,7 @@ internal fun ContinuousDocumentViewport(
                         targetedAtNanos = snapshot.timestampNanos,
                     )
                 }
-                all += planned(currentBucket)
-                if (targetBucket != currentBucket) all += planned(targetBucket)
+                requestBuckets.forEach { bucket -> all += planned(bucket) }
                 if (isDebuggable) {
                     Log.d(tag, "TILE_TARGET pageIndex=${view.pageIndex} currentScale=${snapshot.scale} " +
                         "predictedScale=$predictedScale currentBucket=$currentBucket targetBucket=$targetBucket " +
@@ -509,37 +551,6 @@ internal fun ContinuousDocumentViewport(
                         snapshotSequence = snapshot.sequence,
                         targetedAtNanos = snapshot.timestampNanos,
                     )
-                }
-            }
-            if (snapshot.interactionPhase == TileInteractionPhase.IDLE && snapshot.scale <= 1.01f) {
-                views.firstOrNull { it.pageIndex == snapshot.currentPage }?.let { view ->
-                    val centerX = (view.visibleRect.left + view.visibleRect.right) / 2f
-                    val centerY = (view.visibleRect.top + view.visibleRect.bottom) / 2f
-                    val warm = view.copy(
-                        visibleRect = PageLayoutRect(
-                            (centerX - 128f).coerceAtLeast(0f),
-                            (centerY - 128f).coerceAtLeast(0f),
-                            (centerX + 128f).coerceAtMost(view.pageWidth),
-                            (centerY + 128f).coerceAtMost(view.pageHeight),
-                        ),
-                    )
-                    sizes[warm.pageIndex] = warm.pageSize
-                    all += PdfTilePlanner.requests(
-                        documentId,
-                        snapshot.documentGeneration,
-                        warm,
-                        1,
-                        snapshot.timestampNanos,
-                        centerX,
-                        centerY,
-                    ).take(2).map {
-                        it.copy(
-                            priority = TilePriority.SPECULATIVE,
-                            requestedAtNanos = plannerNow,
-                            snapshotSequence = snapshot.sequence,
-                            targetedAtNanos = snapshot.timestampNanos,
-                        )
-                    }
                 }
             }
             val ordered = TileRenderPipelinePolicy.ordered(all.distinctBy { it.key })
@@ -619,6 +630,7 @@ internal fun ContinuousDocumentViewport(
         if (entry.phase != ContinuousEntryPhase.APPLYING_TARGET || target == null ||
             appliedEntryGeneration == target.generation
         ) return@LaunchedEffect
+        if (documentState.gestureActive) return@LaunchedEffect
 
         sharedGestureController.cancelMotion(
             ZoomPanTransform(
@@ -803,11 +815,11 @@ internal fun ContinuousDocumentViewport(
     val renderDocumentState = pendingModeRestoreSession?.let { session ->
         geometry.restoreViewportSession(
             session,
-            documentState,
+            alignedDocumentState,
             viewportSize.width.toFloat(),
             viewportSize.height.toFloat(),
         )
-    } ?: documentState
+    } ?: alignedDocumentState
     val requestedComposedRange = geometry.composedPages(renderDocumentState, viewportSize.height.toFloat())
     val actualVisibleRange = geometry.composedPages(
         renderDocumentState,
@@ -1131,7 +1143,6 @@ internal fun ContinuousDocumentViewport(
                             }
                         } else if (pressed.size == 1) {
                             val change = pressed.first()
-                            val delta = change.position - change.previousPosition
                             if (!twoFinger || gestureCapture != null) {
                                 if (!twoFinger) {
                                     cancelFling()
@@ -1299,7 +1310,11 @@ internal fun ContinuousDocumentViewport(
                             dragStarted = false
                         }
                         val velocity = velocityTracker.calculateVelocity()
-                        startFling(Offset(velocity.x, velocity.y))
+                        val fling = ContinuousLayoutMath.dominantAxisFlingVelocity(
+                            velocity.x,
+                            velocity.y,
+                        )
+                        startFling(Offset(fling.first, fling.second))
                     }
                 }
                 } finally {
@@ -1328,7 +1343,7 @@ internal fun ContinuousDocumentViewport(
                     onEnsure = { onEnsureAround(page) },
                     onRetry = { onRetryPage(page) },
                     hasError = page == state.pageIndex && state.renderError != null,
-                    tiles = drawableTiles.filter { it.key.pageIndex == page && it.key.zoomBucket in setOf(tileBucket,tileTargetBucket) },
+                    tiles = PdfTileDisplay.forPage(drawableTiles, page),
                     showBaseLayer = showBaseLayer,
                     tileOverlayAlpha = detailTileOverlayAlpha,
                     showTileDiagnostics = showTileDiagnostics,
@@ -1412,17 +1427,15 @@ private fun DocumentPage(
     if (bitmap == null) {
         LaunchedEffect(page) { onEnsure() }
     }
-    androidx.compose.material3.Surface(color = Color.White, modifier = Modifier.fillMaxSize()) {
+    androidx.compose.material3.Surface(
+        color = Color.White,
+        modifier = Modifier
+            .fillMaxSize()
+            .semantics { contentDescription = "PDF page ${page + 1} of $pageCount" },
+    ) {
       Box(Modifier.fillMaxSize()) {
-        if (showBaseLayer) {
+        if (showBaseLayer && bitmap == null) {
             when {
-                bitmap != null -> Image(
-                    bitmap = bitmap,
-                    contentDescription = "PDF page ${page + 1} of $pageCount",
-                    contentScale = ContentScale.FillBounds,
-                    filterQuality = FilterQuality.Medium,
-                    modifier = Modifier.fillMaxSize(),
-                )
                 hasError -> androidx.compose.material3.TextButton(onClick = onRetry) {
                     androidx.compose.material3.Text("Retry")
                 }
@@ -1431,7 +1444,14 @@ private fun DocumentPage(
                 }
             }
         }
-        if(tiles.isNotEmpty()) Canvas(Modifier.fillMaxSize()) {
+        if ((showBaseLayer && bitmap != null) || tiles.isNotEmpty()) Canvas(Modifier.fillMaxSize()) {
+            if (showBaseLayer && bitmap != null) {
+                drawImage(
+                    image = bitmap,
+                    dstSize = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1)),
+                    filterQuality = FilterQuality.High,
+                )
+            }
             tiles.forEach { tile ->
                 val source = tile.contentRectPx
                 val destination = tile.pageRect.roundedPixelRect()
@@ -1442,6 +1462,7 @@ private fun DocumentPage(
                     dstOffset=IntOffset(destination.left,destination.top),
                     dstSize=IntSize(destination.width.coerceAtLeast(1),destination.height.coerceAtLeast(1)),
                     alpha=tileOverlayAlpha,
+                    filterQuality = FilterQuality.High,
                 )
                 if (showTileDiagnostics) {
                     drawRect(

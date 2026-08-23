@@ -22,7 +22,9 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
@@ -111,10 +113,13 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.SolidColor
@@ -154,6 +159,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.markleaf.app.R
+import com.markleaf.app.ui.common.clearContrastScrim
 import com.markleaf.app.pdf.PdfChromeLevel
 import com.markleaf.app.pdf.PdfReadingMode
 import com.markleaf.app.pdf.PdfRenderQuality
@@ -167,6 +173,7 @@ import com.markleaf.app.pdf.PageStripTransition
 import com.markleaf.app.pdf.ThreePageStripPhysics
 import com.markleaf.app.pdf.ThreePageStripState
 import com.markleaf.app.pdf.LatestViewportConflator
+import com.markleaf.app.pdf.PdfTileDisplay
 import com.markleaf.app.pdf.PdfTilePlan
 import com.markleaf.app.pdf.PdfGestureTransformController
 import com.markleaf.app.pdf.PdfGesturePhase
@@ -195,6 +202,7 @@ import com.markleaf.app.ui.theme.MarkLeafTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -321,58 +329,41 @@ fun PdfViewerScreen(
     val topBarMode by viewModel.topBarMode.collectAsStateWithLifecycle()
 
     // ── System bar presentation (PDF reader only) ────────────────────────────
-    // IMMERSIVE hides status bar while reading. Leaving the reader MUST restore
-    // bars so Home never inherits immersive (top chrome stuck / clipped).
+    // IMMERSIVE hides the status bar. Do NOT use transient swipe-to-reveal:
+    // a downward page swipe would flash a SystemUI scrim and jump the PDF.
+    // After a shade pull, delayed re-hide + focus-regain re-enter immersive.
+    // Never read live statusBars insets in this composition — that recomposes
+    // the whole reader on every bar animation. Leaving MUST restore bars.
     val view = LocalView.current
     LaunchedEffect(topBarMode) {
-        val activity = view.context as? android.app.Activity ?: return@LaunchedEffect
-        val wic = androidx.core.view.WindowInsetsControllerCompat(activity.window, view)
-        val status = androidx.core.view.WindowInsetsCompat.Type.statusBars()
-        val nav = androidx.core.view.WindowInsetsCompat.Type.navigationBars()
-        val all = androidx.core.view.WindowInsetsCompat.Type.systemBars()
-        when (topBarMode) {
-            com.markleaf.app.pdf.PdfTopBarMode.NORMAL -> {
-                wic.systemBarsBehavior =
-                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
-                wic.show(all)
-            }
-            com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE -> {
-                wic.systemBarsBehavior =
-                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
-                wic.show(nav)
-                wic.hide(status)
+        applyPdfSystemBars(view, topBarMode)
+        if (topBarMode != com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE) return@LaunchedEffect
+        while (isActive) {
+            delay(com.markleaf.app.pdf.PdfImmersiveSystemBars.REHIDE_DELAY_MS)
+            if (com.markleaf.app.pdf.PdfImmersiveSystemBars.shouldReassertHide(
+                    topBarMode,
+                    pdfStatusBarVisiblePx(view),
+                )
+            ) {
+                applyPdfSystemBars(view, com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE)
             }
         }
-        Log.i(
-            "PDF_SYSBARS",
-            "apply topBarMode=$topBarMode wic behavior=" + wic.systemBarsBehavior,
-        )
+    }
+    DisposableEffect(view, topBarMode) {
+        if (topBarMode != com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE) {
+            return@DisposableEffect onDispose { }
+        }
+        val listener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+            if (hasFocus) applyPdfSystemBars(view, com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE)
+        }
+        view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+        onDispose { view.viewTreeObserver.removeOnWindowFocusChangeListener(listener) }
     }
     DisposableEffect(view) {
         onDispose {
-            val activity = view.context as? android.app.Activity ?: return@onDispose
-            val wic = androidx.core.view.WindowInsetsControllerCompat(activity.window, view)
-            val all = androidx.core.view.WindowInsetsCompat.Type.systemBars()
-            wic.systemBarsBehavior =
-                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
-            wic.show(all)
+            applyPdfSystemBars(view, com.markleaf.app.pdf.PdfTopBarMode.NORMAL)
             Log.i("PDF_SYSBARS", "leave reader → restore all system bars")
         }
-    }
-
-    // Evidence logging: any change of the visible system-bars insets re-runs
-    // this effect (composition-level read), so the fullscreen gray mask can be
-    // correlated with SystemUI transient bars on the device (the app itself
-    // never paints a sysbar scrim).
-    val sysbarDensity = LocalDensity.current
-    val visibleStatusTop = WindowInsets.statusBars.getTop(sysbarDensity)
-    val visibleNavBottom = WindowInsets.navigationBars.getBottom(sysbarDensity)
-    LaunchedEffect(visibleStatusTop, visibleNavBottom, topBarMode) {
-        Log.i(
-            "PDF_SYSBARS",
-            "visible insets statusTop=$visibleStatusTop navBottom=$visibleNavBottom " +
-                "mode=$topBarMode (transient bars animate these values)",
-        )
     }
 
     val exportState by viewModel.exportState.collectAsStateWithLifecycle()
@@ -1039,6 +1030,34 @@ fun PdfViewerScreen(
     }
 }
 
+private fun applyPdfSystemBars(view: android.view.View, mode: com.markleaf.app.pdf.PdfTopBarMode) {
+    val activity = view.context as? android.app.Activity ?: return
+    val wic = androidx.core.view.WindowInsetsControllerCompat(activity.window, view)
+    val status = androidx.core.view.WindowInsetsCompat.Type.statusBars()
+    val nav = androidx.core.view.WindowInsetsCompat.Type.navigationBars()
+    val all = androidx.core.view.WindowInsetsCompat.Type.systemBars()
+    when (mode) {
+        com.markleaf.app.pdf.PdfTopBarMode.NORMAL -> {
+            wic.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            wic.show(all)
+        }
+        com.markleaf.app.pdf.PdfTopBarMode.IMMERSIVE -> {
+            wic.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            wic.show(nav)
+            wic.hide(status)
+        }
+    }
+    activity.window.clearContrastScrim(view)
+    Log.i("PDF_SYSBARS", "apply topBarMode=$mode wic behavior=" + wic.systemBarsBehavior)
+}
+
+private fun pdfStatusBarVisiblePx(view: android.view.View): Int {
+    val insets = androidx.core.view.ViewCompat.getRootWindowInsets(view) ?: return 0
+    return insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PdfChrome(
@@ -1352,6 +1371,55 @@ private fun FloatingChromeButton(
  * top-anchored (ADJUST_NOTHING), and the body may scroll within the
  * IME-available height.
  */
+/** Finger-local Plus glow on the capsule pill. Does not scale the jump card. */
+@Composable
+private fun Modifier.capsuleLocalPressHighlight(
+    interaction: MutableInteractionSource,
+): Modifier {
+    val pressed by interaction.collectIsPressedAsState()
+    var pressPos by remember { mutableStateOf<Offset?>(null) }
+    return this
+        .pointerInput(interaction) {
+            awaitEachGesture {
+                val down = awaitFirstDown(
+                    requireUnconsumed = false,
+                    pass = PointerEventPass.Initial,
+                )
+                pressPos = down.position
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    pressPos = change.position
+                    if (!change.pressed) break
+                }
+            }
+        }
+        .drawWithContent {
+            drawContent()
+            if (!pressed) return@drawWithContent
+            val pos = pressPos
+            val center = if (pos != null) {
+                Offset(
+                    pos.x.coerceIn(0f, size.width),
+                    pos.y.coerceIn(0f, size.height),
+                )
+            } else {
+                Offset(size.width / 2f, size.height / 2f)
+            }
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.18f),
+                        Color.Transparent,
+                    ),
+                    center = center,
+                    radius = size.minDimension * 1.2f,
+                ),
+                blendMode = BlendMode.Plus,
+            )
+        }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PdfInfoCapsule(
@@ -1411,6 +1479,8 @@ private fun PdfInfoCapsule(
         }
     }
 
+    val capsuleInteraction = remember { MutableInteractionSource() }
+
     Column(
         modifier = Modifier
             .width(surfaceWidthDp)
@@ -1436,23 +1506,30 @@ private fun PdfInfoCapsule(
                     )
                     lastCapsuleAnchor = anchor
                 }
-            }
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(onClick = onClick)
-                } else {
-                    Modifier
-                },
-            ),
+            },
     ) {
-        // Header: always the position line, always the pill's width (centered
-        // inside the wider body) — continuous with the collapsed capsule.
+        // Header is the only press target. Local Plus highlight stays on this
+        // 44dp pill — never a Material ripple on the morphing Column.
         Row(
             modifier = Modifier
                 .width(collapsedWidth)
                 .height(44.dp)
-                .padding(horizontal = 16.dp, vertical = 4.dp)
-                .align(Alignment.CenterHorizontally),
+                .align(Alignment.CenterHorizontally)
+                .clip(RoundedCornerShape(22.dp))
+                .then(
+                    if (onClick != null) {
+                        Modifier
+                            .clickable(
+                                interactionSource = capsuleInteraction,
+                                indication = null,
+                                onClick = onClick,
+                            )
+                            .capsuleLocalPressHighlight(capsuleInteraction)
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 16.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f, fill = false)) {
@@ -2383,13 +2460,15 @@ internal fun PdfHorizontalPagedArea(
                 fittedPage.fittedHeightPx,
                 rotation = 0,
             )
-            val horizontalTiles = horizontalOverlaySnapshot.entries.values.filter { tile ->
-                tile.key.documentGeneration == state.tileDocumentGeneration &&
-                    tile.key.pageIndex == page &&
-                    tile.key.geometryGeneration == fittedGeometry &&
-                    tile.key.fittedPageWidthVersion == fittedPage.fittedWidthPx.roundToInt() &&
-                    tile.key.zoomBucket in setOf(horizontalTileBucket, horizontalTileTargetBucket)
-            }
+            val horizontalTiles = PdfTileDisplay.forPage(
+                horizontalOverlaySnapshot.entries.values.filter { tile ->
+                    tile.key.documentGeneration == state.tileDocumentGeneration &&
+                        tile.key.pageIndex == page &&
+                        tile.key.geometryGeneration == fittedGeometry &&
+                        tile.key.fittedPageWidthVersion == fittedPage.fittedWidthPx.roundToInt()
+                },
+                page,
+            )
             val pendingHorizontalRenderSession = state.viewportSessionState
                 ?.normalized(state.pageCount, activeHorizontalPage)
                 ?.takeIf { session ->

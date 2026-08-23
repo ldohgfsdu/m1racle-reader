@@ -43,11 +43,13 @@ class R71FrameStabilityTest {
         assertTrue(cancel.contains("key.tier == QualityTier.HIGH"))
     }
 
-    @Test fun `document page owns exactly one Image path and no crossfade`() {
+    @Test fun `document page draws base and tiles in one canvas without crossfade`() {
         val page = viewportSource().substringAfter("private fun DocumentPage")
-        assertTrue(page.contains("bitmap != null -> Image("))
+        assertTrue(page.contains("drawImage("))
+        assertTrue(page.contains("FilterQuality.High"))
         assertFalse(page.contains("Crossfade"))
         assertFalse(page.contains("AnimatedContent"))
+        assertFalse(page.contains("androidx.compose.foundation.Image"))
     }
 
     @Test fun `subcompose identity excludes transform and bitmap fields`() {

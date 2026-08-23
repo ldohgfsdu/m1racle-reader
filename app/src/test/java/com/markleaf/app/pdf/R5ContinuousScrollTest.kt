@@ -89,6 +89,22 @@ class R5ContinuousScrollTest {
         assertEquals(AxisLock.NONE, ContinuousLayoutMath.resolveAxis(3f, 2f, 8f, AxisLock.NONE))
     }
 
+    @Test fun dominantAxisFlingDropsMinorAxisOnlyWhenNearAxis() {
+        val vertical = ContinuousLayoutMath.dominantAxisFlingVelocity(200f, 2000f)
+        assertEquals(0f, vertical.first, 0f)
+        assertEquals(2000f, vertical.second, 0f)
+        val horizontal = ContinuousLayoutMath.dominantAxisFlingVelocity(900f, 100f)
+        assertEquals(900f, horizontal.first, 0f)
+        assertEquals(0f, horizontal.second, 0f)
+        val diagonal = ContinuousLayoutMath.dominantAxisFlingVelocity(800f, 800f)
+        assertEquals(800f, diagonal.first, 0f)
+        assertEquals(800f, diagonal.second, 0f)
+        // ~30° from vertical: tan(30°)=0.577, ratio≈1.73 < 2.5 → keep both
+        val intentionalDiagonal = ContinuousLayoutMath.dominantAxisFlingVelocity(577f, 1000f)
+        assertEquals(577f, intentionalDiagonal.first, 0f)
+        assertEquals(1000f, intentionalDiagonal.second, 0f)
+    }
+
     // ---- offsetX clears at 1x ----
     @Test fun offsetXClearsWhenBackToScaleOne() {
         assertEquals(0f, ContinuousLayoutMath.offsetXAfterCommit(1f, -350f), 0f)

@@ -17,6 +17,9 @@ enum class AxisLock { NONE, HORIZONTAL, VERTICAL }
 
 object ContinuousLayoutMath {
 
+    /** Major/minor fling speed ratio that still counts as a 1-axis flick (~22°). */
+    const val FLING_DOMINANT_AXIS_RATIO = 2.5f
+
     /** Document-layout page width (px) for a committed zoom. */
     fun pageLayoutWidthPx(viewportWidthPx: Int, committedScale: Float): Int =
         (viewportWidthPx.coerceAtLeast(1) * committedScale.coerceAtLeast(1f)).roundToInt()
@@ -34,6 +37,24 @@ object ContinuousLayoutMath {
         if (current != AxisLock.NONE) return current
         if (abs(dx) < touchSlop && abs(dy) < touchSlop) return AxisLock.NONE
         return if (abs(dx) > abs(dy)) AxisLock.HORIZONTAL else AxisLock.VERTICAL
+    }
+
+    /**
+     * Contact pan is always 1:1 2D so a diagonal finger is followed.
+     * After lift, a near-axis flick drops the leak on the minor axis; a real
+     * diagonal flick keeps both. Ratio 2.5 ≈ 22° from the major axis.
+     */
+    fun dominantAxisFlingVelocity(
+        velocityX: Float,
+        velocityY: Float,
+        dominanceRatio: Float = FLING_DOMINANT_AXIS_RATIO,
+    ): Pair<Float, Float> {
+        val ratio = dominanceRatio.coerceAtLeast(1f)
+        return when {
+            abs(velocityY) >= ratio * abs(velocityX) -> 0f to velocityY
+            abs(velocityX) >= ratio * abs(velocityY) -> velocityX to 0f
+            else -> velocityX to velocityY
+        }
     }
 
     /**

@@ -110,4 +110,32 @@ object TextbookOutlineResolver {
         val e = end.coerceIn(0, pageCount - 1)
         return if (s <= e) s to e else e to s
     }
+
+    /** Flattened-list index of the current node, or -1 if missing. */
+    fun outlineCurrentIndex(rows: List<FlatRow>, currentId: String?): Int {
+        if (currentId == null) return -1
+        return rows.indexOfFirst { it.node.id == currentId }
+    }
+
+    /**
+     * Immediate parent of the current flattened row. Always a lower index
+     * than [currentIndex] in a DFS flattening (parent is emitted first).
+     */
+    fun outlineImmediateParentIndex(rows: List<FlatRow>, currentIndex: Int): Int? {
+        if (currentIndex !in rows.indices) return null
+        val parentId = rows[currentIndex].node.parentId ?: return null
+        val parentIndex = rows.indexOfFirst { it.node.id == parentId }
+        return parentIndex.takeIf { it >= 0 }
+    }
+
+    /**
+     * First visible outline row on open: the immediate parent (章) when
+     * the current node is a child (节), otherwise the current node itself.
+     * The list itself is the complete catalog — later chapters stay in order.
+     */
+    fun outlineScrollStartIndex(rows: List<FlatRow>, currentId: String?): Int {
+        val currentIndex = outlineCurrentIndex(rows, currentId)
+        if (currentIndex < 0) return 0
+        return outlineImmediateParentIndex(rows, currentIndex) ?: currentIndex
+    }
 }

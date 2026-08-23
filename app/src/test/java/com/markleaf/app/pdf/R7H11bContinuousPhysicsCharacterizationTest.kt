@@ -21,6 +21,14 @@ class R7H11bContinuousPhysicsCharacterizationTest {
     )
 
     @Test
+    fun `zoomed contact pan follows a diagonal finger`() {
+        val start = ContinuousDocumentState(scale = 2f, scrollX = 700f, scrollY = 8_000f)
+        val moved = geometry.panBy(start, 120f, -500f, 1000f, 1800f)
+        assertEquals(580f, moved.scrollX, 0f)
+        assertEquals(8_500f, moved.scrollY, 0f)
+    }
+
+    @Test
     fun `continuous single pointer pan is one to one then hard clamps`() {
         val start = ContinuousDocumentState(scale = 2f, scrollX = 500f, scrollY = 20_000f)
 

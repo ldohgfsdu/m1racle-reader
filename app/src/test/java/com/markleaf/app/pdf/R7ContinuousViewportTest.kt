@@ -51,6 +51,27 @@ class R7ContinuousViewportTest {
 
     /** R25 closure (ported from R62): cold continuous pages render a solid
      *  white background, never a CircularProgressIndicator. */
+    @Test fun `V2 zoom display keeps last-good tiles across buckets`() {
+        val source = viewportSource()
+        assertTrue(source.contains("PdfTileDisplay.forPage"))
+        assertTrue(source.contains("PdfTileDisplay.bucketsToRequest"))
+        assertFalse(source.contains("zoomBucket in setOf"))
+    }
+
+    @Test fun `V2 remaps scroll when page aspects rebuild geometry`() {
+        val source = viewportSource()
+        assertTrue(source.contains("remapStatePreservingViewportTop"))
+        assertTrue(source.contains("alignedDocumentState"))
+        assertTrue(source.contains("if (documentState.gestureActive) return@SideEffect"))
+    }
+
+    @Test fun `V2 contact pan is free 2D and only fling drops a near-axis leak`() {
+        val source = viewportSource()
+        assertTrue(source.contains("dominantAxisFlingVelocity"))
+        assertFalse(source.contains("axisLockedPosition"))
+        assertFalse(source.contains("resolveAxis"))
+    }
+
     @Test fun `V2 cold pages use white background not spinner`() {
         val source = viewportSource()
         assertTrue(source.contains("Color.White"))

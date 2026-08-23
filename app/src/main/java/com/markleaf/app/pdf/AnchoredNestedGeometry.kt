@@ -62,17 +62,18 @@ fun computeAnchoredNestedTarget(input: AnchoredNestedInput): AnchoredNestedTarge
     val sourceH = (input.sourceRectBottom - input.sourceRectTop).coerceAtLeast(1f)
     // Fully-open card must be clearly taller than a single row (anti-pill gate).
     val minCardH = max(input.minHeightPx, sourceH * 3.5f)
-    val availableFromTop = input.viewportBottom - input.bottomMarginPx - input.sourceRectTop
-    val height = min(
-        input.contentHeightPx.coerceAtLeast(minCardH),
-        availableFromTop.coerceAtLeast(minCardH),
-    ).coerceAtLeast(minCardH)
-    val maxTop = input.viewportBottom - input.bottomMarginPx - height
-    val childTop = input.sourceRectTop.coerceIn(
-        minOf(0f, maxTop),
-        maxOf(0f, maxTop),
-    )
-    val childBottom = min(childTop + height, input.viewportBottom - input.bottomMarginPx)
+    val maxBottom = input.viewportBottom - input.bottomMarginPx
+    // Never climb above the parent menu; that is the overlay ceiling.
+    val ceiling = min(input.parentRectTop, input.sourceRectTop)
+    val maxH = (maxBottom - ceiling).coerceAtLeast(minCardH)
+    val height = input.contentHeightPx.coerceAtLeast(minCardH).coerceAtMost(maxH)
+    val fitsBelowSource = input.sourceRectTop + height <= maxBottom
+    val childTop = if (fitsBelowSource) {
+        input.sourceRectTop
+    } else {
+        (maxBottom - height).coerceAtLeast(ceiling)
+    }
+    val childBottom = min(childTop + height, maxBottom)
         .coerceAtLeast(childTop + minCardH)
     return AnchoredNestedTarget(
         left = childLeft,
@@ -113,18 +114,25 @@ fun anchoredRevealRect(
 
 // ── Scroll-start helpers (shared by outline list + thumbnail grid) ────────
 
-/** Row index of the current page inside a two-column thumbnail grid. */
-fun thumbnailGridRow(currentPageIndex: Int): Int = currentPageIndex / 2
+/** Column count of the thumbnail grid (must match [GridCells.Fixed] in the card). */
+const val ThumbnailGridColumns = 3
 
-/**
- * First visible row so the current page lands around the upper-third of the
- * viewport with a couple of rows of context above it.
- */
+/** Row index of the current page inside the thumbnail grid. */
+fun thumbnailGridRow(currentPageIndex: Int): Int =
+    currentPageIndex.coerceAtLeast(0) / ThumbnailGridColumns
+
+/** First visible row is the current page's row — current cell is first. */
 fun thumbnailInitialRow(currentPageIndex: Int): Int =
-    max(0, thumbnailGridRow(currentPageIndex) - 2)
+    thumbnailGridRow(currentPageIndex)
 
 /**
- * First visible row for the outline list: the current node's render index
- * minus a few rows of context, so it lands near the upper-third.
+ * First visible **item index** for LazyGrid: the current page itself, so it
+ * occupies the first cell (top-left), not two rows of earlier pages.
  */
-fun outlineInitialRow(renderIndex: Int): Int = max(0, renderIndex - 3)
+fun thumbnailInitialItemIndex(
+    currentPageIndex: Int,
+    columns: Int = ThumbnailGridColumns,
+): Int {
+    require(columns > 0)
+    return currentPageIndex.coerceAtLeast(0)
+}

@@ -76,6 +76,20 @@ class AnchoredNestedGeometryTest {
         assertTrue(t.height >= 52f - 1e-3f)
     }
 
+    @Test
+    fun `low source slides up and keeps content height instead of crushing the card`() {
+        // Export-like: source near the bottom, content taller than remaining room below.
+        val t = computeAnchoredNestedTarget(
+            base(sourceTop = 700f, sourceBottom = 752f, contentH = 400f, viewportBottom = 900f),
+        )
+        val maxBottom = 900f - 28f
+        assertEquals(400f, t.height, 1e-3f)
+        assertEquals(maxBottom, t.bottom, 1e-3f)
+        assertEquals(maxBottom - 400f, t.top, 1e-3f)
+        assertTrue("must climb above the source row", t.top < 700f)
+        assertTrue("must not climb above the parent menu", t.top >= 80f)
+    }
+
     // ── Production morph path: full L/T/R/B source → target ─────────────────
 
     private fun morphSample(
