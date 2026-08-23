@@ -2,37 +2,30 @@
 
 ## Current
 
-**HOME_ALIGN_UNIFIED_LIQUID_CONTROLS** — Home alignment + unified liquid floating controls（24dp rail + FAB/menu = Reader liquid，无重设计）
+**BATCH_B_RUNTIME_HARDENING** — 运行时可靠性与性能证明（长期重负载稳定基础）
 
 ## Machine-readable
 
-See `.memory/active_object.yaml` (source of truth for id/priority/status/scope).
+See `.memory/active_object.yaml` (source of truth).
 
 ## Status
 
-`implemented_automated_verified_device_pending` — Home 对齐（24dp 内容 rail）与悬浮控件材质统一已落地：FAB 与 ··· 菜单复用共享液态玻璃（markLeafLiquidSurface + LiquidSurfaceLevel.Control）；单测绿（107 suites）；assembleRelease PASS（sha256 c1607650…）；设备视觉校准 PENDING（adb offline）。
+`in_progress_partial_automated_verified_device_pending` — B-0 zip 契约修复与 B-1 displayedBitmaps retention 已落地（1145/0 全绿，assembleRelease PASS）；B-2/B-3 因 adb 离线挂起；设备侧验收（内存曲线/FrameTimeline/GPU 采样）待真机。
 
 ## Goal
 
-以当前代码为唯一事实源：Home 内容与悬浮控件统一到 24dp rail；FAB（56dp 圆角方）与 ··· 菜单使用 Reader 同一液态材质，不发明 home 专属材质；卡片保持实色 tonal（永不液态）。
+不新增功能：以证据驱动把 PDF 阅读器推进到长期重负载稳定。先测试后实现；行为变化必须有测试；废弃路径不留。
 
 ## Handoff
 
-下一位 Agent **必须先读**：
+下一位 Agent 必须先读：
 
-1. `.memory/active_object.yaml`
-2. `.memory/CURRENT_STATE.md`
-3. `docs/HOME_ALIGN_LIQUID_CONTROLS_REPORT.md`
-
-## Scope
-
-- Home 24dp 内容 rail（brand / section title / cards / menu；空态 header 修复）
-- FAB = 56dp 液态（共享 surface）；··· 菜单 = 液态 Popup（Control soft plate，无跨窗口采样）
-- 卡片实色 tonal（不液态）
-- Memory / doc 同步（代码优先于旧 memory）
+1. `.memory/CURRENT_STATE.md`
+2. `docs/BATCH_B_FINAL_REPORT.md`（B-0/B-1 详情、B-2/B-3 采集计划、zip identity 决策请求）
+3. `docs/A3_FINALIZATION_REPORT.md`（A3 台账与导入链终审）
 
 ## Out of scope
 
-- Reader chrome / PDF 渲染 / 手势 / ThreePageStrip / Tile
-- Markdown reader
-- commit / push / remote
+- TOC UX / 网盘兼容 / EPUB / 新阅读模式
+- Liquid Glass 视觉调参 / PDF renderer 重写 / generation 门禁与手势模型变更
+- 未批准的 B-4 代码修改（zip identity 统一等：先报告等批准）

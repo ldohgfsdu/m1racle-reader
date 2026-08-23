@@ -1,31 +1,20 @@
-id: HOME_ALIGN_UNIFIED_LIQUID_CONTROLS
-status: closed_automated_verified_device_pending
-scope: home_alignment_24dp_rail_fab_and_menu_reader_liquid_glass
+id: BATCH_B_RUNTIME_HARDENING
+status: in_progress_partial_automated_verified_device_pending
+scope: runtime_reliability_memory_governance_performance_evidence
 note: >
-  CLOSED as active dev item 2026-08-23: code committed in F1 audit batch
-  (398536a..374df83); suite green; device visual calibration still pending
-  (adb offline). Kept here only until a new active object is declared.
-  Delivered scope (historical):
-  Home alignment + floating-control material unification (no redesign):
-  1) ONE 24dp content rail — brand block / section title / cards / menu all at
-  PageHorizontal=24dp; empty-state header bug fixed (was flush at x=0, now same
-  rail). 2) FAB = 56dp rounded square (corner 20, plus 26dp onSurface) using the
-  SHARED markLeafLiquidSurface + LiquidSurfaceLevel.Control — exactly the PDF
-  reader chrome material (alpha/blur/lens/highlight/shadow/pressed), real
-  backdrop sampling from Scaffold slot; no home-specific material invented.
-  3) ··· menu = same-source liquid glass (Control soft plate in Popup window,
-  no cross-window sampling) + Control edge highlight border 0.5dp/α0.55, corner
-  10dp = PDF chrome menu-row corner, right-edge aligned to anchor expanding
-  left. 4) Cards stay solid tonal (never liquid). KEPT: single LazyColumn
-  header item, stable keys, optimistic delete reflow, no animateItem.
-  Reader/shared liquid untouched (home only re-calls the shared entry).
-  Files: HomeScreen.kt, HomeDesignTokens.kt, HomeLayoutContractTest.kt,
-  ReaderChromeMaterialTest.kt (home assertion only).
-  Report: docs/HOME_ALIGN_LIQUID_CONTROLS_REPORT.md
+  Batch B opened 2026-08-23 (goal: long-session stability, no new features).
+  Done: B-0 zip VIEW/SEND contract (ce31f00); B-1 displayedBitmaps retention
+  policy (878209f) — JVM-verified, device memory-curve half pending.
+  Blocked offline adb: B-2 Liquid Glass GPU profiling, B-3 device evidence
+  closure (export-cancel manual check, FrameTimeline, meminfo curve, GPU
+  sampling). B-4 partial: .memory rewritten; zip identity unification and any
+  code change beyond approved findings require explicit approval first.
+  Constraints locked: no TOC/netdisk/EPUB/new reading modes/Liquid tuning/
+  renderer rewrite/generation-gate or gesture-model changes.
 builds:
   release_apk: .external_outbox/markleaf-release-latest.apk
   delivered_to: /storage/emulated/0/Download/markleaf-release-latest.apk
-  sha256: 4f5b60a9d7aafc61cd5ae531d51d01894ba15a70ca29c05ec66a104ea366a632
-  report: docs/HOME_ALIGN_LIQUID_CONTROLS_REPORT.md
-commit: committed_F1_audit_batch_2026-08-23
+  tests: 1145/0 (:app:testQaUnitTest, JDK17)
+report: docs/BATCH_B_FINAL_REPORT.md
+commit: 878209f
 updated: 2026-08-23
