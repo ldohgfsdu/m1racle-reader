@@ -29,16 +29,6 @@ class PdfProgressTest {
     }
 
     @Test
-    fun isAllowedFileName_includesPdfAndMarkdown() {
-        assertTrue(DocumentRepository.isAllowedFileName("a.md"))
-        assertTrue(DocumentRepository.isAllowedFileName("a.markdown"))
-        assertTrue(DocumentRepository.isAllowedFileName("a.txt"))
-        assertTrue(DocumentRepository.isAllowedFileName("report.PDF"))
-        assertFalse(DocumentRepository.isAllowedFileName("report.docx"))
-        assertFalse(DocumentRepository.isAllowedFileName(null))
-    }
-
-    @Test
     fun documentType_notPdfForMarkdownNames() {
         assertEquals(
             DocumentType.MARKDOWN,

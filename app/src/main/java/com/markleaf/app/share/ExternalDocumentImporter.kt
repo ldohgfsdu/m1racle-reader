@@ -36,7 +36,8 @@ open class ExternalDocumentImporter(
     private val forceIndexBindFailure: Boolean = false,
 ) {
     companion object {
-        const val MAX_BYTES: Long = ExternalFileIntake.MAX_BYTES
+        /** Hard cap to avoid huge share payloads (shared semantics with zip intake). */
+        const val MAX_BYTES: Long = 200L * 1024L * 1024L
 
         /**
          * Single import-side staged-file name sanitizer (A3-3a: the
@@ -74,7 +75,12 @@ open class ExternalDocumentImporter(
                 documentIdFromProvider = provider.lastPathSegment,
             )
 
-            if (!ExternalFileIntake.isAllowed(resolved.mimeType, resolved.displayName, provider.lastPathSegment)) {
+            if (!DocumentType.isAllowedImport(
+                    resolved.mimeType,
+                    resolved.displayName,
+                    provider.lastPathSegment,
+                )
+            ) {
                 return@withContext PrepareOutcome.Unsupported
             }
             resolved.sizeBytesHint?.let {

@@ -502,10 +502,9 @@ class DocumentRepository(
             )
             val displayName = resolvedMeta.displayName
 
-            if (!DocumentType.isAllowedImport(mimeType, displayName, pathSegment) &&
-                !isAllowedFileName(displayName) &&
-                !isAllowedFileName(pathSegment)
-            ) {
+            // Single acceptance authority (import policy batch 2): the former
+            // isAllowedFileName OR-branches were a proven subset of this gate.
+            if (!DocumentType.isAllowedImport(mimeType, displayName, pathSegment)) {
                 return@withContext ImportResult.UnsupportedFormat
             }
 
@@ -544,13 +543,10 @@ class DocumentRepository(
                 ?: return@withContext ImportResult.ReadFailed
 
             val documentType = DocumentType.resolve(mimeType, displayName, pathSegment)
-            // Markdown path: require known text extension (keep previous strictness).
-            if (documentType == DocumentType.MARKDOWN &&
-                !isAllowedFileName(displayName) &&
-                !isAllowedFileName(pathSegment)
-            ) {
-                return@withContext ImportResult.UnsupportedFormat
-            }
+            // Note: the former "markdown requires known text extension" re-check
+            // is unreachable after policy unification — a MARKDOWN-typed input
+            // can only pass the gate with document extensions on its (resolved)
+            // names, either via branch 1 or via ensureExtension normalization.
 
             val resolvedSize = resolvedMeta.sizeBytesHint
                 ?: when (uri.scheme?.lowercase(Locale.ROOT)) {
@@ -718,15 +714,6 @@ class DocumentRepository(
          * while keeping the current full-document parser inside a bounded heap.
          */
         const val MAX_MARKDOWN_BYTES: Int = 32 * 1024 * 1024
-
-        private val ALLOWED_EXTENSIONS = listOf(".md", ".markdown", ".txt", ".zip")
-
-        fun isAllowedFileName(name: String?): Boolean {
-            if (name.isNullOrBlank()) return false
-            val lower = name.lowercase(Locale.ROOT)
-            return ALLOWED_EXTENSIONS.any { lower.endsWith(it) } ||
-                DocumentType.hasPdfExtension(lower)
-        }
 
         fun stableUriId(uriString: String): String {
             val digest = MessageDigest

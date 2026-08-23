@@ -162,8 +162,14 @@ class ExternalOpenCoordinator(
             }
             val incoming = importer.probeIncomingCard(uri, intent.type)
 
-            // Reject unsupported before any confirm dialog or copy.
-            if (!ExternalFileIntake.isAllowed(intent.type, incoming.displayName, uri.lastPathSegment)) {
+            // Reject unsupported before any confirm dialog or copy. Single
+            // acceptance authority (import policy batch 2).
+            if (!com.markleaf.app.data.local.DocumentType.isAllowedImport(
+                    intent.type,
+                    incoming.displayName,
+                    uri.lastPathSegment,
+                )
+            ) {
                 handledEventIds.add(eventId.value)
                 _effects.emit(
                     ExternalOpenUiEffect.ToastUnsupported(
