@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Pre-Android 12 full backup rules. -->
-<full-backup-content>
-    <include domain="root" path="." />
-    <include domain="file" path="." />
-    <include domain="database" path="." />
-    <include domain="sharedpref" path="." />
-</full-backup-content>

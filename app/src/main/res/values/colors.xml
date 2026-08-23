@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sampled from selected panda IP A1 (top-right sage). -->
+    <color name="ic_launcher_background">#92A091</color>
+</resources>

@@ -38,15 +38,12 @@ class ReleaseHygieneHostTest {
     }
 
     @Test
-    fun dataExtractionRules_declared() {
+    fun appDataBackup_isDisabledForLocalOnlyDocuments() {
         val manifest = File("app/src/main/AndroidManifest.xml").takeIf { it.isFile }
             ?: File("src/main/AndroidManifest.xml")
         val text = manifest.readText()
-        assertTrue(text.contains("dataExtractionRules"))
-        assertTrue(text.contains("fullBackupContent"))
-        assertTrue(
-            File("app/src/main/res/xml/data_extraction_rules.xml").isFile ||
-                File("src/main/res/xml/data_extraction_rules.xml").isFile,
-        )
+        assertTrue(text.contains("android:allowBackup=\"false\""))
+        assertFalse(text.contains("dataExtractionRules"))
+        assertFalse(text.contains("fullBackupContent"))
     }
 }
