@@ -55,8 +55,9 @@ P-1、P-2、P-3(至 C-store)、P-4、P-5、两项观察项 —— 全部记录�
 | **C-0（本文件）** | 发布规划与判定 | 本文档 |
 | **C-1 发布执行批** | R-2：versionCode bump → CHANGELOG → git tag `v0.1.0` → assembleRelease → 三方 sha256 核对 → 交付 | tag + 发布 APK + 台账 |
 | **C-2 证据闭环批**（设备会话） | B-1 不中断长程复测；P-5 force-stop 场景；ThumbnailLoader 观察；安装冒烟（§5 清单 E 组） | Device Evidence Closure 终版 |
-| **C-3（可选）UI 解冻批** | P-2 + P-3 + SourceTooLarge 事件分支 | 小批 |
+| **C-3 Release Promotion / Finalization** | 将 C-2.2 修复提交提升为最终 C-local 基线；重建、验签、记录 digest；旧 tag 不移动 | 最终 tag + 发布 APK + 台账 |
 | **C-4（条件）C-store 前置批** | R-1 keystore + R-4 隐私声明 + P-1 zip 身份（若选择广发前修） | store 候选包 |
+| **后续 UI 解冻批（未排期）** | P-2 + P-3 + SourceTooLarge 事件分支 | C-local 后小批；不属于 C-3 |
 
 ## 4. Evidence Requirements（证据要求）
 
@@ -84,15 +85,15 @@ P-1、P-2、P-3(至 C-store)、P-4、P-5、两项观察项 —— 全部记录�
 
 全部勾选方可放行：
 
-- [ ] 测试：testQaUnitTest 全绿（≥1149 且 0 fail）
-- [ ] 构建：assembleRelease PASS；outbox 与 Download SHA256 一致
-- [ ] 卫生：release dex 无 debug telemetry 字符串
-- [ ] 版本：version.properties 已 bump 且 ≥21；CHANGELOG 有对应条目；git tag 存在
-- [ ] 设备安装：身份核对通过；冷启正常
-- [ ] 冒烟：§4-9~12 十二项人工验收全过
-- [ ] 证据：C-2 四项采集归档或明确标注 PENDING 不阻塞
-- [ ] 文档：README 与发布版本一致；B4_PENDING_ISSUES 与实际同步
-- [ ] 隐私：manifest 零权限复查（ReleaseHygieneHostTest 绿）
+- [x] 测试：testQaUnitTest 全绿（1156 tests，0 failures/errors/skipped）
+- [x] 构建：assembleRelease PASS；timestamped/outbox/Download SHA256 一致
+- [x] 卫生：release dex 无约定的 debug telemetry 字符串
+- [x] 版本：version.properties=22；CHANGELOG 有对应条目；最终 annotated tag 存在
+- [x] 设备安装：C-2.3 对干净 `604d404` 构建完成身份、安装与冷启核对
+- [x] 冒烟：C-2 主矩阵与 C-2.3 针对性回归构成 `HUMAN_ACCEPTED`；pinch zoom 保持独立 PENDING，不冒充 PASS
+- [x] 证据：C-2.3 已归档；其余项目明确列为非阻塞 PENDING
+- [x] 文档：README 与发布版本一致；B4_PENDING_ISSUES 与实际同步
+- [x] 隐私：无 INTERNET/用户网络权限；ReleaseHygieneHostTest 绿（AndroidX 自动生成的非导出 receiver 内部权限除外）
 
 ## 6. 明确不做（C 阶段边界）
 
@@ -124,3 +125,50 @@ P-1、P-2、P-3(至 C-store)、P-4、P-5、两项观察项 —— 全部记录�
 ### Checklist 对照（§5）
 - [x] 测试全绿 · [x] 构建 PASS + 双侧 SHA 一致 · [x] dex 卫生 · [x] 版本 bump=22/tag/CHANGELOG
 - [ ] 设备安装身份核对（待设备在线）· [ ] 冒烟十二项（人工）· [x] 文档一致 · [x] 隐私零权限（门禁测试常绿）
+
+---
+
+## 8. C-3 Release Promotion / Finalization Record（2026-08-24）
+
+### 8.1 发布来源与 tag 历史
+
+| 项 | 值 |
+|---|---|
+| Final release source commit | `604d404978b5f09fdb4a9c825259ef6793f59949` — C-2.2 export cancellation fix |
+| C-2.3 acceptance report commit | `7594a30dbe52667e663d54e5840395309fcfe26a` |
+| C-2.3 status | **HUMAN_ACCEPTED** — ZIP mid-cancel / PDF cancel 均无 0-byte 或 partial 残留；正常 ZIP 回归通过 |
+| 原 tag | annotated `v0.1.0` 保持指向 `5febda3bc0ea2582cdff276457ffec466e072650`，未移动、未覆盖 |
+| 最终 tag | annotated `v0.1.0-c-local` 指向 `604d404978b5f09fdb4a9c825259ef6793f59949` |
+| 新 tag 理由 | 原 `v0.1.0` 已公开标识 C-1 RC；移动会静默改写历史，因此以新 tag 标识 C-local 最终基线 |
+
+### 8.2 最终构建与 APK 身份
+
+最终构建在 detached、干净的精确提交 `604d404978b5f09fdb4a9c825259ef6793f59949` 上执行；不是从后续文档提交推导。
+
+| 项 | 值 |
+|---|---|
+| `:app:assembleRelease --rerun-tasks` | **PASS** — 2026-08-24 22:26:31–22:31:19 UTC+8，289s，52 tasks executed |
+| APK | `.external_outbox/markleaf-release-v0.1.0-20260824-223117.apk` = `.external_outbox/markleaf-release-latest.apk` |
+| Size | **11,493,231 bytes** |
+| SHA-256 | `4dd9c7ebacec6276fbca0615107ce2885f35c8a70bf81de0be818b39035a3ba4` |
+| 三方一致 | timestamped / outbox latest / `/storage/emulated/0/Download/markleaf-release-latest.apk` 全部同 SHA、字节一致 |
+| APK identity | `com.markleaf.app`, versionCode **22**, versionName **0.1.0**（`aapt dump badging`） |
+| Signature | `apksigner verify` **PASS**；APK Signature Scheme v2；`C=US, O=Android, CN=Android Debug`（C-local 既定签名） |
+| `:app:testQaUnitTest --rerun-tasks` | **PASS** — 1156 tests / 0 failures / 0 errors / 0 skipped；2026-08-24 22:31:30–22:33:33 UTC+8，123s |
+| Release hygiene | `CHROME_STATE` / `PDF_SYSBARS` / `MARKDOWN_REFRESH` 均 absent；无 INTERNET 权限 |
+
+C-2.3 实机安装包 SHA 为 `7285123ca78bf531580fe7bfda64c4e0e0d6737be342b2a9fe5c5711fd722e95`。本次最终重建 APK 的 digest 不同，但两者均由干净的精确 source commit `604d404` 构建，版本与签名身份一致。C-2.3 的 device claim 只覆盖其已安装 APK 与该 source commit；本记录不把新 digest 虚构成已再次装机验证。
+
+### 8.3 已知 PENDING（不阻塞 C-local）
+
+- C-2 原报告的 pinch zoom 仍为 PENDING，未在 C-2.3 针对性复测中改写为 PASS。
+- B4 P-1 跨入口 ZIP 身份统一、P-2 ZIP 导出取消 UX 歧义、P-3 SourceTooLarge 专属文案、P-4 LocalImageLoader `Log.w` 门控、P-5 force-stop 中途写入复现均保持待批准/待排期。
+- ThumbnailLoader 长会话竞态观察与 B-1 不中断长程复测仍为观察项。
+- C-store 仍被独立 release keystore 与公开发布文档要求阻塞；本次状态只适用于 C-local。
+- 最终 digest `4dd9c7...` 未单独重装；设备行为验收证据来自同一精确 source commit 的 C-2.3 fix-build。
+
+## 9. C-3 Final Status
+
+**READY_FOR_C_LOCAL_RELEASE**
+
+`604d404978b5f09fdb4a9c825259ef6793f59949` 已提升为最终 C-local release source baseline；原 tag 历史保持不变，最终 artifact、digest、版本、签名、自动化和 C-2.3 人工验收证据均已落账。

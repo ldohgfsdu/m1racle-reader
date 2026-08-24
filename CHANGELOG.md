@@ -2,7 +2,7 @@
 
 ## v0.1.0 (versionCode 22) — 2026-08-24
 
-首个 C-local Release Candidate（侧载分发）。
+首个 C-local Release（侧载分发）。最终 source baseline：`604d404978b5f09fdb4a9c825259ef6793f59949`；tag：`v0.1.0-c-local`。
 
 ### 产品能力
 - 本地 Markdown 阅读：块解析（标题/列表/引用/代码高亮/表格/图片）、TOC 锚点、文档内搜索+高亮、全文读取（32MiB 上限）、阅读位置恢复、字号/行高/边距设置
@@ -11,10 +11,11 @@
 - 最近阅读管理、删除记录永不触碰用户源文件
 
 ### 工程与质量基线
-- 隐私：manifest 零权限（无 INTERNET）、无账号/广告/统计/云同步；ReleaseHygieneHostTest 强制门禁
-- 测试：testQaUnitTest 1149 例全绿（Robolectric 契约 + 纯逻辑回归）
+- 隐私：无 INTERNET 等用户权限（仅 AndroidX 自动生成的非导出 receiver 内部权限）、无账号/广告/统计/云同步；ReleaseHygieneHostTest 强制门禁
+- 测试：testQaUnitTest 1156 例全绿（Robolectric 契约 + 纯逻辑回归）
 - 性能：连续视口热路径单收集器驱动；display mirror retention policy（长会话内存有界）；真机 gfxinfo P50=6ms / P90=16ms / P99=17ms
 - 发布卫生：release 构建启用 R8 full-mode + resource shrink；debug telemetry/log 经编译期门控在 release 中剥离
+- 导出取消：ZIP 与标注 PDF 在 SAF 目标提交前取消时清理 0-byte/partial 产物；C-2.3 真机回归 `HUMAN_ACCEPTED`
 
 ### 已知限制（详见 docs/B4_PENDING_ISSUES.md）
 - 同一 zip 经不同入口导入可能产生两条库记录（跨入口身份模型待统一）

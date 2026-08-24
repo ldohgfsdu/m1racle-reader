@@ -128,3 +128,22 @@ Procedure: select `纯 PDF`, set range `1–384`, create `C23-pdf-cancel.pdf` th
 **HUMAN_ACCEPTED**
 
 The sole C-2 rejection item now passes on the real device, and both required regressions pass. The prior `HUMAN_REJECTED` result is superseded for the C-2 export-cancellation gate by this C-2.3 evidence.
+
+## 7. C-3 release promotion linkage（2026-08-24）
+
+This section is a later release-ledger linkage. It does not rewrite the device evidence or claim that a different APK digest was installed.
+
+| Field | Value |
+|---|---|
+| Final C-local source baseline | `604d404978b5f09fdb4a9c825259ef6793f59949` |
+| This acceptance report commit | `7594a30dbe52667e663d54e5840395309fcfe26a` |
+| Final annotated tag | `v0.1.0-c-local` → `604d404978b5f09fdb4a9c825259ef6793f59949` |
+| Preserved historical tag | `v0.1.0` → `5febda3bc0ea2582cdff276457ffec466e072650`（unchanged） |
+| Final rebuilt APK | `.external_outbox/markleaf-release-v0.1.0-20260824-223117.apk` |
+| Final rebuilt APK SHA-256 | `4dd9c7ebacec6276fbca0615107ce2885f35c8a70bf81de0be818b39035a3ba4` |
+| APK identity / signature | versionCode `22`, versionName `0.1.0`; APK Signature Scheme v2 verified; C-local debug DN |
+| Promotion status | **READY_FOR_C_LOCAL_RELEASE** |
+
+The final rebuild and the C-2.3 installed APK are not byte-identical (`4dd9c7...` vs `728512...`). Both were built from the same clean, exact source commit `604d404`; C-2.3 remains the device evidence for that source baseline, while the final digest is covered by the C-3 build, identity, signature, and automated verification record. The final digest was not separately reinstalled, and this document does not claim otherwise.
+
+Known non-blocking pending remains unchanged: the original C-2 pinch-zoom item; B4 P-1 through P-5; ThumbnailLoader/B-1 observation items. C-store requirements remain out of scope.

@@ -1,5 +1,7 @@
 # C-2 Device Acceptance Evidence
 
+> **Superseded status notice（2026-08-24）:** This report preserves the original C-2 `HUMAN_REJECTED` evidence. Its export-cancellation rejection was fixed by `604d404978b5f09fdb4a9c825259ef6793f59949` and superseded by [`C2_3_DEVICE_RETEST_REPORT.md`](C2_3_DEVICE_RETEST_REPORT.md), committed as `7594a30dbe52667e663d54e5840395309fcfe26a`, with final status **HUMAN_ACCEPTED**. C-3 promotes that fix source as the final C-local baseline under annotated tag `v0.1.0-c-local`; the original `v0.1.0` tag remains unchanged at `5febda3bc0ea2582cdff276457ffec466e072650`.
+
 | 字段 | 值 |
 |---|---|
 | 日期 | 2026-08-24（UTC+8） |
