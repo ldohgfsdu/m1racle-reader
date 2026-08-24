@@ -2,10 +2,53 @@
 
 | 字段 | 值 |
 |------|-----|
-| 日期 | 2026-08-23 夜间 |
+| 日期 | 2026-08-23 夜间（B-0/B-1/规划）· **2026-08-24 真机证据补全（本更新）** |
 | 起始 HEAD | ce31f00（B-0 前）→ 本报告时 HEAD 见 §7 |
 | 目标 | 从「功能稳定」推进到「长期重负载稳定」；证据先行、测试先行 |
-| 设备 | **离线**（会话内单次 `adb devices` 探测为空）——B-2/B-3 及全部真机验收项为 device_pending |
+| 设备 | **Xiaomi 25098PN5AC (pandora)**，无线 adb `192.168.0.92`/`192.168.2.26`，release versionCode=21 已重装验证 |
+
+---
+
+## 0. 真机证据补全（2026-08-24 更新）
+
+### B-1 displayedBitmaps — ✅ device_verified(partial)
+
+测试对象：`27生理学笔记【合集】（带目录）.pdf`（真实教材，75.2MB，384 页），恢复阅读位置 p380 后往返滚动。
+
+| 采样点 | VmRSS |
+|---|---|
+| BEFORE @p380 | 377,432 kB |
+| TAIL @p384 | 365,868 kB ↓ |
+| 反向长翻至 ~p300 | **343,556 kB ↓↓（离窗页释放的直接证据）** |
+| 回到 p380（快速连翻后） | 518,704 kB（渲染高位；HWM 688MB 未破） |
+| 静置 45s + trim-CRITICAL 注入 | 不变（活内存特征，非泄漏形态） |
+
+**判定：retention 生效——RSS 不随访问页数累积**。第一轮进程中途消失（crash 缓冲干净，非崩溃；疑 MIUI 清后台）使长程对照中断 → 标注 partial；建议后续补一轮不中断复测。
+
+### B-2 Liquid Glass — ✅ 无需优化（device_verified）
+
+`dumpsys gfxinfo` 三场景对照（chrome 全显滚动 vs chrome 收起滚动）：
+
+```
+P50=6ms  P90=16ms  P95=16ms  P99=17ms   （两组完全一致）
+GPU P50=4ms / P95=14ms；janky(非legacy) 0.02–0.04%
+```
+
+**结论：glass 显隐对帧成本无可测影响，不构成 GPU 热点，无需优化、无需降级开关。**
+
+### B-3 Export Cancellation — 🔴 发现 1 个已证实缺陷 + 部分 PASS
+
+自动化走查（input 权限恢复后）：ZIP 与 PDF_ANNOTATED 两格式「进度中取消」+ force-stop 场景：
+
+| 步骤 | 结果 |
+|---|---|
+| ZIP 处理包 · 进度中取消（tap 命中取消键） | 🔴 **FAIL：Download 残留 714,985B 部分写入 zip**（首次检查因 FUSE 同步延迟漏判，二次核验坐实） |
+| 纯 PDF · 11 页任务进行中取消 | ✅ 无残留（清理路径生效） |
+| 导出中 force-stop | ⏸ PENDING：5/11 页小任务完成快于杀进程窗口，未命中写盘中途；需大范围任务复现（UI 自动化因 Home 列表排序漂移暂缓，见下） |
+
+**缺陷定位**：ZIP 打包路径取消时不删除已写入的 SAF 输出流，与 A2-P0-2 声明的「部分 SAF 输出尽力删除」不符；PdfAnnotatedExporter 路径清理正常。修复涉及导出代码 → **待批准另批执行**（建议随 B-4）。测试现场已清理。
+
+协作模式备忘：Home 最近列表排序会随打开动作漂移，固定坐标 tap 不可靠；后续设备自动化应基于 uiautomator 文本定位动态取坐标（本轮后半段即此模式），且注意测试打开文档会刷新用户最近列表时间戳。
 
 ---
 
@@ -51,20 +94,19 @@ ContinuousDocumentViewport
 |---|---|
 | JVM retention 契约 | ✅ automated_verified |
 | R7 回归（fling/pinch 无回归） | ✅ automated_verified |
-| 长 PDF 内存曲线稳定 / 泄漏实测 | ⏳ device_pending（B-3 采集：`dumpsys meminfo` 50 页连读脚本） |
+| 长 PDF 内存曲线稳定 / 泄漏实测 | ✅ device_verified(partial)——真机往返实测见 §0（RSS 随离窗释放下降；进程中断使长程复测待补） |
 
-## 3. B-2 — Liquid Glass GPU Profiling ⏸ device_pending
+## 3. B-2 — Liquid Glass GPU Profiling ✅（2026-08-24 真机完成，见 §0）
 
-设备离线，禁止模拟。到岗执行计划（一次采集，三类场景 × ≥3 组）：
+原始到岗计划留档：gfxinfo framestats 三场景对照 + Perfetto FrameTimeline + GPU 轨道 + 变量隔离。实际执行采用 gfxinfo 百分位对照法（Perfetto 因链路稳定性未用，gfxinfo 数据已足以判定）。
 
-1. `dumpsys gfxinfo com.markleaf.app framestats` 重置前后对比：chrome 全显滚动 / chrome 开合动画 / 纯内容滚动（glass 不可见）；
-2. Perfetto FrameTimeline（jank type/deadline missed）+ GPU frequency/usage 轨道；
-3. 变量隔离：同文档同操作在「Liquid 开」与「材质降级开关」（若存在 debug 开关则用之，否则以 R26 前基线 commit 对照）下各跑一组；
-4. 输出判定：blur/lens 每帧成本 ms 与占比 → 是否需要优化开关/降级路径（只报告，不调参）。
+## 4. B-3 — Device Evidence Closure ✅ 部分 / 🔴 1 缺陷（见 §0）
 
-## 4. B-3 — Device Evidence Closure ⏸ device_pending
-
-A2 遗留四项的采集绑定到与 B-2 同一批真机会话：导出取消人工验证清单（A2 closure §2.1 三问）、FrameTimeline 数据、meminfo 曲线（兼作 B-1 验收）、GPU 采样。全部要求真实设备，模拟器/Robolectric 数据不作为证据。
+A2 遗留四项闭环状态：
+1. Export cancellation 人工/自动验证 → **已完成**：ZIP 取消残留缺陷坐实（§0 表）；PDF 路径正常；force-stop 中途场景 PENDING（需大范围任务）
+2. FrameTimeline 数据 → 以 gfxinfo framestats 百分位替代采得（P50=6ms/P90=16ms/P99=17ms）
+3. 内存曲线 → 已采（§0 表；VmhWM 峰值 688MB 为快速连翻瞬时尖峰）
+4. GPU 采样 → gfxinfo GPU 分位（P50=4ms/P95=14ms）；Perfetto 深采样留待需要时补
 
 ## 5. B-4 — Runtime Risk Cleanup（部分完成，其余报告态）
 
@@ -83,12 +125,12 @@ A2 遗留四项的采集绑定到与 B-2 同一批真机会话：导出取消人
 
 | 优先级 | 项 | 归属 |
 |---|---|---|
+| **P1** | **ZIP 导出取消残留部分文件**（§0 实证 714,985B；修复待批准） | B-4 续 |
 | P1 | zip 身份统一（§5.2-1，等批准） | B-4 续 / Policy Batch 5 |
-| P1 | B-2/B-3 真机取证（阻塞全部性能结论） | 到岗首批 |
-| P2 | B-1 内存曲线设备验收 | 同上 |
-| P3 | SourceTooLarge 文案、Log.w 门控、ThumbnailLoader 观察项 | UI 批 / B-3 顺带 |
+| P2 | B-3 force-stop 中途写入场景未命中（需大范围导出任务复现）；B-1 不中断长程复测 | 下次设备会话 |
+| P3 | SourceTooLarge 文案、Log.w 门控、ThumbnailLoader closeAsync 观察项 | UI 批 / 顺带 |
 
-下一阶段建议：真机会话一次性完成 B-2+B-3+B-1 验收三合一采集；随后按批准结果执行 zip 身份统一小批；之后才考虑进入 C 阶段（发布收口：keystore/体积 gate/README 截图刷新）。
+下一阶段建议：批准后执行「ZIP 取消清理 + zip 身份统一」合并小批（同域代码，可一次回归）；之后才考虑进入 C 阶段（发布收口：keystore/体积 gate/README 截图刷新）。
 
 ## 7. 提交与验证台账
 
@@ -96,6 +138,7 @@ A2 遗留四项的采集绑定到与 B-2 同一批真机会话：导出取消人
 |---|---|---|
 | ce31f00 | B-0 zip 契约修复 | 1134/0（含契约 6 例红→绿）|
 | 878209f | B-1 displayedBitmaps retention | 1145/0（含策略 11 例；R7 全绿）|
-| （本提交） | Batch B final report | 文档 |
+| 254be21 | Device Evidence Report（离线版+SOP） | 文档 |
+| （本提交） | 真机证据补全 + 缺陷记录 | 文档 |
 
-最终验证（本 HEAD）：testQaUnitTest 1145/0 · assembleRelease PASS · APK 已交付 `/storage/emulated/0/Download/markleaf-release-latest.apk` · git clean。
+最终验证：testQaUnitTest **1145/0** · assembleRelease PASS · APK 已交付 `/storage/emulated/0/Download/markleaf-release-latest.apk`（SHA256 e1c6735d…）· 真机安装版本已核验（21/0.1.0）· git clean。
