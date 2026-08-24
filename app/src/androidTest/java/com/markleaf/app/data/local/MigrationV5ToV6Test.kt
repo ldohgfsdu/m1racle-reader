@@ -217,9 +217,12 @@ class MigrationV5ToV6Test {
             dbName, 6, true, AppDatabase.MIGRATION_5_6
         )
 
-        // 3. Open with current AppDatabase (Room) to verify schema compatibility.
+        // 3. Open with current AppDatabase (v7). The focused v6 -> v7 contract
+        // is covered separately; this keeps the historical v5 -> v6 fixture
+        // readable after the current schema advances.
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
             .allowMainThreadQueries()
+            .addMigrations(AppDatabase.MIGRATION_6_7)
             .build()
         val docDao = roomDb.documentDao()
         val outlineDao = roomDb.textbookOutlineNodeDao()
@@ -250,6 +253,7 @@ class MigrationV5ToV6Test {
             assertNull("pdfViewportAnchorYFraction is null", doc.pdfViewportAnchorYFraction)
             assertNull("pdfViewportScale is null", doc.pdfViewportScale)
             assertNull("pdfViewportGeneration is null", doc.pdfViewportGeneration)
+            assertNull("contentSha256 is null", doc.contentSha256)
 
             // Outline preserved.
             val outlines = outlineDao.listForDocument("doc-migrate")

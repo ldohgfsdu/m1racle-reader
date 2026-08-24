@@ -1,6 +1,7 @@
 package com.markleaf.app.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -15,7 +16,12 @@ import androidx.room.PrimaryKey
  *   intra-page fraction; [pageCount] = total pages when last known;
  *   [readingProgress] ≈ page/(count-1)
  */
-@Entity(tableName = "documents")
+@Entity(
+    tableName = "documents",
+    indices = [
+        Index(value = ["contentSha256"], unique = true),
+    ],
+)
 data class DocumentEntity(
     @PrimaryKey val id: String,
     val displayName: String,
@@ -42,6 +48,13 @@ data class DocumentEntity(
     val pdfViewportAnchorYFraction: Float? = null,
     val pdfViewportScale: Float? = null,
     val pdfViewportGeneration: Long? = null,
+    /**
+     * SHA-256 of the original imported source bytes when known.
+     *
+     * Nullable for documents created before the v6 -> v7 migration. Multiple
+     * legacy NULL values are permitted by SQLite's UNIQUE index semantics.
+     */
+    val contentSha256: String? = null,
 ) {
     val type: DocumentType
         get() = DocumentType.fromStorage(documentType)

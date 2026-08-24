@@ -41,6 +41,12 @@ class DocumentMigrationSqlTest {
     }
 
     @Test
+    fun migration_6_7_addsNullableContentIdentitySchema() {
+        assertEquals(6, AppDatabase.MIGRATION_6_7.startVersion)
+        assertEquals(7, AppDatabase.MIGRATION_6_7.endVersion)
+    }
+
+    @Test
     fun entityDefaults_markdownCompatible() {
         val row = DocumentEntity(
             id = "id",
@@ -60,6 +66,7 @@ class DocumentMigrationSqlTest {
         assertEquals(0, row.pageCount)
         assertEquals(3, row.lastScrollIndex)
         assertEquals(0.25f, row.readingProgress, 0.001f)
+        assertEquals(null, row.contentSha256)
         assertTrue(!row.isPdf)
     }
 

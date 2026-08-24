@@ -308,6 +308,8 @@ dependencies {
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("androidx.test.ext:junit:1.2.1")
+    // Host migration tests use a real SQLite file. Test-only; never packaged in APKs.
+    testImplementation("org.xerial:sqlite-jdbc:3.45.3.0")
 
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PdfPrintPageAnchorEntity::class,
         TextbookOutlineNodeEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -127,6 +127,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v6 -> v7: reserve durable source-byte identity on documents.
+         *
+         * Existing rows intentionally remain NULL. SQLite UNIQUE indices allow
+         * multiple NULL values, while preventing duplicate known hashes.
+         */
+        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(MIGRATION_6_7_ADD_CONTENT_SHA_SQL)
+                db.execSQL(MIGRATION_6_7_CREATE_CONTENT_SHA_INDEX_SQL)
+            }
+        }
+
+        internal const val MIGRATION_6_7_ADD_CONTENT_SHA_SQL =
+            "ALTER TABLE documents ADD COLUMN contentSha256 TEXT"
+
+        internal const val MIGRATION_6_7_CREATE_CONTENT_SHA_INDEX_SQL =
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_documents_contentSha256 " +
+                "ON documents(contentSha256)"
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -143,6 +163,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_3_4,
                         MIGRATION_4_5,
                         MIGRATION_5_6,
+                        MIGRATION_6_7,
                     )
                     .build()
                     .also { instance = it }
