@@ -40,13 +40,13 @@ GPU P50=4ms / P95=14ms；janky(非legacy) 0.02–0.04%
 
 自动化走查（input 权限恢复后）：ZIP 与 PDF_ANNOTATED 两格式「进度中取消」+ force-stop 场景：
 
-| 步骤 | 结果 |
-|---|---|
-| ZIP 处理包 · 进度中取消（tap 命中取消键） | 🔴 **FAIL：Download 残留 714,985B 部分写入 zip**（首次检查因 FUSE 同步延迟漏判，二次核验坐实） |
-| 纯 PDF · 11 页任务进行中取消 | ✅ 无残留（清理路径生效） |
-| 导出中 force-stop | ⏸ PENDING：5/11 页小任务完成快于杀进程窗口，未命中写盘中途；需大范围任务复现（UI 自动化因 Home 列表排序漂移暂缓，见下） |
+| 步骤 | 初判 | JVM 契约复核后终判 |
+|---|---|---|
+| ZIP 处理包 · 进度中取消 | 🔴 疑似残留 714,985B | ✅ **误报（完成-取消竞态）**：5 页章节 ZIP 导出 <2s 完成，tap 生效前任务已 `Completed`——对话框消失实为完成而非取消；714KB 是合法完整产物 |
+| 纯 PDF · 11 页进行中取消 | ✅ 无残留 | ✅ 维持 |
+| force-stop 中途写入 | ⏸ 未命中窗口 | ⏸ PENDING（需大范围导出任务；Home 列表排序漂移使坐标自动化暂缓） |
 
-**缺陷定位**：ZIP 打包路径取消时不删除已写入的 SAF 输出流，与 A2-P0-2 声明的「部分 SAF 输出尽力删除」不符；PdfAnnotatedExporter 路径清理正常。修复涉及导出代码 → **待批准另批执行**（建议随 B-4）。测试现场已清理。
+**JVM 契约固化**（`ExportSafCancellationCleanupTest`，Robolectric + stub DocumentsProvider）：两个 exporter 的「openOutputStream → copyWithExportCancellation → CE → deleteSafDocumentBestEffort → rethrow」序列逐行为锁定：mid-write 取消必抛 CE、目标保持部分态、best-effort 删除被调用且吞 provider 异常、正常完成零删除调用。**取消→清理语义本身无缺陷**。附带发现：DocumentsContract 对非 document-uri 会短路返回 true 不触达 provider（测试须用 buildDocumentUri 构造真机同构 uri）。
 
 协作模式备忘：Home 最近列表排序会随打开动作漂移，固定坐标 tap 不可靠；后续设备自动化应基于 uiautomator 文本定位动态取坐标（本轮后半段即此模式），且注意测试打开文档会刷新用户最近列表时间戳。
 
