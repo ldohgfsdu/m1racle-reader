@@ -104,14 +104,14 @@ P-1、P-2、P-3(至 C-store)、P-4、P-5、两项观察项 —— 全部记录�
 
 | 项 | 值 |
 |---|---|
-| Release commit | `5febda3`（tag **v0.1.0**，annotated，指向精确）|
-| versionCode | **22**（app/version.properties，merged manifest 已核）|
-| versionName | 0.1.0（同上已核）|
-| APK | `.external_outbox/markleaf-release-v0.1.0-20260824-150901.apk` = `-latest.apk`，11,239 KB |
-| SHA256 | `1eda7c12dd844cc6e60cc0881073afb4bd542097c27808b27a8d297ffec4a51f` |
-| 构建时间 | 2026-08-24 15:09 (UTC+8) |
+| Release commit | `5febda3bc0ea2582cdff276457ffec466e072650`（tag **v0.1.0**，annotated，指向精确）|
+| versionCode | **22**（app/version.properties + APK badging 已核）|
+| versionName | **0.1.0**（app/build.gradle.kts + APK badging 已核）|
+| APK | `.external_outbox/markleaf-release-v0.1.0-20260824-153727.apk` = `-latest.apk`，11,223 KB |
+| SHA256 | `e05386e2b9c32002044f7afefcb558efcd2798539c8b90c1f3693ae941b3e534` |
+| 构建时间 | 2026-08-24 15:37 (UTC+8) |
 | 签名 | debug DN `CN=Android Debug`（C-local 既定策略；apksigner verify 通过）|
-| testQaUnitTest | **1149 / 0 failures** |
+| testQaUnitTest | **1149 / 0 failures / 0 errors**（`--rerun-tasks`）|
 | dex 卫生抽查 | CHROME_STATE / PDF_SYSBARS / MARKDOWN_REFRESH 全 absent |
 | 交付 | `/storage/emulated/0/Download/markleaf-release-latest.apk`（双侧 SHA 一致）|
 
@@ -119,6 +119,7 @@ P-1、P-2、P-3(至 C-store)、P-4、P-5、两项观察项 —— 全部记录�
 1. 设备安装核验：安装时 adb 掉线（端口轮换）；APK 已在设备 Download 目录，人工安装后 `dumpsys package com.markleaf.app | grep version` 应显示 `22 / 0.1.0`
 2. C-2 设备证据闭环（B-1 长程复测、P-5、ThumbnailLoader 观察、冒烟十二项）
 3. CHANGELOG.md 已创建（v0.1.0 条目 + 已知限制两则）
+4. Release 全量重建期间 `lintVitalAnalyzeRelease` 的自定义 detector 迁移打印 ASM `NegativeArraySizeException`；lintVital、R8、资源收缩与 assembleRelease 均成功，构建工具链告警诊断 pending，不阻塞 C-local
 
 ### Checklist 对照（§5）
 - [x] 测试全绿 · [x] 构建 PASS + 双侧 SHA 一致 · [x] dex 卫生 · [x] 版本 bump=22/tag/CHANGELOG
