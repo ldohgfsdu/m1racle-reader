@@ -361,6 +361,9 @@ private class FakeDocumentDao : DocumentDao {
 
     override suspend fun getById(id: String): DocumentEntity? = rows[id]
 
+    override suspend fun getByContentSha256(contentSha256: String): DocumentEntity? =
+        rows.values.find { it.contentSha256 == contentSha256 }
+
     override suspend fun getAll(): List<DocumentEntity> = rows.values.toList()
 
     override suspend fun upsert(document: DocumentEntity) {

@@ -247,6 +247,8 @@ private class B3RecordingDocumentDao : DocumentDao {
 
     override fun observeRecentDocuments(): Flow<List<DocumentEntity>> = recent
     override suspend fun getById(id: String): DocumentEntity? = upserts.find { it.id == id }
+    override suspend fun getByContentSha256(contentSha256: String): DocumentEntity? =
+        upserts.find { it.contentSha256 == contentSha256 }
     override suspend fun getAll(): List<DocumentEntity> = upserts.toList()
     override suspend fun upsert(document: DocumentEntity) {
         upserts.removeAll { it.id == document.id }

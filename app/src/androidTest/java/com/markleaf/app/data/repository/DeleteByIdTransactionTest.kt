@@ -145,6 +145,8 @@ class DeleteByIdTransactionTest {
     ) : DocumentDao {
         override fun observeRecentDocuments() = real.observeRecentDocuments()
         override suspend fun getById(id: String) = real.getById(id)
+        override suspend fun getByContentSha256(contentSha256: String) =
+            real.getByContentSha256(contentSha256)
         override suspend fun getAll() = real.getAll()
         override suspend fun upsert(document: DocumentEntity) = real.upsert(document)
         override suspend fun deleteById(id: String) {

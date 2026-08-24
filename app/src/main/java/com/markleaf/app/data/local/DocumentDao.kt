@@ -15,6 +15,9 @@ interface DocumentDao {
     @Query("SELECT * FROM documents WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): DocumentEntity?
 
+    @Query("SELECT * FROM documents WHERE contentSha256 = :contentSha256 LIMIT 1")
+    suspend fun getByContentSha256(contentSha256: String): DocumentEntity?
+
     @Query("SELECT * FROM documents")
     suspend fun getAll(): List<DocumentEntity>
 
