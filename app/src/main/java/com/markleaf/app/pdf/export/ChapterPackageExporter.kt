@@ -53,11 +53,13 @@ class ChapterPackageExporter(
         onState: (ChapterExportState) -> Unit,
     ): ChapterExportState = withContext(Dispatchers.IO) {
         val workDir = File(appContext.cacheDir, "chapter_export_${System.currentTimeMillis()}")
+        var destinationCommitted = false
         try {
             onState(ChapterExportState.Preparing)
             if (!workDir.mkdirs()) {
                 return@withContext fail("无法创建临时目录", workDir, onState)
             }
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
             val err = ExportRangeResolver.validateRange(
                 plan.startPageIndex,
                 plan.endPageIndex,
@@ -86,9 +88,7 @@ class ChapterPackageExporter(
                     FileOutputStream(sourceTemp).use { out ->
                         val buf = ByteArray(64 * 1024)
                         while (true) {
-                            if (cancellation.isCancelled() || !coroutineContext.isActive) {
-                                return@withContext cancel(workDir, onState)
-                            }
+                            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
                             val n = src.read(buf)
                             if (n < 0) break
                             out.write(buf, 0, n)
@@ -96,6 +96,8 @@ class ChapterPackageExporter(
                         }
                     }
                 }
+            } catch (ce: CancellationException) {
+                throw ce
             } catch (t: Throwable) {
                 return@withContext fail(
                     t.message ?: "读取源 PDF 失败",
@@ -105,7 +107,7 @@ class ChapterPackageExporter(
             }
             val sourceShaHex = sourceSha.digest().toHex()
 
-            if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
 
             val extract = FileInputStream(sourceTemp).use { srcIn ->
                 PdfPageExtractor.extractPageRange(
@@ -123,7 +125,7 @@ class ChapterPackageExporter(
 
             when (extract) {
                 is PdfPageExtractor.ExtractResult.Cancelled ->
-                    return@withContext cancel(workDir, onState)
+                    throw CancellationException("Export cancelled")
                 is PdfPageExtractor.ExtractResult.Failed ->
                     return@withContext fail(extract.message, workDir, onState)
                 is PdfPageExtractor.ExtractResult.Success -> {
@@ -140,7 +142,7 @@ class ChapterPackageExporter(
             // Drop full source temp ASAP (do not pack into ZIP)
             sourceTemp.delete()
 
-            if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
             onState(ChapterExportState.BuildingMetadata)
 
             val iso = isoNow()
@@ -176,7 +178,7 @@ class ChapterPackageExporter(
                 Charsets.UTF_8,
             )
 
-            if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
             onState(ChapterExportState.WritingArchive)
 
             val zipTmp = File(workDir, "package.zip")
@@ -192,21 +194,16 @@ class ChapterPackageExporter(
                 cancellation,
             ) { coroutineContext.isActive }
 
-            if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
 
-            // Write to SAF URI. Per-chunk cancellation: a cancelled export must
-            // never keep writing the user-selected destination after Cancelled
-            // is shown; partial output is deleted best-effort and CE rethrown.
+            // A successful stream close commits the destination. Any cancellation
+            // before this boundary is handled by the outer cleanup path.
             appContext.contentResolver.openOutputStream(outputUri)?.use { out ->
                 FileInputStream(zipTmp).use { inp ->
-                    try {
-                        copyWithExportCancellation(inp, out, cancellation) { coroutineContext.isActive }
-                    } catch (ce: CancellationException) {
-                        deleteSafDocumentBestEffort(appContext.contentResolver, outputUri)
-                        throw ce
-                    }
+                    copyWithExportCancellation(inp, out, cancellation) { coroutineContext.isActive }
                 }
             } ?: return@withContext fail("无法写入所选位置", workDir, onState)
+            destinationCommitted = true
 
             val done = ChapterExportState.Completed(
                 displayName = ExportRangeResolver.defaultZipName(
@@ -218,6 +215,9 @@ class ChapterPackageExporter(
             cleanupDir(workDir)
             done
         } catch (ce: CancellationException) {
+            if (!destinationCommitted) {
+                deleteSafDocumentBestEffort(appContext.contentResolver, outputUri)
+            }
             cancel(workDir, onState)
             throw ce
         } catch (t: Throwable) {

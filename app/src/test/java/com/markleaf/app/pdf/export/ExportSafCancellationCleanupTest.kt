@@ -10,7 +10,11 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsProvider
 import androidx.test.core.app.ApplicationProvider
+import com.markleaf.app.data.local.TextbookOutlineNodeEntity
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDPage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -29,13 +33,11 @@ import java.io.FileNotFoundException
 import java.io.InputStream
 
 /**
- * SAF destination lifecycle characterization for both exporters.
+ * SAF destination lifecycle contract for both exporters.
  *
  * ACTION_CREATE_DOCUMENT creates the destination before an exporter starts.
- * The exporter currently deletes only when [copyWithExportCancellation] throws
- * from inside the final SAF stream copy. These tests deliberately distinguish
- * that path from an earlier cancellation checkpoint, where the pre-created
- * document is never opened and delete is never called.
+ * Any cancellation before a successful final stream close must remove that
+ * pre-created document best-effort and preserve CancellationException.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -50,11 +52,19 @@ class ExportSafCancellationCleanupTest {
      */
     private class StubDocumentsProvider : DocumentsProvider() {
         companion object {
-            var backingFile: File? = null
+            var sourceFile: File? = null
+            var outputFile: File? = null
             var deleteCalls: Int = 0
             var failDelete: Boolean = false
-            const val AUTHORITY = "c21saf.stub"
-            const val DOCUMENT_ID = "export_out.zip"
+            const val AUTHORITY = "c22saf.stub"
+            const val SOURCE_DOCUMENT_ID = "source.pdf"
+            const val OUTPUT_DOCUMENT_ID = "export_out.zip"
+        }
+
+        private fun fileFor(documentId: String): File = when (documentId) {
+            SOURCE_DOCUMENT_ID -> checkNotNull(sourceFile)
+            OUTPUT_DOCUMENT_ID -> checkNotNull(outputFile)
+            else -> throw FileNotFoundException("unknown document: $documentId")
         }
 
         override fun onCreate() = true
@@ -68,7 +78,7 @@ class ExportSafCancellationCleanupTest {
                     DocumentsContract.Root.COLUMN_FLAGS,
                 ),
             ).apply {
-                addRow(arrayOf("root", DOCUMENT_ID, "C2.1 stub", 0))
+                addRow(arrayOf("root", SOURCE_DOCUMENT_ID, "C2.2 stub", 0))
             }
 
         override fun queryDocument(
@@ -86,10 +96,10 @@ class ExportSafCancellationCleanupTest {
             addRow(
                 arrayOf(
                     documentId,
-                    DOCUMENT_ID,
-                    "application/zip",
+                    documentId,
+                    if (documentId == SOURCE_DOCUMENT_ID) "application/pdf" else "application/zip",
                     DocumentsContract.Document.FLAG_SUPPORTS_DELETE,
-                    backingFile?.length() ?: 0L,
+                    fileFor(documentId).length(),
                 ),
             )
         }
@@ -107,7 +117,7 @@ class ExportSafCancellationCleanupTest {
             mode: String,
             signal: CancellationSignal?,
         ): ParcelFileDescriptor = ParcelFileDescriptor.open(
-            checkNotNull(backingFile),
+            fileFor(documentId),
             if ("w" in mode) {
                 ParcelFileDescriptor.MODE_READ_WRITE or
                     ParcelFileDescriptor.MODE_CREATE or
@@ -120,26 +130,43 @@ class ExportSafCancellationCleanupTest {
         override fun deleteDocument(documentId: String) {
             deleteCalls += 1
             if (failDelete) throw FileNotFoundException("provider refuses delete")
-            if (backingFile?.delete() != true) {
+            if (documentId != OUTPUT_DOCUMENT_ID || outputFile?.delete() != true) {
                 throw FileNotFoundException("backing document was not deleted")
             }
         }
     }
 
+    private lateinit var app: android.content.Context
     private lateinit var resolver: android.content.ContentResolver
+    private lateinit var source: File
     private lateinit var backing: File
     private val destUri: Uri
         get() = DocumentsContract.buildDocumentUri(
             StubDocumentsProvider.AUTHORITY,
-            StubDocumentsProvider.DOCUMENT_ID,
+            StubDocumentsProvider.OUTPUT_DOCUMENT_ID,
+        )
+    private val sourceUri: Uri
+        get() = DocumentsContract.buildDocumentUri(
+            StubDocumentsProvider.AUTHORITY,
+            StubDocumentsProvider.SOURCE_DOCUMENT_ID,
         )
 
     @Before
     fun setUp() {
-        val app = ApplicationProvider.getApplicationContext<android.content.Context>()
+        app = ApplicationProvider.getApplicationContext()
         resolver = app.contentResolver
-        backing = File(app.cacheDir, "c21-${System.nanoTime()}.zip")
-        StubDocumentsProvider.backingFile = backing
+        source = File(app.cacheDir, "c22-source-${System.nanoTime()}.pdf").apply {
+            PDDocument().use { document ->
+                document.addPage(PDPage())
+                document.save(this)
+            }
+        }
+        backing = File(app.cacheDir, "c22-output-${System.nanoTime()}.zip")
+        app.cacheDir.listFiles()
+            ?.filter { it.name.startsWith("chapter_export_") || it.name.startsWith("pdf_export_") }
+            ?.forEach { ChapterPackageExporter.cleanupDir(it) }
+        StubDocumentsProvider.sourceFile = source
+        StubDocumentsProvider.outputFile = backing
         StubDocumentsProvider.deleteCalls = 0
         StubDocumentsProvider.failDelete = false
         Robolectric.buildContentProvider(StubDocumentsProvider::class.java)
@@ -174,7 +201,7 @@ class ExportSafCancellationCleanupTest {
         override fun read(): Int = throw UnsupportedOperationException()
     }
 
-    private fun finalSafCopyLikeExporters(
+    private fun copyToSafWithCancellationCleanup(
         source: InputStream,
         token: ExportCancellationToken,
     ) {
@@ -188,6 +215,47 @@ class ExportSafCancellationCleanupTest {
         }
     }
 
+    private fun exportPlan(): ExportRangePlan {
+        val node = TextbookOutlineNodeEntity(
+            id = "node",
+            documentId = "document",
+            parentId = null,
+            type = "CHAPTER",
+            title = "Chapter",
+            startPageIndex = 0,
+            endPageIndex = 0,
+            sortOrder = 0,
+            createdAt = 0,
+            updatedAt = 0,
+        )
+        return ExportRangePlan(
+            node = node,
+            pathTitles = listOf(node.title),
+            startPageIndex = 0,
+            endPageIndex = 0,
+            endSource = EndPageSource.USER_OVERRIDE,
+            pageCount = 1,
+            printPageStart = null,
+            printPageEnd = null,
+        )
+    }
+
+    private fun expectCancellation(block: suspend () -> Unit): CancellationException {
+        try {
+            runBlocking { block() }
+            throw AssertionError("expected CancellationException")
+        } catch (ce: CancellationException) {
+            return ce
+        }
+    }
+
+    private fun assertNoExportWorkDirs() {
+        val remaining = app.cacheDir.listFiles()
+            .orEmpty()
+            .filter { it.name.startsWith("chapter_export_") || it.name.startsWith("pdf_export_") }
+        assertTrue("temporary export directories remain: $remaining", remaining.isEmpty())
+    }
+
     @Test
     fun safDocumentCreated_isInitiallyZeroBytes() {
         assertTrue(backing.createNewFile())
@@ -198,23 +266,127 @@ class ExportSafCancellationCleanupTest {
     }
 
     @Test
-    fun cancelBeforeFinalSafCopy_currentEarlyReturn_skipsDeleteAndLeavesZeroByteDocument() {
+    fun zip_normalCompletion_keepsDocumentAndDoesNotDelete() = runBlocking {
+        assertTrue(backing.createNewFile())
+        val plan = exportPlan()
+
+        val result = ChapterPackageExporter(app).export(
+            sourceUri = sourceUri,
+            documentId = "document",
+            documentDisplayName = "source.pdf",
+            plan = plan,
+            allNodes = listOf(plan.node),
+            printAnchors = emptyList(),
+            outputUri = destUri,
+            cancellation = ExportCancellationToken(),
+            onState = {},
+        )
+
+        assertTrue(result is ChapterExportState.Completed)
+        assertTrue(backing.exists())
+        assertTrue(backing.length() > 0L)
+        assertEquals(0, StubDocumentsProvider.deleteCalls)
+        assertNoExportWorkDirs()
+    }
+
+    @Test
+    fun annotatedPdf_normalCompletion_keepsDocumentAndDoesNotDelete() = runBlocking {
+        assertTrue(backing.createNewFile())
+
+        val result = PdfAnnotatedExporter(app).export(
+            sourceUri = sourceUri,
+            documentDisplayName = "source.pdf",
+            plan = exportPlan(),
+            outputUri = destUri,
+            cancellation = ExportCancellationToken(),
+            onState = {},
+        )
+
+        assertTrue(result is ChapterExportState.Completed)
+        assertTrue(backing.exists())
+        assertTrue(backing.length() > 0L)
+        assertEquals(0, StubDocumentsProvider.deleteCalls)
+        assertNoExportWorkDirs()
+    }
+
+    @Test
+    fun zip_cancelAfterSafDocumentCreationBeforeWrite_deletesAndRethrowsCancellation() {
         assertTrue(backing.createNewFile())
         val token = ExportCancellationToken().apply { cancel() }
+        val states = mutableListOf<ChapterExportState>()
+        val plan = exportPlan()
 
-        // Characterizes the pre-copy checks in both exporters. They return
-        // Cancelled before entering openOutputStream/catch/delete.
-        val state = if (token.isCancelled()) {
-            ChapterExportState.Cancelled
-        } else {
-            finalSafCopyLikeExporters(ByteArrayInputStream(byteArrayOf(1)), token)
-            ChapterExportState.Completed("unreachable.zip")
+        val cancellation = expectCancellation {
+            ChapterPackageExporter(app).export(
+                sourceUri = sourceUri,
+                documentId = "document",
+                documentDisplayName = "source.pdf",
+                plan = plan,
+                allNodes = listOf(plan.node),
+                printAnchors = emptyList(),
+                outputUri = destUri,
+                cancellation = token,
+                onState = states::add,
+            )
         }
 
-        assertEquals(ChapterExportState.Cancelled, state)
-        assertTrue("ACTION_CREATE_DOCUMENT target remains", backing.exists())
-        assertEquals(0L, backing.length())
-        assertEquals("delete is outside the early-return path", 0, StubDocumentsProvider.deleteCalls)
+        assertEquals("Export cancelled", cancellation.message)
+        assertEquals(1, StubDocumentsProvider.deleteCalls)
+        assertFalse(backing.exists())
+        assertEquals(ChapterExportState.Cancelled, states.last())
+        assertNoExportWorkDirs()
+    }
+
+    @Test
+    fun annotatedPdf_cancelAfterSafDocumentCreationBeforeWrite_deletesAndRethrowsCancellation() {
+        assertTrue(backing.createNewFile())
+        val token = ExportCancellationToken().apply { cancel() }
+        val states = mutableListOf<ChapterExportState>()
+        val plan = exportPlan()
+
+        val cancellation = expectCancellation {
+            PdfAnnotatedExporter(app).export(
+                sourceUri = sourceUri,
+                documentDisplayName = "source.pdf",
+                plan = plan,
+                outputUri = destUri,
+                cancellation = token,
+                onState = states::add,
+            )
+        }
+
+        assertEquals("Export cancelled", cancellation.message)
+        assertEquals(1, StubDocumentsProvider.deleteCalls)
+        assertFalse(backing.exists())
+        assertEquals(ChapterExportState.Cancelled, states.last())
+        assertNoExportWorkDirs()
+    }
+
+    @Test
+    fun zip_cancelBeforeWrite_deleteFailure_doesNotReplaceCancellation() {
+        assertTrue(backing.createNewFile())
+        StubDocumentsProvider.failDelete = true
+        val token = ExportCancellationToken().apply { cancel() }
+        val plan = exportPlan()
+
+        val cancellation = expectCancellation {
+            ChapterPackageExporter(app).export(
+                sourceUri = sourceUri,
+                documentId = "document",
+                documentDisplayName = "source.pdf",
+                plan = plan,
+                allNodes = listOf(plan.node),
+                printAnchors = emptyList(),
+                outputUri = destUri,
+                cancellation = token,
+                onState = {},
+            )
+        }
+
+        assertEquals("Export cancelled", cancellation.message)
+        assertEquals(1, StubDocumentsProvider.deleteCalls)
+        assertTrue(backing.exists())
+        assertNoExportWorkDirs()
     }
 
     @Test
@@ -223,7 +395,7 @@ class ExportSafCancellationCleanupTest {
         val token = ExportCancellationToken().apply { cancel() }
 
         try {
-            finalSafCopyLikeExporters(ByteArrayInputStream(ByteArray(1024)), token)
+            copyToSafWithCancellationCleanup(ByteArrayInputStream(ByteArray(1024)), token)
             fail("expected CancellationException")
         } catch (_: CancellationException) {
             // expected
@@ -241,7 +413,7 @@ class ExportSafCancellationCleanupTest {
         val source = CancelMidStream(payload, EXPORT_COPY_CHUNK_BYTES.toLong(), token)
 
         try {
-            finalSafCopyLikeExporters(source, token)
+            copyToSafWithCancellationCleanup(source, token)
             fail("expected CancellationException")
         } catch (_: CancellationException) {
             // expected
@@ -252,12 +424,12 @@ class ExportSafCancellationCleanupTest {
     }
 
     @Test
-    fun cancelAfterStreamClose_keepsCompletedDocumentAndDoesNotDelete() {
+    fun cancelAfterStreamClose_keepsDocumentAndDoesNotDelete() {
         assertTrue(backing.createNewFile())
         val payload = ByteArray(150_000) { (it % 249).toByte() }
         val token = ExportCancellationToken()
 
-        finalSafCopyLikeExporters(ByteArrayInputStream(payload), token)
+        copyToSafWithCancellationCleanup(ByteArrayInputStream(payload), token)
         token.cancel()
 
         assertTrue(backing.exists())

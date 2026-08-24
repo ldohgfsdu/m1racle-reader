@@ -48,11 +48,13 @@ class PdfAnnotatedExporter(
         onState: (ChapterExportState) -> Unit,
     ): ChapterExportState = withContext(Dispatchers.IO) {
         val workDir = File(appContext.cacheDir, "pdf_export_${System.currentTimeMillis()}")
+        var destinationCommitted = false
         try {
             onState(ChapterExportState.Preparing)
             if (!workDir.mkdirs()) {
                 return@withContext fail("无法创建临时目录", workDir, onState)
             }
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
             if (!PdfBoxRuntime.ensureInit(appContext)) {
                 return@withContext fail("PDF 组件初始化失败", workDir, onState)
             }
@@ -64,9 +66,7 @@ class PdfAnnotatedExporter(
             input.use { src ->
                 FileOutputStream(sourceTemp).use { dst -> src.copyTo(dst) }
             }
-            if (cancellation.isCancelled() || !coroutineContext.isActive) {
-                return@withContext cancel(workDir, onState)
-            }
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
 
             val chapterTitle = plan.pathTitles.lastOrNull()?.ifBlank { null }
                 ?: plan.node.title
@@ -98,9 +98,7 @@ class PdfAnnotatedExporter(
                         )
 
                         for (i in 0 until total) {
-                            if (cancellation.isCancelled() || !coroutineContext.isActive) {
-                                return@withContext cancel(workDir, onState)
-                            }
+                            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
                             val srcIndex = plan.startPageIndex + i
                             try {
                                 val page = source.getPage(srcIndex)
@@ -125,29 +123,23 @@ class PdfAnnotatedExporter(
                             onState(ChapterExportState.CopyingPages(i + 1, total))
                         }
 
-                        if (cancellation.isCancelled()) return@withContext cancel(workDir, onState)
+                        throwIfExportCancelled(cancellation) { coroutineContext.isActive }
                         onState(ChapterExportState.WritingArchive)
                         dest.save(outPdf)
                     }
                 }
             }
 
-            if (cancellation.isCancelled() || !coroutineContext.isActive) {
-                return@withContext cancel(workDir, onState)
-            }
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
 
-            // Per-chunk cancellation: never keep writing the user-selected
-            // destination after Cancelled; delete partial output best-effort.
+            // A successful stream close commits the destination. Any cancellation
+            // before this boundary is handled by the outer cleanup path.
             appContext.contentResolver.openOutputStream(outputUri)?.use { out ->
                 FileInputStream(outPdf).use { inp ->
-                    try {
-                        copyWithExportCancellation(inp, out, cancellation) { coroutineContext.isActive }
-                    } catch (ce: CancellationException) {
-                        deleteSafDocumentBestEffort(appContext.contentResolver, outputUri)
-                        throw ce
-                    }
+                    copyWithExportCancellation(inp, out, cancellation) { coroutineContext.isActive }
                 }
             } ?: return@withContext fail("无法写入所选位置", workDir, onState)
+            destinationCommitted = true
 
             val name = ExportRangeResolver.defaultPdfName(documentDisplayName, plan.pathTitles)
             val done = ChapterExportState.Completed(displayName = name)
@@ -155,6 +147,9 @@ class PdfAnnotatedExporter(
             cleanupDir(workDir)
             done
         } catch (e: CancellationException) {
+            if (!destinationCommitted) {
+                deleteSafDocumentBestEffort(appContext.contentResolver, outputUri)
+            }
             cancel(workDir, onState)
             throw e
         } catch (t: Throwable) {
