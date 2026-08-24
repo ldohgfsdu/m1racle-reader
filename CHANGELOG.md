@@ -4,6 +4,12 @@
 
 首个 C-local Release（侧载分发）。最终 source baseline：`604d404978b5f09fdb4a9c825259ef6793f59949`；tag：`v0.1.0-c-local`。
 
+### C-local closure
+- 最终 APK SHA-256：`4dd9c7ebacec6276fbca0615107ce2885f35c8a70bf81de0be818b39035a3ba4`（11,493,231 bytes）
+- 自动化：`assembleRelease` PASS；`testQaUnitTest` 1156 tests / 0 failures / 0 errors / 0 skipped
+- 设备验收：C-2.3 `HUMAN_ACCEPTED`；ZIP/PDF cancel 均无 0-byte 或 partial 残留，正常 ZIP 回归通过
+- 非阻塞 pending 固化于 `docs/B4_PENDING_ISSUES.md`；C-4 未修改生产代码、UI、功能或架构
+
 ### 产品能力
 - 本地 Markdown 阅读：块解析（标题/列表/引用/代码高亮/表格/图片）、TOC 锚点、文档内搜索+高亮、全文读取（32MiB 上限）、阅读位置恢复、字号/行高/边距设置
 - 本地 PDF 阅读：PdfRenderer 分块瓦片渲染 + 预测式解码，连续/单页模式，双指缩放平移，页面缩略图，教材目录大纲与印刷页码绑定，章节导出（ZIP 处理包 / 标注 PDF）

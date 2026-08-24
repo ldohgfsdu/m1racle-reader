@@ -56,8 +56,9 @@ P-1、P-2、P-3(至 C-store)、P-4、P-5、两项观察项 —— 全部记录�
 | **C-1 发布执行批** | R-2：versionCode bump → CHANGELOG → git tag `v0.1.0` → assembleRelease → 三方 sha256 核对 → 交付 | tag + 发布 APK + 台账 |
 | **C-2 证据闭环批**（设备会话） | B-1 不中断长程复测；P-5 force-stop 场景；ThumbnailLoader 观察；安装冒烟（§5 清单 E 组） | Device Evidence Closure 终版 |
 | **C-3 Release Promotion / Finalization** | 将 C-2.2 修复提交提升为最终 C-local 基线；重建、验签、记录 digest；旧 tag 不移动 | 最终 tag + 发布 APK + 台账 |
-| **C-4（条件）C-store 前置批** | R-1 keystore + R-4 隐私声明 + P-1 zip 身份（若选择广发前修） | store 候选包 |
+| **C-4 Release Closure** | 固化最终 source/tag/artifact/验证/验收证据；同步 checklist、CHANGELOG、known issues | Closure Report；C-local 状态 CLOSED |
 | **后续 UI 解冻批（未排期）** | P-2 + P-3 + SourceTooLarge 事件分支 | C-local 后小批；不属于 C-3 |
+| **后续 C-store 前置批（未排期）** | R-1 keystore + R-4 隐私声明 + P-1 zip 身份（若选择广发前修） | 不属于 C-local closure |
 
 ## 4. Evidence Requirements（证据要求）
 
@@ -172,3 +173,22 @@ C-2.3 实机安装包 SHA 为 `7285123ca78bf531580fe7bfda64c4e0e0d6737be342b2a9f
 **READY_FOR_C_LOCAL_RELEASE**
 
 `604d404978b5f09fdb4a9c825259ef6793f59949` 已提升为最终 C-local release source baseline；原 tag 历史保持不变，最终 artifact、digest、版本、签名、自动化和 C-2.3 人工验收证据均已落账。
+
+---
+
+## 10. C-4 Release Closure（2026-08-24）
+
+最终收口报告：[`C4_RELEASE_CLOSURE_REPORT.md`](C4_RELEASE_CLOSURE_REPORT.md)。
+
+- [x] Source：`604d404978b5f09fdb4a9c825259ef6793f59949`
+- [x] Annotated tag：`v0.1.0-c-local` 可解析并精确指向 source；旧 `v0.1.0` 保持指向 `5febda3bc0ea2582cdff276457ffec466e072650`
+- [x] Artifact：11,493,231 bytes；SHA-256 `4dd9c7ebacec6276fbca0615107ce2885f35c8a70bf81de0be818b39035a3ba4`
+- [x] Identity：`com.markleaf.app` / versionCode `22` / versionName `0.1.0`；APK Signature Scheme v2 验签通过
+- [x] Automated：assembleRelease PASS；testQaUnitTest 1156/0；release dex hygiene PASS
+- [x] Device：C-2.3 `HUMAN_ACCEPTED`，证据 commit `7594a30dbe52667e663d54e5840395309fcfe26a`
+- [x] Pending：B4 P-1/P-3/P-4/P-5 与 ThumbnailLoader/B-1 观察项冻结为 non-blocking；未实施
+- [x] Scope：无生产代码、UI、新功能或架构变更
+
+### C-4 Final Status
+
+**CLOSED**
