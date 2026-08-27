@@ -1,4 +1,4 @@
-# 墨阅 MarkLeaf 测试样例
+# M1racle Reader 测试样例
 
 这是一份用于本地验收的 Markdown 样例文档，覆盖标题、段落、引用、列表、分割线、搜索与代码高亮。
 
@@ -14,7 +14,7 @@
 
 > 本地优先、启动快、阅读舒服、排版漂亮、无账号、无广告、无联网依赖。
 >
-> —— 墨阅 MarkLeaf PRD
+> —— M1racle Reader PRD
 
 ## 无序列表
 
@@ -40,7 +40,7 @@
 
 ```kotlin
 fun main() {
-    val message = "Hello MarkLeaf"
+    val message = "Hello M1racle Reader"
     // 超长单行（横向滚动）：
     val longLine = "abcdefghijklmnopqrstuvwxyz0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_this_is_a_very_long_code_line_that_should_not_break_the_page_layout_and_must_scroll_horizontally_inside_the_code_block_container"
     println(message)
@@ -68,14 +68,14 @@ function greet(name) {
   // comment
   return `hello ${name}`;
 }
-console.log(greet("MarkLeaf"));
+console.log(greet("M1racle Reader"));
 ```
 
 ### JSON
 
 ```json
 {
-  "name": "MarkLeaf",
+  "name": "M1racle Reader",
   "version": 1,
   "localOnly": true,
   "tags": ["markdown", "android"]
@@ -86,7 +86,7 @@ console.log(greet("MarkLeaf"));
 
 ```xml
 <!-- sample -->
-<reader name="MarkLeaf" local="true">
+<reader name="M1racle Reader" local="true">
   <feature id="search">document search</feature>
 </reader>
 ```
@@ -96,7 +96,7 @@ console.log(greet("MarkLeaf"));
 ```bash
 #!/usr/bin/env bash
 # install debug apk
-echo "Hello MarkLeaf"
+echo "Hello M1racle Reader"
 if [ -f app-debug.apk ]; then
   echo "found apk"
 fi
@@ -200,7 +200,7 @@ title | String | 标题
 
 ### 边界情况
 
-#  
+#
 
 ## 空标题正文也允许
 

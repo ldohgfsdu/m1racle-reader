@@ -2,10 +2,10 @@
 
 ## Protected and automated packages
 
-- The normal debug/release application ID is `com.markleaf.app`. It may contain irreplaceable
+- The normal debug/release application ID is `com.m1racle.reader`. It may contain irreplaceable
   local reading state and must be updated only with `adb install -r`.
 - Automated instrumentation uses the `qa` build type and application ID
-  `com.markleaf.app.qa`. Its launcher label is **MarkLeaf QA**.
+  `com.m1racle.reader.qa`. Its launcher label is **M1racle Reader QA**.
 - The two application IDs have independent Android sandboxes. Room databases,
   SharedPreferences, DataStore and `files/` content are therefore isolated without changing the
   production schema, migrations or persistence behavior.
@@ -18,8 +18,8 @@ Never run `connectedDebugAndroidTest` (or any connected variant other than QA) a
 that holds user data. Never run either of these commands:
 
 ```text
-adb uninstall com.markleaf.app
-adb shell pm clear com.markleaf.app
+adb uninstall com.m1racle.reader
+adb shell pm clear com.m1racle.reader
 ```
 
 The Gradle task graph rejects non-QA connected tests before install tasks can run. The supported
@@ -27,7 +27,7 @@ entry point additionally reads the built APK metadata and prints the resolved ta
 
 ```powershell
 .\scripts\run-qa-connected-tests.ps1
-# ANDROID_TEST_TARGET applicationId=com.markleaf.app.qa
+# ANDROID_TEST_TARGET applicationId=com.m1racle.reader.qa
 ```
 
 Direct QA commands are available when the same guard remains enabled:
@@ -47,10 +47,10 @@ per-file and archive SHA-256 values. An incomplete or empty backup is deleted an
 error.
 
 ```powershell
-.\scripts\backup-debug-app-data.ps1 -PackageName com.markleaf.app
+.\scripts\backup-debug-app-data.ps1 -PackageName com.m1racle.reader
 ```
 
-Backups default to `.local-backups/markleaf-debug/`, which is ignored by Git. Keep the entire
+Backups default to `.local-backups/m1racle-reader-debug/`, which is ignored by Git. Keep the entire
 backup directory together; `manifest.json`, `app-data.tar`, and `payload/` are all required.
 Review `BACKUP_COMPLETE`, the file count, byte count and SHA-256 before proceeding.
 
@@ -61,8 +61,8 @@ backup, deliberately change only QA state, then restore it:
 
 ```powershell
 .\scripts\restore-debug-app-data.ps1 `
-  -PackageName com.markleaf.app.qa `
-  -BackupDirectory .\.local-backups\markleaf-debug\<qa-backup>
+  -PackageName com.m1racle.reader.qa `
+  -BackupDirectory .\.local-backups\m1racle-reader-debug\<qa-backup>
 ```
 
 Restore verifies applicationId, manifest entries, sizes and hashes before stopping the target.
@@ -76,6 +76,6 @@ Main-package restore is an emergency operation and is refused unless
 ## Incident record
 
 On 2026-07-13 a second connected-test installation failed after the Android test tooling had
-already removed `com.markleaf.app`. The package sandbox and device-local application data were
+already removed `com.m1racle.reader`. The package sandbox and device-local application data were
 cleared. This record intentionally contains no user document content. The incident is the reason
 QA-only device testing and pre-test backups are mandatory.

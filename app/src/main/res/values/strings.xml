@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">墨阅 MarkLeaf</string>
+    <string name="app_name">M1racle Reader</string>
     <string name="app_subtitle">本地 Markdown / PDF 阅读器</string>
     <string name="empty_title">还没有导入文档</string>
     <string name="empty_subtitle">选择 Markdown 或 PDF 文件，开始本地阅读。</string>

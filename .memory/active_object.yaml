@@ -1,25 +1,26 @@
-id: R32_6_PRODUCTION_COMMIT_PREPARATION
-status: production_source_commit_complete_clean_signing_pending
+id: R33_1_IDENTITY_MIGRATION_COMMIT_FINALIZATION
+status: complete
 scope: >
-  Review and consolidate the full R23-R32 source, migrations, tests and evidence
-  into one clean v1.0.0 production commit. No release build, signer injection,
-  APK generation or tag creation.
+  Finalize the completed M1racle Reader identity migration as one reviewed commit,
+  without changing runtime behavior or entering release publication.
 verification:
-  reviewed_source_paths: PASS (155 paths; code/resources/tests/schemas/docs/state)
-  classification: PASS (no untracked binary, secret or file over 1 MiB)
-  migrations: PASS (Room v12; schema 6-12; registered migration chain 1-12)
-  release_evidence_preserved: PASS
-  temporary_cleanup: PASS (obsolete ignored compile log only)
+  application_id_namespace: PASS (com.m1racle.reader)
+  package_paths: PASS (main/test/androidTest/debug/qa/benchmark)
+  providers_manifest_theme_brand: PASS
+  active_legacy_identity: PASS (zero in active code/scripts)
+  historical_identity_classification: PASS (pre-R33 evidence retained)
+  room_schema_bytes: PASS (v6-v12 unchanged)
+  migration_sql: PASS (unchanged)
+  frozen_logic_transform_compare: PASS (Anchor/Glass/Reader/Annotation/Search)
   version: PASS (1.0.0 / 23)
-  test_qa_unit: PASS (fresh rerun; 1350 tests; zero failures/errors/skipped)
+  test_qa_unit: PASS (1355 tests; zero failures/errors/skipped)
   compile_qa_android_test: PASS
-  git_clean_after_commit: PASS
+  compile_benchmark_kotlin: PASS
   release_tag_v1_0_0: NOT_CREATED_BY_DESIGN
   production_signer: NOT_USED
   production_apk: NOT_BUILT_BY_DESIGN
 next_actions:
-  - securely inject the real production signer outside the repository
-  - build and verify one canonical v1.0.0 production artifact from this commit
-  - archive artifact identity and then create the immutable v1.0.0 tag
-report: docs/R32_6_PRODUCTION_COMMIT_PREPARATION_REPORT.md
+  - rename/create the external Git hosting repository as m1racle-reader when owner-approved
+  - inject the M1RACLE production signer and build the first canonical artifact in a later gate
+report: docs/R33_1_IDENTITY_COMMIT_REPORT.md
 updated: 2026-08-27

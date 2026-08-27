@@ -3,12 +3,12 @@
     <application>
         <provider
             android:name=".ui.pdf.H1QaPdfFixtureProvider"
-            android:authorities="com.markleaf.app.qa.h1fixture"
+            android:authorities="com.m1racle.reader.qa.h1fixture"
             android:exported="true"
             android:grantUriPermissions="true" />
         <provider
             android:name=".ui.pdf.ExternalOpenFixtureProvider"
-            android:authorities="com.markleaf.app.qa.externalopen"
+            android:authorities="com.m1racle.reader.qa.externalopen"
             android:exported="true"
             android:grantUriPermissions="true" />
         <activity
@@ -18,21 +18,21 @@
             android:name=".ui.pdf.H1QaHarnessActivity"
             android:exported="true"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.MarkLeaf" />
+            android:theme="@style/Theme.M1racleReader" />
         <activity
             android:name=".ui.pdf.H1QaContinuousHarnessActivity"
             android:exported="true"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.MarkLeaf" />
+            android:theme="@style/Theme.M1racleReader" />
         <activity
             android:name=".ui.viewer.components.MarkdownTableQaActivity"
             android:exported="true"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.MarkLeaf" />
+            android:theme="@style/Theme.M1racleReader" />
             <activity
             android:name=".ui.home.MinimalListHarnessActivity"
             android:exported="true"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.MarkLeaf" />
+            android:theme="@style/Theme.M1racleReader" />
     </application>
 </manifest>

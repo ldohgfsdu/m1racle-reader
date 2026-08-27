@@ -2,6 +2,9 @@
 
 ## Unreleased — v1.0.0 public candidate (versionCode 23)
 
+- Product identity：产品/品牌迁移为 `M1racle Reader / M1racle`；Android `applicationId` 与 Kotlin
+  namespace 迁移为 `com.m1racle.reader`，仓库标识迁移为 `m1racle-reader`。R32 及更早报告中的
+  MarkLeaf 名称与 `com.markleaf.app` 仅作为迁移前历史证据保留。
 - 阅读资产：收藏、书签、PDF 高亮、轻量笔记及统一管理闭环。
 - 本地搜索：文档标题、高亮摘录与笔记索引、Home/Library 入口和 canonical anchor 原文跳转。
 - 架构与发布收口：Repository/Room 权威边界审计、R8 release 日志剔除、outbox 有界保留。

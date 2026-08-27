@@ -34,10 +34,10 @@ val releaseVersionName = releaseVersionProperties.getProperty("versionName")
 // Secrets are injected by the caller/CI environment and are never read from a
 // committed file or supplied as Gradle -P arguments (which may leak in logs).
 val releaseSigningEnvironmentNames = listOf(
-    "MARKLEAF_RELEASE_STORE_FILE",
-    "MARKLEAF_RELEASE_STORE_PASSWORD",
-    "MARKLEAF_RELEASE_KEY_ALIAS",
-    "MARKLEAF_RELEASE_KEY_PASSWORD",
+    "M1RACLE_RELEASE_STORE_FILE",
+    "M1RACLE_RELEASE_STORE_PASSWORD",
+    "M1RACLE_RELEASE_KEY_ALIAS",
+    "M1RACLE_RELEASE_KEY_PASSWORD",
 )
 val releaseSigningEnvironment = releaseSigningEnvironmentNames.associateWith { name ->
     providers.environmentVariable(name).orNull?.takeIf { it.isNotEmpty() }
@@ -45,24 +45,24 @@ val releaseSigningEnvironment = releaseSigningEnvironmentNames.associateWith { n
 val providedReleaseSigningNames = releaseSigningEnvironment.filterValues { it != null }.keys
 check(providedReleaseSigningNames.isEmpty() || providedReleaseSigningNames.size == releaseSigningEnvironmentNames.size) {
     val missing = releaseSigningEnvironmentNames.filterNot(providedReleaseSigningNames::contains)
-    "Partial MarkLeaf release signing environment; missing: ${missing.joinToString()}."
+    "Partial M1racleReader release signing environment; missing: ${missing.joinToString()}."
 }
 val hasInjectedReleaseSigning = providedReleaseSigningNames.size == releaseSigningEnvironmentNames.size
-val injectedReleaseStoreFile = releaseSigningEnvironment.getValue("MARKLEAF_RELEASE_STORE_FILE")
+val injectedReleaseStoreFile = releaseSigningEnvironment.getValue("M1RACLE_RELEASE_STORE_FILE")
     ?.let(::File)
     ?.let { if (it.isAbsolute) it else rootProject.file(it.path) }
 
-val detailTileOverlayEnabled = providers.gradleProperty("markleaf.detailTileOverlayEnabled")
+val detailTileOverlayEnabled = providers.gradleProperty("m1racle-reader.detailTileOverlayEnabled")
     .orElse("true").get().toBoolean()
-val detailTileBaseLayerEnabled = providers.gradleProperty("markleaf.detailTileBaseLayerEnabled")
+val detailTileBaseLayerEnabled = providers.gradleProperty("m1racle-reader.detailTileBaseLayerEnabled")
     .orElse("true").get().toBoolean()
-val detailTileDiagnosticsEnabled = providers.gradleProperty("markleaf.detailTileDiagnosticsEnabled")
+val detailTileDiagnosticsEnabled = providers.gradleProperty("m1racle-reader.detailTileDiagnosticsEnabled")
     .orElse("false").get().toBoolean()
-val detailTileOverlayAlpha = providers.gradleProperty("markleaf.detailTileOverlayAlpha")
+val detailTileOverlayAlpha = providers.gradleProperty("m1racle-reader.detailTileOverlayAlpha")
     .orElse("1.0").get().toFloatOrNull()?.coerceIn(0f, 1f) ?: 1f
 
 android {
-    namespace = "com.markleaf.app"
+    namespace = "com.m1racle.reader"
     // Backdrop 2.0.0 AAR metadata requires minCompileSdk 37; shapes 1.2.0 needs 36.
     // Host has android-36; 37 may be installed when available. We compile against 36
     // and relax AAR metadata for the Backdrop transitive (see afterEvaluate below).
@@ -72,7 +72,7 @@ android {
     testBuildType = "qa"
 
     defaultConfig {
-        applicationId = "com.markleaf.app"
+        applicationId = "com.m1racle.reader"
         minSdk = 31
         targetSdk = 35
         versionCode = releaseVersionCode
@@ -98,9 +98,9 @@ android {
         create("release") {
             if (hasInjectedReleaseSigning) {
                 storeFile = injectedReleaseStoreFile
-                storePassword = releaseSigningEnvironment.getValue("MARKLEAF_RELEASE_STORE_PASSWORD")
-                keyAlias = releaseSigningEnvironment.getValue("MARKLEAF_RELEASE_KEY_ALIAS")
-                keyPassword = releaseSigningEnvironment.getValue("MARKLEAF_RELEASE_KEY_PASSWORD")
+                storePassword = releaseSigningEnvironment.getValue("M1RACLE_RELEASE_STORE_PASSWORD")
+                keyAlias = releaseSigningEnvironment.getValue("M1RACLE_RELEASE_KEY_ALIAS")
+                keyPassword = releaseSigningEnvironment.getValue("M1RACLE_RELEASE_KEY_PASSWORD")
             }
         }
     }
@@ -113,7 +113,7 @@ android {
             versionNameSuffix = "-qa"
             isDebuggable = true
             buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "true")
-            manifestPlaceholders["appLabel"] = "MarkLeaf QA"
+            manifestPlaceholders["appLabel"] = "M1racle Reader QA"
         }
         release {
             // Size: R8 full mode + resource shrink. Keep rules in proguard-rules.pro
@@ -246,11 +246,11 @@ tasks.matching { it.name in publicReleaseOutputTasks }.configureEach {
 // Keep the formerly common command present only as an explicit, pre-install safety refusal.
 tasks.register("connectedDebugAndroidTest") {
     group = "verification"
-    description = "Refuses device tests against the protected com.markleaf.app sandbox."
+    description = "Refuses device tests against the protected com.m1racle.reader sandbox."
     doFirst {
         error(
-            "REFUSED connected test: target applicationId=com.markleaf.app. " +
-                "Use :app:connectedQaAndroidTest (applicationId=com.markleaf.app.qa).",
+            "REFUSED connected test: target applicationId=com.m1racle.reader. " +
+                "Use :app:connectedQaAndroidTest (applicationId=com.m1racle.reader.qa).",
         )
     }
 }
@@ -262,13 +262,13 @@ gradle.taskGraph.whenReady {
     }
     connectedAndroidTests.forEach { task ->
         val targetApplicationId = if (task.name == "connectedQaAndroidTest") {
-            "com.markleaf.app.qa"
+            "com.m1racle.reader.qa"
         } else {
-            "com.markleaf.app"
+            "com.m1racle.reader"
         }
-        check(targetApplicationId == "com.markleaf.app.qa") {
+        check(targetApplicationId == "com.m1racle.reader.qa") {
             "REFUSED connected test: target applicationId=$targetApplicationId. " +
-                "Only :app:connectedQaAndroidTest may run; com.markleaf.app user data must not be touched."
+                "Only :app:connectedQaAndroidTest may run; com.m1racle.reader user data must not be touched."
         }
         task.doFirst {
             logger.lifecycle("ANDROID_TEST_TARGET applicationId=$targetApplicationId")
@@ -355,20 +355,20 @@ dependencies {
 // ── 打完包自动导出到项目 outbox（给 agent 菜单「发件箱」/人工取包）──
 // 目录：<repo>/.external_outbox/（已 gitignore，不进仓库）
 // 每次 assemble* 成功后：
-//   markleaf-<variant>-v<version>-yyyyMMdd-HHmmss.apk  （带时间戳）
-//   markleaf-<variant>-latest.apk                     （同变体最新覆盖）
+//   m1racle-reader-<variant>-v<version>-yyyyMMdd-HHmmss.apk  （带时间戳）
+//   m1racle-reader-<variant>-latest.apk                     （同变体最新覆盖）
 //   对应 .sha256
-val markleafOutboxDir: File =
+val m1racleReaderOutboxDir: File =
     rootProject.layout.projectDirectory.dir(".external_outbox").asFile
-val markleafOutboxHistoryLimit = 5
+val m1racleReaderOutboxHistoryLimit = 5
 
 fun pruneVariantOutboxHistory(label: String) {
-    val stampedPattern = Regex("^markleaf-${Regex.escape(label)}-v.+\\.apk$")
-    val stampedApks = markleafOutboxDir.listFiles()
+    val stampedPattern = Regex("^m1racle-reader-${Regex.escape(label)}-v.+\\.apk$")
+    val stampedApks = m1racleReaderOutboxDir.listFiles()
         ?.filter { it.isFile && stampedPattern.matches(it.name) }
         .orEmpty()
         .sortedWith(compareByDescending<File> { it.lastModified() }.thenByDescending { it.name })
-    stampedApks.drop(markleafOutboxHistoryLimit).forEach { obsoleteApk ->
+    stampedApks.drop(m1racleReaderOutboxHistoryLimit).forEach { obsoleteApk ->
         val checksum = File(obsoleteApk.path + ".sha256")
         val removedBytes = obsoleteApk.length() + checksum.length()
         val apkRemoved = obsoleteApk.delete()
@@ -391,12 +391,12 @@ fun exportVariantApksToOutbox(variantFolder: String, label: String) {
         logger.lifecycle("OUTBOX: skip $label (no apk in ${apkDir.path})")
         return
     }
-    markleafOutboxDir.mkdirs()
+    m1racleReaderOutboxDir.mkdirs()
     val version = android.defaultConfig.versionName ?: "0"
     val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
     apks.forEach { apk ->
-        val stamped = File(markleafOutboxDir, "markleaf-$label-v${version}-$ts.apk")
-        val latest = File(markleafOutboxDir, "markleaf-$label-latest.apk")
+        val stamped = File(m1racleReaderOutboxDir, "m1racle-reader-$label-v${version}-$ts.apk")
+        val latest = File(m1racleReaderOutboxDir, "m1racle-reader-$label-latest.apk")
         apk.copyTo(stamped, overwrite = true)
         apk.copyTo(latest, overwrite = true)
         fun writeSha(target: File) {
@@ -414,7 +414,7 @@ fun exportVariantApksToOutbox(variantFolder: String, label: String) {
         }
         writeSha(stamped)
         writeSha(latest)
-        logger.lifecycle("OUTBOX: ${stamped.name} (${stamped.length() / 1024} KB) → ${markleafOutboxDir.path}")
+        logger.lifecycle("OUTBOX: ${stamped.name} (${stamped.length() / 1024} KB) → ${m1racleReaderOutboxDir.path}")
         logger.lifecycle("OUTBOX: ${latest.name} (latest)")
     }
     pruneVariantOutboxHistory(label)

@@ -11,14 +11,14 @@ FROM slice s
 JOIN thread_track tt ON s.track_id = tt.id
 JOIN thread t ON tt.utid = t.utid
 JOIN process p ON t.upid = p.upid
-WHERE p.name = 'com.markleaf.app.qa'
+WHERE p.name = 'com.m1racle.reader.qa'
   AND t.is_main_thread = 1
   AND s.name = 'AndroidOwner:onTouch';
 
 -- Replace the literals in params with the touch bounds returned above.
 WITH params(start_ns, end_ns) AS (VALUES (0, 0)),
 app AS (
-  SELECT upid FROM process WHERE name = 'com.markleaf.app.qa' LIMIT 1
+  SELECT upid FROM process WHERE name = 'com.m1racle.reader.qa' LIMIT 1
 ),
 frames AS (
   SELECT a.*
@@ -42,7 +42,7 @@ SELECT
 FROM frames, params;
 
 WITH params(start_ns, end_ns) AS (VALUES (0, 0)),
-app AS (SELECT upid FROM process WHERE name = 'com.markleaf.app.qa' LIMIT 1),
+app AS (SELECT upid FROM process WHERE name = 'com.m1racle.reader.qa' LIMIT 1),
 main AS (
   SELECT t.utid FROM thread t, app WHERE t.upid = app.upid AND t.is_main_thread = 1
 ),
@@ -65,7 +65,7 @@ SELECT
 FROM window_slices;
 
 WITH params(start_ns, end_ns) AS (VALUES (0, 0)),
-app AS (SELECT upid FROM process WHERE name = 'com.markleaf.app.qa' LIMIT 1)
+app AS (SELECT upid FROM process WHERE name = 'com.m1racle.reader.qa' LIMIT 1)
 SELECT
   t.name,
   ROUND(SUM(s.dur) / 1e6, 3) AS total_ms,

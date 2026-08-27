@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.markleaf.benchmark"
+    namespace = "com.m1racle.reader.benchmark"
     compileSdk = 35
 
     defaultConfig {

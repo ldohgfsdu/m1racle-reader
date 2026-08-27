@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Macrobenchmark test package; target app is :app. -->
     <queries>
-        <package android:name="com.markleaf.app" />
-        <package android:name="com.markleaf.app.benchmark" />
+        <package android:name="com.m1racle.reader" />
+        <package android:name="com.m1racle.reader.benchmark" />
     </queries>
 </manifest>

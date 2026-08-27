@@ -1,5 +1,5 @@
-$script:ProtectedMainApplicationId = "com.markleaf.app"
-$script:QaApplicationId = "com.markleaf.app.qa"
+$script:ProtectedMainApplicationId = "com.m1racle.reader"
+$script:QaApplicationId = "com.m1racle.reader.qa"
 
 function Resolve-AdbPath {
     param([string]$AdbPath)

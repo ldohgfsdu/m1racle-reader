@@ -1,8 +1,14 @@
-# 墨阅 MarkLeaf
+# M1racle Reader
 
 **一句话：** 面向 Android 的本地优先、无账号、无广告、无联网依赖的**本地文档阅读器**，当前支持 **Markdown** 与 **PDF**。
 
-当前版本：**v0.1.0**（`versionName=0.1.0`）
+当前候选版本：**v1.0.0**（`versionName=1.0.0`，`versionCode=23`）
+
+技术身份：
+
+- Product / Brand：**M1racle Reader / M1racle**
+- Android `applicationId` / Kotlin namespace：`com.m1racle.reader`
+- Repository：`m1racle-reader`
 
 ## 隐私与安全
 
@@ -50,13 +56,13 @@
 每次成功构建会自动导出到仓库 outbox：
 
 ```text
-.external_outbox/markleaf-release-latest.apk
+.external_outbox/m1racle-reader-release-latest.apk
 ```
 
 并同步交付到设备侧（可直接安装）：
 
 ```text
-/storage/emulated/0/Download/markleaf-release-latest.apk
+/storage/emulated/0/Download/m1racle-reader-release-latest.apk
 ```
 
 详见 [docs/APK_DELIVERY.md](docs/APK_DELIVERY.md)；辅助脚本 `scripts/install-release-outbox.sh`。
@@ -73,7 +79,7 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 ```
 
 - **最低系统：** Android 12（API 31）
-- **包名：** `com.markleaf.app`
+- **包名：** `com.m1racle.reader`
 - Android Studio：打开仓库根目录 → Run `app`
 
 ### arm64 本机构建说明
@@ -83,7 +89,7 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 
 ## 如何导入文档
 
-1. 打开 App → 点右下角 **导入** FAB；或从系统文件管理器 / 分享面板选择「墨阅」打开。
+1. 打开 App → 点右下角 **导入** FAB；或从系统文件管理器 / 分享面板选择「M1racle Reader」打开。
 2. 选择 `.md` / `.markdown` / `.txt` / `.pdf` / `.zip` 文件。
 3. 导入成功后直接进入阅读页；返回主页可见「最近阅读」。
 
@@ -123,6 +129,7 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 
 | 标记 | 含义 |
 |------|------|
+| **v1.0.0 candidate** | M1racle Reader 首个公开候选；新 Android/Kotlin 身份为 `com.m1racle.reader` |
 | **v0.1.0** | 本地 Markdown + PDF 阅读功能完整、可日常使用；编辑、同步、正文全文索引等明确不做 |
 | release APK | minify+shrink；仅接受环境注入的独立 release signer，无 debug fallback |
 

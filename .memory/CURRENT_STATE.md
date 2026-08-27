@@ -1,10 +1,27 @@
 # CURRENT_STATE
 
-**Updated:** 2026-08-27（R32.6 production source commit complete）
+**Updated:** 2026-08-27（R33.1 M1racle Reader identity commit finalized）
 
 本文件只描述**当前**工程状态；过程细节以 `docs/` 已入库报告与 git 历史为准。
 
 ## 当前 Session Objective
+
+- **R33.1 Identity Migration Commit Finalization（complete / automated_verified）**：R33
+  全量身份迁移已经 rename-aware diff 与逐文件 identity-only transform 审核；180/180 个 production
+  Kotlin 文件无非身份差异，Room v6–v12 schema 字节不变，版本仍为 1.0.0 (23)。完整
+  `:app:testQaUnitTest` 为 1355/0/0/0。未使用 signer、未构建 release APK、未创建 tag。报告见
+  `docs/R33_1_IDENTITY_COMMIT_REPORT.md`。
+
+- **R33 Product Identity Full Migration（implemented / automated_verified）**：产品/品牌现为
+  `M1racle Reader / M1racle`，Android applicationId 与 Kotlin namespace 现为
+  `com.m1racle.reader`，repository/project identity 现为 `m1racle-reader`。main/test/androidTest/
+  debug/qa/benchmark package、Manifest、QA provider、R8、脚本、资源与当前产品文档已全量迁移。
+  Room v6–v12 JSON 字节及 migration SQL 不变；Anchor/Glass/Reader/Annotation/Search 仅身份映射。
+  `:app:testQaUnitTest` 1355/0/0/0，AndroidTest/benchmark Kotlin 编译 PASS。未使用 signer、未生成
+  production APK、未创建 tag。报告见 `docs/R33_PRODUCT_IDENTITY_MIGRATION_REPORT.md`。
+
+- **历史身份说明**：R32 及更早报告中的 MarkLeaf、`com.markleaf.app`、`markleaf-*` APK 路径与
+  signer DN 是迁移前证据，按 R33 报告保留，不代表当前产品身份。
 
 - **R32.6 Production Commit Preparation（PASS / source_immutable）**：完整审查并纳入 R23–R32
   功能代码、Room v8–v12 schema/migration、50 个测试路径、公开文档与 release evidence；最终生产
@@ -82,7 +99,7 @@
 
 ## 产品现状（code = source of truth）
 
-墨阅 MarkLeaf：Android 本地优先文档阅读器（Markdown + PDF，无 INTERNET 权限）。
+M1racle Reader：Android 本地优先文档阅读器（Markdown + PDF，无 INTERNET 权限）。
 
 - **导入链（A3 收敛后单一事实源）**：ProviderMetadataSource（唯一采集器）→ ExternalUriMetadata.resolve（唯一解析）→ DocumentType.isAllowedImport（唯一接受权威，含 text/* fallback 封闭拒绝表）→ 200MiB source limit（双入口统一：hint 预检 + 无 hint 有界排水/copy-loop）→ Path A importDocument / Path B 两阶段 prepare-commit。zip VIEW/SEND 经 ZipPackageImporter 提取为 MARKDOWN_PACKAGE（B-0 修复）；zip 解压三限独立。
 - **Markdown 阅读**：自研块解析器、TOC 锚点、文档内搜索+高亮、全文读取（32MiB）、安全相对路径图片、阅读位置恢复、字号/行高/边距。
@@ -151,6 +168,7 @@
 | R32.1 最终 RC 真机验收 | docs/R32_1_DEVICE_ACCEPTANCE_REPORT.md |
 | R32.5 生产发布最终门禁 | docs/R32_5_PRODUCTION_RELEASE_GATE_REPORT.md |
 | R32.6 唯一生产提交准备 | docs/R32_6_PRODUCTION_COMMIT_PREPARATION_REPORT.md |
+| R33 产品与技术身份迁移 | docs/R33_PRODUCT_IDENTITY_MIGRATION_REPORT.md |
 | 发布就绪快照（07-21 历史） | docs/RELEASE_READINESS.md |
 
 ## Active object

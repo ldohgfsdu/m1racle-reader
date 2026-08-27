@@ -1,11 +1,11 @@
-# MarkLeaf Public Release Checklist
+# M1racle Reader Public Release Checklist
 
-This checklist is the authority for the next public MarkLeaf release. It does not alter or replace the immutable `v0.1.0-c-local` history.
+This checklist is the authority for the next public M1racle Reader release. It does not alter or replace the immutable pre-migration `v0.1.0-c-local` history.
 
 ## Signing
 
 - [x] `release` has no debug-keystore fallback and is always bound to the dedicated release signing config.
-- [x] Signing is injected only through `MARKLEAF_RELEASE_STORE_FILE`, `MARKLEAF_RELEASE_STORE_PASSWORD`, `MARKLEAF_RELEASE_KEY_ALIAS`, and `MARKLEAF_RELEASE_KEY_PASSWORD`.
+- [x] Signing is injected only through `M1RACLE_RELEASE_STORE_FILE`, `M1RACLE_RELEASE_STORE_PASSWORD`, `M1RACLE_RELEASE_KEY_ALIAS`, and `M1RACLE_RELEASE_KEY_PASSWORD`.
 - [x] Missing/partial injection, `debug.keystore`, and alias `androiddebugkey` are rejected before public output is accepted.
 - [x] Keystore/container patterns (`*.jks`, `*.keystore`, `*.p12`, `*.pfx`) and `keystore.properties` are gitignored.
 - [ ] The real production/upload keystore has been created outside the repository, backed up securely, and injected by the release owner or CI secret store.
@@ -14,10 +14,10 @@ This checklist is the authority for the next public MarkLeaf release. It does no
 Expected invocation (values must come from a local secret manager or CI environment, never from committed files or `-P` command-line arguments):
 
 ```bash
-export MARKLEAF_RELEASE_STORE_FILE=/secure/path/markleaf-upload.jks
-export MARKLEAF_RELEASE_STORE_PASSWORD='<secret>'
-export MARKLEAF_RELEASE_KEY_ALIAS='<alias>'
-export MARKLEAF_RELEASE_KEY_PASSWORD='<secret>'
+export M1RACLE_RELEASE_STORE_FILE=/secure/path/m1racle-reader-upload.jks
+export M1RACLE_RELEASE_STORE_PASSWORD='<secret>'
+export M1RACLE_RELEASE_KEY_ALIAS='<alias>'
+export M1RACLE_RELEASE_KEY_PASSWORD='<secret>'
 JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ./gradlew :app:testQaUnitTest :app:assembleRelease
 ```
 
@@ -28,7 +28,7 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ./gradlew :app:testQaUnitTest :app:
 - [x] `versionName` follows SemVer. `versionCode` is a positive monotonic integer and must increase for every artifact uploaded to a distribution channel, including rejected uploads.
 - [ ] Before publication, create an annotated immutable `v1.0.0` tag on the exact verified source commit; do not move an existing tag.
 
-## APK identity and hash
+## Pre-migration R32 APK identity and hash (historical evidence)
 
 - [x] R32 verification APK was built through the injected-signing path. It is a host-verification artifact, not the publishable production binary.
 - [x] Verification identity: package `com.markleaf.app`; version `1.0.0` (23); 11,660,123 bytes; APK Signature Scheme v2.
@@ -38,6 +38,18 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ./gradlew :app:testQaUnitTest :app:
 - [x] Two forced builds from unchanged source/version and the same signer succeeded. All 238 extracted ZIP entries and central-directory metadata matched.
 - [x] Signed APK byte reproducibility result is recorded: build A `24d53f61e1eac07ba1d9b9ad7e64d8d481407369b549b78ea5da87256858596a`; build B `7aba6b5d2dca5c31a8ce81bfa873ad18457299bc7e1de8ddbc1560536e02d1d2`. Only the APK v2 signing block differed, so final signed APKs were **not byte-identical**.
 - [ ] Replace the disposable verification identity with the production/upload signer and archive that final artifact's size, digest, signer certificate, immutable source commit, and tag before publication.
+
+The package, filename, signer DN, and hash in this section intentionally retain the old MarkLeaf identity because they describe bytes built and accepted before R33. They are not valid production identity for M1racle Reader.
+
+## R33 product and technical identity
+
+- [x] Product is `M1racle Reader`; brand is `M1racle`.
+- [x] Android `applicationId` and Kotlin namespace are `com.m1racle.reader`.
+- [x] QA and benchmark identities are `com.m1racle.reader.qa` and `com.m1racle.reader.benchmark`.
+- [x] Repository/project identity and artifact prefix are `m1racle-reader`.
+- [x] Active provider authorities, package-targeted intents, scripts, tests, R8 rules, and signer environment names use the new identity.
+- [x] Historical R22–R32 evidence retains its original MarkLeaf/package identity and is classified by `docs/R33_PRODUCT_IDENTITY_MIGRATION_REPORT.md`.
+- [ ] A production-signed `com.m1racle.reader` APK has been generated and archived.
 
 ## Automated verification
 
@@ -65,6 +77,7 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ./gradlew :app:testQaUnitTest :app:
 - Backdrop 2.0.0 currently forces a Compose/Kotlin/AGP compatibility workaround: metadata/AAR gates and the incompatible Compose runtime lint registry remain excluded as documented in R31.
 - Room v1-v5 schema snapshots do not exist. Public compatibility starts at v12; no historical snapshots were reconstructed.
 - Transition from the debug-signed C-local package to the production-signed public package requires uninstall/reinstall and does not preserve app-private data.
+- R33 changes the Android package from historical `com.markleaf.app` to `com.m1racle.reader`; Android treats it as a different app, so pre-migration private data is not upgraded in place.
 - Device install, upgrade, UI, interaction, and migration acceptance are outside R32 unless separately recorded.
 - The R32 verification ran from HEAD `76ebea5` plus the existing uncommitted R23-R32 worktree. A public artifact still requires one reviewed, clean, immutable source commit and tag.
 

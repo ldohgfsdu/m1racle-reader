@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("com.markleaf.app", "com.markleaf.app.qa")]
-    [string]$PackageName = "com.markleaf.app",
+    [ValidateSet("com.m1racle.reader", "com.m1racle.reader.qa")]
+    [string]$PackageName = "com.m1racle.reader",
     [string]$OutputRoot,
     [string]$AdbPath
 )
@@ -10,13 +10,13 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "app-data-safety-common.ps1")
 $adb = Resolve-AdbPath $AdbPath
 if (-not $OutputRoot) {
-    $OutputRoot = Join-Path (Split-Path -Parent $PSScriptRoot) ".local-backups\markleaf-debug"
+    $OutputRoot = Join-Path (Split-Path -Parent $PSScriptRoot) ".local-backups\m1racle-reader-debug"
 }
 $package = Get-PackageEvidence $adb $PackageName
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
 $finalDirectory = Join-Path $OutputRoot "$($PackageName.Replace('.', '-'))-$timestamp"
 $temporaryDirectory = "$finalDirectory.incomplete"
-$remoteArchive = "cache/markleaf-data-backup-$PID.tar"
+$remoteArchive = "cache/m1racle-reader-data-backup-$PID.tar"
 
 if ((Test-Path -LiteralPath $finalDirectory) -or (Test-Path -LiteralPath $temporaryDirectory)) {
     throw "Backup destination already exists: $finalDirectory"

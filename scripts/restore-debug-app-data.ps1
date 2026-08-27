@@ -2,8 +2,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$BackupDirectory,
-    [ValidateSet("com.markleaf.app", "com.markleaf.app.qa")]
-    [string]$PackageName = "com.markleaf.app.qa",
+    [ValidateSet("com.m1racle.reader", "com.m1racle.reader.qa")]
+    [string]$PackageName = "com.m1racle.reader.qa",
     [switch]$AllowMainPackageRestore,
     [string]$AdbPath
 )
@@ -36,29 +36,29 @@ if ((Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash -ne [string]
 Assert-PayloadManifest $payloadRoot @($manifest.files)
 
 Write-Host "RESTORE_TARGET applicationId=$PackageName"
-$remoteArchive = "/data/local/tmp/markleaf-restore-$PID.tar"
+$remoteArchive = "/data/local/tmp/m1racle-reader-restore-$PID.tar"
 $null = Invoke-AdbText $adb @("push", $archivePath, $remoteArchive)
 try {
     $null = Invoke-AdbText $adb @("shell", "am", "force-stop", $PackageName)
     $restore = @'
 set -eu
-rm -rf cache/markleaf-restore-new
-mkdir -p cache/markleaf-restore-new
-tar -xf __ARCHIVE__ -C cache/markleaf-restore-new
-for d in databases shared_prefs files; do test -d cache/markleaf-restore-new/$d; done
+rm -rf cache/m1racle-reader-restore-new
+mkdir -p cache/m1racle-reader-restore-new
+tar -xf __ARCHIVE__ -C cache/m1racle-reader-restore-new
+for d in databases shared_prefs files; do test -d cache/m1racle-reader-restore-new/$d; done
 rollback() {
   for d in databases shared_prefs files; do
-    if [ -e $d.markleaf-restore-old ]; then rm -rf $d; mv $d.markleaf-restore-old $d; fi
+    if [ -e $d.m1racle-reader-restore-old ]; then rm -rf $d; mv $d.m1racle-reader-restore-old $d; fi
   done
 }
 trap rollback EXIT
 for d in databases shared_prefs files; do
-  rm -rf $d.markleaf-restore-old
-  if [ -e $d ]; then mv $d $d.markleaf-restore-old; fi
-  mv cache/markleaf-restore-new/$d $d
+  rm -rf $d.m1racle-reader-restore-old
+  if [ -e $d ]; then mv $d $d.m1racle-reader-restore-old; fi
+  mv cache/m1racle-reader-restore-new/$d $d
 done
 trap - EXIT
-rm -rf databases.markleaf-restore-old shared_prefs.markleaf-restore-old files.markleaf-restore-old cache/markleaf-restore-new
+rm -rf databases.m1racle-reader-restore-old shared_prefs.m1racle-reader-restore-old files.m1racle-reader-restore-old cache/m1racle-reader-restore-new
 '@.Replace("__ARCHIVE__", $remoteArchive)
     $null = Invoke-AdbText $adb @("shell", "run-as $PackageName sh -c '$restore'")
 } finally {
@@ -73,7 +73,7 @@ if ($PackageName -eq $script:QaApplicationId) {
     $instrumentation = "$PackageName.test/androidx.test.runner.AndroidJUnitRunner"
     $result = Invoke-AdbText $adb @(
         "shell", "am", "instrument", "-w", "-r", "-e", "class",
-        "com.markleaf.app.QaDataIsolationInstrumentedTest", $instrumentation
+        "com.m1racle.reader.QaDataIsolationInstrumentedTest", $instrumentation
     )
     Write-Host $result
     if ($result -notmatch "OK \(1 test\)") { throw "QA Room-open verification instrumentation did not pass." }

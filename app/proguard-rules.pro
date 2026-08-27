@@ -1,9 +1,9 @@
-# MarkLeaf release R8 rules
+# M1racleReader release R8 rules
 # Goal: shrink Compose + PDFBox without breaking PDF metadata / Room / navigation.
 
 # ── BuildConfig / app entry ──
--keep class com.markleaf.app.BuildConfig { *; }
--keep class com.markleaf.app.MainActivity { *; }
+-keep class com.m1racle.reader.BuildConfig { *; }
+-keep class com.m1racle.reader.MainActivity { *; }
 
 # ── Room ──
 -keep class * extends androidx.room.RoomDatabase

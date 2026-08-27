@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Install MarkLeaf release from .external_outbox when ADB is connected (USB or Wi‑Fi).
+# Install M1racleReader release from .external_outbox when ADB is connected (USB or Wi‑Fi).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APK="${1:-$ROOT/.external_outbox/markleaf-release-latest.apk}"
+APK="${1:-$ROOT/.external_outbox/m1racle-reader-release-latest.apk}"
 
 if ! command -v adb >/dev/null 2>&1; then
   echo "adb not found in PATH"
@@ -28,6 +28,6 @@ fi
 echo "Installing $APK ..."
 adb -s "$DEV" install -r "$APK"
 echo "Launching..."
-adb -s "$DEV" shell am start -n com.markleaf.app/.MainActivity || \
-  adb -s "$DEV" shell monkey -p com.markleaf.app -c android.intent.category.LAUNCHER 1
+adb -s "$DEV" shell am start -n com.m1racle.reader/.MainActivity || \
+  adb -s "$DEV" shell monkey -p com.m1racle.reader -c android.intent.category.LAUNCHER 1
 echo "Done."

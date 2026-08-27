@@ -10,9 +10,9 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "app-data-safety-common.ps1")
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$targetApplicationId = "com.markleaf.app.qa"
-$protectedApplicationId = "com.markleaf.app"
-$activity = "$targetApplicationId/com.markleaf.app.ui.viewer.MarkdownScrollBenchmarkActivity"
+$targetApplicationId = "com.m1racle.reader.qa"
+$protectedApplicationId = "com.m1racle.reader"
+$activity = "$targetApplicationId/com.m1racle.reader.ui.viewer.MarkdownScrollBenchmarkActivity"
 
 if ($targetApplicationId -eq $protectedApplicationId) {
     throw "REFUSED: Markdown benchmark must never target protected applicationId=$protectedApplicationId."
@@ -45,7 +45,7 @@ if (Test-Path -LiteralPath $metadataPath) {
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $outputDir = Join-Path (Join-Path $projectRoot $OutputRoot) "markdown-scroll-$timestamp"
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-$remoteVideo = "/sdcard/markleaf-qa-markdown-scroll.mp4"
+$remoteVideo = "/sdcard/m1racle-reader-qa-markdown-scroll.mp4"
 $installedQa = $false
 $screenRecord = $null
 
@@ -73,8 +73,8 @@ try {
     $bottom = [int]($height * 0.82)
 
     function Get-UiHierarchy {
-        Adb @("shell", "uiautomator", "dump", "/sdcard/markleaf-window.xml") | Out-Null
-        return (Adb @("shell", "cat", "/sdcard/markleaf-window.xml"))
+        Adb @("shell", "uiautomator", "dump", "/sdcard/m1racle-reader-window.xml") | Out-Null
+        return (Adb @("shell", "cat", "/sdcard/m1racle-reader-window.xml"))
     }
     function Start-BenchmarkAtTop {
         Adb @("shell", "am", "force-stop", $targetApplicationId) | Out-Null

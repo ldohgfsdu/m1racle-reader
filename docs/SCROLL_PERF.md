@@ -33,23 +33,23 @@
 # 功能验证（产物仅工程内 / dist/performance/，不进手机 Download）
 ./gradlew :app:assembleDebug :app:testDebugUnitTest
 
-# 人工验收交付：Release only → dist/markleaf-release.apk
+# 人工验收交付：Release only → dist/m1racle-reader-release.apk
 ./gradlew :app:assembleRelease
 
 # Macrobenchmark（benchmark variant，脚本不变）
 ./gradlew :app:assembleBenchmark :benchmark:assembleBenchmark
 # 真机（需已导入 docs/sample-stress.md 并打开过一次）
-# benchmark 包名: com.markleaf.app.benchmark
+# benchmark 包名: com.m1racle.reader.benchmark
 ./gradlew :app:installBenchmark :benchmark:connectedBenchmarkAndroidTest
 ```
 
-**APK 交付规则**见 `dist/APK_DELIVERY.md`：`/storage/emulated/0/Download/` 仅放 `markleaf-release.apk`。
+**APK 交付规则**见 `dist/APK_DELIVERY.md`：`/storage/emulated/0/Download/` 仅放 `m1racle-reader-release.apk`。
 
 FrameTiming 关注 `frameDurationCpuMs` P50/P90/P99 与 `frameOverrunMs`。
 
 ### 指标说明（本环境）
 
-当前构建环境无已连接物理设备 / adb，**无法在本轮产出 before/after 数值表**。  
+当前构建环境无已连接物理设备 / adb，**无法在本轮产出 before/after 数值表**。
 请在真机上对同一文档（`sample-stress.md`）各跑 5 iterations：
 
 | 场景 | 指标 |

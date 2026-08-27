@@ -1,4 +1,4 @@
-# 📄 墨阅 MarkLeaf｜Android 本地文档阅读器 PRD
+# 📄 M1racle Reader｜Android 本地文档阅读器 PRD
 
 > **范围修订（2026-08-23）**：产品已从「Markdown 阅读 MVP」演进为「本地优先的 Markdown + PDF 文档阅读器」。PDF 能力经由 R 系列 PDF 阅读器会话交付，本文档同步更新定位与功能范围；隐私与本地优先原则不变。历史原始定位见 git 历史。
 
@@ -176,7 +176,7 @@
 
 #### 顶部区域
 
-- App 名称：墨阅 MarkLeaf；
+- App 名称：M1racle Reader；
 - 副标题：本地 Markdown / PDF 阅读器；
 - 右上角可选设置入口；
 - 右下角 FAB：导入文件。
@@ -616,7 +616,7 @@ data class TocItem(
 
 > 本节保留为项目起步期的历史模板；当前范围以上文修订后的 PRD 为准。
 
-你现在是我的 Android 技术合伙人。下面是我的项目 PRD：我正在做一款 Android Markdown 阅读器，项目名暂定为“墨阅 MarkLeaf”。
+你现在是我的 Android 技术合伙人。下面是我的项目 PRD：我正在做一款 Android Markdown 阅读器，项目名暂定为“M1racle Reader”。
 
 产品定位：本地优先、轻量、高颜值、无账号、无广告、无联网依赖。MVP 只做本地 Markdown 阅读，不做编辑、不做同步、不做 AI 总结、不做复杂文件管理。
 

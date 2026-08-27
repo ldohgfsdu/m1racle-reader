@@ -20,6 +20,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MarkLeaf"
+rootProject.name = "m1racle-reader"
 include(":app")
 include(":benchmark")

@@ -1,10 +1,10 @@
-# 墨阅 MarkLeaf — MVP 验收清单（Release Gate）
+# M1racle Reader — MVP 验收清单（Release Gate）
 
 > **历史记录（2026-07-10，Markdown MVP 时期验收）**：仅证明当时基线；当前功能范围与验证状态见 `.memory/CURRENT_STATE.md` 与 docs/ 下各专项报告。
 
-- **版本：** v0.1.0（`versionCode=1`，`versionName=0.1.0`）  
-- **验收日：** 2026-07-10  
-- **结论：** **通过** — 可称为 **v0.1.0 MVP** 发布候选（debug APK）  
+- **版本：** v0.1.0（`versionCode=1`，`versionName=0.1.0`）
+- **验收日：** 2026-07-10
+- **结论：** **通过** — 可称为 **v0.1.0 MVP** 发布候选（debug APK）
 
 ## 构建与安全
 
@@ -38,19 +38,19 @@
 
 ## 已知限制（非阻塞）
 
-1. 相对路径图片（`images/a.png`）暂不支持  
-2. 网络图片禁用（有意为之）  
-3. 文档过长时有 200KB 预览截断  
-4. 段落内 inline 图片不渲染为图（仅独立行 Image block）  
-5. 空 source 图片语法 `![]()` 降级为普通段落文本  
-6. 无正式商店签名 / 未做完整自动化 UI 测试  
+1. 相对路径图片（`images/a.png`）暂不支持
+2. 网络图片禁用（有意为之）
+3. 文档过长时有 200KB 预览截断
+4. 段落内 inline 图片不渲染为图（仅独立行 Image block）
+5. 空 source 图片语法 `![]()` 降级为普通段落文本
+6. 无正式商店签名 / 未做完整自动化 UI 测试
 
 ## 关键样例
 
-- `docs/sample-large.md`  
-- 内置图：`asset://sample-image.png`（`app/src/main/assets/sample-image.png`）  
+- `docs/sample-large.md`
+- 内置图：`asset://sample-image.png`（`app/src/main/assets/sample-image.png`）
 
 ## 判定
 
-在「本地导入 + 阅读 + 搜索 + 目录 + 进度 + 显示设置 + 代码/表格/安全图片」路径上已达到 **可日常使用** 的 MVP 标准。  
+在「本地导入 + 阅读 + 搜索 + 目录 + 进度 + 显示设置 + 代码/表格/安全图片」路径上已达到 **可日常使用** 的 MVP 标准。
 建议版本号：**v0.1.0**（若强调内测可写 **v0.1.0-alpha**，与 `versionName` 一致即可）。

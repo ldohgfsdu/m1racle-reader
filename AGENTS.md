@@ -1,6 +1,6 @@
-# MarkLeaf
+# M1racle Reader
 
-Android 本地优先文档阅读器（墨阅）：Markdown + PDF。
+Android 本地优先文档阅读器：Markdown + PDF。
 
 ## Scope
 
@@ -30,7 +30,7 @@ Follow `docs/PRD.md`（2026-08-23 范围修订版）：本地 Markdown + PDF 阅
 5. 做大功能时：优先打通 输入 → 核心逻辑 → UI/输出 → 验收 的最小闭环，再补横向能力。
 6. 架构选择：允许实现简单，但不允许方向临时。也就是“代码可以少，边界必须对”。
 7. 评审方案时：会主动把“为了兼容旧东西”“以后可能会用”“先糊一下以后重构”视为负面信号。
-8. 交互/UI 问题：先看 Android、iOS、Chrome、Acrobat、微信读书、成熟阅读器等现成范式，再决定 MarkLeaf 应该怎么做，而不是凭空设计。
+8. 交互/UI 问题：先看 Android、iOS、Chrome、Acrobat、微信读书、成熟阅读器等现成范式，再决定 M1racle Reader 应该怎么做，而不是凭空设计。
 
 ## 变更与验收纪律
 
@@ -41,7 +41,7 @@ Follow `docs/PRD.md`（2026-08-23 范围修订版）：本地 Markdown + PDF 阅
 
 ## Inbox / Outbox
 
-- Inbox (inputs): `/storage/emulated/0/inbox/MarkLeaf/`
+- Inbox (inputs): `/storage/emulated/0/inbox/M1racleReader/`
 - **Outbox (built APKs):** `.external_outbox/` — every successful `assemble*` copies APKs here automatically
 
 ## 构建后交付（强制，无需提示）
@@ -49,10 +49,10 @@ Follow `docs/PRD.md`（2026-08-23 范围修订版）：本地 Markdown + PDF 阅
 **每次 `assemble*` 成功后，必须自动执行：**
 
 ```bash
-cp .external_outbox/markleaf-release-latest.apk /storage/emulated/0/Download/markleaf-release-latest.apk
+cp .external_outbox/m1racle-reader-release-latest.apk /storage/emulated/0/Download/m1racle-reader-release-latest.apk
 ```
 
-- 路径固定：设备端 `/storage/emulated/0/Download/markleaf-release-latest.apk` 可直接安装
+- 路径固定：设备端 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk` 可直接安装
 - **覆盖旧文件，无需用户额外提示**
 - 这是构建流程的一部分，不是可选操作
 
@@ -62,7 +62,7 @@ cp .external_outbox/markleaf-release-latest.apk /storage/emulated/0/Download/mar
 
 - Check `adb devices` first. Only `device` state allows auto-install/smoke.
 - If offline: copy release APK to `/storage/emulated/0/Download/` and ask human to install; **do not mark device smoke as PASS**.
-- Prefer release minify package: `.external_outbox/markleaf-release-latest.apk` (~10–11MB), not 70MB+ QA unless tasked.
+- Prefer release minify package: `.external_outbox/m1racle-reader-release-latest.apk` (~10–11MB), not 70MB+ QA unless tasked.
 - Helper: `bash scripts/install-release-outbox.sh`
 
 ## Agent startup / handoff

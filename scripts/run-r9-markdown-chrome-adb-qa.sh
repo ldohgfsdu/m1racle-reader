@@ -6,12 +6,12 @@ project_root="$(cd -- "$script_dir/.." && pwd)"
 cd "$project_root"
 
 # R9 top-bar QA through the real MainActivity path.
-# Only com.markleaf.app.qa is installed/driven. No package data is cleared.
+# Only com.m1racle.reader.qa is installed/driven. No package data is cleared.
 
-readonly QA_PACKAGE="com.markleaf.app.qa"
-readonly PROTECTED_PACKAGE="com.markleaf.app"
-readonly MAIN_ACTIVITY="$QA_PACKAGE/com.markleaf.app.MainActivity"
-readonly DEFAULT_APK="dist/r9-markdown-scroll-chrome/markleaf-qa-r9-md-chrome-c-slow-drag.apk"
+readonly QA_PACKAGE="com.m1racle.reader.qa"
+readonly PROTECTED_PACKAGE="com.m1racle.reader"
+readonly MAIN_ACTIVITY="$QA_PACKAGE/com.m1racle.reader.MainActivity"
+readonly DEFAULT_APK="dist/r9-markdown-scroll-chrome/m1racle-reader-qa-r9-md-chrome-c-slow-drag.apk"
 
 serial=""
 apk="$DEFAULT_APK"
@@ -117,7 +117,7 @@ fail() {
   exit 1
 }
 
-remote_ui="/sdcard/markleaf-r9-qa-window.xml"
+remote_ui="/sdcard/m1racle-reader-r9-qa-window.xml"
 ui_dump() {
   local name="$1"
   local attempt
@@ -253,7 +253,7 @@ grep -q 'Success' "$output_dir/install.txt" || fail "QA APK install failed"
 pass "QA install -r"
 package_path="$(adbq shell pm path "$QA_PACKAGE" | sed -n 's/^package://p' | head -n 1)"
 [[ -n "$package_path" ]] || fail "Installed QA package path not found"
-installed_copy="$(mktemp /tmp/markleaf-installed-qa.XXXXXX.apk)"
+installed_copy="$(mktemp /tmp/m1racle-reader-installed-qa.XXXXXX.apk)"
 adbq pull "$package_path" "$installed_copy" >/dev/null
 installed_sha="$(sha256sum "$installed_copy" | awk '{print $1}')"
 [[ "$installed_sha" == "$local_sha" ]] || fail "Installed APK SHA-256 differs from requested APK"

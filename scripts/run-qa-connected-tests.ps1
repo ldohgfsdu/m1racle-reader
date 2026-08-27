@@ -5,8 +5,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$mainApplicationId = "com.markleaf.app"
-$allowedApplicationId = "com.markleaf.app.qa"
+$mainApplicationId = "com.m1racle.reader"
+$allowedApplicationId = "com.m1racle.reader.qa"
 
 if ($GradleTask -ne ":app:connectedQaAndroidTest") {
     throw "REFUSED connected test task '$GradleTask'. Only :app:connectedQaAndroidTest is allowed."

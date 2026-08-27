@@ -4,13 +4,13 @@
     <!-- MVP: no INTERNET / no MANAGE_EXTERNAL_STORAGE. Local-only reader. -->
 
     <application
-        android:name=".MarkLeafApplication"
+        android:name=".M1racleReaderApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="${appLabel}"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MarkLeaf">
+        android:theme="@style/Theme.M1racleReader">
 
         <!-- Enables Macrobenchmark / FrameTiming sampling on physical devices. -->
         <profileable android:shell="true" />
@@ -21,7 +21,7 @@
             android:launchMode="singleTop"
             android:configChanges="uiMode"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.MarkLeaf">
+            android:theme="@style/Theme.M1racleReader">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
