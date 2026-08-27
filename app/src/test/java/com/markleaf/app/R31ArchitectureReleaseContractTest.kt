@@ -1,0 +1,99 @@
+package com.markleaf.app
+
+import com.markleaf.app.data.local.AppDatabase
+import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/** R31 executable architecture, migration and release-configuration gates. */
+class R31ArchitectureReleaseContractTest {
+
+    @Test
+    fun `core and data packages never depend on application UI`() {
+        val roots = listOf("data", "markdown", "packageimport", "pdf", "share")
+        val reverseImports = roots.flatMap { relative ->
+            sourceDir(relative).walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .flatMap { file ->
+                    file.readLines().asSequence()
+                        .filter { it.startsWith("import com.markleaf.app.ui.") }
+                        .map { "${file.relativeTo(projectRoot()).path}:$it" }
+                }
+                .toList()
+        }
+        assertEquals(emptyList<String>(), reverseImports)
+    }
+
+    @Test
+    fun `UI consumes repositories and never imports DAOs`() {
+        val uiFiles = sourceDir("ui").walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .toList()
+        val daoImports = uiFiles.flatMap { file ->
+            file.readLines().filter {
+                it.startsWith("import com.markleaf.app.data.local.") && it.trimEnd().endsWith("Dao")
+            }
+        }
+        assertTrue(daoImports.isEmpty())
+        assertTrue(source("MarkLeafApplication.kt").contains("searchRepository = searchRepository"))
+    }
+
+    @Test
+    fun `Room migration chain is contiguous through v12 with committed v6 plus schemas`() {
+        val migrations = listOf(
+            AppDatabase.MIGRATION_1_2,
+            AppDatabase.MIGRATION_2_3,
+            AppDatabase.MIGRATION_3_4,
+            AppDatabase.MIGRATION_4_5,
+            AppDatabase.MIGRATION_5_6,
+            AppDatabase.MIGRATION_6_7,
+            AppDatabase.MIGRATION_7_8,
+            AppDatabase.MIGRATION_8_9,
+            AppDatabase.MIGRATION_9_10,
+            AppDatabase.MIGRATION_10_11,
+            AppDatabase.MIGRATION_11_12,
+        )
+        assertEquals((1..11).map { it to it + 1 }, migrations.map { it.startVersion to it.endVersion })
+        val schemas = File(projectRoot(), "app/schemas/com.markleaf.app.data.local.AppDatabase")
+            .listFiles()
+            .orEmpty()
+            .mapNotNull { it.nameWithoutExtension.toIntOrNull() }
+            .sorted()
+        assertEquals((6..12).toList(), schemas)
+    }
+
+    @Test
+    fun `release enables shrink strips debug logs and bounds outbox history`() {
+        val build = File(projectRoot(), "app/build.gradle.kts").readText()
+        val rules = File(projectRoot(), "app/proguard-rules.pro").readText()
+        assertTrue(build.contains("isMinifyEnabled = true"))
+        assertTrue(build.contains("isShrinkResources = true"))
+        assertTrue(build.contains("markleafOutboxHistoryLimit = 5"))
+        assertTrue(rules.contains("-assumenosideeffects class android.util.Log"))
+        assertTrue(rules.contains("public static int d(...);"))
+        assertTrue(rules.contains("public static int v(...);"))
+    }
+
+    @Test
+    fun `removed compatibility-only members stay deleted`() {
+        assertFalse(source("pdf/PdfRenderQuality.kt").contains("MAX_RENDER_WIDTH_PX"))
+        assertFalse(
+            source("ui/viewer/components/MarkdownTableLayout.kt")
+                .contains("maximumWideCompressionFraction"),
+        )
+    }
+
+    private fun projectRoot(): File = listOf(File("."), File("/root/code/MarkLeaf"))
+        .first { File(it, "app/src/main/java/com/markleaf/app").isDirectory }
+        .canonicalFile
+
+    private fun sourceDir(relative: String): File =
+        File(projectRoot(), "app/src/main/java/com/markleaf/app/$relative")
+
+    private fun source(relative: String): String = File(
+        projectRoot(),
+        "app/src/main/java/com/markleaf/app/$relative",
+    ).readText()
+}

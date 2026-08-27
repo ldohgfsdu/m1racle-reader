@@ -205,6 +205,7 @@ class DeleteByIdTransactionTest {
             documentDao = db.documentDao(),
             pdfPrintPageAnchorDao = db.pdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = db.textbookOutlineNodeDao(),
+            searchRepository = SearchRepository(db.searchIndexDao()),
         )
         repo.deleteById("doc-success")
 
@@ -235,6 +236,7 @@ class DeleteByIdTransactionTest {
         documentDao = db.documentDao(),
         pdfPrintPageAnchorDao = db.pdfPrintPageAnchorDao(),
         textbookOutlineNodeDao = db.textbookOutlineNodeDao(),
+        searchRepository = SearchRepository(db.searchIndexDao()),
     )
 
     /**
@@ -249,6 +251,7 @@ class DeleteByIdTransactionTest {
             documentDao = db.documentDao(),
             pdfPrintPageAnchorDao = db.pdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = FailingOutlineDao(db.textbookOutlineNodeDao()),
+            searchRepository = SearchRepository(db.searchIndexDao()),
         )
         try {
             repo.deleteById("doc-step1")
@@ -276,6 +279,7 @@ class DeleteByIdTransactionTest {
             documentDao = db.documentDao(),
             pdfPrintPageAnchorDao = FailingAnchorDao(db.pdfPrintPageAnchorDao()),
             textbookOutlineNodeDao = db.textbookOutlineNodeDao(),
+            searchRepository = SearchRepository(db.searchIndexDao()),
         )
         try {
             repo.deleteById("doc-step2")
@@ -302,6 +306,7 @@ class DeleteByIdTransactionTest {
             documentDao = FailingDocumentDao(db.documentDao()),
             pdfPrintPageAnchorDao = db.pdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = db.textbookOutlineNodeDao(),
+            searchRepository = SearchRepository(db.searchIndexDao()),
         )
         try {
             repo.deleteById("doc-step3")

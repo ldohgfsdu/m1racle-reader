@@ -6,9 +6,9 @@
 
 ## 隐私与安全
 
-- **不申请 `INTERNET` 权限**，不发起网络请求  
-- **无账号、无广告、无统计 SDK、无云同步**  
-- 文件仅在你主动通过系统选择器或系统「打开方式 / 分享」授权后可读  
+- **不申请 `INTERNET` 权限**，不发起网络请求
+- **无账号、无广告、无统计 SDK、无云同步**
+- 文件仅在你主动通过系统选择器或系统「打开方式 / 分享」授权后可读
 - 删除「最近阅读」记录**永不删除你的源文件**；仅当记录对应的是 App 自管的私有副本（外部打开暂存的 `files/library`、`.zip` 包解压的 `files/packages`）且无其他记录引用时，才会一并清理该副本
 
 ## 当前已支持
@@ -29,17 +29,19 @@
 | 阅读显示 | 字号 / 行高 / 边距（DataStore 持久化） |
 | PDF 阅读 | 连续/单页模式、双指缩放平移、页面缩略图、教材目录大纲、章节导出（ZIP 包 / 标注 PDF） |
 | Markdown 包 | 导入 `.zip` 打包的 Markdown + 相对图片（防 Zip-Slip / 炸弹条目） |
+| 阅读资产 | 收藏、书签、PDF 高亮与轻量笔记；按文档和 canonical anchor 恢复 |
+| 本地搜索 | 跨文档搜索文档标题、高亮摘录与笔记，并跳回原文页/段 |
 | 主题 | 跟随系统深浅色（夜间独立液态玻璃配方），Material 3 Dynamic Color |
 
 ## 明确不支持（当前版本）
 
-- Markdown **编辑器**  
-- **全文索引** / 跨文档搜索  
-- **云同步**（WebDAV / GitHub 等）  
-- **账号** / 登录 / 社区  
-- **网络图片**加载（`http`/`https` 显示「网络图片已禁用」）  
-- 行内图片、图片点击放大、文件夹批量导入  
-- 完整编译器级语法高亮、复杂 Excel 表格  
+- Markdown **编辑器**
+- 文档正文的**全文索引**（当前跨文档搜索范围为标题、高亮与笔记）
+- **云同步**（WebDAV / GitHub 等）
+- **账号** / 登录 / 社区
+- **网络图片**加载（`http`/`https` 显示「网络图片已禁用」）
+- 行内图片、图片点击放大、文件夹批量导入
+- 完整编译器级语法高亮、复杂 Excel 表格
 
 ## 安装方式
 
@@ -65,23 +67,24 @@
 export ANDROID_HOME=/path/to/Android/Sdk
 echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-./gradlew :app:assembleRelease   # 或 assembleDebug
+./gradlew :app:assembleDebug
+# 正式 release 需先安全注入签名环境，见 RELEASE_CHECKLIST.md
 # 注意：本机默认 JDK 25 时需 export JAVA_HOME 指向 JDK 17
 ```
 
-- **最低系统：** Android 12（API 31）  
-- **包名：** `com.markleaf.app`  
+- **最低系统：** Android 12（API 31）
+- **包名：** `com.markleaf.app`
 - Android Studio：打开仓库根目录 → Run `app`
 
 ### arm64 本机构建说明
 
-若 aarch64 主机上 AGP 自带 aapt2 不可用，可用仓库内 `tools/aapt2`。  
+若 aarch64 主机上 AGP 自带 aapt2 不可用，可用仓库内 `tools/aapt2`。
 `gradle.properties` 中 `android.aapt2FromMavenOverride` 需为本机绝对路径；x86_64 / 常规 Android Studio 可删除该行。
 
 ## 如何导入文档
 
-1. 打开 App → 点右下角 **导入** FAB；或从系统文件管理器 / 分享面板选择「墨阅」打开。  
-2. 选择 `.md` / `.markdown` / `.txt` / `.pdf` / `.zip` 文件。  
+1. 打开 App → 点右下角 **导入** FAB；或从系统文件管理器 / 分享面板选择「墨阅」打开。
+2. 选择 `.md` / `.markdown` / `.txt` / `.pdf` / `.zip` 文件。
 3. 导入成功后直接进入阅读页；返回主页可见「最近阅读」。
 
 ## 测试样例
@@ -92,7 +95,7 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 | [docs/PRD.md](docs/PRD.md) | 产品需求文档 |
 | [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) | MVP 验收清单记录 |
 
-样例 **不会** 作为默认文档自动导入；请通过「导入文件」选择。  
+样例 **不会** 作为默认文档自动导入；请通过「导入文件」选择。
 图片验证请使用样例中的：
 
 ```markdown
@@ -103,24 +106,24 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 
 ## 技术栈
 
-- Kotlin · Jetpack Compose · Material 3  
-- Navigation Compose · Room · DataStore  
-- Coroutines / Flow · SAF  
-- 自研 Markdown 块解析 / Inline / 轻量代码高亮 / 表格 / 本地图加载（含安全相对路径解析）  
-- PDF：Android `PdfRenderer` 渲染 + Apache PDFBox（元数据/大纲）+ `backdrop` 液态玻璃 chrome  
+- Kotlin · Jetpack Compose · Material 3
+- Navigation Compose · Room · DataStore
+- Coroutines / Flow · SAF
+- 自研 Markdown 块解析 / Inline / 轻量代码高亮 / 表格 / 本地图加载（含安全相对路径解析）
+- PDF：Android `PdfRenderer` 渲染 + Apache PDFBox（元数据/大纲）+ `backdrop` 液态玻璃 chrome
 - 测试：JVM 单测（Robolectric Compose 规则，QA 沙箱变体）+ 仪器测试 + Macrobenchmark 模块
 
 ## 文档
 
-- [产品 PRD](docs/PRD.md)  
-- [验收清单 ACCEPTANCE](docs/ACCEPTANCE.md)  
-- [测试样例](docs/sample-large.md)  
+- [产品 PRD](docs/PRD.md)
+- [验收清单 ACCEPTANCE](docs/ACCEPTANCE.md)
+- [测试样例](docs/sample-large.md)
 
 ## 版本说明
 
 | 标记 | 含义 |
 |------|------|
-| **v0.1.0** | 本地 Markdown + PDF 阅读功能完整、可日常使用；编辑、同步、全文索引等明确不做 |
-| release APK | minify+shrink，debug keystore 签名（自用分发）；适合自测与内部分发 |
+| **v0.1.0** | 本地 Markdown + PDF 阅读功能完整、可日常使用；编辑、同步、正文全文索引等明确不做 |
+| release APK | minify+shrink；仅接受环境注入的独立 release signer，无 debug fallback |
 
 欢迎在本地使用与反馈；后续迭代以隐私与阅读体验为先。

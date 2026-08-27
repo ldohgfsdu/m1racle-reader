@@ -2,10 +2,11 @@ package com.markleaf.app.ui.home
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollFactory
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -29,13 +30,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -56,7 +60,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -72,36 +75,40 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.markleaf.app.R
 import com.markleaf.app.data.local.DocumentEntity
 import com.markleaf.app.markdown.DocumentListTitle
-import com.markleaf.app.ui.common.LiquidBackdropHost
-import com.markleaf.app.ui.common.LiquidSurfaceLevel
-import com.markleaf.app.ui.common.LocalLiquidBackdropHost
-import com.markleaf.app.ui.common.markLeafLiquidSurface
+import com.markleaf.app.ui.material.GlassBackdropHost
+import com.markleaf.app.ui.material.GlassBackdropSource
+import com.markleaf.app.ui.material.GlassMaterialEngine
+import com.markleaf.app.ui.material.GlassMaterialRole
+import com.markleaf.app.ui.material.LocalGlassBackdropHost
+import com.markleaf.app.ui.material.glassMaterial
+import com.markleaf.app.ui.material.glassPressedContentOverlayAlpha
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 /**
- * Home = plain, content-first file list. **No Liquid Glass on Home** — Liquid
- * stays Reader-only (floating chrome over PDF content).
+ * Home = plain, content-first file list. The unified glass engine is limited to
+ * floating controls; document cards remain solid tonal content surfaces.
  *
  * - ONE LazyColumn owns the whole flow: brand header (墨阅 MarkLeaf / subtitle /
  *   最近文件) is the first item and scrolls away with the cards — no fixed header,
  *   no clip boundary, no nested scrolling.
  * - Cards: solid tonal surface (no backdrop/refraction), compact 4-row layout.
- * - Overflow: bare ··· icon (no glass circle), lightweight Material DropdownMenu.
- * - FAB: ordinary Material FloatingActionButton (near-black in light theme).
+ * - Overflow: bare ··· icon opening a compact engine-backed utility menu.
+ * - FAB: engine-backed Control material.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
     onOpenDocument: (document: DocumentEntity) -> Unit,
+    onNavigateHub: (destination: com.markleaf.app.ui.hub.HubDestination) -> Unit = {},
+    onOpenSearch: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -112,9 +119,11 @@ fun HomeScreen(
     // Scaffold FAB slot already insets 16dp from the screen edges;
     // these extras bring it to 20dp right margin / 20dp above safe area.
     val fabEndExtra = HomeDesignTokens.FabEdgePaddingExtra
-    val fabBottomInset = navBottom + HomeDesignTokens.FabEdgePaddingExtra
-    // Clears the 56dp FAB + 20dp bottom gap so the last card scrolls fully above it.
-    val listBottomInset = navBottom + HomeDesignTokens.FabClearance
+    // H2.2: dock occupies the bottom center — FAB stacks above it.
+    val dockStack = HomeDesignTokens.DockHeight + HomeDesignTokens.DockBottomGap
+    val fabBottomInset = navBottom + HomeDesignTokens.FabEdgePaddingExtra + dockStack
+    // Clears FAB AND the floating dock so content never hides behind either.
+    val listBottomInset = navBottom + HomeDesignTokens.FabClearance + dockStack
 
     // Never inherit PDF immersive — always show status + nav on Home.
     val view = LocalView.current
@@ -128,12 +137,12 @@ fun HomeScreen(
 
     val listState = rememberLazyListState()
 
-    // Shared liquid backdrop host — ONLY floating controls (FAB / ··· menu)
-    // consume it; list cards stay solid tonal (content-first, no glass waves).
+    // Shared backdrop host — ONLY floating controls (FAB / ··· menu) consume it;
+    // list cards stay solid tonal (content-first, no glass waves).
     val rootBackdrop = rememberLayerBackdrop()
     val parentExport = rememberLayerBackdrop()
-    val liquidHost = remember(rootBackdrop, parentExport) {
-        LiquidBackdropHost(root = rootBackdrop, parentExport = parentExport)
+    val glassHost = remember(rootBackdrop, parentExport) {
+        GlassBackdropHost(root = rootBackdrop, menuExport = parentExport)
     }
 
     val openDocumentLauncher = rememberLauncherForActivityResult(
@@ -158,7 +167,7 @@ fun HomeScreen(
         }
     }
 
-    CompositionLocalProvider(LocalLiquidBackdropHost provides liquidHost) {
+    CompositionLocalProvider(LocalGlassBackdropHost provides glassHost) {
         Scaffold(
             modifier = modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
@@ -166,9 +175,8 @@ fun HomeScreen(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             floatingActionButton = {
-                // Liquid Glass FAB — same surface/blur/highlight/shadow/press
-                // tokens as the PDF reader chrome (Control level). Rounded square.
-                LiquidHomeFab(
+                // Unified Control recipe, rendered as a rounded square.
+                GlassHomeFab(
                     onClick = {
                         openDocumentLauncher.launch(
                             arrayOf(
@@ -192,43 +200,55 @@ fun HomeScreen(
                 listBottomInset,
                 scaffoldPadding.calculateBottomPadding(),
             )
-            // Content layer feeds the backdrop for floating liquid chrome only.
+            // Ownership boundary: captured content cannot see its own host.
+            // Sampling controls are sibling overlays after GlassBackdropSource.
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .layerBackdrop(rootBackdrop),
+                modifier = Modifier.fillMaxSize(),
             ) {
-                if (uiState.isEmpty) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        HomeHeaderSection(
+                GlassBackdropSource(
+                    backdrop = rootBackdrop,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    if (uiState.isEmpty) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            HomeHeaderSection(
+                                statusTop = statusTop,
+                                onOpenSearch = onOpenSearch,
+                                // Empty state is a plain Column (no LazyColumn
+                                // contentPadding) — keep the same 24dp rail.
+                                modifier = Modifier.padding(
+                                    horizontal = HomeDesignTokens.PageHorizontal,
+                                ),
+                            )
+                            EmptyState(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 32.dp)
+                                    .padding(bottom = contentBottomInset),
+                            )
+                        }
+                    } else {
+                        // Single flow: header item scrolls away with the cards — no
+                        // fixed header, no nested/clipped boundary under 最近文件.
+                        RecentDocumentList(
+                            documents = uiState.documents,
+                            continueReading = uiState.continueReading,
+                            listState = listState,
                             statusTop = statusTop,
-                            // Empty state is a plain Column (no LazyColumn
-                            // contentPadding) — keep the same 24dp rail.
-                            modifier = Modifier.padding(
-                                horizontal = HomeDesignTokens.PageHorizontal,
-                            ),
-                        )
-                        EmptyState(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .padding(horizontal = 32.dp)
-                                .padding(bottom = contentBottomInset),
+                            onOpen = onOpenDocument,
+                            onDelete = viewModel::deleteDocument,
+                            onOpenSearch = onOpenSearch,
+                            contentBottomInset = contentBottomInset,
+                            modifier = Modifier.fillMaxSize(),
                         )
                     }
-                } else {
-                    // Single flow: header item scrolls away with the cards — no
-                    // fixed header, no nested/clipped boundary under 最近文件.
-                    RecentDocumentList(
-                        documents = uiState.documents,
-                        listState = listState,
-                        statusTop = statusTop,
-                        onOpen = onOpenDocument,
-                        onDelete = viewModel::deleteDocument,
-                        contentBottomInset = contentBottomInset,
-                        modifier = Modifier.fillMaxSize(),
-                    )
                 }
+                // Sibling overlay: samples rootBackdrop without being captured by it.
+                com.markleaf.app.ui.hub.GlassDock(
+                    selected = com.markleaf.app.ui.hub.HubDestination.HOME,
+                    onSelect = onNavigateHub,
+                )
             }
         }
     }
@@ -241,6 +261,7 @@ fun HomeScreen(
 @Composable
 private fun HomeHeaderSection(
     statusTop: Dp,
+    onOpenSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -249,16 +270,25 @@ private fun HomeHeaderSection(
             .fillMaxWidth()
             .padding(top = statusTop + HomeDesignTokens.HeaderTopPad),
     ) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontSize = HomeDesignTokens.AppNameSize,
-                lineHeight = HomeDesignTokens.AppNameLine,
-                fontWeight = FontWeight.SemiBold,
-            ),
-            color = scheme.onSurface,
-            maxLines = 1,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = HomeDesignTokens.AppNameSize,
+                    lineHeight = HomeDesignTokens.AppNameLine,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onOpenSearch) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = stringResource(R.string.search_library_entry),
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(HomeDesignTokens.AppNameToSubtitle))
         Text(
             text = stringResource(R.string.app_subtitle),
@@ -312,10 +342,12 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 @Composable
 private fun RecentDocumentList(
     documents: List<DocumentEntity>,
+    continueReading: DocumentEntity?,
     listState: LazyListState,
     statusTop: Dp,
     onOpen: (DocumentEntity) -> Unit,
     onDelete: (String) -> Unit,
+    onOpenSearch: () -> Unit,
     contentBottomInset: Dp,
     modifier: Modifier = Modifier,
 ) {
@@ -335,8 +367,23 @@ private fun RecentDocumentList(
             item(key = "home_brand_header") {
                 HomeHeaderSection(
                     statusTop = statusTop,
+                    onOpenSearch = onOpenSearch,
                     modifier = Modifier.padding(bottom = HomeDesignTokens.HeaderToFirstCardGap),
                 )
+            }
+            // H2.2 Phase 1 继续阅读 hero（无阅读记录时优雅降级：整卡不渲染）。
+            if (continueReading != null) {
+                item(key = "home_continue_reading") {
+                    ContinueReadingCard(
+                        document = continueReading,
+                        positionLine = readingPositionLine(continueReading),
+                        progressPercent = progressPercent(continueReading),
+                        onOpen = { onOpen(continueReading) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = HomeDesignTokens.CardGap),
+                    )
+                }
             }
             items(
                 items = documents,
@@ -493,13 +540,12 @@ private fun DocumentCard(
 }
 
 /**
- * Home import FAB — Liquid Glass, exactly the PDF reader chrome material
- * (shared [markLeafLiquidSurface] with [LiquidSurfaceLevel.Control] tokens:
+ * Home import FAB — unified Control material, shared with compact reader chrome:
  * surface alpha / blur / lens / highlight / shadow / pressed boost).
  * Rounded square, light liquid surface + dark plus in light theme.
  */
 @Composable
-private fun LiquidHomeFab(
+private fun GlassHomeFab(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String,
@@ -509,14 +555,9 @@ private fun LiquidHomeFab(
     Box(
         modifier = modifier
             .size(HomeDesignTokens.FabSize)
-            .graphicsLayer {
-                val s = if (pressed) 0.96f else 1f
-                scaleX = s
-                scaleY = s
-            }
-            .markLeafLiquidSurface(
+            .glassMaterial(
+                role = GlassMaterialRole.Control,
                 shape = HomeDesignTokens.FabShape,
-                level = LiquidSurfaceLevel.Control,
                 pressed = pressed,
             )
             .clickable(
@@ -563,13 +604,10 @@ private fun OverflowMenuButton(
 }
 
 /**
- * Delete utility menu — Liquid Glass surface via the SHARED
- * [markLeafLiquidSurface] ([LiquidSurfaceLevel.Control] tokens: same alpha /
- * blur / shadow / highlight family as the PDF reader chrome). Compact
+ * Delete utility menu — unified Menu material. Compact
  * single-row rectangle, right-edge aligned to the ··· anchor (expands
  * leftward). A [Popup] is a separate window, so backdrop sampling across
- * windows is unsafe — the soft-plate path paints the same Control tokens, plus
- * the Control-level 0.5dp/α0.55 edge highlight as a thin border.
+ * windows is unsafe, so the engine renders the same recipe as a soft plate.
  */
 @Composable
 private fun DeleteRecordMenu(
@@ -596,25 +634,28 @@ private fun DeleteRecordMenu(
                     min = HomeDesignTokens.MenuMinWidth,
                     max = HomeDesignTokens.MenuMaxWidth,
                 )
-                .markLeafLiquidSurface(
+                .glassMaterial(
+                    role = GlassMaterialRole.Menu,
                     shape = HomeDesignTokens.MenuShape,
-                    level = LiquidSurfaceLevel.Control,
                     sampleBackdrop = false,
-                )
-                .border(
-                    BorderStroke(
-                        width = HomeDesignTokens.MenuEdgeHighlightWidth,
-                        color = Color.White.copy(alpha = HomeDesignTokens.MenuEdgeHighlightAlpha),
-                    ),
-                    HomeDesignTokens.MenuShape,
                 ),
         ) {
             val rowInteraction = remember { MutableInteractionSource() }
             val rowPressed by rowInteraction.collectIsPressedAsState()
+            val pressedOverlay = glassPressedContentOverlayAlpha(GlassMaterialRole.Menu)
+            val rowHighlight by animateFloatAsState(
+                targetValue = if (rowPressed) pressedOverlay else 0f,
+                animationSpec = GlassMaterialEngine.PressSpring,
+                label = "homeMenuRowPress",
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(HomeDesignTokens.MenuRowHeight)
+                    .background(
+                        color = scheme.onSurface.copy(alpha = rowHighlight),
+                        shape = RoundedCornerShape(10.dp),
+                    )
                     .clickable(
                         interactionSource = rowInteraction,
                         indication = null,
@@ -623,8 +664,7 @@ private fun DeleteRecordMenu(
                             onDelete()
                         },
                     )
-                    .padding(horizontal = HomeDesignTokens.MenuRowPadH)
-                    .graphicsLayer { alpha = if (rowPressed) 0.82f else 1f },
+                    .padding(horizontal = HomeDesignTokens.MenuRowPadH),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -646,7 +686,7 @@ private fun DeleteRecordMenu(
 }
 
 @Composable
-private fun ReadingProgressBar(
+internal fun ReadingProgressBar(
     progress: Float,
     activeColor: Color,
     trackColor: Color,
@@ -673,13 +713,13 @@ private fun ReadingProgressBar(
 
 // ── Title / meta pure helpers ───────────────────────────────────────────────
 
-private data class DocumentCardTitles(
+internal data class DocumentCardTitles(
     val displayTitle: String,
     /** Short type/format label (PDF / MD / package). */
     val typeLabel: String,
 )
 
-private fun resolveDocumentCardTitles(document: DocumentEntity): DocumentCardTitles {
+internal fun resolveDocumentCardTitles(document: DocumentEntity): DocumentCardTitles {
     val fullFileName = fullFileNameOf(document)
     if (document.isPdf) {
         return DocumentCardTitles(
@@ -736,7 +776,7 @@ internal fun formatMeta(document: DocumentEntity): String {
     return listOf(time, size, progressLabel).joinToString(" · ")
 }
 
-private fun formatPdfProgress(document: DocumentEntity): String {
+internal fun formatPdfProgress(document: DocumentEntity): String {
     val pageCount = document.pageCount
     val pageIndex = document.lastScrollIndex.coerceAtLeast(0)
     if (pageCount > 0) {
@@ -796,7 +836,7 @@ private fun formatRelativeOpenedAt(epochMs: Long): String {
     }
 }
 
-private fun formatReadingProgress(progress: Float): String {
+internal fun formatReadingProgress(progress: Float): String {
     val percent = (progress.coerceIn(0f, 1f) * 100f).toInt()
     return when {
         percent <= 0 -> "未读"

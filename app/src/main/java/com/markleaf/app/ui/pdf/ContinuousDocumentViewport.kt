@@ -140,6 +140,7 @@ internal fun ContinuousDocumentViewport(
     onTilePlan: (PdfTilePlan) -> Unit = {},
     tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
     gestureCoordinatorOverride: ContinuousGestureCoordinator? = null,
+    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val documentId = state.document.id
@@ -1412,6 +1413,7 @@ internal fun ContinuousDocumentViewport(
             subcompose(page) {
                 val bitmap = displayedBitmaps[page]
                 DocumentPage(
+                    pageAnnotation = pageAnnotation,
                     documentId = documentId,
                     page = page,
                     pageCount = state.pageCount,
@@ -1524,6 +1526,7 @@ private fun DocumentPage(
     showBaseLayer: Boolean,
     tileOverlayAlpha: Float,
     showTileDiagnostics: Boolean,
+    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
 ) {
     val drawnTileKeys = remember(documentId, page) { mutableSetOf<com.markleaf.app.pdf.PdfTileKey>() }
     val diagnosticPaint = remember(showTileDiagnostics) {
@@ -1608,6 +1611,8 @@ private fun DocumentPage(
                 }
             }
         }
+        // R26.1 标注覆盖/选择层：渲染在页面内容之上（同页局部坐标系）。
+        pageAnnotation(page)
       }
     }
 }

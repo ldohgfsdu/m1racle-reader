@@ -12,6 +12,11 @@
 *.apk
 *.ap_
 *.aab
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
 .external_inbox/
 .external_outbox/
 .shared_inbox/

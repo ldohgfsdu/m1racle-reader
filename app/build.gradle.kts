@@ -3,6 +3,7 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -11,31 +12,45 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-// ── Monotonic versionCode from git commit count ─────────────────────────────
-// Dev fallback only (QA/debug). Release uses the explicit app/version.properties
-// (single source of truth, strictly bumped by hand); see the release gate below.
-val gitCommitCount: Provider<Int> = providers.exec {
-    commandLine("git", "-C", rootProject.projectDir.absolutePath, "rev-list", "--count", "HEAD")
-    isIgnoreExitValue = true
-}.standardOutput.asText.map { text ->
-    text.trim().toIntOrNull()?.coerceAtLeast(1) ?: 1
-}
-
-// Explicit, persistent, verifiable release versionCode (app/version.properties).
-// Missing/invalid → release gate below REFUSES the build; QA/debug fall back.
+// Public version identity is explicit and committed. Never derive it from Git:
+// commit counts are not monotonic across rebases, shallow clones or branches.
 val versionPropertiesFile = file("version.properties")
-
-fun readReleaseVersionCode(): Int? {
-    if (!versionPropertiesFile.isFile) return null
-    val text = versionPropertiesFile.readText()
-    val line = text.lineSequence()
-        .map { it.trim() }
-        .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
-        ?: return null
-    // Accept both "versionCode=21" and bare "21".
-    val value = line.substringAfter('=').trim().ifEmpty { line }
-    return value.toIntOrNull()?.takeIf { it > 0 }
+check(versionPropertiesFile.isFile) {
+    "Missing app/version.properties; release identity must be committed explicitly."
 }
+val releaseVersionProperties = Properties().apply {
+    versionPropertiesFile.inputStream().use(::load)
+}
+val releaseVersionCode = releaseVersionProperties.getProperty("versionCode")
+    ?.trim()
+    ?.toIntOrNull()
+    ?.takeIf { it > 0 }
+    ?: error("Invalid app/version.properties: versionCode must be a positive integer.")
+val releaseVersionName = releaseVersionProperties.getProperty("versionName")
+    ?.trim()
+    ?.takeIf { it.matches(Regex("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$")) }
+    ?: error("Invalid app/version.properties: versionName must be SemVer (for example 1.0.0).")
+
+// Secrets are injected by the caller/CI environment and are never read from a
+// committed file or supplied as Gradle -P arguments (which may leak in logs).
+val releaseSigningEnvironmentNames = listOf(
+    "MARKLEAF_RELEASE_STORE_FILE",
+    "MARKLEAF_RELEASE_STORE_PASSWORD",
+    "MARKLEAF_RELEASE_KEY_ALIAS",
+    "MARKLEAF_RELEASE_KEY_PASSWORD",
+)
+val releaseSigningEnvironment = releaseSigningEnvironmentNames.associateWith { name ->
+    providers.environmentVariable(name).orNull?.takeIf { it.isNotEmpty() }
+}
+val providedReleaseSigningNames = releaseSigningEnvironment.filterValues { it != null }.keys
+check(providedReleaseSigningNames.isEmpty() || providedReleaseSigningNames.size == releaseSigningEnvironmentNames.size) {
+    val missing = releaseSigningEnvironmentNames.filterNot(providedReleaseSigningNames::contains)
+    "Partial MarkLeaf release signing environment; missing: ${missing.joinToString()}."
+}
+val hasInjectedReleaseSigning = providedReleaseSigningNames.size == releaseSigningEnvironmentNames.size
+val injectedReleaseStoreFile = releaseSigningEnvironment.getValue("MARKLEAF_RELEASE_STORE_FILE")
+    ?.let(::File)
+    ?.let { if (it.isAbsolute) it else rootProject.file(it.path) }
 
 val detailTileOverlayEnabled = providers.gradleProperty("markleaf.detailTileOverlayEnabled")
     .orElse("true").get().toBoolean()
@@ -60,8 +75,8 @@ android {
         applicationId = "com.markleaf.app"
         minSdk = 31
         targetSdk = 35
-        versionCode = readReleaseVersionCode() ?: gitCommitCount.get()
-        versionName = "0.1.0"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "@string/app_name"
         // R7_P0C1_4: geometry visual sample passed; the decoupled tile pipeline is enabled.
@@ -74,22 +89,18 @@ android {
         buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "false")
     }
 
-    // Local/acceptance signing: AGP applies zipalign + APK Signature Scheme v2/v3.
+    // Public signing: AGP applies zipalign and APK Signature Scheme signing.
     // Do NOT re-sign outputs with jarsigner — that breaks 16 KB page-aligned
     // uncompressed .so entries (extractNativeLibs=false) and causes
     // INSTALL_FAILED_INVALID_APK / Failed to extract native libraries.
     signingConfigs {
-        // Reuse the Android debug keystore when present so release APKs install on device.
-        // Replace with a real release keystore for store distribution.
         getByName("debug")
         create("release") {
-            val home = System.getProperty("user.home")
-            val debugStore = file("$home/.android/debug.keystore")
-            if (debugStore.isFile) {
-                storeFile = debugStore
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+            if (hasInjectedReleaseSigning) {
+                storeFile = injectedReleaseStoreFile
+                storePassword = releaseSigningEnvironment.getValue("MARKLEAF_RELEASE_STORE_PASSWORD")
+                keyAlias = releaseSigningEnvironment.getValue("MARKLEAF_RELEASE_KEY_ALIAS")
+                keyPassword = releaseSigningEnvironment.getValue("MARKLEAF_RELEASE_KEY_PASSWORD")
             }
         }
     }
@@ -113,11 +124,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Prefer dedicated release config; fall back is unsigned if keystore missing.
-            val releaseStore = signingConfigs.getByName("release").storeFile
-            if (releaseStore != null && releaseStore.isFile) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
         // Non-debuggable release-like build for Macrobenchmark / FrameTiming on device.
         create("benchmark") {
@@ -127,11 +134,8 @@ android {
             // Keep package installable alongside debug for side-by-side checks.
             applicationIdSuffix = ".benchmark"
             versionNameSuffix = "-benchmark"
-            // Isolate signing from release path; still installable via debug keystore.
-            val releaseStore = signingConfigs.getByName("release").storeFile
-            if (releaseStore != null && releaseStore.isFile) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            // Benchmark is an internal installable artifact, never a public release.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -142,10 +146,30 @@ android {
         }
     }
 
-    // Lifecycle lint detector crashes with Compose UI 1.11 (pulled by Backdrop 2.0.0)
-    // under AGP 8.7.3: KaCallableMemberCall IncompatibleClassChangeError.
+    // Lifecycle/Compose lint detectors crash with Compose UI 1.11 (pulled by
+    // Backdrop 2.0.0) under AGP 8.7.3 because their Kotlin analysis API ABI
+    // does not match the host lint runtime. Exclude that incompatible registry;
+    // keep Android, Material, Room, and all other release lint checks active.
     lint {
         disable += "NullSafeMutableLiveData"
+        disable += setOf(
+            "AutoboxingStateCreation",
+            "AutoboxingStateValueProperty",
+            "ComposableLambdaParameterNaming",
+            "ComposableLambdaParameterPosition",
+            "ComposableNaming",
+            "CompositionLocalNaming",
+            "CoroutineCreationDuringComposition",
+            "FlowOperatorInvokedInComposition",
+            "FrequentlyChangingValue",
+            "MutableCollectionMutableState",
+            "OpaqueUnitKey",
+            "ProduceStateDoesNotAssignValue",
+            "RememberInComposition",
+            "RememberReturnType",
+            "StateFlowValueCalledInComposition",
+            "UnrememberedState",
+        )
         checkReleaseBuilds = true
         abortOnError = true
     }
@@ -188,31 +212,35 @@ android {
     }
 }
 
-// ── Release identity gate: never silently produce an unsigned release APK ──
-// Local dev signs release with the debug keystore (accepted compromise);
-// but a missing keystore must fail the build loudly instead of emitting an
-// uninstallable unsigned APK that the outbox would happily ship.
-val releaseIdentityTasks = setOf("assembleRelease", "packageRelease")
+// ── Public release gate: never fall back to debug or unsigned output ─────────
 val releaseSigning = android.signingConfigs.getByName("release")
 val releaseBuildType = android.buildTypes.getByName("release")
-tasks.matching { it.name in releaseIdentityTasks }.configureEach {
-    doFirst {
+val validatePublicReleaseConfiguration = tasks.register("validatePublicReleaseConfiguration") {
+    group = "verification"
+    description = "Rejects public release output unless version and injected signing are complete."
+    doLast {
+        check(hasInjectedReleaseSigning) {
+            "REFUSED public release: inject ${releaseSigningEnvironmentNames.joinToString()} via environment."
+        }
         val store = releaseSigning.storeFile
         check(store != null && store.isFile) {
-            "REFUSED ${name}: release signing keystore missing (${store}). " +
-                "Configure signingConfigs.release.storeFile before building a release APK."
+            "REFUSED public release: injected keystore does not exist or is not a file."
         }
-        check(releaseBuildType.signingConfig != null) {
-            "REFUSED ${name}: release buildType has no signingConfig."
+        check(store.name != "debug.keystore") {
+            "REFUSED public release: Android debug.keystore is not an acceptable signing identity."
         }
-        // Explicit release versionCode: app/version.properties is the single
-        // source of truth. Never silently fall back to git commit count here —
-        // that sequence is not strictly monotonic (rebase/squash/branch/shallow).
-        check(readReleaseVersionCode() != null) {
-            "REFUSED ${name}: app/version.properties missing or invalid " +
-                "(versionCode must be a positive integer). Bump it by +1 per release."
+        check(releaseSigning.keyAlias != "androiddebugkey") {
+            "REFUSED public release: androiddebugkey is not an acceptable signing alias."
         }
+        check(releaseBuildType.signingConfig == releaseSigning) {
+            "REFUSED public release: release buildType is not bound to the injected signing config."
+        }
+        logger.lifecycle("PUBLIC_RELEASE_IDENTITY versionCode=$releaseVersionCode versionName=$releaseVersionName")
     }
+}
+val publicReleaseOutputTasks = setOf("assembleRelease", "bundleRelease", "packageRelease")
+tasks.matching { it.name in publicReleaseOutputTasks }.configureEach {
+    dependsOn(validatePublicReleaseConfiguration)
 }
 
 // Keep the formerly common command present only as an explicit, pre-install safety refusal.
@@ -250,8 +278,9 @@ gradle.taskGraph.whenReady {
 
 ksp {
     // P0A: export Room schema JSON for migration testing (spec section 五).
-    // First enabling does NOT retro-generate historical v1–v5 schemas; only
-    // v6 (current) is exported. Historical backfill is a separate task.
+    // Schema export began at v6; v1–v5 snapshots cannot be reconstructed by KSP.
+    // Every current build exports the latest schema while committed v6+ snapshots
+    // remain available to migration verification.
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
@@ -331,6 +360,25 @@ dependencies {
 //   对应 .sha256
 val markleafOutboxDir: File =
     rootProject.layout.projectDirectory.dir(".external_outbox").asFile
+val markleafOutboxHistoryLimit = 5
+
+fun pruneVariantOutboxHistory(label: String) {
+    val stampedPattern = Regex("^markleaf-${Regex.escape(label)}-v.+\\.apk$")
+    val stampedApks = markleafOutboxDir.listFiles()
+        ?.filter { it.isFile && stampedPattern.matches(it.name) }
+        .orEmpty()
+        .sortedWith(compareByDescending<File> { it.lastModified() }.thenByDescending { it.name })
+    stampedApks.drop(markleafOutboxHistoryLimit).forEach { obsoleteApk ->
+        val checksum = File(obsoleteApk.path + ".sha256")
+        val removedBytes = obsoleteApk.length() + checksum.length()
+        val apkRemoved = obsoleteApk.delete()
+        val checksumRemoved = !checksum.exists() || checksum.delete()
+        check(apkRemoved && checksumRemoved) {
+            "OUTBOX: failed to prune ${obsoleteApk.name} or its checksum"
+        }
+        logger.lifecycle("OUTBOX: pruned ${obsoleteApk.name} ($removedBytes bytes)")
+    }
+}
 
 fun exportVariantApksToOutbox(variantFolder: String, label: String) {
     val apkDir = layout.buildDirectory.dir("outputs/apk/$variantFolder").get().asFile
@@ -369,6 +417,7 @@ fun exportVariantApksToOutbox(variantFolder: String, label: String) {
         logger.lifecycle("OUTBOX: ${stamped.name} (${stamped.length() / 1024} KB) → ${markleafOutboxDir.path}")
         logger.lifecycle("OUTBOX: ${latest.name} (latest)")
     }
+    pruneVariantOutboxHistory(label)
 }
 
 listOf(

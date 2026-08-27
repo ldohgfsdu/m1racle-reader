@@ -287,6 +287,7 @@ class MigrationV5ToV6Test {
                 documentDao = docDao,
                 pdfPrintPageAnchorDao = anchorDao,
                 textbookOutlineNodeDao = outlineDao,
+                searchRepository = com.markleaf.app.data.repository.SearchRepository(roomDb.searchIndexDao()),
             )
             repo.updatePdfViewportSession("doc-migrate", session)
 

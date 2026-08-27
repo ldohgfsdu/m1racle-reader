@@ -1,175 +1,178 @@
 package com.markleaf.app.ui.pdf
 
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
+import com.markleaf.app.ui.material.GlassMaterialEngine
+import com.markleaf.app.ui.material.GlassMaterialRole
+import com.markleaf.app.ui.material.GlassRenderState
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Static contract: Back / Parent / Child shells share [ReaderChromeTokens]
- * border/alpha/elevation — no hard black outline, light glass 88–94%.
- *
- * Also drives the SHIPPED applied-border path ([resolveGlassBorder] +
- * [appliedGlassBorderColor]) so opaque Black 1dp outlines cannot regress green.
- */
+/** Regression gates for the single Glass Material Engine authority. */
 class ReaderChromeTokensContractTest {
 
     @Test
-    fun `glass tokens in product bands`() {
-        assertTrue(ReaderChromeTokens.LightBaseAlpha in 0.88f..0.94f)
-        assertTrue(
-            ReaderChromeTokens.LightBaseAlpha + ReaderChromeTokens.ChildAlphaDelta in 0.90f..0.97f,
-        )
-        assertTrue(ReaderChromeTokens.LightBorderAlpha in 0.03f..0.07f)
-        assertTrue(ReaderChromeTokens.DarkBorderAlpha in 0.08f..0.12f)
-        assertTrue(ReaderChromeTokens.ParentElevationDp in 8f..10f)
-        assertTrue(ReaderChromeTokens.ChildElevationDp in 12f..16f)
-        assertTrue(ReaderChromeTokens.DividerAlpha in 0.05f..0.08f)
-        assertTrue(ReaderChromeTokens.LightMutedAlpha in 0.55f..0.62f)
+    fun `every product role has a complete bounded recipe`() {
+        assertEquals(5, GlassMaterialRole.entries.size)
+        GlassMaterialRole.entries.forEach { role ->
+            listOf(false, true).forEach { dark ->
+                val spec = GlassMaterialEngine.resolve(role, dark)
+                assertTrue(spec.surfaceColor.alpha in 0f..0.98f)
+                assertTrue(spec.blur.value > 0f)
+                assertTrue(spec.shadow.value > 0f)
+                assertEquals(0.5f, spec.highlightWidth.value, 0.001f)
+                assertTrue(spec.highlightColor.alpha in 0.15f..0.40f)
+                assertTrue(spec.contentDividerAlpha in 0.04f..0.08f)
+                assertTrue(spec.contentPressedOverlayAlpha in 0.04f..0.05f)
+                assertEquals(1f, spec.scale, 0.001f)
+            }
+        }
     }
 
     @Test
-    fun `applied glass border alpha is hairline not opaque black`() {
-        // Light: base Black + LightBorderAlpha → drawn alpha stays 0.03–0.07.
-        val (lightBase, lightA) = resolveGlassBorder(dark = false)
-        assertEquals(0f, lightBase.red, 1e-4f)
-        assertEquals(0f, lightBase.green, 1e-4f)
-        assertEquals(0f, lightBase.blue, 1e-4f)
-        // Base must be full-opaque RGB; alpha lives only in borderAlpha.
-        assertEquals(1f, lightBase.alpha, 1e-4f)
-        assertEquals(ReaderChromeTokens.LightBorderAlpha, lightA, 1e-4f)
-        assertTrue(lightA in 0.03f..0.07f)
+    fun `dialog plate isolates content while retaining translucency`() {
+        listOf(false, true).forEach { dark ->
+            val dialog = GlassMaterialEngine.resolve(GlassMaterialRole.Dialog, dark)
+            val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark)
+            assertEquals(0.97f, dialog.surfaceColor.alpha, 0.002f)
+            assertTrue(dialog.surfaceColor.alpha < 1f)
+            val minimumHierarchyGap = if (dark) 0.18f else 0.30f
+            assertTrue(dialog.surfaceColor.alpha - settings.surfaceColor.alpha >= minimumHierarchyGap)
+        }
+    }
 
-        val lightSpec = sampleSpec(borderColor = lightBase, borderAlpha = lightA)
-        val lightStroke = appliedGlassBorderColor(lightSpec)
-        // Color packs alpha to 8-bit (~1/255); assert hairline band, not exact float.
-        assertTrue(
-            "applied alpha=${lightStroke.alpha} must stay in light hairline 0.03–0.07 (not opaque 1f)",
-            lightStroke.alpha in 0.03f..0.07f,
+    @Test
+    fun `pressed state is resolved without changing component geometry`() {
+        val rest = GlassMaterialEngine.resolve(GlassMaterialRole.Control, dark = false)
+        val pressed = GlassMaterialEngine.resolve(
+            GlassMaterialRole.Control,
+            dark = false,
+            pressed = true,
+        )
+        assertEquals(0.04f, pressed.surfaceColor.alpha - rest.surfaceColor.alpha, 0.01f)
+        assertEquals(0.10f, pressed.highlightColor.alpha - rest.highlightColor.alpha, 0.01f)
+        assertEquals(rest.blur, pressed.blur)
+        assertEquals(rest.shadow, pressed.shadow)
+        assertEquals(0.965f, pressed.scale, 0.001f)
+        assertEquals(GlassRenderState.IDLE, rest.renderState)
+        assertEquals(GlassRenderState.INTERACTION, pressed.renderState)
+    }
+
+    @Test
+    fun `expanded material roles resolve as interaction while compact roles idle`() {
+        assertEquals(
+            GlassRenderState.IDLE,
+            GlassMaterialEngine.resolve(GlassMaterialRole.Capsule, dark = false).renderState,
         )
         assertEquals(
-            "applied path must use borderAlpha token (8-bit quantization ok)",
-            lightA,
-            lightStroke.alpha,
-            0.01f,
+            GlassRenderState.INTERACTION,
+            GlassMaterialEngine.resolve(
+                GlassMaterialRole.Capsule,
+                dark = false,
+                interaction = true,
+            ).renderState,
         )
-        assertFalse("must not be opaque black", lightStroke.alpha >= 0.99f)
-
-        // Dark: base White + DarkBorderAlpha → 0.08–0.12.
-        val (darkBase, darkA) = resolveGlassBorder(dark = true)
-        assertEquals(1f, darkBase.red, 1e-4f)
-        assertEquals(1f, darkBase.alpha, 1e-4f)
-        assertEquals(ReaderChromeTokens.DarkBorderAlpha, darkA, 1e-4f)
-        assertTrue(darkA in 0.08f..0.12f)
-        val darkStroke = appliedGlassBorderColor(
-            sampleSpec(borderColor = darkBase, borderAlpha = darkA),
+        assertEquals(
+            GlassRenderState.INTERACTION,
+            GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false).renderState,
         )
-        assertTrue(darkStroke.alpha in 0.08f..0.12f)
-        assertEquals(darkA, darkStroke.alpha, 0.01f)
-        assertFalse(darkStroke.alpha >= 0.99f)
     }
 
     @Test
-    fun `readerGlassSurface uses appliedGlassBorderColor not borderAlpha equals one overwrite`() {
-        val glass = source("ReaderChromeGlass.kt")
-        // Factory stores opaque base + token alpha (not pre-baked color + borderAlpha=1f).
-        assertTrue(glass.contains("resolveGlassBorder"))
-        assertTrue(glass.contains("appliedGlassBorderColor"))
-        assertTrue(glass.contains("borderAlpha = borderA"))
-        // Surface must call appliedGlassBorderColor for the stroke.
-        assertTrue(glass.contains("val stroke = appliedGlassBorderColor(spec)"))
-        assertTrue(glass.contains(".border(spec.borderWidth, stroke, shape)"))
-        // Regression: never set borderAlpha = 1f while color already embeds hairline.
-        assertFalse(glass.contains("borderAlpha = 1f"))
-    }
-
-    private fun sampleSpec(
-        borderColor: Color,
-        borderAlpha: Float,
-    ): ReaderGlassSurfaceSpec = ReaderGlassSurfaceSpec(
-        containerColor = Color.White,
-        containerAlpha = ReaderChromeTokens.LightBaseAlpha,
-        borderColor = borderColor,
-        borderAlpha = borderAlpha,
-        borderWidth = 1.dp,
-        elevation = ReaderChromeTokens.ParentElevationDp.dp,
-        contentColor = Color.Black,
-        contentMutedAlpha = ReaderChromeTokens.LightMutedAlpha,
-    )
-
-    @Test
-    fun `Back Parent Child all call unified readerChromeSurface`() {
-        val host = source("ReaderMoreHost.kt")
-        val pop = source("AnchoredNestedPopover.kt")
-        val screen = source("PdfViewerScreen.kt")
-        // Material dual-style entry (Frosted/Liquid) — not ad-hoc glass/Backdrop.
-        assertTrue(host.contains("readerChromeSurface("))
-        assertTrue(pop.contains("readerChromeSurface("))
-        assertTrue(screen.contains("readerChromeSurface("))
-        assertTrue(host.contains("ReaderChromeSurfaceRole.Parent") || host.contains("ReaderGlassElevation.Main"))
-        assertTrue(pop.contains("ReaderChromeSurfaceRole.Child") || pop.contains("ReaderGlassElevation.Child"))
+    fun `single renderer applies tint highlight shadow blur and lens`() {
+        val engine = materialSource()
+        assertTrue(engine.contains("lerp(idleSpec.surfaceColor, pressedSpec.surfaceColor, progress)"))
+        assertTrue(engine.contains("pressedSpec.highlightColor.alpha - idleSpec.highlightColor.alpha"))
+        assertTrue(engine.contains("colorControls("))
+        assertTrue(engine.contains("blur(blurPx)"))
+        assertTrue(engine.contains("lens("))
+        assertTrue(engine.contains("Highlight.Plain.copy("))
+        assertTrue(engine.contains("Shadow("))
+        assertTrue(engine.contains("animationSpec = GlassMaterialEngine.PressSpring"))
+        assertTrue(engine.contains("layerBlock = if (pressLayerActive)"))
+        assertTrue(engine.contains("val resourceModifier = remember("))
+        assertTrue(engine.contains("return modifier.then(resourceModifier)"))
+        assertFalse(engine.contains("ReaderChromeTokens"))
     }
 
     @Test
-    fun `shells do not hardcode high-alpha black border on glass path`() {
-        val glass = source("ReaderChromeGlass.kt")
-        assertFalse(glass.contains("Color.Black.copy(alpha = 0.2"))
-        assertFalse(glass.contains("Color.Black.copy(alpha = 0.3"))
-        assertFalse(glass.contains("borderColor = Color.Black)"))
-        assertTrue(glass.contains("readerChromeBorderColor()"))
-        assertTrue(glass.contains("LightBorderAlpha"))
-    }
-
-    @Test
-    fun `host snaps inline progress when child opens - no dual expansion freeze`() {
-        val host = source("ReaderMoreHost.kt")
-        assertTrue(host.contains("isPreparing()") || host.contains("isChild()"))
-        assertTrue(host.contains("readingModeProgress.snapTo(0f)"))
-        assertTrue(host.contains("topBarProgress.snapTo(0f)"))
-        assertTrue(host.contains("baseHeightPx"))
-        assertTrue(host.contains("canonicalMainBounds") || host.contains("nestedActive"))
-    }
-
-    @Test
-    fun `page mapping has no sticky clipped footer - save is in-body`() {
-        val card = source("ReaderAdvancedCard.kt")
-        assertTrue(
-            "expected in-body 44dp save; len=${card.length} cwd=${File(".").absolutePath}",
-            card.contains("height(44.dp)"),
+    fun `all app dialogs use unified dialog component`() {
+        val files = listOf(
+            appSource("com/markleaf/app/MainActivity.kt"),
+            sourceFile("OutlineEditDialog.kt"),
+            sourceFile("ChapterExportDialogs.kt"),
+            sourceFile("EmbeddedOutlineImportDialog.kt"),
         )
-        assertTrue(
-            "expected IME Done submit",
-            card.contains("ImeAction.Done"),
-        )
-        assertFalse("must not auto-requestFocus", card.contains("requestFocus()"))
-        assertFalse("must not showSoftInput on open", card.contains("showSoftInput"))
+        files.forEach { file ->
+            val source = file.readText()
+            assertTrue("${file.name} must use GlassAlertDialog", source.contains("GlassAlertDialog("))
+            assertFalse(source.contains("containerColor = scheme.dialogContainer"))
+            assertFalse(source.contains("containerColor = MaterialTheme.colorScheme.dialogContainer"))
+        }
+        val dialog = appSource(
+            "com/markleaf/app/ui/material/GlassAlertDialog.kt",
+        ).readText()
+        assertTrue(dialog.contains("GlassMaterialRole.Dialog"))
+        assertTrue(dialog.contains("BasicAlertDialog("))
+        assertTrue(dialog.contains("sampleBackdrop = false"))
+    }
+
+    @Test
+    fun `old material authorities are removed`() {
+        assertFalse(sourceFile("ReaderChromeGlass.kt").exists())
+        assertFalse(sourceFile("ReaderChromeMaterial.kt").exists())
+        assertFalse(appSourceCandidate(
+            "com/markleaf/app/ui/common/MarkLeafLiquidSurface.kt",
+        ).exists())
+    }
+
+    @Test
+    fun `page mapping geometry and input behavior remain unchanged`() {
+        val card = sourceFile("ReaderAdvancedCard.kt").readText()
+        assertTrue(card.contains("height(44.dp)"))
+        assertTrue(card.contains("ImeAction.Done"))
+        assertFalse(card.contains("requestFocus()"))
+        assertFalse(card.contains("showSoftInput"))
         assertTrue(card.contains("TextbookPageAdvancedContent"))
         assertTrue(card.contains("verticalScroll(rememberScrollState())"))
+        assertTrue(card.contains("AdvancedChildLayoutSpec.InputCornerDp"))
+        assertTrue(card.contains("AdvancedChildLayoutSpec.ActionCornerDp"))
     }
 
     @Test
-    fun `screen wires section-while-child close-first path`() {
-        val screen = source("PdfViewerScreen.kt")
+    fun `reader transition state wiring remains unchanged`() {
+        val host = sourceFile("ReaderMoreHost.kt").readText()
+        val screen = sourceFile("PdfViewerScreen.kt").readText()
+        assertTrue(host.contains("readingModeProgress.snapTo(0f)"))
+        assertTrue(host.contains("topBarProgress.snapTo(0f)"))
+        assertTrue(host.contains("canonicalMainBounds") || host.contains("nestedActive"))
         assertTrue(screen.contains("ReaderMoreTransitions.onSectionToggle"))
         assertTrue(screen.contains("pendingInlineAfterChild"))
         assertTrue(screen.contains("ReaderMoreTransitions.onBack"))
         assertTrue(screen.contains("ReaderMoreTransitions.afterChildCollapsed"))
-        assertTrue(screen.contains("AdvancedChildLayoutSpec.maxHeightDp"))
     }
 
-    private fun source(name: String): String {
+    private fun materialSource(): String = appSource(
+        "com/markleaf/app/ui/material/GlassMaterial.kt",
+    ).readText()
+
+    private fun sourceFile(name: String): File = appSourceCandidate(
+        "com/markleaf/app/ui/pdf/$name",
+    )
+
+    private fun appSource(relative: String): File = listOf(
+        File("src/main/java/$relative"),
+        File("app/src/main/java/$relative"),
+        File("/root/code/MarkLeaf/app/src/main/java/$relative"),
+    ).first { it.isFile }
+
+    private fun appSourceCandidate(relative: String): File {
         val candidates = listOf(
-            File("app/src/main/java/com/markleaf/app/ui/pdf/$name"),
-            File("src/main/java/com/markleaf/app/ui/pdf/$name"),
-            File("../app/src/main/java/com/markleaf/app/ui/pdf/$name"),
-            // Absolute-ish from common MarkLeaf roots.
-            File("/root/code/MarkLeaf/app/src/main/java/com/markleaf/app/ui/pdf/$name"),
+            File("src/main/java/$relative"),
+            File("app/src/main/java/$relative"),
+            File("/root/code/MarkLeaf/app/src/main/java/$relative"),
         )
-        val hit = candidates.firstOrNull { it.isFile }
-            ?: error("source not found for $name; cwd=${File(".").absolutePath}; tried=$candidates")
-        return hit.readText()
+        return candidates.firstOrNull { it.exists() } ?: candidates.first()
     }
 }

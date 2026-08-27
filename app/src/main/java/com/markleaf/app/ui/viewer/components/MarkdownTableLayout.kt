@@ -22,8 +22,6 @@ internal data class MarkdownTableLayoutTokens(
     val wideTableReadableTextFloorDp: Float = 64f,
     val wideIdentifierTextFloorDp: Float = 36f,
     val wideIdentifierMinimumDp: Float = 56f,
-    /** Legacy compatibility token; R3 wide tables no longer compress toward the viewport. */
-    val maximumWideCompressionFraction: Float = 0.75f,
     val twoColumnCandidateFractions: List<Float> =
         listOf(0.28f, 0.32f, 0.36f, 0.40f, 0.44f, 0.48f, 0.52f, 0.56f, 0.60f, 0.64f, 0.68f, 0.72f),
     val shortLabelCharacterLimit: Int = 12,

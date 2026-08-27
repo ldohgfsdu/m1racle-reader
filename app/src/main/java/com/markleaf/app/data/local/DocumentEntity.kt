@@ -10,7 +10,8 @@ import androidx.room.PrimaryKey
  * extracted package trees are lifecycle-owned by the repository and are cleaned
  * up with the record.
  *
- * Reading progress fields are shared:
+ * 唯一阅读位置事实源（H2_1_READING_MODEL_AUTHORITY_REPORT.md）：下列阅读字段族由
+ * DocumentRepository 保存路径单点写入，禁止任何第二阅读状态存储或投影表：
  * - Markdown: [lastScrollIndex]/[lastScrollOffset] = LazyColumn position
  * - PDF: [lastScrollIndex] = 0-based page index; [lastScrollOffset] stores an encoded
  *   intra-page fraction; [pageCount] = total pages when last known;

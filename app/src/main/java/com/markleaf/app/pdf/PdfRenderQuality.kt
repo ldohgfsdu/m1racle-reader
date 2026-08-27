@@ -60,8 +60,6 @@ object PdfRenderQuality {
     /** Absolute continuous-mode width cap (never 4096). */
     const val MAX_CONTINUOUS_WIDTH_PX = HIGH_MAX_PX
     const val MIN_RENDER_WIDTH_PX = 320
-    /** Legacy alias — continuous path must use [MAX_CONTINUOUS_WIDTH_PX]. */
-    const val MAX_RENDER_WIDTH_PX = MAX_CONTINUOUS_WIDTH_PX
 
     // Hysteresis (zoom scale)
     const val UP_TO_MEDIUM = 1.45f

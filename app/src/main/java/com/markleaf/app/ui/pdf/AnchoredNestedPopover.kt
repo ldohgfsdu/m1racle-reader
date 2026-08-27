@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,6 +58,10 @@ import com.markleaf.app.R
 import com.markleaf.app.pdf.AnchoredNestedInput
 import com.markleaf.app.pdf.anchoredRevealRect
 import com.markleaf.app.pdf.computeAnchoredNestedTarget
+import com.markleaf.app.ui.material.GlassMaterialEngine
+import com.markleaf.app.ui.material.GlassMaterialRole
+import com.markleaf.app.ui.material.glassMutedContentAlpha
+import com.markleaf.app.ui.material.glassMaterial
 import kotlin.math.roundToInt
 
 /** Open: 180–220ms band. */
@@ -77,7 +82,7 @@ internal fun nestedMinContentHeightDp(state: ReaderMoreState): Dp =
  * - Independent overlay above Main (Main x/width/right never change)
  * - Morph starts at frozen source-row bounds; height-first growth into a full card
  * - Single header instance (Main blanks that row); real bodies below
- * - Shared [ReaderGlassElevation.Child] glass token
+ * - Unified SettingsCard material stacked over the parent Menu material
  */
 @Composable
 internal fun AnchoredNestedPopover(
@@ -199,10 +204,9 @@ internal fun AnchoredNestedPopover(
             .pointerInput(Unit) {
                 detectTapGestures(onTap = {})
             }
-            .readerChromeSurface(
-                level = ReaderGlassElevation.Child,
+            .glassMaterial(
+                role = GlassMaterialRole.SettingsCard,
                 shape = RoundedCornerShape(cornerDp),
-                role = ReaderChromeSurfaceRole.Child,
             ),
     ) {
         // Content fills the morphing container (same width as card — never laid
@@ -236,7 +240,10 @@ internal fun AnchoredNestedPopover(
                     modifier = Modifier.padding(horizontal = MenuRowHPad),
                     thickness = 0.5.dp,
                     color = MaterialTheme.colorScheme.onSurface.copy(
-                        alpha = ReaderChromeTokens.DividerAlpha,
+                        alpha = GlassMaterialEngine.resolve(
+                            role = GlassMaterialRole.SettingsCard,
+                            dark = isSystemInDarkTheme(),
+                        ).contentDividerAlpha,
                     ),
                 )
                 NestedChildBody(
@@ -256,7 +263,7 @@ private fun NestedSourceHeader(
     onClose: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val muted = readerChromeMutedAlpha()
+    val muted = glassMutedContentAlpha(GlassMaterialRole.SettingsCard)
     val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier

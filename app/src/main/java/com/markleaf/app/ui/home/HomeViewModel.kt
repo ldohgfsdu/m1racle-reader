@@ -22,7 +22,25 @@ import kotlinx.coroutines.launch
 data class HomeUiState(
     val documents: List<DocumentEntity> = emptyList(),
     val isEmpty: Boolean = true,
+    /** H2.2 继续阅读 hero 目标（无阅读记录时为 null → UI 降级隐藏）。 */
+    val continueReading: DocumentEntity? = null,
 )
+
+/**
+ * 状态推导纯函数（HomeViewModelTest 直测）：乐观删除过滤后，
+ * 继续阅读取最近一条有阅读记录的文档（唯一事实源 = DocumentEntity 字段族）。
+ */
+internal fun homeUiState(
+    source: List<DocumentEntity>,
+    pendingDeleteIds: Set<String>,
+): HomeUiState {
+    val visible = HomeListUpdate.visibleDocuments(source, pendingDeleteIds)
+    return HomeUiState(
+        documents = visible,
+        isEmpty = visible.isEmpty(),
+        continueReading = HomeHubSelectors.continueReading(visible),
+    )
+}
 
 sealed class HomeEvent {
     data class OpenDocument(val document: DocumentEntity) : HomeEvent()
@@ -54,11 +72,7 @@ class HomeViewModel(
         repository.observeRecentDocuments(),
         pendingDeleteIds,
     ) { source, pending ->
-        val visible = HomeListUpdate.visibleDocuments(source, pending)
-        HomeUiState(
-            documents = visible,
-            isEmpty = visible.isEmpty(),
-        )
+        homeUiState(source, pending)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

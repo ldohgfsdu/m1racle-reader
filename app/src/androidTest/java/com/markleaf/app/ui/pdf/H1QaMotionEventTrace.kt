@@ -105,6 +105,10 @@ internal class H1QaMotionEventTrace(
     fun zoomedPageHandoff() =
         singleSwipe(0.82f, 0.45f, 0.08f, 0.45f, frames = 36, accelerating = true)
 
+    /** R22.3: accelerated PREVIOUS-page handoff (mirror of [zoomedPageHandoff]). */
+    fun zoomedPageHandoffBack() =
+        singleSwipe(0.18f, 0.45f, 0.92f, 0.45f, frames = 36, accelerating = true)
+
     fun cancelledEdgeHandoff() =
         singleSwipe(0.55f, 0.45f, 0.49f, 0.45f, frames = 14)
 

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -12,25 +13,90 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.markleaf.app.data.local.DocumentEntity
 import com.markleaf.app.data.local.DocumentType
+import com.markleaf.app.data.anchor.AnchorCodec
+import com.markleaf.app.data.anchor.DocumentAnchor
 import com.markleaf.app.data.repository.DocumentRepository
+import com.markleaf.app.data.repository.ReadingRepository
+import com.markleaf.app.data.repository.SearchRepository
 import com.markleaf.app.data.settings.ReaderSettingsRepository
 import com.markleaf.app.share.ExternalOpenCoordinator
 import com.markleaf.app.ui.home.HomeScreen
 import com.markleaf.app.ui.home.HomeViewModel
+import com.markleaf.app.ui.hub.BookmarksScreen
+import com.markleaf.app.ui.hub.BookmarksViewModel
+import com.markleaf.app.ui.hub.HubDestination
+import com.markleaf.app.ui.hub.LibraryScreen
+import com.markleaf.app.ui.hub.LibraryViewModel
+import com.markleaf.app.ui.hub.HubSettingsScreen
 import com.markleaf.app.ui.pdf.PdfViewerScreen
 import com.markleaf.app.ui.pdf.PdfViewerViewModel
+import com.markleaf.app.ui.search.SearchScreen
+import com.markleaf.app.ui.search.SearchViewModel
 import com.markleaf.app.ui.viewer.ViewerScreen
 import com.markleaf.app.ui.viewer.ViewerViewModel
 import java.util.UUID
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import kotlinx.coroutines.launch
 
 object Routes {
     const val HOME = "home"
-    const val VIEWER = "viewer/{documentId}"
-    const val PDF_VIEWER = "pdf/{documentId}"
+    const val VIEWER = "viewer/{documentId}?anchor={anchor}"
+    const val PDF_VIEWER = "pdf/{documentId}?anchor={anchor}"
 
-    fun viewer(documentId: String): String = "viewer/$documentId"
-    fun pdfViewer(documentId: String): String = "pdf/$documentId"
+    // H2.2 Hub 顶层目的地（Dock 四入口；与 HubDestination.route 一一对应）。
+    const val LIBRARY = "library"
+    const val BOOKMARKS = "bookmarks"
+    const val SETTINGS = "settings"
+    const val SEARCH = "search"
+
+    fun viewer(documentId: String, anchor: DocumentAnchor? = null): String =
+        routeWithAnchor("viewer/$documentId", anchor)
+
+    fun pdfViewer(documentId: String, anchor: DocumentAnchor? = null): String =
+        routeWithAnchor("pdf/$documentId", anchor)
+
+    fun decodeAnchor(raw: String?): DocumentAnchor? = AnchorCodec.decode(
+        raw?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) },
+    )
+
+    private fun routeWithAnchor(base: String, anchor: DocumentAnchor?): String =
+        anchor?.let {
+            "$base?anchor=${URLEncoder.encode(AnchorCodec.encode(it), StandardCharsets.UTF_8.name())}"
+        } ?: base
+}
+
+/** 按文档类型选择既有阅读路由（Home/Library/书签跳转共用）。 */
+private fun viewerRouteFor(document: DocumentEntity, anchor: DocumentAnchor? = null): String = when (document.type) {
+    DocumentType.PDF -> Routes.pdfViewer(document.id, anchor)
+    DocumentType.MARKDOWN,
+    DocumentType.MARKDOWN_PACKAGE,
+    -> Routes.viewer(document.id, anchor)
+}
+
+/**
+ * H2.2 顶层 Tab 导航：以 HOME 为锚点，saveState/restoreState 保持各页状态，
+ * launchSingleTop 防重复栈顶。
+ */
+private fun NavHostController.navigateToHub(destination: HubDestination) {
+    navigate(destination.route) {
+        popUpTo(Routes.HOME) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
+/** 打开文档：单一活跃阅读器语义（先弹回 Home 锚点再进阅读器）。 */
+private fun openDocument(
+    navController: NavHostController,
+    document: DocumentEntity,
+    anchor: DocumentAnchor? = null,
+) {
+    navController.popBackStack(Routes.HOME, inclusive = false)
+    navController.navigate(viewerRouteFor(document, anchor)) { launchSingleTop = true }
 }
 
 @Composable
@@ -40,10 +106,17 @@ fun MarkLeafNavGraph(
     readerSettingsRepository: ReaderSettingsRepository,
     modifier: Modifier = Modifier,
     externalOpenCoordinator: ExternalOpenCoordinator? = null,
+    readingRepository: ReadingRepository? = null,
+    searchRepository: SearchRepository? = null,
 ) {
     val application = LocalContext.current.applicationContext as Application
     val coordinator = externalOpenCoordinator
         ?: (application as? com.markleaf.app.MarkLeafApplication)?.externalOpenCoordinator
+    // R23：阅读资产仓库（书签/标注唯一写入通道）。
+    val readingRepo = readingRepository
+        ?: (application as? com.markleaf.app.MarkLeafApplication)?.readingRepository
+    val searchRepo = searchRepository
+        ?: (application as? com.markleaf.app.MarkLeafApplication)?.searchRepository
 
     NavHost(
         navController = navController,
@@ -57,15 +130,89 @@ fun MarkLeafNavGraph(
             HomeScreen(
                 viewModel = homeViewModel,
                 onOpenDocument = { document ->
-                    val route = when (document.type) {
-                        DocumentType.PDF -> Routes.pdfViewer(document.id)
-                        DocumentType.MARKDOWN,
-                        DocumentType.MARKDOWN_PACKAGE,
-                        -> Routes.viewer(document.id)
+                    openDocument(navController, document)
+                },
+                onNavigateHub = { destination ->
+                    navController.navigateToHub(destination)
+                },
+                onOpenSearch = { navController.navigate(Routes.SEARCH) },
+            )
+        }
+
+        composable(Routes.LIBRARY) {
+            val libraryViewModel: LibraryViewModel = viewModel(
+                factory = LibraryViewModel.Factory(repository),
+            )
+            LibraryScreen(
+                viewModel = libraryViewModel,
+                onOpenDocument = { document ->
+                    openDocument(navController, document)
+                },
+                onNavigateHub = { destination ->
+                    navController.navigateToHub(destination)
+                },
+                onOpenSearch = { navController.navigate(Routes.SEARCH) },
+            )
+        }
+
+        composable(Routes.SEARCH) {
+            val repositoryForSearch = requireNotNull(searchRepo) {
+                "SearchRepository unavailable for SearchScreen"
+            }
+            val searchViewModel: SearchViewModel = viewModel(
+                factory = SearchViewModel.Factory(repositoryForSearch),
+            )
+            val scope = rememberCoroutineScope()
+            SearchScreen(
+                viewModel = searchViewModel,
+                onBack = { navController.popBackStack() },
+                onOpenResult = { result ->
+                    scope.launch {
+                        repository.getDocumentById(result.documentId)?.let { document ->
+                            openDocument(navController, document, result.anchor)
+                        }
                     }
-                    // Single active viewer: clear any prior viewer route first.
-                    navController.popBackStack(Routes.HOME, inclusive = false)
-                    navController.navigate(route) { launchSingleTop = true }
+                },
+            )
+        }
+
+        composable(Routes.BOOKMARKS) {
+            val bookmarksViewModel: BookmarksViewModel = viewModel(
+                factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                    @Suppress("UNCHECKED_CAST")
+                    override fun <T : androidx.lifecycle.ViewModel> create(
+                        modelClass: Class<T>,
+                    ): T {
+                        if (modelClass.isAssignableFrom(BookmarksViewModel::class.java)) {
+                            val repo = readingRepository
+                                ?: (application as? com.markleaf.app.MarkLeafApplication)?.readingRepository
+                                ?: error("ReadingRepository unavailable for BookmarksScreen")
+                            return BookmarksViewModel(repo) as T
+                        }
+                        throw IllegalArgumentException("Unknown ViewModel")
+                    }
+                },
+            )
+            val scope = rememberCoroutineScope()
+            BookmarksScreen(
+                viewModel = bookmarksViewModel,
+                onOpenDocument = { documentId ->
+                    scope.launch {
+                        repository.getDocumentById(documentId)?.let { document ->
+                            openDocument(navController, document)
+                        }
+                    }
+                },
+                onNavigateHub = { destination ->
+                    navController.navigateToHub(destination)
+                },
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            HubSettingsScreen(
+                onNavigateHub = { destination ->
+                    navController.navigateToHub(destination)
                 },
             )
         }
@@ -76,10 +223,26 @@ fun MarkLeafNavGraph(
                 navArgument("documentId") {
                     type = NavType.StringType
                 },
+                navArgument("anchor") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
             ),
         ) { entry ->
             val documentId = entry.arguments?.getString("documentId").orEmpty()
+            val initialAnchor = Routes.decodeAnchor(entry.arguments?.getString("anchor"))
             val sessionId = remember(documentId) { "md-$documentId-${UUID.randomUUID()}" }
+            // R23 书签中介：Markdown 使用 SCROLL_POSITION 坐标系。
+            val bookmarkController = remember(documentId) {
+                readingRepo?.let {
+                    com.markleaf.app.ui.reader.ReaderBookmarkController(
+                        readingRepository = it,
+                        documentId = documentId,
+                        locationKind = com.markleaf.app.data.local.BookmarkLocationKind.SCROLL_POSITION,
+                    )
+                }
+            }
             val viewerViewModel: ViewerViewModel = viewModel(
                 factory = ViewerViewModel.Factory(
                     documentId = documentId,
@@ -106,6 +269,8 @@ fun MarkLeafNavGraph(
                 onBack = {
                     navController.popBackStack(Routes.HOME, inclusive = false)
                 },
+                bookmarkController = bookmarkController,
+                initialAnchor = initialAnchor,
             )
         }
 
@@ -115,11 +280,44 @@ fun MarkLeafNavGraph(
                 navArgument("documentId") {
                     type = NavType.StringType
                 },
+                navArgument("anchor") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
             ),
         ) { entry ->
             val documentId = entry.arguments?.getString("documentId").orEmpty()
+            val initialAnchor = Routes.decodeAnchor(entry.arguments?.getString("anchor"))
             val sessionId = remember(documentId) { "pdf-$documentId-${UUID.randomUUID()}" }
             val markLeafApp = application as? com.markleaf.app.MarkLeafApplication
+            // R26.1 高亮控制器（Selection → Flow → Repository → Overlay）。
+            val highlightController = remember(documentId) {
+                readingRepo?.let {
+                    com.markleaf.app.ui.reader.ReaderHighlightController(
+                        readingRepository = it,
+                        documentId = documentId,
+                    )
+                }
+            }
+            val noteController = remember(documentId) {
+                readingRepo?.let {
+                    com.markleaf.app.ui.reader.ReaderNoteController(
+                        readingRepository = it,
+                        documentId = documentId,
+                    )
+                }
+            }
+            // R23 书签中介：PDF 使用 PAGE_INDEX 坐标系。
+            val bookmarkController = remember(documentId) {
+                readingRepo?.let {
+                    com.markleaf.app.ui.reader.ReaderBookmarkController(
+                        readingRepository = it,
+                        documentId = documentId,
+                        locationKind = com.markleaf.app.data.local.BookmarkLocationKind.PAGE_INDEX,
+                    )
+                }
+            }
             val pdfViewModel: PdfViewerViewModel = viewModel(
                 factory = PdfViewerViewModel.Factory(
                     application = application,
@@ -150,6 +348,10 @@ fun MarkLeafNavGraph(
                 onBack = {
                     navController.popBackStack(Routes.HOME, inclusive = false)
                 },
+                bookmarkController = bookmarkController,
+                highlightController = highlightController,
+                noteController = noteController,
+                initialAnchor = initialAnchor,
             )
         }
     }

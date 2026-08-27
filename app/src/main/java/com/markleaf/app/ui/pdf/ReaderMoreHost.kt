@@ -3,7 +3,7 @@ package com.markleaf.app.ui.pdf
 import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -61,6 +61,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.markleaf.app.ui.material.GlassMaterialRole
+import com.markleaf.app.ui.material.GlassMaterialEngine
+import com.markleaf.app.ui.material.glassMutedContentAlpha
+import com.markleaf.app.ui.material.glassMaterial
+import com.markleaf.app.ui.material.glassPressedContentOverlayAlpha
 import kotlinx.coroutines.launch
 
 /**
@@ -206,13 +211,19 @@ internal val Level2FontSize = 13.sp
 internal val Level2FontWeight = FontWeight.Normal
 
 // ── Motion ────────────────────────────────────────────────────────────────
-internal const val MorphExpandMs = 190
 private const val MorphCollapseMs = 170
 /** Emphasized decelerate / FastOutSlowIn-class. */
 internal val MoreMorphEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
-/** Trigger icon: fades within the first ~30% of the morph (60ms of 190ms). */
-private const val IconFadeMs = 60
+/**
+ * R22.2 open-morph spring: the card grows out of the More button anchor
+ * (top-right pinned) with one damped spring; close stays a short deterministic
+ * tween so the host's morph-handoff window is exact.
+ */
+internal val MoreMorphSpring = SpringSpec<Float>(
+    dampingRatio = 0.8f,
+    stiffness = 450f,
+)
 /** Inline expansion/collapse duration (single authoritative progress p). */
 private const val InlineProgressMs = 175
 
@@ -456,7 +467,7 @@ internal fun ReaderMoreHost(
     // ── MAIN container size (circle ↔ menu card) ────────────────────────────
     LaunchedEffect(active, closing) {
         if (active && !closing) {
-            cardWidth.animateTo(menuWidthPx, tween(MorphExpandMs, easing = MoreMorphEasing))
+            cardWidth.animateTo(menuWidthPx, MoreMorphSpring)
         }
     }
     LaunchedEffect(
@@ -480,7 +491,7 @@ internal fun ReaderMoreHost(
                 )
             }
             if (cardHeight.value <= circlePx * 1.05f) {
-                cardHeight.animateTo(target, tween(MorphExpandMs, easing = MoreMorphEasing))
+                cardHeight.animateTo(target, MoreMorphSpring)
             } else {
                 cardHeight.snapTo(target)
             }
@@ -498,27 +509,21 @@ internal fun ReaderMoreHost(
         }
     }
 
-    val cornerAnim by animateDpAsState(
-        targetValue = if (active && !closing) MoreMenuCorner else MoreMenuCornerClosed,
-        animationSpec = tween(MorphExpandMs, easing = MoreMorphEasing),
-        label = "moreCorner",
+    // ── R22.2 single-clock spatial morph ─────────────────────────────────────
+    // One expandFraction (derived from the spring-driven card width) owns the
+    // corner radius, content fade-in, icon fade-out and the content's slight
+    // scale from the top-right anchor. No independent alpha clocks: opening
+    // reads as "the button grows into the card", closing as the exact reverse,
+    // with the anchor (top-right) invariant throughout.
+    val expandFraction = ((cardWidth.value - circlePx) / (menuWidthPx - circlePx))
+        .coerceIn(0f, 1f)
+    val shape = RoundedCornerShape(
+        MoreMenuCornerClosed + (MoreMenuCorner - MoreMenuCornerClosed) * expandFraction,
     )
-    val shape = RoundedCornerShape(cornerAnim)
 
-    val contentAlpha by animateFloatAsState(
-        targetValue = if (active && !closing) 1f else 0f,
-        animationSpec = if (active && !closing) tween(0) else tween(100),
-        label = "moreContentAlpha",
-    )
-    val iconAlpha by animateFloatAsState(
-        targetValue = if (active && !closing) 0f else 1f,
-        animationSpec = tween(
-            durationMillis = IconFadeMs,
-            delayMillis = if (!active || closing) (MorphCollapseMs - IconFadeMs) else 0,
-            easing = MoreMorphEasing,
-        ),
-        label = "moreIconAlpha",
-    )
+    val contentAlpha = (expandFraction * 1.6f).coerceAtMost(1f)
+    val iconAlpha = (1f - expandFraction * 2.5f).coerceAtLeast(0f)
+    val contentScale = 0.94f + 0.06f * expandFraction
 
     var lastTop by remember { mutableFloatStateOf(Float.NaN) }
     var lastRight by remember { mutableFloatStateOf(Float.NaN) }
@@ -572,10 +577,9 @@ internal fun ReaderMoreHost(
                             height = with(density) { cardHeight.value.toDp() },
                         )
                         .align(Alignment.TopEnd)
-                        .readerChromeSurface(
-                            level = ReaderGlassElevation.Main,
+                        .glassMaterial(
+                            role = GlassMaterialRole.Menu,
                             shape = shape,
-                            role = ReaderChromeSurfaceRole.Parent,
                         )
                         .onGloballyPositioned { coords ->
                             mainCardRectRoot = coords.boundsInRoot()
@@ -586,7 +590,13 @@ internal fun ReaderMoreHost(
                         modifier = Modifier
                             .width(MoreMenuWidth)
                             .align(Alignment.TopEnd)
-                            .graphicsLayer { alpha = contentAlpha },
+                            .graphicsLayer {
+                                alpha = contentAlpha
+                                scaleX = contentScale
+                                scaleY = contentScale
+                                // Grow from / shrink into the More button anchor.
+                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
+                            },
                     ) {
                         MainMenuContent(
                             state = state,
@@ -669,27 +679,12 @@ private fun MoreCircleButton(
     val scheme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val pressAlpha by animateFloatAsState(
-        targetValue = if (pressed) 0.55f else 1f,
-        animationSpec = tween(80),
-        label = "moreCirclePressAlpha",
-    )
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.95f else 1f,
-        animationSpec = tween(80),
-        label = "moreCirclePressScale",
-    )
     Box(
         modifier = modifier
-            .graphicsLayer {
-                alpha = pressAlpha
-                scaleX = pressScale
-                scaleY = pressScale
-            }
-            .readerChromeSurface(
-                level = ReaderGlassElevation.Chrome,
+            .glassMaterial(
+                role = GlassMaterialRole.Control,
                 shape = CircleShape,
-                role = ReaderChromeSurfaceRole.Chrome,
+                pressed = pressed,
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -938,12 +933,13 @@ internal fun PdfChromeMenuRow(
     val rotation = chevronRotation ?: animatedRotation
     val rowInteraction = remember { MutableInteractionSource() }
     val rowPressed by rowInteraction.collectIsPressedAsState()
+    val pressedOverlay = glassPressedContentOverlayAlpha(GlassMaterialRole.Menu)
     val rowHighlight by animateFloatAsState(
-        targetValue = if (rowPressed) 0.08f else 0f,
-        animationSpec = tween(80),
+        targetValue = if (rowPressed) pressedOverlay else 0f,
+        animationSpec = GlassMaterialEngine.PressSpring,
         label = "menuRowPress",
     )
-    val muted = readerChromeMutedAlpha()
+    val muted = glassMutedContentAlpha(GlassMaterialRole.Menu)
     Row(
         modifier = modifier
             .fillMaxWidth()

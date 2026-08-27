@@ -44,9 +44,6 @@ val ColorScheme.cardContainer: Color
 val ColorScheme.sheetContainer: Color
     get() = surfaceContainer
 
-val ColorScheme.dialogContainer: Color
-    get() = surfaceContainerHigh
-
 val ColorScheme.selectedRow: Color
     get() = surfaceContainerHighest
 

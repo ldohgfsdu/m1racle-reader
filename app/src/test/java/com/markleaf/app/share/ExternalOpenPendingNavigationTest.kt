@@ -73,6 +73,7 @@ class ExternalOpenPendingNavigationTest {
             documentDao = documentDao,
             pdfPrintPageAnchorDao = FakePdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = FakeTextbookOutlineNodeDao(),
+            searchRepository = com.markleaf.app.testing.testSearchRepository(),
         )
         importer = FakeImporter(context, repository)
         coordinator = ExternalOpenCoordinator(context, repository, importer)

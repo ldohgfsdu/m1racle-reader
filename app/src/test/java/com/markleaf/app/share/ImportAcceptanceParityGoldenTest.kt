@@ -313,6 +313,7 @@ class ImportAcceptanceParityGoldenTest {
             documentDao = fakeDao,
             pdfPrintPageAnchorDao = UnusedPdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = UnusedTextbookOutlineNodeDao(),
+            searchRepository = com.markleaf.app.testing.testSearchRepository(),
         )
     }
 

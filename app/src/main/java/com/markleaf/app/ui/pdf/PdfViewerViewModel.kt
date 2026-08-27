@@ -202,7 +202,7 @@ class PdfViewerViewModel(
         _topBarMode.value = mode
     }
 
-    // Material style prefs removed (r26.1): Liquid Glass is the only chrome surface.
+    // Material style prefs removed: the unified Glass Material Engine is authoritative.
 
     private val _uiState = MutableStateFlow<PdfViewerUiState>(PdfViewerUiState.Loading)
     val uiState: StateFlow<PdfViewerUiState> = _uiState.asStateFlow()

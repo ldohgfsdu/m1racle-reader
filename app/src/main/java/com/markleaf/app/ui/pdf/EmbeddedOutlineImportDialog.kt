@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.markleaf.app.R
 import com.markleaf.app.pdf.EmbeddedOutlineNodeDraft
 import com.markleaf.app.pdf.OutlineImportMode
-import com.markleaf.app.ui.theme.dialogContainer
+import com.markleaf.app.ui.material.GlassAlertDialog
 
 @Composable
 fun EmbeddedOutlineImportDialog(
@@ -34,13 +33,8 @@ fun EmbeddedOutlineImportDialog(
     onDismiss: () -> Unit,
 ) {
     val preview = remember(drafts) { drafts.take(40) }
-    val scheme = MaterialTheme.colorScheme
-
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = scheme.dialogContainer,
-        titleContentColor = scheme.onSurface,
-        textContentColor = scheme.onSurfaceVariant,
         title = {
             Text(stringResource(R.string.pdf_embedded_title))
         },

@@ -29,9 +29,9 @@
     <string name="pdf_reading_mode_continuous">上下连续</string>
     <string name="pdf_reading_mode_horizontal">左右翻页</string>
     <string name="pdf_page_cd">PDF 第 %1$d 页，共 %2$d 页</string>
-    <string name="pdf_jump_title">跳转到页面</string>
+    <string name="pdf_capsule_progress_percent">%1$d%%</string>
+    <string name="pdf_capsule_reading_progress">阅读进度 %1$d%%</string>
     <string name="pdf_jump_label">PDF 页码</string>
-    <string name="pdf_jump_range">请输入 1 – %1$d 之间的页码</string>
     <string name="pdf_jump_invalid">页码须为 1 – %1$d 的整数</string>
     <string name="pdf_jump_go">跳转</string>
     <string name="pdf_dialog_cancel">取消</string>
@@ -185,4 +185,55 @@
     <string name="search_placeholder">搜索当前文档</string>
     <string name="search_previous">上一个</string>
     <string name="search_next">下一个</string>
+    <string name="search_library_title">本地搜索</string>
+    <string name="search_library_entry">搜索文档与标注</string>
+    <string name="search_library_placeholder">搜索文档、高亮或笔记</string>
+    <string name="search_library_hint">输入关键词，搜索本机阅读内容</string>
+    <string name="search_library_empty">没有找到匹配内容</string>
+    <string name="search_library_failed">搜索失败，请重试</string>
+    <string name="search_source_document">文档</string>
+    <string name="search_source_highlight">高亮</string>
+    <string name="search_source_note">笔记</string>
+    <string name="search_location_page">第 %1$d 页</string>
+    <string name="search_location_block">第 %1$d 段</string>
+
+    <!-- H2.2 Home Reading Hub -->
+    <string name="hub_continue_reading">继续阅读</string>
+    <string name="hub_nav_home">首页</string>
+    <string name="hub_nav_library">文库</string>
+    <string name="hub_nav_bookmarks">书签</string>
+    <string name="hub_nav_settings">设置</string>
+    <string name="hub_library_title">文库</string>
+    <string name="hub_filter_all">全部</string>
+    <string name="hub_filter_pdf">PDF</string>
+    <string name="hub_filter_markdown">Markdown</string>
+    <string name="hub_library_empty">还没有文档，回首页导入后即可在此浏览。</string>
+    <string name="hub_bookmarks_title">书签</string>
+    <string name="hub_bookmarks_empty">还没有书签。在阅读器中创建的书签会出现在这里。</string>
+    <string name="hub_settings_title">设置</string>
+    <string name="hub_settings_reader_appearance_hint">阅读外观（字号 / 行高 / 边距）请在打开任意文档后，通过阅读器右上角菜单中的「阅读界面」调整。</string>
+
+    <!-- R23 Reading Assets -->
+    <string name="reader_bookmark_add">添加书签</string>
+    <string name="reader_bookmark_remove">移除书签</string>
+    <string name="reader_bookmark_added">已添加书签</string>
+    <string name="reader_bookmark_removed">已移除书签</string>
+    <string name="reader_highlight_added">已添加高亮</string>
+    <string name="reader_highlight_failed">无法创建高亮</string>
+    <string name="reader_annotations_open">标注列表</string>
+    <string name="reader_annotations_title">标注</string>
+    <string name="reader_annotations_empty">当前文档还没有高亮标注。</string>
+    <string name="reader_annotation_deleted">已删除标注</string>
+    <string name="reader_annotation_page_line">第 %1$d 页</string>
+    <string name="reader_note_save">保存</string>
+    <string name="reader_note_hint">输入批注内容…</string>
+    <string name="reader_note_add">添加批注</string>
+    <string name="reader_notes_section">批注</string>
+    <string name="reader_note_editor_title">批注 · %1$s</string>
+    <string name="reader_note_edit">编辑批注</string>
+    <string name="reader_notes_empty">还没有批注。可从上方高亮添加。</string>
+    <string name="reader_highlights_section">高亮</string>
+    <string name="reader_note_saved">批注已保存</string>
+    <string name="reader_note_deleted">已删除批注</string>
+    <string name="cancel">取消</string>
 </resources>

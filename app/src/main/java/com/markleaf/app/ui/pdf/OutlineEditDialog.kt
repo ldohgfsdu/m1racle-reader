@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -30,7 +29,7 @@ import com.markleaf.app.R
 import com.markleaf.app.data.local.TextbookOutlineNodeEntity
 import com.markleaf.app.data.local.TextbookOutlineNodeType
 import com.markleaf.app.pdf.TextbookOutlineResolver
-import com.markleaf.app.ui.theme.dialogContainer
+import com.markleaf.app.ui.material.GlassAlertDialog
 import com.markleaf.app.ui.theme.markLeafOutlinedFieldColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,13 +98,9 @@ fun OutlineEditDialog(
         onSave(state.id, parentId, type, title.trim(), s, e)
     }
 
-    val scheme = MaterialTheme.colorScheme
     val fieldColors = markLeafOutlinedFieldColors()
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = scheme.dialogContainer,
-        titleContentColor = scheme.onSurface,
-        textContentColor = scheme.onSurfaceVariant,
         title = {
             Text(
                 if (state.id == null) {

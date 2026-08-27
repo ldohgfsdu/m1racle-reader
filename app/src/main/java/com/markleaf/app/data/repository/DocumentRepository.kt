@@ -40,6 +40,7 @@ class DocumentRepository(
     private val documentDao: DocumentDao,
     private val pdfPrintPageAnchorDao: PdfPrintPageAnchorDao,
     private val textbookOutlineNodeDao: TextbookOutlineNodeDao,
+    private val searchRepository: SearchRepository,
 ) {
 
     fun observeRecentDocuments(): Flow<List<DocumentEntity>> =
@@ -113,8 +114,13 @@ class DocumentRepository(
 
     suspend fun upsert(document: DocumentEntity) {
         withContext(Dispatchers.IO) {
-            documentDao.upsert(document)
+            upsertAndIndex(document)
         }
+    }
+
+    private suspend fun upsertAndIndex(document: DocumentEntity) {
+        documentDao.upsert(document)
+        searchRepository.index(document)
     }
 
     suspend fun deleteById(id: String) {
@@ -132,6 +138,7 @@ class DocumentRepository(
             db.withTransaction {
                 textbookOutlineNodeDao.deleteAllForDocument(id)
                 pdfPrintPageAnchorDao.deleteAllForDocument(id)
+                searchRepository.clearDocument(id)
                 documentDao.deleteById(id)
             }
             // Sidecar identity index is rebuildable; remove best-effort after Room commit.
@@ -345,6 +352,7 @@ class DocumentRepository(
                 title = title,
                 headingCount = headingCount,
             )
+            documentDao.getById(id)?.let { searchRepository.index(it) }
         }
     }
 
@@ -611,7 +619,7 @@ class DocumentRepository(
                 )
             }
 
-            documentDao.upsert(entity)
+            upsertAndIndex(entity)
             ImportResult.Success(entity)
         } catch (_: SecurityException) {
             ImportResult.ReadFailed
@@ -701,7 +709,7 @@ class DocumentRepository(
                 pageCount = 0,
             )
         }
-        documentDao.upsert(entity)
+        upsertAndIndex(entity)
         return ImportResult.Success(entity)
     }
 

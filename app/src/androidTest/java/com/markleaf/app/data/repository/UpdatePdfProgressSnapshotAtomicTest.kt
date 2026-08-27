@@ -50,6 +50,7 @@ class UpdatePdfProgressSnapshotAtomicTest {
             documentDao = db.documentDao(),
             pdfPrintPageAnchorDao = db.pdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = db.textbookOutlineNodeDao(),
+            searchRepository = SearchRepository(db.searchIndexDao()),
         )
     }
 
@@ -151,6 +152,7 @@ class UpdatePdfProgressSnapshotAtomicTest {
             documentDao = FailingViewportSessionDao(db.documentDao()),
             pdfPrintPageAnchorDao = db.pdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = db.textbookOutlineNodeDao(),
+            searchRepository = SearchRepository(db.searchIndexDao()),
         )
 
         try {
@@ -198,6 +200,7 @@ class UpdatePdfProgressSnapshotAtomicTest {
             documentDao = FailingPositionDao(db.documentDao()),
             pdfPrintPageAnchorDao = db.pdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = db.textbookOutlineNodeDao(),
+            searchRepository = SearchRepository(db.searchIndexDao()),
         )
 
         try {

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,6 +35,7 @@ import com.markleaf.app.share.ExternalOpenUiEffect
 import com.markleaf.app.share.FileSizeFormatter
 import com.markleaf.app.share.PendingExternalOpen
 import com.markleaf.app.ui.common.clearContrastScrim
+import com.markleaf.app.ui.material.GlassAlertDialog
 import com.markleaf.app.ui.navigation.MarkLeafNavGraph
 import com.markleaf.app.ui.navigation.Routes
 import com.markleaf.app.ui.theme.MarkLeafTheme
@@ -142,7 +142,7 @@ class MainActivity : ComponentActivity() {
                             ExternalOpenPhase.READY_TO_COMMIT,
                             -> {
                                 if (busy) {
-                                    AlertDialog(
+                                    GlassAlertDialog(
                                         onDismissRequest = {},
                                         title = { Text(stringResource(R.string.external_import_loading_title)) },
                                         text = {
@@ -290,7 +290,7 @@ private fun ExternalOpenConfirmDialog(
 ) {
     val current = pending.current
     val incoming = pending.incoming
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.external_open_confirm_title)) },
         text = {

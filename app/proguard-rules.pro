@@ -48,3 +48,11 @@
 # ── Prefer smaller stack traces in field only if needed ──
 # -renamesourcefileattribute SourceFile
 # -keepattributes SourceFile,LineNumberTable
+
+# ── Release diagnostics ──
+# Debug/verbose telemetry is useful in QA but must not execute in release.
+# Warning/error logs remain available for actionable failures.
+-assumenosideeffects class android.util.Log {
+    public static int d(...);
+    public static int v(...);
+}

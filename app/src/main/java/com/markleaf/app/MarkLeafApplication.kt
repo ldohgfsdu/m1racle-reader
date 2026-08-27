@@ -3,6 +3,8 @@ package com.markleaf.app
 import android.app.Application
 import com.markleaf.app.data.local.AppDatabase
 import com.markleaf.app.data.repository.DocumentRepository
+import com.markleaf.app.data.repository.ReadingRepository
+import com.markleaf.app.data.repository.SearchRepository
 import com.markleaf.app.data.settings.ReaderSettingsRepository
 import com.markleaf.app.share.ExternalOpenCoordinator
 import kotlinx.coroutines.CoroutineScope
@@ -37,11 +39,28 @@ class MarkLeafApplication : Application() {
             documentDao = database.documentDao(),
             pdfPrintPageAnchorDao = database.pdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = database.textbookOutlineNodeDao(),
+            searchRepository = searchRepository,
         )
     }
 
     val readerSettingsRepository: ReaderSettingsRepository by lazy {
         ReaderSettingsRepository(this)
+    }
+
+    /** H2.1 Reading Library 门面（书签/收藏；阅读位置权威在 DocumentRepository）。 */
+    val readingRepository: ReadingRepository by lazy {
+        ReadingRepository(
+            bookmarkDao = database.bookmarkDao(),
+            favoriteDao = database.favoriteDocumentDao(),
+            highlightDao = database.highlightDao(),
+            noteDao = database.noteDao(),
+            searchRepository = searchRepository,
+        )
+    }
+
+    /** R29 local-search data boundary; no UI surface is introduced here. */
+    val searchRepository: SearchRepository by lazy {
+        SearchRepository(database.searchIndexDao())
     }
 
     val externalOpenCoordinator: ExternalOpenCoordinator by lazy {

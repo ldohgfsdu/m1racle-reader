@@ -48,8 +48,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -109,6 +111,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.markleaf.app.BuildConfig
 import com.markleaf.app.R
+import com.markleaf.app.data.anchor.DocumentAnchor
 import com.markleaf.app.data.settings.ReaderSettings
 import com.markleaf.app.markdown.MarkdownPerformance
 import com.markleaf.app.markdown.TocItem
@@ -132,6 +135,9 @@ fun ViewerScreen(
     viewModel: ViewerViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** R23 书签中介（NavGraph 注入；null = 能力未启用，顶栏不显示书签钮）。 */
+    bookmarkController: com.markleaf.app.ui.reader.ReaderBookmarkController? = null,
+    initialAnchor: DocumentAnchor? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -163,6 +169,8 @@ fun ViewerScreen(
                 title = title,
                 viewModel = viewModel,
                 onBack = onBack,
+                bookmarkController = bookmarkController,
+                initialAnchor = initialAnchor,
                 modifier = modifier,
             )
         }
@@ -255,10 +263,13 @@ private fun ViewerSuccessScreen(
     title: String,
     viewModel: ViewerViewModel,
     onBack: () -> Unit,
+    bookmarkController: com.markleaf.app.ui.reader.ReaderBookmarkController?,
+    initialAnchor: DocumentAnchor?,
     modifier: Modifier = Modifier,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val hasToc = state.toc.isNotEmpty()
     val readerSettings by viewModel.readerSettings.collectAsStateWithLifecycle()
     val searchState by viewModel.searchState.collectAsStateWithLifecycle()
@@ -328,6 +339,46 @@ private fun ViewerSuccessScreen(
         initialFirstVisibleItemScrollOffset = restoredOffset,
         prefetchStrategy = prefetchStrategy,
     )
+
+    // Search navigation supplies the same canonical anchor used by annotations.
+    // The existing block jump helper remains the sole Markdown positioning path.
+    LaunchedEffect(initialAnchor, state.document.id) {
+        val target = initialAnchor as? DocumentAnchor.MarkdownBlock ?: return@LaunchedEffect
+        scrollToBlockIndex(
+            listState = listState,
+            blockIndex = target.blockIndex,
+            listHeaderCount = listHeaderCount,
+            blockCount = state.blocks.size,
+        )
+    }
+
+    // ── R23 Reader Bookmark（SCROLL_POSITION 坐标系；位置=绝对列表索引） ──
+    var bookmarkedIndexes by remember(state.document.id) {
+        mutableStateOf<Set<Int>>(emptySet())
+    }
+    LaunchedEffect(bookmarkController, state.document.id) {
+        bookmarkedIndexes = bookmarkController?.bookmarkedLocations() ?: emptySet()
+    }
+    fun toggleBookmarkHere() {
+        val controller = bookmarkController ?: return
+        val index = listState.firstVisibleItemIndex
+        scope.launch {
+            when (controller.toggle(index)) {
+                com.markleaf.app.ui.reader.ReaderBookmarkController.ToggleResult.Added -> {
+                    bookmarkedIndexes = bookmarkedIndexes + index
+                    snackbarHostState.showSnackbar(
+                        context.getString(R.string.reader_bookmark_added),
+                    )
+                }
+                com.markleaf.app.ui.reader.ReaderBookmarkController.ToggleResult.Removed -> {
+                    bookmarkedIndexes = bookmarkedIndexes - index
+                    snackbarHostState.showSnackbar(
+                        context.getString(R.string.reader_bookmark_removed),
+                    )
+                }
+            }
+        }
+    }
 
     // Persist only from a settled list, plus leave/background flushes. Observing index/offset while
     // a 120 Hz gesture is active used to allocate and dispatch one ReadingScrollSnapshot for every
@@ -531,6 +582,12 @@ private fun ViewerSuccessScreen(
             onCloseSearch = viewModel::closeSearch,
             onSearchPrevious = viewModel::goToPreviousMatch,
             onSearchNext = viewModel::goToNextMatch,
+            onToggleBookmark = if (bookmarkController != null) {
+                { toggleBookmarkHere() }
+            } else {
+                null
+            },
+            bookmarkActive = listState.firstVisibleItemIndex in bookmarkedIndexes,
             snackbarHostState = snackbarHostState,
             // Pass state object only — body never reads .visible (avoids recompose cascade).
             // QA: nulling the state freezes the overlay at visible and drops hide/show flips.
@@ -848,6 +905,8 @@ private fun ReaderTopBarRow(
     onOpenSettings: () -> Unit,
     tocEnabled: Boolean,
     onOpenToc: () -> Unit,
+    onToggleBookmark: (() -> Unit)? = null,
+    bookmarkActive: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // Full-contrast chrome icons (not muted gray) for dark/light consistency.
@@ -973,6 +1032,26 @@ private fun ReaderTopBarRow(
             }
         }
 
+        // R23 书签切换（SCROLL_POSITION）：实心=当前位置已收藏；null 控制器不渲染。
+        if (onToggleBookmark != null) {
+            ReaderTopBarIconButton(
+                imageVector = if (bookmarkActive) {
+                    Icons.Filled.Bookmarks
+                } else {
+                    Icons.Outlined.Bookmarks
+                },
+                contentDescription = stringResource(
+                    if (bookmarkActive) R.string.reader_bookmark_remove else R.string.reader_bookmark_add,
+                ),
+                onClick = { closePopupThen(onToggleBookmark) },
+                enabled = true,
+                tint = if (bookmarkActive) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    iconTint
+                },
+            )
+        }
         ReaderTopBarIconButton(
             imageVector = Icons.Default.Search,
             contentDescription = stringResource(R.string.search_open),
@@ -1050,6 +1129,9 @@ private fun ViewerScaffold(
     onCloseSearch: () -> Unit,
     onSearchPrevious: () -> Unit,
     onSearchNext: () -> Unit,
+    /** R23 书签切换（null = 未启用，顶栏不渲染书签钮）。 */
+    onToggleBookmark: (() -> Unit)? = null,
+    bookmarkActive: Boolean = false,
     snackbarHostState: SnackbarHostState? = null,
     /**
      * Null for loading/error chrome; when set, only [ReaderTopBarOverlay] reads
@@ -1108,6 +1190,8 @@ private fun ViewerScaffold(
                     onOpenSettings = onOpenSettings,
                     tocEnabled = tocEnabled,
                     onOpenToc = onOpenToc,
+                    onToggleBookmark = onToggleBookmark,
+                    bookmarkActive = bookmarkActive,
                     onSearchQueryChange = onSearchQueryChange,
                     onCloseSearch = onCloseSearch,
                     onSearchPrevious = onSearchPrevious,
@@ -1141,6 +1225,8 @@ private fun ReaderTopBarOverlay(
     onOpenSettings: () -> Unit,
     tocEnabled: Boolean,
     onOpenToc: () -> Unit,
+    onToggleBookmark: (() -> Unit)? = null,
+    bookmarkActive: Boolean = false,
     onSearchQueryChange: (String) -> Unit,
     onCloseSearch: () -> Unit,
     onSearchPrevious: () -> Unit,
@@ -1194,6 +1280,8 @@ private fun ReaderTopBarOverlay(
                     onOpenSettings = onOpenSettings,
                     tocEnabled = tocEnabled,
                     onOpenToc = onOpenToc,
+                    onToggleBookmark = onToggleBookmark,
+                    bookmarkActive = bookmarkActive,
                 )
             }
         }

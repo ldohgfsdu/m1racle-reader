@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -17,7 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.markleaf.app.R
 import com.markleaf.app.pdf.export.ChapterExportState
-import com.markleaf.app.ui.theme.dialogContainer
+import com.markleaf.app.ui.material.GlassAlertDialog
 
 /**
  * Export progress — the system-flow status surface (kept; it is a dialog,
@@ -35,7 +34,7 @@ fun ChapterExportProgressDialog(
         state is ChapterExportState.BuildingMetadata ||
         state is ChapterExportState.WritingArchive
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = {
             if (state is ChapterExportState.Completed ||
                 state is ChapterExportState.Failed ||
@@ -44,9 +43,6 @@ fun ChapterExportProgressDialog(
                 onDismiss()
             }
         },
-        containerColor = MaterialTheme.colorScheme.dialogContainer,
-        titleContentColor = MaterialTheme.colorScheme.onSurface,
-        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         title = { Text(stringResource(R.string.pdf_export_progress_title)) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

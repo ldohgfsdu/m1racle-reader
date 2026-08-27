@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — v1.0.0 public candidate (versionCode 23)
+
+- 阅读资产：收藏、书签、PDF 高亮、轻量笔记及统一管理闭环。
+- 本地搜索：文档标题、高亮摘录与笔记索引、Home/Library 入口和 canonical anchor 原文跳转。
+- 架构与发布收口：Repository/Room 权威边界审计、R8 release 日志剔除、outbox 有界保留。
+- Release hardening：正式 release 禁止 debug 签名 fallback，签名材料仅通过环境安全注入；
+  版本 identity 统一为 `app/version.properties`；Room v12 定义为首个公开数据库基线。
+- 本节仍为未发布候选；真实生产 signer、最终 tag 与公开发布批准尚未完成。
+
 ## v0.1.0 (versionCode 22) — 2026-08-24
 
 首个 C-local Release（侧载分发）。最终 source baseline：`604d404978b5f09fdb4a9c825259ef6793f59949`；tag：`v0.1.0-c-local`。

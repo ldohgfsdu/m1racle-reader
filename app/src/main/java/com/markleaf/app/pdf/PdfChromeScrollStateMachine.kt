@@ -28,6 +28,13 @@ enum class PdfChromeLevel {
     HIDDEN,
 }
 
+/**
+ * R22.4 交互锁定原因：用户主动操作内容期间，chrome 不得因内容位移自动收起。
+ * 锁定是正交模式位（level 不变）：pinch / 页面跳转动画期间，锚点位移是操作的
+ * 直接结果而非阅读意图，禁止喂给方向状态机。
+ */
+enum class ChromeInteractionLock { PINCH, PAGE_JUMP, TEXT_SELECTION }
+
 /** 状态迁移原因（日志/验收证据）。 */
 enum class ChromeTriggerReason {
     CAPSULE_HIDE_THRESHOLD,      // 滚动累计：收纳第一级（FULL/BUTTONS_ONLY 中的胶囊隐藏）
@@ -131,6 +138,25 @@ class PdfChromeScrollStateMachine(
     var userGestureId: Long = 0L
         private set
 
+    private val interactionLocks = HashSet<ChromeInteractionLock>()
+
+    /** R22.4：任一交互锁激活时，滚动/fling 样本一律忽略。 */
+    val isInteractionLocked: Boolean
+        get() = interactionLocks.isNotEmpty()
+
+    /**
+     * 开始交互锁定（幂等）。进入锁定即清空手势残留：锁定期间积累的位移/
+     * 方向属于被禁止的操作，解锁后从干净 session 重新开始。
+     */
+    fun beginInteractionLock(lock: ChromeInteractionLock) {
+        if (interactionLocks.add(lock)) resetForNewSession()
+    }
+
+    /** 结束交互锁定（幂等）。全部锁释放后才恢复响应；同样先清残留。 */
+    fun endInteractionLock(lock: ChromeInteractionLock) {
+        if (interactionLocks.remove(lock)) resetForNewSession()
+    }
+
     private var direction: ChromeContentDirection? = null
     private var phaseAccumDp: Float = 0f
     private var reverseAccumDp: Float = 0f
@@ -166,6 +192,9 @@ class PdfChromeScrollStateMachine(
         anchorDeltaYPx: Float,
         nowMs: Long,
     ): List<ChromeStateChange> {
+        // R22.4 INTERACTION_LOCKED：pinch / 跳转等操作期间内容位移不是阅读意图，
+        // 不累计、不迁移、不留残留（样本直接丢弃）。
+        if (interactionLocks.isNotEmpty()) return emptyList()
         if (abs(deltaDp) < params.deadZoneDp) return emptyList()
         val changes = mutableListOf<ChromeStateChange>()
         val active = direction
@@ -229,6 +258,7 @@ class PdfChromeScrollStateMachine(
         anchorDeltaYPx: Float,
         nowMs: Long,
     ): ChromeStateChange? {
+        if (interactionLocks.isNotEmpty()) return null
         if (velocityDpPerSec < params.flingMinSpeedDpPerSec || distanceDp < params.flingMinDistanceDp) {
             return null
         }

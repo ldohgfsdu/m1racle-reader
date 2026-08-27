@@ -10,8 +10,7 @@ import androidx.compose.ui.unit.sp
  * Alignment: ONE horizontal content rail — 24dp left/right safe inset shared
  * by the brand block, section title, list cards and popup menu. Cards =
  * solid/tonal. Only floating controls (FAB / ··· menu) consume the shared
- * Liquid Glass surface ([com.markleaf.app.ui.common.markLeafLiquidSurface],
- * same tokens as the PDF reader chrome) — never the cards themselves.
+ * unified glass material engine — never the cards themselves.
  */
 object HomeDesignTokens {
     /** Unified page rail: brand text, section title, cards all at 24dp. */
@@ -51,8 +50,7 @@ object HomeDesignTokens {
     val OverflowIconPad = 13.dp
 
     /**
-     * FAB — Liquid Glass rounded square, exactly the PDF reader chrome
-     * material ([LiquidSurfaceLevel.Control] via the shared liquid surface):
+     * FAB — rounded square using the unified Control material:
      * light surface, soft shadow, edge highlight, pressed boost.
      */
     val FabSize = 56.dp
@@ -64,8 +62,8 @@ object HomeDesignTokens {
     val FabEdgePaddingExtra = 4.dp
 
     /**
-     * Lightweight utility delete menu — shared Liquid Glass surface (Control
-     * tokens), compact single row, right-edge aligned with the ··· anchor and
+     * Lightweight utility delete menu — unified Menu material, compact single
+     * row, right-edge aligned with the ··· anchor and
      * expanding leftward. Corner = PDF chrome menu-row corner (10dp).
      */
     val MenuMinWidth = 140.dp
@@ -76,10 +74,6 @@ object HomeDesignTokens {
     val MenuRowPadH = 16.dp
     val MenuItemIcon = 22.dp
     val MenuIconGap = 12.dp
-
-    /** Control-level edge highlight (shared liquid tokens: 0.5dp / α0.55). */
-    val MenuEdgeHighlightWidth = 0.5.dp
-    val MenuEdgeHighlightAlpha = 0.55f
 
     /** Popup x-offset so menu right edge = anchor right edge (menu min width). */
     val MenuAnchorOverhang = MenuMinWidth - OverflowTouch
@@ -96,4 +90,32 @@ object HomeDesignTokens {
     val MetaLine = 14.sp
 
     val ProgressHeight = 3.dp
+
+    // ── H2.2 Reading Hub ────────────────────────────────────────────────────
+
+    /**
+     * 继续阅读 hero 卡（GlassMaterialRole.Menu 玻璃）：视觉强度高于实色文档卡。
+     */
+    val HeroCorner = 20.dp
+    val HeroShape = RoundedCornerShape(HeroCorner)
+    val HeroPaddingH = 16.dp
+    val HeroPaddingV = 14.dp
+    val HeroCaptionSize = 12.sp
+    val HeroTitleSize = 17.sp
+    val HeroTitleLine = 22.sp
+    val HeroMetaSize = 12.sp
+
+    /**
+     * 底部悬浮 Glass Dock（GlassMaterialRole.Control，强度低于内容卡）：
+     * 悬浮胶囊，四入口，内容以底部 inset 避让——永不遮挡内容。
+     */
+    val DockHeight = 62.dp
+    val DockBottomGap = 14.dp
+    val DockHorizontalMargin = 48.dp
+    val DockCorner = 26.dp
+    val DockShape = RoundedCornerShape(DockCorner)
+    val DockItemIcon = 22.dp
+    val DockLabelSize = 10.sp
+    val DockItemWeight: Float = 1f
+    val DockSelectedAlpha = 0.10f
 }

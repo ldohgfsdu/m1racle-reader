@@ -1,20 +1,25 @@
-id: BATCH_B_RUNTIME_HARDENING
-status: in_progress_partial_automated_verified_device_pending
-scope: runtime_reliability_memory_governance_performance_evidence
-note: >
-  Batch B opened 2026-08-23 (goal: long-session stability, no new features).
-  Done: B-0 zip VIEW/SEND contract (ce31f00); B-1 displayedBitmaps retention
-  policy (878209f) — JVM-verified, device memory-curve half pending.
-  Blocked offline adb: B-2 Liquid Glass GPU profiling, B-3 device evidence
-  closure (export-cancel manual check, FrameTimeline, meminfo curve, GPU
-  sampling). B-4 partial: .memory rewritten; zip identity unification and any
-  code change beyond approved findings require explicit approval first.
-  Constraints locked: no TOC/netdisk/EPUB/new reading modes/Liquid tuning/
-  renderer rewrite/generation-gate or gesture-model changes.
-builds:
-  release_apk: .external_outbox/markleaf-release-latest.apk
-  delivered_to: /storage/emulated/0/Download/markleaf-release-latest.apk
-  tests: 1145/0 (:app:testQaUnitTest, JDK17)
-report: docs/BATCH_B_FINAL_REPORT.md
-commit: 878209f
-updated: 2026-08-23
+id: R32_6_PRODUCTION_COMMIT_PREPARATION
+status: production_source_commit_complete_clean_signing_pending
+scope: >
+  Review and consolidate the full R23-R32 source, migrations, tests and evidence
+  into one clean v1.0.0 production commit. No release build, signer injection,
+  APK generation or tag creation.
+verification:
+  reviewed_source_paths: PASS (155 paths; code/resources/tests/schemas/docs/state)
+  classification: PASS (no untracked binary, secret or file over 1 MiB)
+  migrations: PASS (Room v12; schema 6-12; registered migration chain 1-12)
+  release_evidence_preserved: PASS
+  temporary_cleanup: PASS (obsolete ignored compile log only)
+  version: PASS (1.0.0 / 23)
+  test_qa_unit: PASS (fresh rerun; 1350 tests; zero failures/errors/skipped)
+  compile_qa_android_test: PASS
+  git_clean_after_commit: PASS
+  release_tag_v1_0_0: NOT_CREATED_BY_DESIGN
+  production_signer: NOT_USED
+  production_apk: NOT_BUILT_BY_DESIGN
+next_actions:
+  - securely inject the real production signer outside the repository
+  - build and verify one canonical v1.0.0 production artifact from this commit
+  - archive artifact identity and then create the immutable v1.0.0 tag
+report: docs/R32_6_PRODUCTION_COMMIT_PREPARATION_REPORT.md
+updated: 2026-08-27

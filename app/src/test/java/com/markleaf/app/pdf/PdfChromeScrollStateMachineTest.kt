@@ -312,7 +312,67 @@ class PdfChromeScrollStateMachineTest {
         }
     }
 
-    // ── ⑨ adapter ground truth（R17 映射，禁止反转） ───────────────────────
+    // ── ⑨ R22.4 INTERACTION_LOCKED：pinch / 跳转期间 chrome 冻结 ────────────
+
+    @Test
+    fun `interaction lock ignores scroll samples and keeps level`() {
+        val m = machine()
+        m.beginInteractionLock(ChromeInteractionLock.PINCH)
+        assertTrue(m.isInteractionLocked)
+        // 锁定期间大量 UP 位移：不迁移、不累计。
+        repeat(10) { assertTrue(m.up(40f).isEmpty()) }
+        assertNull(m.onFling(ChromeContentDirection.UP, 2000f, 60f, -60f, t0))
+        assertEquals(PdfChromeLevel.FULL, m.level)
+        // 解锁后从干净 session 开始：36dp 阈值重新起算（无锁定期残留）。
+        m.endInteractionLock(ChromeInteractionLock.PINCH)
+        assertFalse(m.isInteractionLocked)
+        assertTrue(m.up(30f).isEmpty())
+        assertEquals(PdfChromeLevel.FULL, m.level)
+        val changes = m.up(10f) // 30+10=40 >= 36
+        assertEquals(1, changes.size)
+        assertEquals(PdfChromeLevel.BUTTONS_ONLY, changes[0].levelAfter)
+    }
+
+    @Test
+    fun `nested locks require all reasons released`() {
+        val m = machine()
+        m.beginInteractionLock(ChromeInteractionLock.PINCH)
+        m.beginInteractionLock(ChromeInteractionLock.PAGE_JUMP)
+        assertTrue(m.up(100f).isEmpty())
+        m.endInteractionLock(ChromeInteractionLock.PINCH)
+        assertTrue(m.isInteractionLocked)
+        assertTrue(m.up(100f).isEmpty())
+        assertEquals(PdfChromeLevel.FULL, m.level)
+        m.endInteractionLock(ChromeInteractionLock.PAGE_JUMP)
+        assertFalse(m.isInteractionLocked)
+        assertEquals(1, m.up(40f).size)
+    }
+
+    @Test
+    fun `begin and end lock are idempotent and clear residue once`() {
+        val m = machine()
+        m.up(30f) // 残留 30dp
+        m.beginInteractionLock(ChromeInteractionLock.PAGE_JUMP)
+        m.beginInteractionLock(ChromeInteractionLock.PAGE_JUMP)
+        m.endInteractionLock(ChromeInteractionLock.PAGE_JUMP)
+        m.endInteractionLock(ChromeInteractionLock.PAGE_JUMP)
+        assertFalse(m.isInteractionLocked)
+        // 残留被清空：30+30=60 本应跨级，现在必须重新累计。
+        assertTrue(m.up(30f).isEmpty())
+        assertEquals(PdfChromeLevel.FULL, m.level)
+    }
+
+    @Test
+    fun `center tap still works while locked but level change persists after unlock`() {
+        val m = machine()
+        m.beginInteractionLock(ChromeInteractionLock.PINCH)
+        m.onCenterTap()
+        assertEquals(PdfChromeLevel.BUTTONS_ONLY, m.level)
+        m.endInteractionLock(ChromeInteractionLock.PINCH)
+        assertEquals(PdfChromeLevel.BUTTONS_ONLY, m.level)
+    }
+
+    // ── ⑩ adapter ground truth（R17 映射，禁止反转） ───────────────────────
 
     @Test
     fun `adapter maps negative anchor delta to content moving up`() {

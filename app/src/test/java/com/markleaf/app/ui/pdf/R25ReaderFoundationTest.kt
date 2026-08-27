@@ -1,6 +1,8 @@
 package com.markleaf.app.ui.pdf
 
 import java.io.File
+import com.markleaf.app.ui.material.GlassMaterialEngine
+import com.markleaf.app.ui.material.GlassMaterialRole
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,46 +15,29 @@ import org.junit.Test
 class R25ReaderFoundationTest {
 
     @Test
-    fun `shared glass base alpha is in 0_88-0_94 light coverage band`() {
-        val glass = glassSource()
-        // Light glass must be dense enough that PDF faces are not readable through text.
-        assertTrue(
-            glass.contains("LightBaseAlpha = 0.91f") ||
-                glass.contains("LightBaseAlpha = 0.90f") ||
-                glass.contains("LightBaseAlpha = 0.92f") ||
-                glass.contains("ReaderGlassBaseAlpha = 0.91f") ||
-                glass.contains("ReaderGlassBaseAlpha = 0.90f") ||
-                glass.contains("ReaderGlassBaseAlpha = 0.92f"),
-        )
-        assertTrue(glass.contains("enum class ReaderGlassElevation"))
-        assertTrue(glass.contains("Main"))
-        assertTrue(glass.contains("Child"))
-        assertTrue(glass.contains("Chrome"))
-        // Hairline border only — no high-alpha hard Black outline.
-        assertTrue(
-            glass.contains("LightBorderAlpha = 0.045f") ||
-                glass.contains("LightBorderAlpha = 0.04f") ||
-                glass.contains("LightBorderAlpha = 0.05f") ||
-                glass.contains("LightBorderAlpha = 0.06f"),
-        )
-        assertTrue(glass.contains("ReaderChromeTokens"))
-        assertTrue(glass.contains("ParentElevationDp = 10f") || glass.contains("ParentElevationDp = 9f"))
-        assertTrue(glass.contains("ChildElevationDp = 14f") || glass.contains("ChildElevationDp = 12f") ||
-            glass.contains("ChildElevationDp = 16f"))
+    fun `reader roles form one translucent material hierarchy`() {
+        val control = GlassMaterialEngine.resolve(GlassMaterialRole.Control, dark = false)
+        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false)
+        val child = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
+        assertTrue(control.surfaceColor.alpha < menu.surfaceColor.alpha)
+        assertTrue(menu.surfaceColor.alpha < child.surfaceColor.alpha)
+        assertTrue(control.blur < menu.blur)
+        assertTrue(menu.shadow <= child.shadow)
+        assertEquals(0.5f, menu.highlightWidth.value, 0.001f)
     }
 
     @Test
-    fun `Main child and circles use unified readerChromeSurface entry`() {
+    fun `Main child circles and capsule use unified engine entry`() {
         val host = hostSource()
-        // Shells go through readerChromeSurface (material renderer), not ad-hoc glass.
-        assertTrue(host.contains("readerChromeSurface("))
-        assertTrue(host.contains("ReaderGlassElevation.Main") || host.contains("ReaderChromeSurfaceRole.Parent"))
-        assertTrue(host.contains("ReaderGlassElevation.Chrome") || host.contains("ReaderChromeSurfaceRole.Chrome"))
+        assertTrue(host.contains("glassMaterial("))
+        assertTrue(host.contains("GlassMaterialRole.Menu"))
+        assertTrue(host.contains("GlassMaterialRole.Control"))
         val pop = popoverSource()
-        assertTrue(pop.contains("readerChromeSurface("))
-        assertTrue(pop.contains("ReaderGlassElevation.Child") || pop.contains("ReaderChromeSurfaceRole.Child"))
+        assertTrue(pop.contains("glassMaterial("))
+        assertTrue(pop.contains("GlassMaterialRole.SettingsCard"))
         val screen = screenSource()
-        assertTrue(screen.contains("readerChromeSurface("))
+        assertTrue(screen.contains("GlassMaterialRole.Control"))
+        assertTrue(screen.contains("GlassMaterialRole.Capsule"))
         // No opaque white plate override.
         assertFalse(host.contains("containerAlpha = 1f"))
         assertFalse(pop.contains("containerAlpha = 1f"))
@@ -153,8 +138,6 @@ class R25ReaderFoundationTest {
     private fun hostSource(): String = source("ReaderMoreHost.kt")
     private fun popoverSource(): String = source("AnchoredNestedPopover.kt")
     private fun screenSource(): String = source("PdfViewerScreen.kt")
-    private fun glassSource(): String = source("ReaderChromeGlass.kt")
-
     private fun source(name: String): String = listOf(
         File("app/src/main/java/com/markleaf/app/ui/pdf/$name"),
         File("src/main/java/com/markleaf/app/ui/pdf/$name"),

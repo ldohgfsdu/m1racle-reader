@@ -86,6 +86,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.markleaf.app.ui.material.GlassMaterialRole
+import com.markleaf.app.ui.material.glassMutedContentAlpha
 import com.markleaf.app.R
 import com.markleaf.app.pdf.ThumbnailGridColumns
 import com.markleaf.app.pdf.thumbnailInitialItemIndex
@@ -170,7 +172,7 @@ internal fun TextbookPageAdvancedContent(
     var text by remember { mutableStateOf(params.currentPrint?.toString().orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     val scheme = MaterialTheme.colorScheme
-    val muted = readerChromeMutedAlpha()
+    val muted = glassMutedContentAlpha(GlassMaterialRole.SettingsCard)
     val invalidMsg = stringResource(R.string.pdf_print_invalid)
     val stateLabel = when {
         params.currentPrint == null -> stringResource(R.string.pdf_print_unset)
@@ -218,7 +220,7 @@ internal fun TextbookPageAdvancedContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .clip(RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp))
+                .clip(RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp))
                 .background(scheme.onSurface.copy(alpha = 0.05f))
                 .border(
                     width = 1.dp,
@@ -227,7 +229,7 @@ internal fun TextbookPageAdvancedContent(
                     } else {
                         scheme.onSurface.copy(alpha = 0.08f)
                     },
-                    shape = RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp),
+                    shape = RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp),
                 )
                 .padding(horizontal = 14.dp),
             contentAlignment = Alignment.CenterStart,
@@ -302,7 +304,7 @@ internal fun TextbookPageAdvancedContent(
             Button(
                 onClick = { submit() },
                 modifier = Modifier.height(44.dp),
-                shape = RoundedCornerShape(ReaderChromeTokens.CornerButtonDp.dp),
+                shape = RoundedCornerShape(AdvancedChildLayoutSpec.ActionCornerDp.dp),
                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
             ) {
                 Text(
@@ -329,7 +331,7 @@ internal fun OutlineAdvancedContent(
     bodyMaxHeightDp: Dp = 360.dp,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val muted = readerChromeMutedAlpha()
+    val muted = glassMutedContentAlpha(GlassMaterialRole.SettingsCard)
     val flatAll = remember(params.nodes) { TextbookOutlineResolver.flattenTree(params.nodes) }
     val currentId = remember(params.nodes, params.currentPageIndex) {
         TextbookOutlineResolver.deepestContaining(params.currentPageIndex, params.nodes)?.id
@@ -481,7 +483,7 @@ internal fun ThumbnailsAdvancedContent(
     bodyMaxHeightDp: Dp = 360.dp,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val muted = readerChromeMutedAlpha()
+    val muted = glassMutedContentAlpha(GlassMaterialRole.SettingsCard)
     val indices = remember(params.pageCount) { (0 until params.pageCount).toList() }
     var rangeStart by remember { mutableStateOf<Int?>(null) }
     val gridState = rememberLazyGridState(
@@ -659,7 +661,7 @@ internal fun ExportAdvancedContent(
     bodyMaxHeightDp: Dp,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val muted = readerChromeMutedAlpha()
+    val muted = glassMutedContentAlpha(GlassMaterialRole.SettingsCard)
     val plan = params.plan
     var startText by remember(plan) {
         mutableStateOf((plan?.pdfPageStart1Based ?: 1).toString())
@@ -886,7 +888,7 @@ internal fun ExportAdvancedContent(
             Button(
                 onClick = { submit() },
                 modifier = Modifier.height(44.dp),
-                shape = RoundedCornerShape(ReaderChromeTokens.CornerButtonDp.dp),
+                shape = RoundedCornerShape(AdvancedChildLayoutSpec.ActionCornerDp.dp),
                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
             ) {
                 Text(
@@ -921,7 +923,7 @@ private fun ExportCompactField(
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val muted = readerChromeMutedAlpha()
+    val muted = glassMutedContentAlpha(GlassMaterialRole.SettingsCard)
     Column(modifier = modifier) {
         Text(
             text = label,
@@ -936,12 +938,12 @@ private fun ExportCompactField(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .clip(RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp))
+                .clip(RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp))
                 .background(scheme.onSurface.copy(alpha = 0.05f))
                 .border(
                     width = 1.dp,
                     color = scheme.onSurface.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(ReaderChromeTokens.CornerInputDp.dp),
+                    shape = RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp),
                 )
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.CenterStart,

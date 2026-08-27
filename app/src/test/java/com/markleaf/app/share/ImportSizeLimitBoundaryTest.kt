@@ -137,6 +137,7 @@ class ImportSizeLimitBoundaryTest {
             documentDao = B3RecordingDocumentDao(),
             pdfPrintPageAnchorDao = B3UnusedPdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = B3UnusedTextbookOutlineNodeDao(),
+            searchRepository = com.markleaf.app.testing.testSearchRepository(),
         )
     }
 

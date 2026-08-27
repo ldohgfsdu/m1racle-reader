@@ -130,6 +130,7 @@ class ZipExternalOpenContractTest {
             documentDao = dao,
             pdfPrintPageAnchorDao = ZbUnusedPdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = ZbUnusedTextbookOutlineNodeDao(),
+            searchRepository = com.markleaf.app.testing.testSearchRepository(),
         )
         return repo to dao
     }

@@ -53,9 +53,6 @@ class HomeLayoutContractTest {
         assertEquals(16f, HomeDesignTokens.MenuRowPadH.value)
         assertTrue(HomeDesignTokens.MenuItemIcon.value in 20f..22f)
         assertTrue(HomeDesignTokens.MenuIconGap.value in 12f..14f)
-        // Edge highlight = shared Control-level liquid token (0.5dp / α0.55).
-        assertEquals(0.5f, HomeDesignTokens.MenuEdgeHighlightWidth.value)
-        assertEquals(0.55f, HomeDesignTokens.MenuEdgeHighlightAlpha, 0.001f)
         // Menu right-edge aligns with the ··· anchor (min width − touch).
         assertEquals(
             HomeDesignTokens.MenuMinWidth.value - HomeDesignTokens.OverflowTouch.value,
@@ -67,14 +64,16 @@ class HomeLayoutContractTest {
     @Test
     fun `liquid only on floating controls - cards stay solid`() {
         val home = homeSource()
-        // Floating controls reuse the SHARED Reader liquid surface (Control level).
-        assertTrue(home.contains("markLeafLiquidSurface"))
-        assertTrue(home.contains("LiquidSurfaceLevel.Control"))
+        // Floating controls consume semantic roles from the shared engine.
+        assertTrue(home.contains("glassMaterial"))
+        assertTrue(home.contains("GlassMaterialRole.Control"))
+        assertTrue(home.contains("GlassMaterialRole.Menu"))
         assertTrue(home.contains("rememberLayerBackdrop()"))
-        assertTrue(home.contains("layerBackdrop(rootBackdrop)"))
-        assertTrue(home.contains("LocalLiquidBackdropHost"))
+        assertTrue(home.contains("GlassBackdropSource("))
+        assertTrue(home.contains("backdrop = rootBackdrop"))
+        assertTrue(home.contains("LocalGlassBackdropHost"))
         // FAB = liquid rounded square (no Material FloatingActionButton).
-        assertTrue(home.contains("LiquidHomeFab("))
+        assertTrue(home.contains("GlassHomeFab("))
         assertFalse(home.contains("FloatingActionButton("))
         // ··· menu = Popup with the shared liquid surface (soft plate — no
         // cross-window sampling), not Material DropdownMenu.
@@ -85,7 +84,7 @@ class HomeLayoutContractTest {
         assertTrue(home.contains("surfaceContainerLow"))
         assertTrue(home.contains("HomeDesignTokens.CardShape"))
         assertFalse(
-            Regex("""Surface\([\s\S]{0,200}markLeafLiquidSurface""").containsMatchIn(home),
+            Regex("""Surface\([\s\S]{0,200}glassMaterial""").containsMatchIn(home),
         )
     }
 
@@ -96,7 +95,11 @@ class HomeLayoutContractTest {
         assertTrue(home.contains("start = HomeDesignTokens.PageHorizontal"))
         assertTrue(home.contains("end = HomeDesignTokens.PageHorizontal"))
         // Empty state: header gets the same rail (plain Column has no padding).
-        assertTrue(home.contains("padding(\n                                horizontal = HomeDesignTokens.PageHorizontal,\n                            )"))
+        assertTrue(
+            Regex(
+                """modifier\s*=\s*Modifier\.padding\(\s*horizontal\s*=\s*HomeDesignTokens\.PageHorizontal,?\s*\)""",
+            ).containsMatchIn(home),
+        )
     }
 
     @Test
@@ -141,7 +144,7 @@ class HomeLayoutContractTest {
         // Popup positioned in px relative to the ··· anchor, expanding leftward.
         assertTrue(home.contains("IntOffset(x = offsetX, y = offsetY)"))
         assertTrue(home.contains("HomeDesignTokens.MenuItemIcon"))
-        assertTrue(home.contains("MenuEdgeHighlightWidth"))
+        assertTrue(home.contains("GlassMaterialRole.Menu"))
     }
 
     @Test

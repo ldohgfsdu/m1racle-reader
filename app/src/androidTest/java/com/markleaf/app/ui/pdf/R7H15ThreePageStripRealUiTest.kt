@@ -117,6 +117,53 @@ class R7H15ThreePageStripRealUiTest {
         assertTrue(sampled.size == 3 && sampled.all { it.second > 20 })
     }
 
+    /**
+     * R22.3 zoom-leak evidence: pinch to 2.5x, then RAPID consecutive page
+     * flips (each new gesture interrupts the previous settle mid-flight).
+     * Every H15 commit must (a) keep scaleBefore == scaleAfter (the commit
+     * never mutates scale) and (b) stay zoomed (> 1.05) — a page object that
+     * inherits a stale/wrong transform (reset to 1x or a foreign scale)
+     * fails here.
+     */
+    @Test
+    fun realRapidZoomedFlipsPreserveScaleAcrossCommits() {
+        val trace = prepareMiddlePage()
+        trace.pinch1To2Point5(movingCentroid = true)
+        SystemClock.sleep(450L)
+        shell("logcat -c")
+        // p2 → p3 → p2 → p3 → p2: four commits, alternating directions,
+        // 250ms apart so flips 2..4 start while the previous settle spring
+        // is still in flight (the fast-flip interrupt path).
+        repeat(2) {
+            trace.zoomedPageHandoff()
+            SystemClock.sleep(250L)
+            trace.zoomedPageHandoffBack()
+            SystemClock.sleep(250L)
+        }
+        waitUntil(5_000L) { SCALE_COMMIT.findAll(h15Logs()).count() >= 4 }
+        val commits = SCALE_COMMIT.findAll(h15Logs()).toList()
+        assertTrue("expected >=4 zoomed commits, got ${commits.size}: ${h15Logs()}", commits.size >= 4)
+        commits.forEachIndexed { index, match ->
+            val before = match.groupValues[1].toFloat()
+            val after = match.groupValues[2].toFloat()
+            assertTrue(
+                "commit#$index scale mutated across commit: before=$before after=$after",
+                abs(before - after) <= 0.001f,
+            )
+            assertTrue(
+                "commit#$index zoom leaked to $after (expected carryover > 1.05)",
+                after > 1.05f,
+            )
+        }
+        // All commits carry the SAME zoom: rapid interrupts must never let a
+        // foreign/stale scale into the strip handoff.
+        val scales = commits.map { it.groupValues[2].toFloat() }
+        assertTrue(
+            "scale drifted across rapid flips: $scales",
+            scales.all { abs(it - scales[0]) <= 0.01f },
+        )
+    }
+
     @Test
     fun realZoomedPreviewKeepsTargetBaseReadyAndScaleAcrossCommit() {
         val trace = prepareMiddlePage()

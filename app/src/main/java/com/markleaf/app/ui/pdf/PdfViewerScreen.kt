@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.MutatePriority
@@ -61,7 +62,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
@@ -71,13 +71,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.AlertDialog
@@ -98,11 +101,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import com.kyant.backdrop.backdrops.layerBackdrop
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -160,6 +161,9 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.markleaf.app.BuildConfig
 import com.markleaf.app.R
+import com.markleaf.app.data.anchor.DocumentAnchor
+import com.markleaf.app.data.local.HighlightEntity
+import com.markleaf.app.data.local.NoteEntity
 import com.markleaf.app.ui.common.clearContrastScrim
 import com.markleaf.app.pdf.PdfChromeLevel
 import com.markleaf.app.pdf.PdfReadingMode
@@ -200,6 +204,18 @@ import com.markleaf.app.pdf.ZoomPageOverlayMath
 import com.markleaf.app.pdf.PageTap
 import com.markleaf.app.pdf.export.ChapterExportState
 import com.markleaf.app.ui.theme.MarkLeafTheme
+import com.markleaf.app.ui.annotation.AnnotationOverlayItem
+import com.markleaf.app.ui.annotation.AnnotationsManagementSheet
+import com.markleaf.app.ui.annotation.NoteEditDialog
+import com.markleaf.app.ui.annotation.PdfHighlightLayer
+import com.markleaf.app.ui.material.GlassBackdropHost
+import com.markleaf.app.ui.material.GlassBackdropSource
+import com.markleaf.app.ui.material.GlassMaterialRole
+import com.markleaf.app.ui.material.LocalGlassBackdropHost
+import com.markleaf.app.ui.material.glassMaterial
+import com.markleaf.app.ui.reader.ReaderBookmarkController
+import com.markleaf.app.ui.reader.ReaderHighlightController
+import com.markleaf.app.ui.reader.ReaderNoteController
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineStart
@@ -232,14 +248,35 @@ data class JumpCardParams(
     val onCancel: () -> Unit = {},
 )
 
+data class PdfCapsuleData(
+    val title: String,
+    val positionLine: String?,
+    val progressPercent: Int?,
+    val printDetail: String? = null,
+)
+
+private data class NoteEditorTarget(
+    val anchor: DocumentAnchor,
+    val pageIndex: Int,
+    val note: NoteEntity?,
+    val returnToManagement: Boolean,
+)
+
 /** Duration of the menu card's reverse morph back into the circle (ms). */
 private const val MENU_CLOSE_MORPH_MS = 200L
+
+private val CapsuleMorphSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 450f)
 
 @Composable
 fun PdfViewerScreen(
     viewModel: PdfViewerViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** R23/R26/R27 阅读资产控制器；UI 不直接访问 Repository/DAO。 */
+    bookmarkController: ReaderBookmarkController? = null,
+    highlightController: ReaderHighlightController? = null,
+    noteController: ReaderNoteController? = null,
+    initialAnchor: DocumentAnchor? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val embeddedOffer by viewModel.embeddedOutlineOffer.collectAsStateWithLifecycle()
@@ -419,6 +456,21 @@ fun PdfViewerScreen(
     var thumbRangePick by remember { mutableStateOf(false) }
     var outlineEditor by remember { mutableStateOf<OutlineEditorState?>(null) }
     val scope = rememberCoroutineScope()
+
+    // ── R23/R26/R27 reading assets (document-scoped, UI consumes controllers only) ──
+    var bookmarkedPages by remember(currentDocumentId) { mutableStateOf<Set<Int>>(emptySet()) }
+    var annotationManagementVisible by remember(currentDocumentId) { mutableStateOf(false) }
+    var managementHighlights by remember(currentDocumentId) {
+        mutableStateOf<List<HighlightEntity>>(emptyList())
+    }
+    var managementNotes by remember(currentDocumentId) {
+        mutableStateOf<List<NoteEntity>>(emptyList())
+    }
+    var highlightVersion by remember(currentDocumentId) { mutableIntStateOf(0) }
+    var noteVersion by remember(currentDocumentId) { mutableIntStateOf(0) }
+    var noteEditorTarget by remember(currentDocumentId) {
+        mutableStateOf<NoteEditorTarget?>(null)
+    }
     // Close / dismiss (Back AND outside tap): level-returning. The Advanced
     // Card collapses back to Main (never straight to the circle); the menu
     // reverse-morphs into the circle, then the state flips.
@@ -510,8 +562,11 @@ fun PdfViewerScreen(
     when (val state = uiState) {
         PdfViewerUiState.Loading -> {
             PdfChrome(
-                capsuleMain = stringResource(R.string.viewer_loading),
-                capsuleSub = null,
+                capsuleData = PdfCapsuleData(
+                    title = stringResource(R.string.viewer_loading),
+                    positionLine = null,
+                    progressPercent = null,
+                ),
                 onBack = onBack,
                 onCapsuleToggle = null,
                 modifier = Modifier.fillMaxSize(),
@@ -536,8 +591,11 @@ fun PdfViewerScreen(
 
         is PdfViewerUiState.Error -> {
             PdfChrome(
-                capsuleMain = state.displayName ?: stringResource(R.string.viewer_title_fallback),
-                capsuleSub = null,
+                capsuleData = PdfCapsuleData(
+                    title = state.displayName ?: stringResource(R.string.viewer_title_fallback),
+                    positionLine = null,
+                    progressPercent = null,
+                ),
                 onBack = onBack,
                 onCapsuleToggle = null,
                 modifier = Modifier.fillMaxSize(),
@@ -578,23 +636,147 @@ fun PdfViewerScreen(
                 else ->
                     stringResource(R.string.pdf_print_inferred, printNum)
             }
-            val outlinePath = state.outlinePathLabel.takeIf { it.isNotBlank() }
             val isVertical = state.readingMode == PdfReadingMode.VERTICAL_CONTINUOUS
             val pageJump by viewModel.pageJump.collectAsStateWithLifecycle()
+
+            // Reuse the reader's canonical page transition authority for search hits.
+            LaunchedEffect(initialAnchor, state.document.id) {
+                val target = initialAnchor as? DocumentAnchor.PdfPage ?: return@LaunchedEffect
+                viewModel.goToPage(target.page)
+            }
+
+            LaunchedEffect(bookmarkController, state.document.id) {
+                bookmarkedPages = bookmarkController?.bookmarkedLocations() ?: emptySet()
+            }
+            LaunchedEffect(
+                annotationManagementVisible,
+                highlightVersion,
+                noteVersion,
+                highlightController,
+                noteController,
+                state.document.id,
+            ) {
+                if (annotationManagementVisible) {
+                    managementHighlights = highlightController?.listForDocument().orEmpty()
+                    managementNotes = noteController?.list().orEmpty()
+                }
+            }
+
+            suspend fun editorTargetForAnchor(
+                anchor: DocumentAnchor,
+                pageIndex: Int,
+                returnToManagement: Boolean,
+            ): NoteEditorTarget? {
+                val notes = noteController ?: return null
+                return NoteEditorTarget(
+                    anchor = anchor,
+                    pageIndex = pageIndex,
+                    note = notes.linkedAt(anchor),
+                    returnToManagement = returnToManagement,
+                )
+            }
+
+            suspend fun editorTargetForHighlight(
+                highlight: HighlightEntity,
+                returnToManagement: Boolean,
+            ): NoteEditorTarget? {
+                val highlights = highlightController ?: return null
+                val anchor = highlights.anchorOf(highlight) ?: return null
+                return editorTargetForAnchor(
+                    anchor = anchor,
+                    pageIndex = highlight.location,
+                    returnToManagement = returnToManagement,
+                )
+            }
+
+            suspend fun editorTargetForNote(
+                note: NoteEntity,
+                returnToManagement: Boolean,
+            ): NoteEditorTarget? {
+                val notes = noteController ?: return null
+                val anchor = notes.anchorOf(note) ?: return null
+                return NoteEditorTarget(
+                    anchor = anchor,
+                    pageIndex = note.location,
+                    note = note,
+                    returnToManagement = returnToManagement,
+                )
+            }
+
+            val pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = { page ->
+                var pageItems by remember(state.document.id, page) {
+                    mutableStateOf<List<AnnotationOverlayItem>>(emptyList())
+                }
+                LaunchedEffect(page, highlightController, highlightVersion) {
+                    pageItems = highlightController?.itemsForPage(page).orEmpty()
+                }
+                if (highlightController != null) {
+                    PdfHighlightLayer(
+                        pageIndex = page,
+                        items = pageItems,
+                        selectionEnabled = true,
+                        onSelectCompleted = { selection ->
+                            scope.launch {
+                                when (highlightController.commitHighlight(selection)) {
+                                    is ReaderHighlightController.CommitResult.Success -> {
+                                        highlightVersion++
+                                        snackbarHostState.showSnackbar(
+                                            readerWindowContext.getString(R.string.reader_highlight_added),
+                                        )
+                                    }
+                                    is ReaderHighlightController.CommitResult.Failure -> {
+                                        snackbarHostState.showSnackbar(
+                                            readerWindowContext.getString(R.string.reader_highlight_failed),
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        onDeleteRequested = { itemId, _ ->
+                            scope.launch {
+                                highlightController.deleteHighlight(itemId)
+                                highlightVersion++
+                                snackbarHostState.showSnackbar(
+                                    readerWindowContext.getString(R.string.reader_annotation_deleted),
+                                )
+                            }
+                        },
+                        onNoteRequested = if (noteController != null) {
+                            { item, selectedPage ->
+                                scope.launch {
+                                    noteEditorTarget = editorTargetForAnchor(
+                                        anchor = item.anchor,
+                                        pageIndex = selectedPage,
+                                        returnToManagement = false,
+                                    )
+                                }
+                            }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
             // R6: TopBar is stable and always present. Horizontal controls are viewport overlays.
 
-            val capsuleMain = if (printNum != null) {
-                "${state.pageLabel} · $printLabel"
-            } else {
-                state.pageLabel
-            }
-            val capsuleSub = outlinePath
+            val capsuleData = PdfCapsuleData(
+                title = state.currentOutlineNode?.title?.takeIf { it.isNotBlank() }
+                    ?: state.document.displayName,
+                positionLine = state.pageLabel.takeIf { state.pageCount > 0 },
+                progressPercent = if (state.pageCount > 0) {
+                    kotlin.math.round(
+                        (((state.pageIndex + 1) * 100.0) / state.pageCount),
+                    ).toInt().coerceIn(0, 100)
+                } else {
+                    null
+                },
+                printDetail = printLabel.takeIf { printNum != null },
+            )
             // Advanced Cards are Reader overlays (like Main), not sheets:
             // the chrome keeps its normal level (the capsule retracts via
             // menuActive; the back circle stays).
             PdfChrome(
-                capsuleMain = capsuleMain,
-                capsuleSub = capsuleSub,
+                capsuleData = capsuleData,
                 onBack = onBack,
                 onCapsuleToggle = toggleCapsule,
                 chromeLevel = chromeLevel,
@@ -708,7 +890,7 @@ fun PdfViewerScreen(
                         label = stringResource(R.string.pdf_top_bar_mode),
                     ),
                 ),
-                plainMenuItems = listOf(
+                plainMenuItems = listOfNotNull(
                     // Four advanced entries — each opens nested child from its own row.
                     PdfChromeMenuItem(
                         icon = Icons.Outlined.Tag,
@@ -757,6 +939,54 @@ fun PdfViewerScreen(
                             )
                         },
                     ),
+                    if (highlightController != null) {
+                        PdfChromeMenuItem(
+                            icon = Icons.Outlined.Notes,
+                            label = stringResource(R.string.reader_annotations_open),
+                            closeOnClick = true,
+                            onClick = { annotationManagementVisible = true },
+                        )
+                    } else {
+                        null
+                    },
+                    if (bookmarkController != null) {
+                        val bookmarked = bookmarkController.isBookmarked(
+                            bookmarkedPages,
+                            state.pageIndex,
+                        )
+                        PdfChromeMenuItem(
+                            icon = if (bookmarked) Icons.Filled.Bookmarks else Icons.Outlined.Bookmarks,
+                            label = stringResource(
+                                if (bookmarked) {
+                                    R.string.reader_bookmark_remove
+                                } else {
+                                    R.string.reader_bookmark_add
+                                },
+                            ),
+                            closeOnClick = true,
+                            onClick = {
+                                val page = state.pageIndex
+                                scope.launch {
+                                    when (bookmarkController.toggle(page)) {
+                                        ReaderBookmarkController.ToggleResult.Added -> {
+                                            bookmarkedPages = bookmarkedPages + page
+                                            snackbarHostState.showSnackbar(
+                                                readerWindowContext.getString(R.string.reader_bookmark_added),
+                                            )
+                                        }
+                                        ReaderBookmarkController.ToggleResult.Removed -> {
+                                            bookmarkedPages = bookmarkedPages - page
+                                            snackbarHostState.showSnackbar(
+                                                readerWindowContext.getString(R.string.reader_bookmark_removed),
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    } else {
+                        null
+                    },
                 ),
                 readingModeOptions = listOf(
                     PdfChromeMenuOption(
@@ -911,6 +1141,7 @@ fun PdfViewerScreen(
                                 },
                                 onEnsureAround = viewModel::ensurePagesAround,
                                 onRetryPage = { viewModel.ensurePagesAround(it) },
+                                pageAnnotation = pageAnnotation,
                                 modifier = Modifier.fillMaxSize(),
                             )
                             }
@@ -935,12 +1166,111 @@ fun PdfViewerScreen(
                                 tileOverlaySnapshots = viewModel.tileOverlaySnapshot,
                                 onZoomGestureActive = viewModel::setZoomGestureActive,
                                 onEnsureAround = viewModel::ensurePagesAround,
+                                pageAnnotation = pageAnnotation,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }
                 },
             )
+
+            if (annotationManagementVisible) {
+                AnnotationsManagementSheet(
+                    highlights = managementHighlights,
+                    notes = managementNotes,
+                    onDismiss = { annotationManagementVisible = false },
+                    onJump = { highlight ->
+                        annotationManagementVisible = false
+                        viewModel.goToPage(highlight.location)
+                    },
+                    onDeleteHighlight = { highlight ->
+                        scope.launch {
+                            highlightController?.deleteHighlight(highlight.id)
+                            highlightVersion++
+                            snackbarHostState.showSnackbar(
+                                readerWindowContext.getString(R.string.reader_annotation_deleted),
+                            )
+                        }
+                    },
+                    onAddNoteForHighlight = { highlight ->
+                        scope.launch {
+                            val target = editorTargetForHighlight(
+                                highlight,
+                                returnToManagement = true,
+                            )
+                            if (target != null) {
+                                annotationManagementVisible = false
+                                noteEditorTarget = target
+                            }
+                        }
+                    },
+                    onEditNote = { note ->
+                        scope.launch {
+                            val target = editorTargetForNote(
+                                note,
+                                returnToManagement = true,
+                            )
+                            if (target != null) {
+                                annotationManagementVisible = false
+                                noteEditorTarget = target
+                            }
+                        }
+                    },
+                    onDeleteNote = { note ->
+                        scope.launch {
+                            noteController?.delete(note.id)
+                            noteVersion++
+                            snackbarHostState.showSnackbar(
+                                readerWindowContext.getString(R.string.reader_note_deleted),
+                            )
+                        }
+                    },
+                )
+            }
+
+            noteEditorTarget?.let { target ->
+                val pageLine = stringResource(
+                    R.string.reader_annotation_page_line,
+                    target.pageIndex + 1,
+                )
+                val closeEditor: () -> Unit = {
+                    noteEditorTarget = null
+                    if (target.returnToManagement) annotationManagementVisible = true
+                }
+                NoteEditDialog(
+                    title = stringResource(R.string.reader_note_editor_title, pageLine),
+                    initialContent = target.note?.content.orEmpty(),
+                    isEditing = target.note != null,
+                    onSave = { content ->
+                        scope.launch {
+                            val notes = noteController ?: return@launch
+                            if (target.note == null) {
+                                notes.create(target.anchor, content)
+                            } else {
+                                notes.update(target.note.id, content)
+                            }
+                            noteVersion++
+                            closeEditor()
+                            snackbarHostState.showSnackbar(
+                                readerWindowContext.getString(R.string.reader_note_saved),
+                            )
+                        }
+                    },
+                    onDelete = target.note?.let { note ->
+                        {
+                            scope.launch {
+                                noteController?.delete(note.id)
+                                noteVersion++
+                                closeEditor()
+                                snackbarHostState.showSnackbar(
+                                    readerWindowContext.getString(R.string.reader_note_deleted),
+                                )
+                            }
+                        }
+                    },
+                    onDismiss = closeEditor,
+                )
+            }
 
             // R25: the four task surfaces are Foreground Advanced Cards
             // rendered inside PdfChrome (from the tapped row). No BottomSheets
@@ -1058,10 +1388,7 @@ private fun pdfStatusBarVisiblePx(view: android.view.View): Int {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PdfChrome(
-    /** Capsule main line, e.g. "78 / 982 · 教材页 47". */
-    capsuleMain: String,
-    /** Capsule sub line, e.g. "第二篇 呼吸系统疾病 · 内科学（第10版）". */
-    capsuleSub: String?,
+    capsuleData: PdfCapsuleData,
     onBack: () -> Unit,
     /** Capsule tap: toggle the anchored jump card (never changes chrome levels). */
     onCapsuleToggle: (() -> Unit)?,
@@ -1113,13 +1440,13 @@ private fun PdfChrome(
     // Parent exportedBackdrop → Child samples export (glass-on-glass CORRECT).
     val rootBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
     val parentExportBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
-    val backdropHost = com.markleaf.app.ui.common.LiquidBackdropHost(
+    val backdropHost = GlassBackdropHost(
         root = rootBackdrop,
-        parentExport = parentExportBackdrop,
+        menuExport = parentExportBackdrop,
     )
 
     CompositionLocalProvider(
-        LocalReaderChromeBackdropHost provides backdropHost,
+        LocalGlassBackdropHost provides backdropHost,
     ) {
     Box(
         modifier = modifier
@@ -1127,10 +1454,9 @@ private fun PdfChrome(
             .background(scheme.background),
     ) {
         // PDF content feeds the root LayerBackdrop for Liquid chrome sampling.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .layerBackdrop(rootBackdrop),
+        GlassBackdropSource(
+            backdrop = rootBackdrop,
+            modifier = Modifier.fillMaxSize(),
         ) {
             content()
         }
@@ -1294,8 +1620,7 @@ private fun PdfChrome(
                 exit = fadeOut(tween(180)),
             ) {
                 PdfInfoCapsule(
-                    mainLine = capsuleMain,
-                    subLine = capsuleSub,
+                    data = capsuleData,
                     onClick = onCapsuleToggle,
                     maxWidthDp = capsuleMaxWidthDp,
                     expanded = capsuleExpanded && jumpCardParams != null,
@@ -1338,10 +1663,9 @@ private fun FloatingChromeButton(
     Box(
         modifier = Modifier
             .size(44.dp)
-            .readerChromeSurface(
-                level = ReaderGlassElevation.Chrome,
+            .glassMaterial(
+                role = GlassMaterialRole.Control,
                 shape = CircleShape,
-                role = ReaderChromeSurfaceRole.Chrome,
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -1420,8 +1744,7 @@ private fun Modifier.capsuleLocalPressHighlight(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PdfInfoCapsule(
-    mainLine: String,
-    subLine: String?,
+    data: PdfCapsuleData,
     onClick: (() -> Unit)?,
     maxWidthDp: Int = 260,
     expanded: Boolean = false,
@@ -1429,22 +1752,16 @@ private fun PdfInfoCapsule(
     imeAvailableHeightDp: Dp = Dp.Infinity,
 ) {
     val scheme = MaterialTheme.colorScheme
-    // Popover width band: collapsed pill 200dp (capped), expanded body widens
-    // to 240dp (capped). The TOP EDGE stays 200dp in both states, so the
-    // top/centerX are invariant under the expand/collapse toggle.
     val widthCap = maxWidthDp.dp
     val collapsedWidth = 200.dp.coerceAtMost(widthCap)
     val expandedWidth = 240.dp.coerceAtMost(widthCap)
-    val surfaceWidthDp by animateDpAsState(
-        targetValue = if (expanded) expandedWidth else collapsedWidth,
-        animationSpec = tween(200),
-        label = "capsuleWidth",
-    )
-    // Silhouette: trapezoid while the surface is wider than the pill (the
-    // shape's bottom edge follows the animated width, so both ends of the
-    // animation are plain rounded rectangles and only the body flares);
-    // plain pill shape otherwise.
-    val shape = if ((expanded || surfaceWidthDp > collapsedWidth) && expandedWidth > collapsedWidth) {
+    val morph = remember { Animatable(if (expanded) 1f else 0f) }
+    LaunchedEffect(expanded) {
+        morph.animateTo(if (expanded) 1f else 0f, CapsuleMorphSpring)
+    }
+    val fraction = morph.value
+    val surfaceWidthDp = collapsedWidth + (expandedWidth - collapsedWidth) * fraction
+    val shape = if (fraction > 0f && expandedWidth > collapsedWidth) {
         CapsulePopoverShape(
             topWidth = collapsedWidth,
             bottomWidth = surfaceWidthDp,
@@ -1454,37 +1771,18 @@ private fun PdfInfoCapsule(
     } else {
         RoundedCornerShape(22.dp)
     }
-    // Anchor-stability evidence: log the surface top/centerX whenever they
-    // change (collapsed vs expanded must print identical top & centerX; the
-    // width legitimately animates and is not part of the invariant).
     var lastCapsuleAnchor by remember { mutableStateOf(IntArray(0)) }
-
-    // ── R25 closure P1-1: single authoritative body progress p (the same
-    // pattern as the menu's inline sections — R25.2). Region height =
-    // measuredNaturalHeight × p, children stay composed (clipped) while
-    // expanded or mid-collapse. No separate expand/fade clocks — no late
-    // content, no blank shrinking tail at the end of the collapse.
-    val bodyProgress = remember { Animatable(0f) }
     var bodyNaturalHeightPx by remember { mutableFloatStateOf(0f) }
     val bodyDensity = LocalDensity.current
-    LaunchedEffect(expanded) {
-        if (expanded) {
-            bodyProgress.snapTo(0f)
-            bodyProgress.animateTo(1f, tween(200, easing = MoreMorphEasing))
-        } else {
-            bodyProgress.animateTo(0f, tween(180, easing = MoreMorphEasing))
-        }
-    }
-
     val capsuleInteraction = remember { MutableInteractionSource() }
 
     Column(
         modifier = Modifier
             .width(surfaceWidthDp)
-            .readerChromeSurface(
-                level = ReaderGlassElevation.Chrome,
+            .glassMaterial(
+                role = GlassMaterialRole.Capsule,
                 shape = shape,
-                role = ReaderChromeSurfaceRole.Chrome,
+                interaction = expanded,
             )
             .onGloballyPositioned { coords ->
                 val bounds = coords.boundsInWindow()
@@ -1507,9 +1805,7 @@ private fun PdfInfoCapsule(
                 }
             },
     ) {
-        // Header is the only press target. Local Plus highlight stays on this
-        // 44dp pill — never a Material ripple on the morphing Column.
-        Row(
+        Box(
             modifier = Modifier
                 .width(collapsedWidth)
                 .height(44.dp)
@@ -1529,19 +1825,26 @@ private fun PdfInfoCapsule(
                     },
                 )
                 .padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            contentAlignment = Alignment.CenterStart,
         ) {
-            Column(modifier = Modifier.weight(1f, fill = false)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { alpha = 1f - fraction },
+            ) {
                 Text(
-                    text = mainLine,
+                    text = data.title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = scheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.capsuleTitleMarquee(),
                 )
-                if (!subLine.isNullOrBlank()) {
+                data.positionLine?.let { position ->
+                    val progress = data.progressPercent?.let {
+                        stringResource(R.string.pdf_capsule_progress_percent, it)
+                    }
                     Text(
-                        text = subLine,
+                        text = listOfNotNull(position, progress).joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant,
                         maxLines = 1,
@@ -1549,15 +1852,23 @@ private fun PdfInfoCapsule(
                     )
                 }
             }
+            if (fraction > 0f) {
+                Text(
+                    text = data.title,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .capsuleTitleMarquee()
+                        .graphicsLayer { alpha = fraction },
+                )
+            }
         }
-        // Expanded body: grows from the header's bottom edge inside the same
-        // surface (pure downward growth, same left/right bounds — the region
-        // height follows the single progress p). IME-adaptive: capped to the
-        // space above the keyboard and scrollable, but never relocates the
-        // surface.
-        val shouldComposeBody = expanded || bodyProgress.value > 0f
+
+        val shouldComposeBody = expanded || fraction > 0f
         val bodyRegionHeightDp = with(bodyDensity) {
-            (bodyNaturalHeightPx * bodyProgress.value).toDp()
+            (bodyNaturalHeightPx * fraction).toDp()
         }
         val bodyParams = jumpParams
         Box(
@@ -1570,8 +1881,31 @@ private fun PdfInfoCapsule(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .reportNaturalHeight { bodyNaturalHeightPx = it.toFloat() },
+                        .reportNaturalHeight { bodyNaturalHeightPx = it.toFloat() }
+                        .graphicsLayer { alpha = (fraction * 1.5f).coerceAtMost(1f) },
                 ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(scheme.outlineVariant.copy(alpha = 0.55f)),
+                    )
+                    data.positionLine?.let { position ->
+                        Text(
+                            text = listOfNotNull(position, data.printDetail).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = scheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        )
+                    }
+                    data.progressPercent?.let { progress ->
+                        Text(
+                            text = stringResource(R.string.pdf_capsule_reading_progress, progress),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
                     JumpPageBody(
                         params = bodyParams,
                         bodyMaxHeightDp = (imeAvailableHeightDp - 44.dp).coerceAtLeast(96.dp),
@@ -1581,6 +1915,12 @@ private fun PdfInfoCapsule(
         }
     }
 }
+
+private fun Modifier.capsuleTitleMarquee(): Modifier = basicMarquee(
+    iterations = Int.MAX_VALUE,
+    initialDelayMillis = 1500,
+    repeatDelayMillis = 1200,
+)
 
 /**
  * Jump-to-page body: grows inside the capsule surface, under the header.
@@ -1602,7 +1942,6 @@ private fun JumpPageBody(
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val scheme = MaterialTheme.colorScheme
-    val rangeHint = stringResource(R.string.pdf_jump_range, params.pageCount)
     val invalidMsg = stringResource(R.string.pdf_jump_invalid, params.pageCount)
 
     // R25 closure P2-1: request focus only after the body morph completes
@@ -1631,19 +1970,6 @@ private fun JumpPageBody(
             .verticalScroll(rememberScrollState())
             .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
     ) {
-        // Small title + one helper line (no oversized form header).
-        Text(
-            text = stringResource(R.string.pdf_jump_title),
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = scheme.onSurface,
-        )
-        Text(
-            text = rangeHint,
-            style = MaterialTheme.typography.labelSmall,
-            color = scheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
         // Restrained number field: 44dp tall, 11dp radius, filled only
         // slightly deeper than the capsule glass — never a solid black
         // rectangle, never a bulky form field.
@@ -1762,6 +2088,7 @@ internal fun PdfHorizontalPagedArea(
     tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
     onZoomGestureActive: (Boolean) -> Unit = {},
     onEnsureAround: (Int) -> Unit = {},
+    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
     qaProbe: HorizontalInteractionProbe? = null,
 ) {
     // GPU zoom only inside clipped viewport — never covers TopBar.
@@ -3104,6 +3431,8 @@ internal fun PdfHorizontalPagedArea(
                                         }
                                     }
                                 }
+                                // R26/R27 标注覆盖层：与页面图像共享局部坐标并随页面变换。
+                                pageAnnotation(page)
                             }
                         }
                     }
@@ -3127,4 +3456,3 @@ internal fun PdfHorizontalPagedArea(
     }
 
 }
-

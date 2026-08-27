@@ -13,6 +13,10 @@ object AdvancedChildLayoutSpec {
     /** Level-1 header row inside every Child (matches Parent row). */
     const val HeaderHeightDp = 52f
 
+    /** Component geometry stays outside the material engine. */
+    const val InputCornerDp = 16f
+    const val ActionCornerDp = 18f
+
     /**
      * Preferred total Child height (header + body), before maxHeight clamp.
      * PageMapping stays compact; TOC/Thumbs/Export allow taller content.

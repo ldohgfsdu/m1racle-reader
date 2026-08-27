@@ -3,123 +3,102 @@ package com.markleaf.app.ui.pdf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
-import com.markleaf.app.ui.common.LiquidGlassTokens
-import com.markleaf.app.ui.common.LiquidSurfaceLevel
-import com.markleaf.app.ui.common.resolvedSurfaceAlpha
-import com.markleaf.app.ui.common.shapeSupportsLiquidLens
+import androidx.compose.ui.graphics.Color
+import com.markleaf.app.ui.material.GlassMaterialEngine
+import com.markleaf.app.ui.material.GlassMaterialRole
+import com.markleaf.app.ui.material.supportsGlassLens
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** r26.1: Liquid-only chrome + geometry + glass-on-glass contracts. */
+/** Unified material, geometry and glass-on-glass contracts for Reader chrome. */
 class ReaderChromeMaterialTest {
 
     @Test
-    fun `parent width band is 220dp compact`() {
-        val bands = ReaderChromeMaterialLogic.geometryInvariantBands()
-        assertEquals(220f, bands.parentWidthDp, 0.01f)
-        assertEquals(MoreMenuWidth.value, bands.parentWidthDp, 0.01f)
+    fun `parent geometry stays compact and independent from material`() {
+        assertEquals(220f, MoreMenuWidth.value, 0.01f)
         assertTrue(MoreMenuWidth.value in 212f..224f)
-        assertEquals(MenuRowHeight.value, bands.rowHeightDp, 0.01f)
+        assertEquals(52f, MenuRowHeight.value, 0.01f)
     }
 
     @Test
-    fun `no Frosted material style remains in production chrome`() {
-        val material = source("ReaderChromeMaterial.kt")
-        val prefs = prefsSource()
-        val screen = source("PdfViewerScreen.kt")
-        assertFalse(material.contains("FROSTED"))
-        assertFalse(material.contains("ReaderChromeMaterialStyle"))
-        assertFalse(prefs.contains("KEY_MATERIAL_STYLE"))
-        assertFalse(prefs.contains("getMaterialStyle"))
-        assertFalse(screen.contains("pdf_chrome_material_frosted"))
-        assertFalse(screen.contains("setChromeMaterialStyle"))
-        assertTrue(material.contains("markLeafLiquidSurface") || material.contains("LiquidSurfaceLevel"))
+    fun `semantic roles preserve regular frost hierarchy`() {
+        val control = GlassMaterialEngine.resolve(GlassMaterialRole.Control, dark = false)
+        val capsule = GlassMaterialEngine.resolve(GlassMaterialRole.Capsule, dark = false)
+        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false)
+        val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
+        val dialog = GlassMaterialEngine.resolve(GlassMaterialRole.Dialog, dark = false)
+
+        assertEquals(0.50f, control.surfaceColor.alpha, 0.01f)
+        assertEquals(0.50f, capsule.surfaceColor.alpha, 0.01f)
+        assertEquals(0.60f, menu.surfaceColor.alpha, 0.01f)
+        assertEquals(0.66f, settings.surfaceColor.alpha, 0.01f)
+        assertEquals(0.97f, dialog.surfaceColor.alpha, 0.01f)
+        assertTrue(control.blur < menu.blur)
+        assertTrue(menu.shadow <= settings.shadow)
     }
 
     @Test
-    fun `parent menu fill stays translucent glass not a solid plate`() {
-        assertEquals(0.60f, LiquidGlassTokens.ParentSurfaceAlpha, 0.001f)
-        assertEquals(0.50f, LiquidGlassTokens.ControlSurfaceAlpha, 0.001f)
-        assertEquals(
-            0.60f,
-            resolvedSurfaceAlpha(LiquidSurfaceLevel.Parent, pressed = false),
-            0.001f,
+    fun `night frost remains translucent and uses one palette`() {
+        val expected = mapOf(
+            GlassMaterialRole.Control to (0.68f to 0.34f),
+            GlassMaterialRole.Capsule to (0.68f to 0.34f),
+            GlassMaterialRole.Menu to (0.74f to 0.30f),
+            GlassMaterialRole.SettingsCard to (0.78f to 0.32f),
+            GlassMaterialRole.Dialog to (0.97f to 0.38f),
         )
-        assertEquals(
-            0.50f,
-            resolvedSurfaceAlpha(LiquidSurfaceLevel.Control, pressed = false),
-            0.001f,
-        )
-        assertTrue(
-            "reference frost is milky but still see-through",
-            resolvedSurfaceAlpha(LiquidSurfaceLevel.Parent, pressed = false) in 0.55f..0.75f,
-        )
+        expected.forEach { (role, values) ->
+            val spec = GlassMaterialEngine.resolve(role, dark = true)
+            assertEquals(values.first, spec.surfaceColor.alpha, 0.01f)
+            assertEquals(-0.18f, spec.brightness, 0.001f)
+            assertEquals(1.25f, spec.saturation, 0.001f)
+            assertEquals(values.second, spec.highlightColor.alpha, 0.01f)
+            assertEquals(Color(0xFF111820), spec.surfaceColor.copy(alpha = 1f))
+        }
     }
 
     @Test
-    fun `reader glass follows Kyant dialog regular frost`() {
-        assertEquals(0.60f, LiquidGlassTokens.ParentSurfaceAlpha, 0.001f)
-        assertEquals(0.66f, LiquidGlassTokens.ForegroundSurfaceAlpha, 0.001f)
-        assertEquals(0.58f, LiquidGlassTokens.ParentDarkSurfaceAlpha, 0.001f)
-        assertEquals(0.20f, LiquidGlassTokens.LightBrightness, 0.001f)
-        assertEquals(-0.08f, LiquidGlassTokens.DarkBrightness, 0.001f)
-        val darkParent = resolvedSurfaceAlpha(
-            LiquidSurfaceLevel.Parent,
-            pressed = false,
-            dark = true,
-        )
-        assertEquals(0.58f, darkParent, 0.001f)
-        assertTrue(
-            "night frost stays see-through, not a solid plate",
-            darkParent in 0.50f..0.70f,
-        )
-        val common = commonSource("MarkLeafLiquidSurface.kt")
-        val liquidDraw = common.substringAfter("private fun liquidDraw")
-        assertTrue(liquidDraw.contains("colorControls("))
-        assertTrue(liquidDraw.contains("Highlight.Plain"))
-        assertTrue(liquidDraw.contains("LightSurfaceTint"))
-        assertTrue(liquidDraw.contains("DarkHighlightAlpha"))
-        assertFalse(liquidDraw.contains("vibrancy()"))
-        assertFalse(common.contains("DarkSurfaceAlphaBoost"))
+    fun `settings card samples exported menu material`() {
+        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false)
+        val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
+        assertTrue(menu.exportsForSettingsCard)
+        assertEquals("RootAndMenu", settings.backdropLayer.name)
+
+        val engine = materialSource()
+        assertTrue(engine.contains("rememberCombinedBackdrop(host.root, host.menuExport)"))
+        assertTrue(engine.contains("exportedBackdrop = exportedBackdrop"))
     }
 
     @Test
-    fun `child overlay samples parent export for stacked glass`() {
-        val material = source("ReaderChromeMaterial.kt")
-        val common = commonSource("MarkLeafLiquidSurface.kt")
-        assertTrue(material.contains("ReaderChromeSurfaceRole.Child -> LiquidSurfaceLevel.Foreground"))
-        assertTrue(material.contains("exportForChild = role == ReaderChromeSurfaceRole.Parent"))
-        assertTrue(common.contains("rememberCombinedBackdrop(host.root, host.parentExport)"))
-        assertFalse(material.contains("exportForChild = false"))
-    }
-
-    @Test
-    fun `shells use readerChromeSurface liquid entry`() {
+    fun `reader shells consume semantic engine roles directly`() {
         val host = source("ReaderMoreHost.kt")
-        val pop = source("AnchoredNestedPopover.kt")
+        val popover = source("AnchoredNestedPopover.kt")
         val screen = source("PdfViewerScreen.kt")
-        assertTrue(host.contains("readerChromeSurface("))
-        assertTrue(pop.contains("readerChromeSurface("))
-        assertTrue(screen.contains("readerChromeSurface("))
+        assertTrue(host.contains("glassMaterial("))
+        assertTrue(host.contains("GlassMaterialRole.Menu"))
+        assertTrue(host.contains("GlassMaterialRole.Control"))
+        assertTrue(popover.contains("GlassMaterialRole.SettingsCard"))
+        assertTrue(screen.contains("GlassMaterialRole.Control"))
+        assertTrue(screen.contains("GlassMaterialRole.Capsule"))
         assertFalse(host.contains("drawBackdrop("))
-        assertFalse(pop.contains("layerBackdrop("))
+        assertFalse(popover.contains("layerBackdrop("))
     }
 
     @Test
-    fun `glass-on-glass uses exportedBackdrop and stable rememberLayerBackdrop`() {
-        val common = commonSource("MarkLeafLiquidSurface.kt")
+    fun `glass-on-glass keeps stable layer backdrop instances`() {
         val screen = source("PdfViewerScreen.kt")
-        assertTrue(common.contains("exportForChild") || common.contains("exportedBackdrop"))
         assertTrue(screen.contains("rememberLayerBackdrop()"))
         assertFalse(Regex("""rememberLayerBackdrop\s*\{""").containsMatchIn(screen))
-        assertTrue(screen.contains("layerBackdrop(rootBackdrop)"))
+        assertTrue(screen.contains("GlassBackdropSource("))
+        assertTrue(screen.contains("backdrop = rootBackdrop"))
+        assertTrue(screen.contains("GlassBackdropHost("))
+        assertTrue(screen.contains("LocalGlassBackdropHost provides backdropHost"))
     }
 
     @Test
-    fun `two-phase preparing states exist and map to children`() {
+    fun `two-phase preparing states still map to children`() {
         assertEquals(
             ReaderMoreState.CHILD_PAGE_MAPPING,
             ReaderMoreState.PREPARING_CHILD_PAGE_MAPPING.preparingTarget(),
@@ -134,15 +113,15 @@ class ReaderChromeMaterialTest {
     }
 
     @Test
-    fun `lens gated for CapsulePopoverShape`() {
+    fun `lens remains gated for custom capsule popover shape`() {
         val capsule = CapsulePopoverShape(160.dp, 280.dp, 22.dp, 16.dp)
-        assertFalse(shapeSupportsLiquidLens(capsule))
-        assertTrue(shapeSupportsLiquidLens(CircleShape))
-        assertTrue(shapeSupportsLiquidLens(RoundedCornerShape(28.dp)))
+        assertFalse(supportsGlassLens(capsule))
+        assertTrue(supportsGlassLens(CircleShape))
+        assertTrue(supportsGlassLens(RoundedCornerShape(28.dp)))
     }
 
     @Test
-    fun `capsule press indication is on the pill header not the morphing card`() {
+    fun `capsule press indication stays on pill header`() {
         val screen = source("PdfViewerScreen.kt")
         val start = screen.indexOf("private fun PdfInfoCapsule")
         val end = screen.indexOf("private fun JumpPageBody")
@@ -150,55 +129,34 @@ class ReaderChromeMaterialTest {
         val capsule = screen.substring(start, end)
         val headerIdx = capsule.indexOf(".height(44.dp)")
         val clickableIdx = capsule.indexOf("clickable(")
-        assertTrue("capsule header must be 44dp", headerIdx >= 0)
-        assertTrue("capsule still has a clickable", clickableIdx >= 0)
-        assertTrue(
-            "clickable must sit on the 44dp pill, not the expanding card",
-            clickableIdx > headerIdx,
-        )
-        val surfaceWindow = capsule.substring(0, headerIdx)
-        assertFalse(
-            "morphing Column/surface must not own clickable indication",
-            surfaceWindow.contains("clickable("),
-        )
+        assertTrue(headerIdx >= 0)
+        assertTrue(clickableIdx > headerIdx)
+        assertFalse(capsule.substring(0, headerIdx).contains("clickable("))
         assertTrue(capsule.contains("indication = null"))
         assertTrue(capsule.contains("capsuleLocalPressHighlight"))
-        assertTrue(
-            "pill clip keeps the highlight inside the capsule silhouette",
-            capsule.contains("clip(RoundedCornerShape(22.dp))"),
-        )
     }
 
     @Test
-    fun `home restores system bars and reuses shared liquid for floating controls`() {
-        val home = listOf(
-            File("app/src/main/java/com/markleaf/app/ui/home/HomeScreen.kt"),
-            File("src/main/java/com/markleaf/app/ui/home/HomeScreen.kt"),
-            File("/root/code/MarkLeaf/app/src/main/java/com/markleaf/app/ui/home/HomeScreen.kt"),
-        ).first { it.isFile }.readText()
-        val common = commonSource("MarkLeafLiquidSurface.kt")
+    fun `home shares engine while content cards stay solid`() {
+        val home = appSource("com/markleaf/app/ui/home/HomeScreen.kt").readText()
         assertTrue(home.contains("wic.show(all)"))
-        // Home floating controls (FAB / ··· menu) reuse the SAME shared surface.
-        assertTrue(home.contains("markLeafLiquidSurface"))
-        assertTrue(home.contains("layerBackdrop(rootBackdrop)"))
-        // The shared renderer remains intact and is the Reader surface.
-        assertTrue(common.contains("markLeafLiquidSurface"))
-        assertTrue(common.contains("LiquidSurfaceLevel"))
+        assertTrue(home.contains("glassMaterial"))
+        assertTrue(home.contains("GlassMaterialRole.Control"))
+        assertTrue(home.contains("GlassMaterialRole.Menu"))
+        assertTrue(home.contains("GlassBackdropSource("))
     }
 
-    private fun source(name: String): String = listOf(
-        File("app/src/main/java/com/markleaf/app/ui/pdf/$name"),
-        File("src/main/java/com/markleaf/app/ui/pdf/$name"),
-        File("/root/code/MarkLeaf/app/src/main/java/com/markleaf/app/ui/pdf/$name"),
-    ).first { it.isFile }.readText()
+    private fun source(name: String): String = appSource(
+        "com/markleaf/app/ui/pdf/$name",
+    ).readText()
 
-    private fun commonSource(name: String): String = listOf(
-        File("app/src/main/java/com/markleaf/app/ui/common/$name"),
-        File("/root/code/MarkLeaf/app/src/main/java/com/markleaf/app/ui/common/$name"),
-    ).first { it.isFile }.readText()
+    private fun materialSource(): String = appSource(
+        "com/markleaf/app/ui/material/GlassMaterial.kt",
+    ).readText()
 
-    private fun prefsSource(): String = listOf(
-        File("app/src/main/java/com/markleaf/app/pdf/PdfChromePrefs.kt"),
-        File("/root/code/MarkLeaf/app/src/main/java/com/markleaf/app/pdf/PdfChromePrefs.kt"),
-    ).first { it.isFile }.readText()
+    private fun appSource(relative: String): File = listOf(
+        File("src/main/java/$relative"),
+        File("app/src/main/java/$relative"),
+        File("/root/code/MarkLeaf/app/src/main/java/$relative"),
+    ).first { it.isFile }
 }
