@@ -25,19 +25,42 @@
 -dontwarn com.kyant.shapes.**
 -dontwarn org.jetbrains.compose.**
 
-# ── PDFBox Android (reflection / service loaders / font maps) ──
-# Used for PDF metadata/outline; page bitmaps use Android PdfRenderer.
--keep class com.tom_roush.** { *; }
--keep class org.apache.fontbox.** { *; }
--keep class org.apache.pdfbox.** { *; }
+# ── PDFBox Android ──
+# Display uses Android PdfRenderer. PDFBox is used for outline, page
+# extract/export, fonts, and encrypted-PDF security.
+# R40 experiment: do not blanket-keep com.tom_roush.**. R8 traces the
+# app's static entry points. The AAR consumer rules already keep:
+#   - public constructors of every SecurityHandler subclass
+#   - com.tom_roush.pdfbox.pdmodel.documentinterchange.**
+# The rules below cover remaining reflection / optional paths only.
+
 -dontwarn com.tom_roush.**
 -dontwarn org.apache.fontbox.**
 -dontwarn org.apache.pdfbox.**
 -dontwarn org.bouncycastle.**
+-dontwarn com.gemalto.jp2.**
 
-# Keep PDFBox service files
--keepclassmembers class * {
-    @com.tom_roush.pdfbox.pdmodel.** *;
+# SecurityProvider constructs BouncyCastleProvider directly and also
+# loads it by binary name as a fallback.
+-keep class org.bouncycastle.jce.provider.BouncyCastleProvider {
+    public <init>();
+}
+
+# PDNumberTreeNode uses
+# valueType.getDeclaredConstructor(base.getClass()).newInstance(base).
+# Proven value types in pdfbox-android 2.0.27.0:
+#   PDPageLabelRange(COSDictionary)
+#   PDParentTreeValue(COSArray|COSDictionary) — kept by AAR
+#     documentinterchange.** rule.
+-keep class com.tom_roush.pdfbox.pdmodel.common.PDPageLabelRange {
+    public <init>(com.tom_roush.pdfbox.cos.COSDictionary);
+}
+
+# FilterFactory constructs JPXFilter statically. JPXFilter looks up the
+# optional com.gemalto.jp2.JP2Decoder (not shipped). Keep the filter so
+# the optional path remains; do not keep a decoder we do not ship.
+-keep class com.tom_roush.pdfbox.filter.JPXFilter {
+    public <init>();
 }
 
 # ── Serialization / Parcelable if any ──

@@ -198,6 +198,17 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // R38 size experiment: PDFBox brings the complete BouncyCastle PQC
+            // parameter tables even though M1racle Reader does not invoke the
+            // Picnic or SIKE algorithms. Keep all BouncyCastle dependencies and
+            // code; exclude only the five measured algorithm data resources.
+            excludes += setOf(
+                "/org/bouncycastle/pqc/crypto/picnic/lowmc.properties",
+                "/org/bouncycastle/pqc/crypto/sike/p434.properties",
+                "/org/bouncycastle/pqc/crypto/sike/p503.properties",
+                "/org/bouncycastle/pqc/crypto/sike/p610.properties",
+                "/org/bouncycastle/pqc/crypto/sike/p751.properties",
+            )
         }
     }
 
