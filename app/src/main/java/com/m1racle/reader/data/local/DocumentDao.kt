@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -23,6 +24,27 @@ interface DocumentDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(document: DocumentEntity)
+
+    /** Identity commits must use ABORT so a hash conflict can never cascade-delete. */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertDocument(document: DocumentEntity): Long
+
+    /** Targeted existing-row write that preserves the stable primary key and children. */
+    @Update
+    suspend fun updateDocument(document: DocumentEntity)
+
+    @Query(
+        """
+        UPDATE documents
+        SET contentSha256 = :contentSha256, lastOpenedAt = :lastOpenedAt
+        WHERE id = :id AND contentSha256 IS NULL
+        """,
+    )
+    suspend fun assignContentSha256IfNull(
+        id: String,
+        contentSha256: String,
+        lastOpenedAt: Long,
+    ): Int
 
     @Query("DELETE FROM documents WHERE id = :id")
     suspend fun deleteById(id: String)

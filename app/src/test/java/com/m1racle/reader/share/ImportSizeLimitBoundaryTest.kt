@@ -138,6 +138,8 @@ class ImportSizeLimitBoundaryTest {
             pdfPrintPageAnchorDao = B3UnusedPdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = B3UnusedTextbookOutlineNodeDao(),
             searchRepository = com.m1racle.reader.testing.testSearchRepository(),
+            documentAliasDao = com.m1racle.reader.testing.TestDocumentAliasDao(),
+            importTransactionRunner = com.m1racle.reader.testing.ImmediateImportTransactionRunner(),
         )
     }
 
@@ -162,7 +164,7 @@ class ImportSizeLimitBoundaryTest {
         val uri = stubUri("b199")
 
         val pathA = installRepository().importDocument(uri)
-        assertEquals((pathA as ImportResult.Success).document.fileSize, 199L * 1024L * 1024L)
+        assertEquals(8L, (pathA as ImportResult.Success).document.fileSize)
 
         val pathB = importerWithFakeStream(installRepository(), totalBytes = 64L * 1024L)
             .prepare(uri, intentType = null)
@@ -176,7 +178,7 @@ class ImportSizeLimitBoundaryTest {
         val uri = stubUri("b200")
 
         val pathA = installRepository().importDocument(uri)
-        assertEquals(cap(), (pathA as ImportResult.Success).document.fileSize)
+        assertEquals(8L, (pathA as ImportResult.Success).document.fileSize)
 
         val pathB = importerWithFakeStream(installRepository(), totalBytes = 64L * 1024L)
             .prepare(uri, intentType = null)
@@ -228,9 +230,10 @@ class ImportSizeLimitBoundaryTest {
         val pathA = installRepository().importDocument(uri)
         assertTrue("Path A accepts a cap-sized hint-less stream", pathA is ImportResult.Success)
 
-        val pathB = importerWithFakeStream(installRepository(), totalBytes = cap())
-            .prepare(uri, intentType = null)
+        val importer = importerWithFakeStream(installRepository(), totalBytes = cap())
+        val pathB = importer.prepare(uri, intentType = null)
         assertTrue(pathB is PrepareOutcome.Success)
+        importer.discardPrepared((pathB as PrepareOutcome.Success).prepared)
     }
 
     // ── shared constant sanity ───────────────────────────────────────────────
@@ -255,6 +258,34 @@ private class B3RecordingDocumentDao : DocumentDao {
         upserts.removeAll { it.id == document.id }
         upserts.add(document)
         recent.value = upserts.toList()
+    }
+
+    override suspend fun insertDocument(document: DocumentEntity): Long {
+        check(upserts.none { it.id == document.id || it.contentSha256 == document.contentSha256 })
+        upserts.add(document)
+        recent.value = upserts.toList()
+        return upserts.size.toLong()
+    }
+
+    override suspend fun updateDocument(document: DocumentEntity) {
+        val index = upserts.indexOfFirst { it.id == document.id }
+        if (index >= 0) upserts[index] = document
+        recent.value = upserts.toList()
+    }
+
+    override suspend fun assignContentSha256IfNull(
+        id: String,
+        contentSha256: String,
+        lastOpenedAt: Long,
+    ): Int {
+        val index = upserts.indexOfFirst { it.id == id && it.contentSha256 == null }
+        if (index < 0) return 0
+        upserts[index] = upserts[index].copy(
+            contentSha256 = contentSha256,
+            lastOpenedAt = lastOpenedAt,
+        )
+        recent.value = upserts.toList()
+        return 1
     }
 
     override suspend fun deleteById(id: String) {

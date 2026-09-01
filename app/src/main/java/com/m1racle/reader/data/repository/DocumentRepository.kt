@@ -2,7 +2,11 @@ package com.m1racle.reader.data.repository
 
 import android.content.Context
 import android.content.Intent
+import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
+import com.m1racle.reader.data.local.AppDatabase
+import com.m1racle.reader.data.local.DocumentAliasDao
+import com.m1racle.reader.data.local.DocumentAliasEntity
 import com.m1racle.reader.data.local.DocumentDao
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
@@ -14,17 +18,33 @@ import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.data.local.TextbookOutlineNodeType
 import com.m1racle.reader.packageimport.ZipPackageImporter
 import com.m1racle.reader.pdf.TextbookOutlineResolver
+import com.m1racle.reader.identity.ContentIdentityDecision
+import com.m1racle.reader.identity.ContentIdentityInput
+import com.m1racle.reader.identity.ContentIdentityResolution
+import com.m1racle.reader.identity.ContentIdentityResolver
+import com.m1racle.reader.identity.PreparedContentIdentity
+import com.m1racle.reader.identity.DocumentAliasKeys
+import com.m1racle.reader.identity.RoomSidecarAliasMigrationTransaction
+import com.m1racle.reader.identity.SidecarIdentityMigrationFiles
+import com.m1racle.reader.identity.SidecarIdentityMigrationV1
+import com.m1racle.reader.identity.SidecarIdentityV1Reader
+import com.m1racle.reader.share.ExternalDocumentImporter
+import com.m1racle.reader.share.ExternalUriMetadata
+import com.m1racle.reader.share.ProviderMetadata
+import com.m1racle.reader.share.ProviderMetadataSource
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.InputStream
-import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
 
@@ -41,7 +61,25 @@ class DocumentRepository(
     private val pdfPrintPageAnchorDao: PdfPrintPageAnchorDao,
     private val textbookOutlineNodeDao: TextbookOutlineNodeDao,
     private val searchRepository: SearchRepository,
+    private val documentAliasDao: DocumentAliasDao =
+        (db as AppDatabase).documentAliasDao(),
+    internal val contentIdentityResolver: ContentIdentityResolver =
+        ContentIdentityResolver(context, documentDao),
+    internal val sidecarIdentityMigration: SidecarIdentityMigrationV1 =
+        SidecarIdentityMigrationV1(
+            reader = SidecarIdentityV1Reader(),
+            files = SidecarIdentityMigrationFiles(context.filesDir),
+            transaction = RoomSidecarAliasMigrationTransaction(
+                database = db,
+                documentDao = documentDao,
+                aliasDao = documentAliasDao,
+            ),
+        ),
+    private val importTransactionRunner: ImportTransactionRunner =
+        RoomImportTransactionRunner(db),
 ) {
+
+    private val identityCommitMutex = Mutex()
 
     fun observeRecentDocuments(): Flow<List<DocumentEntity>> =
         documentDao.observeRecentDocuments()
@@ -59,6 +97,10 @@ class DocumentRepository(
             documentDao.getAll()
         }
 
+    internal suspend fun ensureIdentityRuntimeReady() {
+        sidecarIdentityMigration.ensureCompleted()
+    }
+
     suspend fun touchLastOpened(id: String, time: Long = System.currentTimeMillis()) {
         withContext(Dispatchers.IO) {
             documentDao.updateLastOpenedAt(id, time)
@@ -66,62 +108,351 @@ class DocumentRepository(
     }
 
     /**
-     * Locate an existing private-library document whose content SHA-256 matches.
-     * Used for external-open content dedup without a Room schema change.
+     * Read-only location candidate for the external-open confirmation card.
+     * The candidate never skips [ContentIdentityResolver.resolve]; bytes are
+     * always staged and verified before [commitResolvedImport].
      */
-    suspend fun findByContentSha256(sha256: String, sizeBytes: Long?): DocumentEntity? =
-        withContext(Dispatchers.IO) {
-            val want = sha256.lowercase(Locale.ROOT)
-            val byId = documentDao.getById("c:$want")
-            if (byId != null) return@withContext byId
-            val candidates = documentDao.getAll().filter { doc ->
-                sizeBytes == null || doc.fileSize == null || doc.fileSize == sizeBytes
-            }
-            for (doc in candidates) {
-                val path = filePathFromUriString(doc.uri) ?: continue
-                val file = File(path)
-                if (!file.isFile) continue
-                if (sizeBytes != null && file.length() != sizeBytes) continue
-                if (sha256OfFile(file) == want) return@withContext doc
-            }
-            null
+    internal suspend fun findBySourceAlias(
+        sourceUri: Uri,
+        canonicalExternalKey: String,
+    ): DocumentEntity? = withContext(Dispatchers.IO) {
+        ensureIdentityRuntimeReady()
+        for (key in sourceAliasKeys(sourceUri, canonicalExternalKey)) {
+            val documentId = documentAliasDao.getByKey(key)?.documentId ?: continue
+            val document = documentDao.getById(documentId)
+            if (document != null) return@withContext document
         }
+        null
+    }
 
-    private fun filePathFromUriString(uriString: String): String? {
-        return try {
-            val uri = Uri.parse(uriString)
-            when (uri.scheme?.lowercase(Locale.ROOT)) {
-                "file" -> uri.path
-                else -> null
+    /** Host-test seam that keeps hashing/lookup inside ContentIdentityResolver. */
+    internal fun contentIdentityResolverWithSource(
+        openSource: (Uri) -> InputStream?,
+    ): ContentIdentityResolver = ContentIdentityResolver(
+        documentDao = documentDao,
+        stagingDirectory = File(context.filesDir, "identity-staging"),
+        openSource = openSource,
+    )
+
+    /**
+     * The sole document-identity commit boundary.
+     *
+     * It revalidates exact content through [ContentIdentityResolver] inside the
+     * configured Room transaction, preserves every existing primary key and
+     * child row, creates UUID ids only for genuinely new content, and attaches
+     * only byte-verified aliases. It never calls the REPLACE upsert.
+     */
+    suspend fun commitResolvedImport(
+        request: ResolvedImportRequest,
+    ): ResolvedImportCommit = withContext(Dispatchers.IO) {
+        try {
+            ensureIdentityRuntimeReady()
+        } catch (error: Throwable) {
+            request.content.close()
+            throw error
+        }
+        identityCommitMutex.withLock {
+            val prepared = request.content
+            var payload: MaterializedImportPayload? = null
+            var payloadOwnedByCommittedDocument = false
+            try {
+                check(prepared.stagedFile.isFile) { "Resolved import staging file is missing" }
+
+                var earlyConstraint: SQLiteConstraintException? = null
+                for (attempt in 0 until MAX_IDENTITY_COMMIT_ATTEMPTS) {
+                    try {
+                        val firstDecision = importTransactionRunner.run {
+                            reuseOrEnrichResolvedImport(request, System.currentTimeMillis())
+                        }
+                        if (firstDecision != null) {
+                            return@withLock firstDecision
+                        }
+                        earlyConstraint = null
+                        break
+                    } catch (conflict: SQLiteConstraintException) {
+                        earlyConstraint = conflict
+                    }
+                }
+                if (earlyConstraint != null) throw earlyConstraint
+
+                // New ids are minted only here, after a fresh transactional miss.
+                val newDocumentId = UUID.randomUUID().toString()
+                payload = materializeImportPayload(request, newDocumentId)
+
+                var lastConstraint: SQLiteConstraintException? = null
+                repeat(MAX_IDENTITY_COMMIT_ATTEMPTS) {
+                    try {
+                        val committed = importTransactionRunner.run {
+                            reuseOrEnrichResolvedImport(
+                                request = request,
+                                now = System.currentTimeMillis(),
+                            ) ?: insertResolvedImport(
+                                request = request,
+                                documentId = newDocumentId,
+                                payload = requireNotNull(payload),
+                                now = System.currentTimeMillis(),
+                            )
+                        }
+                        if (committed.document.id == newDocumentId) {
+                            payloadOwnedByCommittedDocument = true
+                        }
+                        return@withLock committed
+                    } catch (conflict: SQLiteConstraintException) {
+                        // ABORT rolls back the whole attempt. Requery/re-evaluate
+                        // in a fresh transaction; a same-hash winner is reused.
+                        lastConstraint = conflict
+                    }
+                }
+                throw requireNotNull(lastConstraint)
+            } finally {
+                prepared.close()
+                if (!payloadOwnedByCommittedDocument) {
+                    payload?.deleteOperationOwnedFiles()
+                }
             }
-        } catch (_: Exception) {
-            null
         }
     }
 
-    private fun sha256OfFile(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        FileInputStream(file).use { input ->
-            val buf = ByteArray(64 * 1024)
-            while (true) {
-                val n = input.read(buf)
-                if (n < 0) break
-                digest.update(buf, 0, n)
+    private suspend fun reuseOrEnrichResolvedImport(
+        request: ResolvedImportRequest,
+        now: Long,
+    ): ResolvedImportCommit? {
+        val prepared = request.content
+        val hashOwner = contentIdentityResolver.findExistingDocument(prepared.contentSha256)
+        if (hashOwner != null) {
+            documentDao.updateLastOpenedAt(hashOwner.id, now)
+            bindVerifiedSourceAliases(request, hashOwner.id, now)
+            return ResolvedImportCommit(
+                document = hashOwner.copy(lastOpenedAt = now),
+                reusedExisting = true,
+            )
+        }
+
+        val resolvedCandidate =
+            (prepared.decision as? ContentIdentityDecision.ExistingDocumentFound)?.document
+        if (resolvedCandidate != null && resolvedCandidate.contentSha256 == null) {
+            val current = documentDao.getById(resolvedCandidate.id)
+            if (current != null && current.contentSha256 == null) {
+                val updated = documentDao.assignContentSha256IfNull(
+                    id = current.id,
+                    contentSha256 = prepared.contentSha256,
+                    lastOpenedAt = now,
+                )
+                check(updated == 1) { "Verified legacy identity candidate changed during commit" }
+                bindVerifiedSourceAliases(request, current.id, now)
+                return ResolvedImportCommit(
+                    document = current.copy(
+                        contentSha256 = prepared.contentSha256,
+                        lastOpenedAt = now,
+                    ),
+                    reusedExisting = true,
+                )
             }
         }
-        return digest.digest().joinToString("") { b -> "%02x".format(b) }
+
+        var aliasCandidate: DocumentEntity? = null
+        for (key in sourceAliasKeys(prepared.sourceUri, request.canonicalExternalKey)) {
+            val documentId = documentAliasDao.getByKey(key)?.documentId ?: continue
+            val document = documentDao.getById(documentId) ?: continue
+            if (document.contentSha256 == null) {
+                aliasCandidate = document
+                break
+            }
+        }
+        val legacyCandidate = aliasCandidate ?: return null
+
+        val updated = documentDao.assignContentSha256IfNull(
+            id = legacyCandidate.id,
+            contentSha256 = prepared.contentSha256,
+            lastOpenedAt = now,
+        )
+        check(updated == 1) { "Legacy identity candidate changed during commit" }
+        bindVerifiedSourceAliases(request, legacyCandidate.id, now)
+        return ResolvedImportCommit(
+            document = legacyCandidate.copy(
+                contentSha256 = prepared.contentSha256,
+                lastOpenedAt = now,
+            ),
+            reusedExisting = true,
+        )
     }
 
-    suspend fun upsert(document: DocumentEntity) {
-        withContext(Dispatchers.IO) {
-            upsertAndIndex(document)
+    private suspend fun insertResolvedImport(
+        request: ResolvedImportRequest,
+        documentId: String,
+        payload: MaterializedImportPayload,
+        now: Long,
+    ): ResolvedImportCommit {
+        val prepared = request.content
+        val entity = DocumentEntity(
+            id = documentId,
+            displayName = payload.displayName,
+            uri = payload.uri,
+            mimeType = payload.mimeType,
+            fileSize = payload.fileSize,
+            lastOpenedAt = now,
+            createdAt = now,
+            lastScrollIndex = 0,
+            lastScrollOffset = 0,
+            readingProgress = 0f,
+            title = payload.title,
+            headingCount = 0,
+            documentType = request.documentType.name,
+            pageCount = 0,
+            contentSha256 = prepared.contentSha256,
+        )
+        documentDao.insertDocument(entity)
+        searchRepository.index(entity, indexedAt = now)
+        bindVerifiedSourceAliases(request, documentId, now)
+        return ResolvedImportCommit(document = entity, reusedExisting = false)
+    }
+
+    private suspend fun bindVerifiedSourceAliases(
+        request: ResolvedImportRequest,
+        documentId: String,
+        now: Long,
+    ) {
+        val primaryKey = DocumentAliasKeys.uriV1(request.canonicalExternalKey)
+        bindAlias(primaryKey, DocumentAliasKeys.URI_V1_KIND, documentId, now)
+
+        // v13 migration created this key for old Path-A ids. It remains a
+        // lookup/rebind bridge only; new imports never create legacy aliases.
+        val legacyKey = DocumentAliasKeys.legacyRawUriV1(request.content.sourceUri.toString())
+        if (documentAliasDao.getByKey(legacyKey) != null) {
+            bindAlias(legacyKey, DocumentAliasKeys.LEGACY_RAW_URI_V1_KIND, documentId, now)
         }
     }
 
-    private suspend fun upsertAndIndex(document: DocumentEntity) {
-        documentDao.upsert(document)
-        searchRepository.index(document)
+    private suspend fun bindAlias(
+        aliasKey: String,
+        kind: String,
+        documentId: String,
+        now: Long,
+    ) {
+        val existing = documentAliasDao.getByKey(aliasKey)
+        if (existing == null) {
+            documentAliasDao.insertAlias(
+                DocumentAliasEntity(
+                    aliasKey = aliasKey,
+                    documentId = documentId,
+                    kind = kind,
+                    createdAt = now,
+                    lastSeenAt = now,
+                ),
+            )
+        } else {
+            documentAliasDao.updateAlias(
+                existing.copy(
+                    documentId = documentId,
+                    kind = kind,
+                    lastSeenAt = now,
+                ),
+            )
+        }
     }
+
+    private fun materializeImportPayload(
+        request: ResolvedImportRequest,
+        documentId: String,
+    ): MaterializedImportPayload {
+        val prepared = request.content
+        if (request.documentType == DocumentType.MARKDOWN_PACKAGE) {
+            return materializeZipPackage(prepared, documentId)
+        }
+        if (request.payloadPolicy == ImportPayloadPolicy.SOURCE_URI) {
+            return MaterializedImportPayload(
+                uri = prepared.sourceUri.toString(),
+                displayName = prepared.metadata.displayName,
+                mimeType = prepared.metadata.mimeType,
+                fileSize = prepared.byteCount,
+                title = null,
+                operationOwnedPath = null,
+            )
+        }
+
+        val destinationDirectory = File(
+            context.filesDir,
+            "library/${prepared.contentSha256}/$documentId",
+        )
+        if (!destinationDirectory.mkdirs() && !destinationDirectory.isDirectory) {
+            throw IllegalStateException("Unable to create managed import directory")
+        }
+        val safeName = ExternalDocumentImporter.sanitizeFileName(
+            prepared.metadata.displayName,
+            ExternalUriMetadata.extensionForMime(prepared.metadata.mimeType) ?: "bin",
+        )
+        val destination = File(destinationDirectory, safeName)
+        try {
+            check(!destination.exists()) { "Managed import destination already exists" }
+            if (!prepared.stagedFile.renameTo(destination)) {
+                prepared.stagedFile.copyTo(destination, overwrite = false)
+                prepared.stagedFile.delete()
+            }
+            check(destination.isFile && destination.length() == prepared.byteCount) {
+                "Managed import length mismatch"
+            }
+            return MaterializedImportPayload(
+                uri = Uri.fromFile(destination).toString(),
+                displayName = prepared.metadata.displayName,
+                mimeType = prepared.metadata.mimeType,
+                fileSize = prepared.byteCount,
+                title = null,
+                operationOwnedPath = destinationDirectory,
+            )
+        } catch (error: Exception) {
+            destinationDirectory.deleteRecursively()
+            throw error
+        }
+    }
+
+    private fun materializeZipPackage(
+        prepared: PreparedContentIdentity,
+        documentId: String,
+    ): MaterializedImportPayload {
+        val destinationDirectory = File(context.filesDir, "packages/$documentId")
+        val extracted = try {
+            prepared.stagedFile.inputStream().use { stream ->
+                ZipPackageImporter.extract(stream, destinationDirectory)
+            }
+        } catch (invalid: IllegalArgumentException) {
+            destinationDirectory.deleteRecursively()
+            throw ResolvedImportCommitException.UnsupportedFormat(invalid)
+        } catch (error: Exception) {
+            destinationDirectory.deleteRecursively()
+            throw ResolvedImportCommitException.Failed(error)
+        }
+
+        val entry = extracted.entryFile
+        val title = runCatching {
+            ZipPackageImporter.extractFirstH1(entry.readText(Charsets.UTF_8))
+        }.getOrNull()
+        val extractedSize = entry.length().takeIf { it > 0L }
+            ?: ZipPackageImporter.packageTotalSize(extracted.packageRoot).takeIf { it > 0L }
+            ?: prepared.byteCount
+        val zipLabel = prepared.metadata.displayName
+            .removeSuffix(".zip")
+            .removeSuffix(".ZIP")
+            .trim()
+            .takeIf {
+                it.isNotEmpty() &&
+                    it != "未命名文档" &&
+                    !it.equals("shared", ignoreCase = true)
+            }
+        return MaterializedImportPayload(
+            uri = Uri.fromFile(entry).toString(),
+            displayName = zipLabel ?: entry.name.takeIf(String::isNotBlank) ?: "Markdown 教材包",
+            mimeType = prepared.metadata.mimeType ?: "application/zip",
+            fileSize = extractedSize,
+            title = title,
+            operationOwnedPath = destinationDirectory,
+        )
+    }
+
+    private fun sourceAliasKeys(sourceUri: Uri, canonicalExternalKey: String): List<String> =
+        listOf(
+            DocumentAliasKeys.uriV1(canonicalExternalKey),
+            DocumentAliasKeys.legacyRawUriV1(sourceUri.toString()),
+        )
 
     suspend fun deleteById(id: String) {
         withContext(Dispatchers.IO) {
@@ -140,11 +471,6 @@ class DocumentRepository(
                 pdfPrintPageAnchorDao.deleteAllForDocument(id)
                 searchRepository.clearDocument(id)
                 documentDao.deleteById(id)
-            }
-            // Sidecar identity index is rebuildable; remove best-effort after Room commit.
-            try {
-                com.m1racle.reader.share.DocumentIdentityIndex(context).removeByDocumentId(id)
-            } catch (_: Exception) {
             }
             // Markdown-package extract tree (ZIP textbooks). Orphan dirs accumulate if
             // only Room rows are deleted — wipe best-effort after successful commit.
@@ -490,227 +816,84 @@ class DocumentRepository(
         }
     }
 
-    /**
-     * Import a document via SAF URI: persist read permission, validate type,
-     * read metadata, and upsert into Room. Runs on [Dispatchers.IO].
-     */
+    /** Home SAF adapter: metadata/type/grant only; identity and commit are shared. */
     suspend fun importDocument(uri: Uri): ImportResult = withContext(Dispatchers.IO) {
         try {
+            ensureIdentityRuntimeReady()
             takeReadPermission(uri)
-
-            val metadata = applyFileUriEnrichment(
-                com.m1racle.reader.share.ProviderMetadataSource.collect(context.contentResolver, uri),
+            val provider = applyFileUriEnrichment(
+                ProviderMetadataSource.collect(context.contentResolver, uri),
                 uri,
             )
-            val mimeType = metadata.mimeType
-            val pathSegment = metadata.lastPathSegment
-            val resolvedMeta = com.m1racle.reader.share.ExternalUriMetadata.resolve(
-                metadata,
-                intentMime = mimeType,
-            )
-            val displayName = resolvedMeta.displayName
-
-            // Single acceptance authority (import policy batch 2): the former
-            // isAllowedFileName OR-branches were a proven subset of this gate.
-            if (!DocumentType.isAllowedImport(mimeType, displayName, pathSegment)) {
+            val resolved = ExternalUriMetadata.resolve(provider, intentMime = provider.mimeType)
+            if (!DocumentType.isAllowedImport(
+                    resolved.mimeType,
+                    resolved.displayName,
+                    provider.lastPathSegment,
+                )
+            ) {
                 return@withContext ImportResult.UnsupportedFormat
             }
 
-            // Unified 200 MB source limit (import policy batch 3). Shared
-            // constant with the VIEW/SEND path; enforced on the provider hint
-            // when available, otherwise by a bounded drain of the source stream
-            // below (aborts past the cap, so worst-case read is cap + chunk).
-            val knownSize = resolvedMeta.sizeBytesHint
-                ?: when (uri.scheme?.lowercase(Locale.ROOT)) {
-                    "file" -> uri.path?.let { File(it).length().takeIf { len -> len > 0 } }
-                    else -> null
-                }
-            if (knownSize != null && knownSize > com.m1racle.reader.share.ExternalDocumentImporter.MAX_BYTES) {
-                return@withContext ImportResult.SourceTooLarge
-            }
-
-            val fileNameFromUri = when (uri.scheme?.lowercase(Locale.ROOT)) {
-                "file" -> uri.path?.let { File(it).name }
-                else -> null
-            }
-            val isZip = DocumentType.isZipFileName(displayName) ||
-                DocumentType.isZipFileName(pathSegment) ||
-                DocumentType.isZipFileName(fileNameFromUri) ||
-                DocumentType.isZipMime(mimeType)
-
-            val uriString = uri.toString()
-            val id = stableUriId(uriString)
-            val now = System.currentTimeMillis()
-            val existing = documentDao.getById(id)
-
-            if (isZip) {
-                val zipDisplay = listOf(displayName, fileNameFromUri, pathSegment)
-                    .firstOrNull { DocumentType.isZipFileName(it) }
-                    ?: displayName
-                return@withContext importZipPackage(
-                    sourceUri = uri,
-                    id = id,
-                    displayName = zipDisplay,
-                    mimeType = mimeType,
-                    fileSize = resolvedMeta.sizeBytesHint
-                        ?: fileNameFromUri?.let { uri.path?.let { p -> File(p).length().takeIf { len -> len > 0 } } },
-                    now = now,
-                    existing = existing,
-                )
-            }
-
-            // Verify the URI is readable; when no usable size metadata exists,
-            // the same pass bound-verifies the source against the shared cap
-            // (applies to every document type, zip included — extraction caps
-            // in ZipPackageImporter remain independent, uncompressed-side bounds).
-            openUriInputStream(uri)?.use { input ->
-                if (knownSize == null) {
-                    val buf = ByteArray(64 * 1024)
-                    var seen = 0L
-                    while (true) {
-                        val n = try {
-                            input.read(buf)
-                        } catch (_: Exception) {
-                            -1
-                        }
-                        if (n < 0) break
-                        seen += n
-                        if (seen > com.m1racle.reader.share.ExternalDocumentImporter.MAX_BYTES) {
-                            return@withContext ImportResult.SourceTooLarge
-                        }
-                    }
-                }
-            } ?: return@withContext ImportResult.ReadFailed
-
-            val documentType = DocumentType.resolve(mimeType, displayName, pathSegment)
-            // Note: the former "markdown requires known text extension" re-check
-            // is unreachable after policy unification — a MARKDOWN-typed input
-            // can only pass the gate with document extensions on its (resolved)
-            // names, either via branch 1 or via ensureExtension normalization.
-
-            val resolvedSize = knownSize
-
-            val entity = if (existing != null) {
-                // Same file again: refresh open time + metadata; keep progress/title.
-                existing.copy(
-                    displayName = displayName,
-                    uri = uriString,
-                    mimeType = mimeType,
-                    fileSize = resolvedSize ?: existing.fileSize,
-                    lastOpenedAt = now,
-                    documentType = documentType.name,
-                )
+            val fileNameFromUri = if (uri.scheme.equals("file", ignoreCase = true)) {
+                uri.path?.let { File(it).name }
             } else {
-                DocumentEntity(
-                    id = id,
-                    displayName = displayName,
-                    uri = uriString,
-                    mimeType = mimeType,
-                    fileSize = resolvedSize,
-                    lastOpenedAt = now,
-                    createdAt = now,
-                    lastScrollIndex = 0,
-                    lastScrollOffset = 0,
-                    readingProgress = 0f,
-                    title = null,
-                    headingCount = 0,
-                    documentType = documentType.name,
-                    pageCount = 0,
+                null
+            }
+            val isZip = DocumentType.isZipFileName(resolved.displayName) ||
+                DocumentType.isZipFileName(provider.lastPathSegment) ||
+                DocumentType.isZipFileName(fileNameFromUri) ||
+                DocumentType.isZipMime(resolved.mimeType)
+            val documentType = if (isZip) {
+                DocumentType.MARKDOWN_PACKAGE
+            } else {
+                DocumentType.resolve(
+                    resolved.mimeType,
+                    resolved.displayName,
+                    provider.lastPathSegment,
                 )
             }
-
-            upsertAndIndex(entity)
-            ImportResult.Success(entity)
-        } catch (_: SecurityException) {
-            ImportResult.ReadFailed
-        } catch (_: Exception) {
-            ImportResult.ReadFailed
-        }
-    }
-
-    /**
-     * Extract textbook ZIP into app-private storage; [DocumentEntity.uri] points at entry .md
-     * (file://) so existing progress + reader work without schema migration.
-     */
-    private suspend fun importZipPackage(
-        sourceUri: Uri,
-        id: String,
-        displayName: String,
-        mimeType: String?,
-        fileSize: Long?,
-        now: Long,
-        existing: DocumentEntity?,
-    ): ImportResult {
-        val destDir = File(context.filesDir, "packages/$id")
-        val extracted = try {
-            // Must support file:// (share-intake copy) as well as content:// (FAB SAF).
-            openUriInputStream(sourceUri)?.use { stream ->
-                ZipPackageImporter.extract(stream, destDir)
-            } ?: return ImportResult.ReadFailed
-        } catch (_: SecurityException) {
-            destDir.deleteRecursively()
-            return ImportResult.ReadFailed
-        } catch (_: IllegalArgumentException) {
-            destDir.deleteRecursively()
-            return ImportResult.UnsupportedFormat
-        } catch (_: Exception) {
-            destDir.deleteRecursively()
-            return ImportResult.ReadFailed
-        }
-
-        val entry = extracted.entryFile
-        val packageRoot = extracted.packageRoot
-        // Document URI = package entry Markdown (assets/ stays sibling under packageRoot).
-        val entryUri = Uri.fromFile(entry).toString()
-
-        val mdText = try {
-            entry.readText(Charsets.UTF_8)
-        } catch (_: Exception) {
-            ""
-        }
-        val h1Title = ZipPackageImporter.extractFirstH1(mdText)
-        val entrySize = entry.length().takeIf { it > 0 }
-        val packageSize = ZipPackageImporter.packageTotalSize(packageRoot).takeIf { it > 0 }
-        val resolvedSize = entrySize ?: packageSize ?: fileSize
-
-        val zipLabel = displayName
-            .removeSuffix(".zip").removeSuffix(".ZIP")
-            .trim()
-            .takeIf { it.isNotEmpty() && it != "未命名文档" && !it.equals("shared", true) }
-        val listName = zipLabel
-            ?: entry.name.takeIf { it.isNotBlank() }
-            ?: "Markdown 教材包"
-
-        val entity = if (existing != null) {
-            existing.copy(
-                displayName = listName,
-                uri = entryUri,
-                mimeType = mimeType ?: "application/zip",
-                fileSize = resolvedSize,
-                lastOpenedAt = now,
-                documentType = DocumentType.MARKDOWN_PACKAGE.name,
-                title = h1Title ?: existing.title,
+            val canonicalExternalKey = ExternalUriMetadata.canonicalExternalKey(
+                scheme = provider.scheme,
+                authority = provider.authority,
+                uriString = uri.toString(),
+                documentIdFromProvider = provider.lastPathSegment,
             )
-        } else {
-            DocumentEntity(
-                id = id,
-                displayName = listName,
-                uri = entryUri,
-                mimeType = mimeType ?: "application/zip",
-                fileSize = resolvedSize,
-                lastOpenedAt = now,
-                createdAt = now,
-                lastScrollIndex = 0,
-                lastScrollOffset = 0,
-                readingProgress = 0f,
-                title = h1Title,
-                headingCount = 0,
-                documentType = DocumentType.MARKDOWN_PACKAGE.name,
-                pageCount = 0,
-            )
+
+            when (
+                val identity = contentIdentityResolver.resolve(
+                    ContentIdentityInput(
+                        sourceUri = uri,
+                        metadata = resolved,
+                        maximumBytes = ExternalDocumentImporter.MAX_BYTES,
+                    ),
+                )
+            ) {
+                is ContentIdentityResolution.Resolved -> {
+                    val committed = commitResolvedImport(
+                        ResolvedImportRequest(
+                            content = identity.content,
+                            canonicalExternalKey = canonicalExternalKey,
+                            documentType = documentType,
+                            payloadPolicy = if (documentType == DocumentType.MARKDOWN) {
+                                ImportPayloadPolicy.SOURCE_URI
+                            } else {
+                                ImportPayloadPolicy.MANAGED_COPY
+                            },
+                        ),
+                    )
+                    ImportResult.Success(committed.document)
+                }
+                ContentIdentityResolution.SourceTooLarge -> ImportResult.SourceTooLarge
+                is ContentIdentityResolution.Failed -> ImportResult.ReadFailed
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: ResolvedImportCommitException.UnsupportedFormat) {
+            ImportResult.UnsupportedFormat
+        } catch (_: Exception) {
+            ImportResult.ReadFailed
         }
-        upsertAndIndex(entity)
-        return ImportResult.Success(entity)
     }
 
     private fun takeReadPermission(uri: Uri) {
@@ -732,9 +915,9 @@ class DocumentRepository(
      * former private queryMetadata fallback.
      */
     internal fun applyFileUriEnrichment(
-        base: com.m1racle.reader.share.ProviderMetadata,
+        base: ProviderMetadata,
         uri: Uri,
-    ): com.m1racle.reader.share.ProviderMetadata {
+    ): ProviderMetadata {
         if (!uri.scheme.equals("file", ignoreCase = true)) return base
         val f = uri.path?.let { File(it) }
         var displayName = base.displayName
@@ -750,15 +933,7 @@ class DocumentRepository(
          * while keeping the current full-document parser inside a bounded heap.
          */
         const val MAX_MARKDOWN_BYTES: Int = 32 * 1024 * 1024
-
-        fun stableUriId(uriString: String): String {
-            val digest = MessageDigest
-                .getInstance("SHA-256")
-                .digest(uriString.toByteArray(Charsets.UTF_8))
-            return digest.joinToString(separator = "") { byte ->
-                "%02x".format(byte)
-            }
-        }
+        private const val MAX_IDENTITY_COMMIT_ATTEMPTS = 3
 
         /** Progress 0f..1f from 0-based page index. */
         fun pdfReadingProgress(pageIndex: Int, pageCount: Int): Float {
@@ -768,6 +943,56 @@ class DocumentRepository(
             return (idx.toFloat() / (pageCount - 1).toFloat()).coerceIn(0f, 1f)
         }
     }
+}
+
+enum class ImportPayloadPolicy {
+    /** Keep a persistable/user-owned locator; the resolver stage is identity evidence only. */
+    SOURCE_URI,
+
+    /** Consume the resolver stage into app-private managed storage. */
+    MANAGED_COPY,
+}
+
+data class ResolvedImportRequest(
+    val content: PreparedContentIdentity,
+    val canonicalExternalKey: String,
+    val documentType: DocumentType,
+    val payloadPolicy: ImportPayloadPolicy,
+)
+
+data class ResolvedImportCommit(
+    val document: DocumentEntity,
+    val reusedExisting: Boolean,
+)
+
+sealed class ResolvedImportCommitException(cause: Throwable) : Exception(cause) {
+    class UnsupportedFormat(cause: Throwable) : ResolvedImportCommitException(cause)
+    class Failed(cause: Throwable) : ResolvedImportCommitException(cause)
+}
+
+private data class MaterializedImportPayload(
+    val uri: String,
+    val displayName: String,
+    val mimeType: String?,
+    val fileSize: Long,
+    val title: String?,
+    /** Unique path created by this operation; never points at an existing document payload. */
+    val operationOwnedPath: File?,
+) {
+    fun deleteOperationOwnedFiles() {
+        operationOwnedPath?.deleteRecursively()
+    }
+}
+
+interface ImportTransactionRunner {
+    suspend fun <T> run(block: suspend () -> T): T
+}
+
+private class RoomImportTransactionRunner(
+    private val db: RoomDatabase,
+) : ImportTransactionRunner {
+    override suspend fun <T> run(block: suspend () -> T): T =
+        db.withTransaction { block() }
 }
 
 internal fun readUtf8TextFully(

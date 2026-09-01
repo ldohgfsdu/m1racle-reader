@@ -107,19 +107,10 @@ class ExternalOpenAtomicSessionTest {
     }
 
     @Test
-    fun existingNonActiveReusesRecord() {
-        val libraryId = "c:sha1"
-        val prepared = PreparedOpen.ExistingLibrary(
-            documentId = libraryId,
-            isPdf = true,
-            displayName = "书.pdf",
-            sizeBytes = 10L,
-            contentSha256 = "sha1",
-            externalKey = "uri:x",
-            mimeType = "application/pdf",
-        )
-        assertTrue(prepared is PreparedOpen.ExistingLibrary)
-        assertEquals(libraryId, (prepared as PreparedOpen.ExistingLibrary).documentId)
+    fun preparedExternalOpenDefersDocumentIdChoiceToSharedCommit() {
+        val fieldNames = PreparedOpen::class.java.declaredFields.map { it.name }.toSet()
+        assertTrue("prepared envelope carries the resolved import", "importRequest" in fieldNames)
+        assertFalse("adapter must not mint or select document id", "documentId" in fieldNames)
     }
 
     @Test

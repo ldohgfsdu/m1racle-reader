@@ -59,7 +59,7 @@ class ReadingModelAuthorityTest {
                 .sorted()
                 .toList(),
         )
-        assertEquals(12, Regex("version = ([0-9]+),").find(db)!!.groupValues[1].toInt())
+        assertEquals(13, Regex("version = ([0-9]+),").find(db)!!.groupValues[1].toInt())
     }
 
     @Test

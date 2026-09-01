@@ -1,6 +1,6 @@
 package com.m1racle.reader.share
 
-import java.io.File
+import com.m1racle.reader.data.repository.ResolvedImportRequest
 
 /** Stable identity for a single external-open delivery (survives config change; one-shot). */
 data class ExternalOpenEventId(val value: String)
@@ -26,47 +26,16 @@ data class DocumentIdentityCard(
 )
 
 /**
- * Result of PHASE 1 prepare — old viewer must still be fully active when this is produced.
+ * Result of PHASE 1 prepare. It deliberately contains no document id: only
+ * `commitResolvedImport` may select an existing id or mint a new one.
  */
-sealed class PreparedOpen {
-    /** Target is the currently active document — bring to front only. */
-    data class CurrentActive(
-        val documentId: String,
-        val isPdf: Boolean,
-        val displayName: String,
-        val sizeBytes: Long?,
-    ) : PreparedOpen()
-
-    /** Library already has this content/uri; switch without re-copy. */
-    data class ExistingLibrary(
-        val documentId: String,
-        val isPdf: Boolean,
-        val displayName: String,
-        val sizeBytes: Long?,
-        val contentSha256: String,
-        val externalKey: String,
-        val mimeType: String?,
-    ) : PreparedOpen()
-
-    /** New content copied to a validated temp/final staging path; Room not active-switched yet. */
-    data class NewContent(
-        val documentId: String,
-        val isPdf: Boolean,
-        val displayName: String,
-        val sizeBytes: Long,
-        val contentSha256: String,
-        val externalKey: String,
-        val mimeType: String?,
-        val stagedFile: File,
-        val documentTypeName: String,
-        /**
-         * Batch B-0: the payload is a zip textbook package — commit must route
-         * it through [com.m1racle.reader.packageimport.ZipPackageImporter]
-         * extraction (MARKDOWN_PACKAGE, entry-md uri), never register the raw
-         * archive as a plain MARKDOWN document.
-         */
-        val isZipPackage: Boolean = false,
-    ) : PreparedOpen()
+data class PreparedOpen(
+    val importRequest: ResolvedImportRequest,
+    val activeDocumentId: String?,
+) {
+    val displayName: String get() = importRequest.content.metadata.displayName
+    val sizeBytes: Long get() = importRequest.content.byteCount
+    val isPdf: Boolean get() = importRequest.documentType == com.m1racle.reader.data.local.DocumentType.PDF
 }
 
 /**

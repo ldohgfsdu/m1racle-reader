@@ -160,7 +160,15 @@ class ExternalOpenCoordinator(
                     isPdf = it.isPdf,
                 )
             }
-            val incoming = importer.probeIncomingCard(uri, intent.type)
+            val incoming = try {
+                importer.probeIncomingCard(uri, intent.type)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                handledEventIds.add(eventId.value)
+                _effects.emit(ExternalOpenUiEffect.Toast("文件身份升级失败"))
+                return
+            }
 
             // Reject unsupported before any confirm dialog or copy. Single
             // acceptance authority (import policy batch 2).
@@ -180,22 +188,13 @@ class ExternalOpenCoordinator(
                 return
             }
 
-            // Quick path: probe already knows library id and matches active
+            // Alias identity is advisory only. Even a same-active candidate
+            // must pass resolver staging/hash and the shared commit before it
+            // can become a bring-to-front navigation.
             val path = ExternalOpenSessionRules.classify(
                 activeDocumentId = currentDoc?.id,
                 incomingLibraryDocumentId = incoming.documentId,
             )
-            if (path == ExternalOpenPath.BRING_TO_FRONT && currentDoc != null) {
-                handledEventIds.add(eventId.value)
-                setPendingNavigation(
-                    requestId = eventId.value,
-                    documentId = currentDoc.id,
-                    isPdf = currentDoc.isPdf,
-                    bringToFrontOnly = true,
-                )
-                return
-            }
-
             val requiresConfirm = path == ExternalOpenPath.CONFIRM_REPLACE
             val pending = PendingExternalOpen(
                 eventId = eventId,
@@ -274,33 +273,11 @@ class ExternalOpenCoordinator(
             when (prepareOutcome) {
                 is PrepareOutcome.Success -> {
                     val prepared = prepareOutcome.prepared
-                    // A: already current
-                    if (prepared is PreparedOpen.CurrentActive) {
-                        handledEventIds.add(pending.eventId.value)
-                        _pending.value = null
-                        setPendingNavigation(
-                            requestId = pending.eventId.value,
-                            documentId = prepared.documentId,
-                            isPdf = prepared.isPdf,
-                            bringToFrontOnly = true,
-                        )
-                        return
-                    }
-
                     _pending.value = pending.copy(
                         phase = ExternalOpenPhase.READY_TO_COMMIT,
                         prepared = prepared,
                         incoming = pending.incoming.copy(
-                            documentId = when (prepared) {
-                                is PreparedOpen.ExistingLibrary -> prepared.documentId
-                                is PreparedOpen.NewContent -> prepared.documentId
-                                is PreparedOpen.CurrentActive -> prepared.documentId
-                            },
-                            sizeBytes = when (prepared) {
-                                is PreparedOpen.ExistingLibrary -> prepared.sizeBytes
-                                is PreparedOpen.NewContent -> prepared.sizeBytes
-                                is PreparedOpen.CurrentActive -> prepared.sizeBytes
-                            },
+                            sizeBytes = prepared.sizeBytes,
                             sizeUnknownUntilOpen = false,
                         ),
                     )
@@ -308,7 +285,7 @@ class ExternalOpenCoordinator(
                     // ----- PHASE 2: COMMIT -----
                     // Flush first; on failure keep old session and discard prepared new content.
                     val oldId = pending.current?.documentId ?: activeIdBefore
-                    if (oldId != null && prepared !is PreparedOpen.CurrentActive) {
+                    if (oldId != null) {
                         try {
                             progressFlushHook?.invoke(oldId)
                         } catch (e: Exception) {

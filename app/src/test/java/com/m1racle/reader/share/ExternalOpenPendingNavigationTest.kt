@@ -14,6 +14,10 @@ import com.m1racle.reader.data.local.PdfPrintPageAnchorEntity
 import com.m1racle.reader.data.local.TextbookOutlineNodeDao
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.data.repository.DocumentRepository
+import com.m1racle.reader.data.repository.ImportPayloadPolicy
+import com.m1racle.reader.data.repository.ResolvedImportRequest
+import com.m1racle.reader.identity.ContentIdentityDecision
+import com.m1racle.reader.identity.PreparedContentIdentity
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -84,17 +88,47 @@ class ExternalOpenPendingNavigationTest {
         mime: String = "text/markdown",
     ): Intent = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(uri), mime)
 
-    private fun newContent(id: String) = PreparedOpen.NewContent(
-        documentId = id,
-        isPdf = false,
-        displayName = "$id.md",
-        sizeBytes = 10L,
-        contentSha256 = "sha-$id",
-        externalKey = "uri:x",
-        mimeType = "text/markdown",
-        stagedFile = File.createTempFile("stage-$id", ".md"),
-        documentTypeName = DocumentType.MARKDOWN.name,
-    )
+    private fun pdfContent(id: String, activeDocumentId: String? = null) =
+        preparedContent(id, DocumentType.PDF, activeDocumentId)
+
+    private fun newContent(id: String, activeDocumentId: String? = null) =
+        preparedContent(id, DocumentType.MARKDOWN, activeDocumentId)
+
+    private fun preparedContent(
+        id: String,
+        type: DocumentType,
+        activeDocumentId: String?,
+    ): PreparedOpen {
+        val extension = if (type == DocumentType.PDF) "pdf" else "md"
+        val mime = if (type == DocumentType.PDF) "application/pdf" else "text/markdown"
+        val stage = File.createTempFile("stage-$id", ".$extension").apply {
+            writeBytes(ByteArray(10))
+        }
+        val uri = Uri.parse("content://provider/$id.$extension")
+        val resolved = ResolvedExternalMetadata(
+            displayName = "$id.$extension",
+            sizeBytesHint = 10L,
+            mimeType = mime,
+            nameSource = ResolvedExternalMetadata.NameSource.DISPLAY_NAME,
+            sizeSource = ResolvedExternalMetadata.SizeSource.OPENABLE_SIZE,
+        )
+        return PreparedOpen(
+            importRequest = ResolvedImportRequest(
+                content = PreparedContentIdentity(
+                    sourceUri = uri,
+                    metadata = resolved,
+                    stagedFile = stage,
+                    byteCount = 10L,
+                    contentSha256 = "a".repeat(64),
+                    decision = ContentIdentityDecision.NoExistingDocument,
+                ),
+                canonicalExternalKey = "doc:provider/$id",
+                documentType = type,
+                payloadPolicy = ImportPayloadPolicy.MANAGED_COPY,
+            ),
+            activeDocumentId = activeDocumentId,
+        )
+    }
 
     private fun doc(id: String) = DocumentEntity(
         id = id,
@@ -116,6 +150,43 @@ class ExternalOpenPendingNavigationTest {
      * readable later (replay-latest). The old SharedFlow(replay=0) path silently
      * dropped it in this window.
      */
+    @Test
+    fun content_pdf_view_intent_reaches_importer_prepare() = runTest {
+        val uri = "content://provider/docs/sample.pdf"
+        importer.probeCard = DocumentIdentityCard(
+            documentId = null,
+            displayName = "sample.pdf",
+            sizeBytes = 10L,
+            sizeUnknownUntilOpen = false,
+            isPdf = true,
+        )
+        importer.prepareResult = PrepareOutcome.Success(pdfContent("pdf-1"))
+        importer.commitResult = CommitOutcome.Success(
+            documentId = "pdf-1",
+            isPdf = true,
+            displayName = "sample.pdf",
+            sizeBytes = 10L,
+            contentSha256 = "sha-pdf-1",
+            reusedExisting = false,
+            bringToFrontOnly = false,
+        )
+
+        coordinator.onIncomingIntent(viewIntent(uri = uri, mime = "application/pdf"))
+
+        assertEquals(1, importer.prepareCalls)
+        assertEquals(Uri.parse(uri), importer.lastPrepareUri)
+        assertEquals("application/pdf", importer.lastPrepareType)
+        val req = coordinator.pendingNavigation.value
+        assertNotNull(req)
+        assertEquals("pdf-1", req!!.documentId)
+        assertTrue(req.isPdf)
+        assertFalse(req.bringToFrontOnly)
+        assertEquals(
+            coordinator.makeEventId(Intent.ACTION_VIEW, Uri.parse(uri), "application/pdf").value,
+            req.requestId,
+        )
+    }
+
     @Test
     fun commit_success_holds_request_even_with_no_subscriber() = runTest {
         importer.prepareResult = PrepareOutcome.Success(newContent("doc-b"))
@@ -186,9 +257,14 @@ class ExternalOpenPendingNavigationTest {
         coordinator.onViewerOpened("doc-a", "sess-1")
         importer.probeCard =
             DocumentIdentityCard("doc-a", "doc-a.md", 10L, sizeUnknownUntilOpen = false, isPdf = false)
+        importer.prepareResult = PrepareOutcome.Success(newContent("doc-a", activeDocumentId = "doc-a"))
+        importer.commitResult = CommitOutcome.Success(
+            "doc-a", false, "doc-a.md", 10L, "a".repeat(64), true, true,
+        )
 
         coordinator.onIncomingIntent(viewIntent())
 
+        assertEquals("alias candidate must still hash/prepare", 1, importer.prepareCalls)
         val req = coordinator.pendingNavigation.value
         assertNotNull(req)
         assertEquals("doc-a", req!!.documentId)
@@ -197,8 +273,9 @@ class ExternalOpenPendingNavigationTest {
 
     @Test
     fun current_active_prepare_path_sets_request() = runTest {
-        importer.prepareResult = PrepareOutcome.Success(
-            PreparedOpen.CurrentActive("doc-a", false, "doc-a.md", 10L),
+        importer.prepareResult = PrepareOutcome.Success(newContent("doc-a", activeDocumentId = "doc-a"))
+        importer.commitResult = CommitOutcome.Success(
+            "doc-a", false, "doc-a.md", 10L, "a".repeat(64), true, true,
         )
 
         coordinator.onIncomingIntent(viewIntent())
@@ -260,6 +337,54 @@ class ExternalOpenPendingNavigationTest {
     }
 
     @Test
+    fun concurrent_second_pdf_view_waits_on_mutex_then_runs_after_first() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        importer.probeCard = DocumentIdentityCard(
+            documentId = null,
+            displayName = "first.pdf",
+            sizeBytes = 10L,
+            sizeUnknownUntilOpen = false,
+            isPdf = true,
+        )
+        importer.prepareBlock = { gate.await() }
+        importer.prepareResult = PrepareOutcome.Success(pdfContent("pdf-first"))
+        importer.commitResult = CommitOutcome.Success(
+            "pdf-first", true, "first.pdf", 10L, "sha-first", false, false,
+        )
+
+        val first = launch {
+            coordinator.onIncomingIntent(
+                viewIntent(uri = "content://provider/first.pdf", mime = "application/pdf"),
+            )
+        }
+        advanceUntilIdle()
+        assertEquals(1, importer.prepareCalls)
+        assertEquals(Uri.parse("content://provider/first.pdf"), importer.lastPrepareUri)
+
+        val second = launch {
+            coordinator.onIncomingIntent(
+                viewIntent(uri = "content://provider/second.pdf", mime = "application/pdf"),
+            )
+        }
+        advanceUntilIdle()
+        assertEquals(
+            "mutex still held by first prepare, so second VIEW cannot enter yet",
+            1,
+            importer.prepareCalls,
+        )
+
+        gate.complete(Unit)
+        first.join()
+        second.join()
+        assertEquals(
+            "_busy drop is unreachable across mutex; second VIEW is serialized after first",
+            2,
+            importer.prepareCalls,
+        )
+        assertEquals(Uri.parse("content://provider/second.pdf"), importer.lastPrepareUri)
+    }
+
+    @Test
     fun freshProcessRestore_handlesLaunchIntentWithReplayDisabled() = runTest {
         importer.prepareResult = PrepareOutcome.Success(newContent("restored-doc"))
         importer.commitResult = CommitOutcome.Success(
@@ -291,35 +416,19 @@ class ExternalOpenPendingNavigationTest {
     }
 
     @Test
-    fun roomFailureAfterPromotion_removesFinalFileAndContentDirectory() = runTest {
-        val contentDir = File(context.cacheDir, "commit-rollback-${System.nanoTime()}")
-            .apply { mkdirs() }
-        val staged = File(contentDir, "document.md.importing")
-            .apply { writeText("# rollback") }
-        val finalFile = File(contentDir, "document.md")
+    fun roomFailureAfterResolverStage_removesOperationOwnedStage() = runTest {
         val failingImporter = ExternalDocumentImporter(
             context = context,
             repository = repository,
             forceRoomUpsertFailure = true,
         )
-        val prepared = PreparedOpen.NewContent(
-            documentId = "c:rollback",
-            isPdf = false,
-            displayName = "document.md",
-            sizeBytes = staged.length(),
-            contentSha256 = "rollback",
-            externalKey = "uri:rollback",
-            mimeType = "text/markdown",
-            stagedFile = staged,
-            documentTypeName = DocumentType.MARKDOWN.name,
-        )
+        val prepared = newContent("rollback")
+        val staged = prepared.importRequest.content.stagedFile
 
         val outcome = failingImporter.commitPrepared(prepared)
 
         assertTrue(outcome is CommitOutcome.Failed)
         assertFalse(staged.exists())
-        assertFalse(finalFile.exists())
-        assertFalse(contentDir.exists())
     }
 }
 
@@ -335,6 +444,10 @@ private class FakeImporter(
     var prepareResult: PrepareOutcome = PrepareOutcome.Failed("prepare not configured")
     var commitResult: CommitOutcome = CommitOutcome.Failed("commit not configured")
     var discardedCount = 0
+    var prepareCalls = 0
+    var lastPrepareUri: Uri? = null
+    var lastPrepareType: String? = null
+    var prepareBlock: (suspend () -> Unit)? = null
 
     override suspend fun probeIncomingCard(sourceUri: Uri, intentType: String?): DocumentIdentityCard =
         probeCard
@@ -344,7 +457,13 @@ private class FakeImporter(
         intentType: String?,
         grantFlags: Int,
         activeDocumentId: String?,
-    ): PrepareOutcome = prepareResult
+    ): PrepareOutcome {
+        prepareCalls += 1
+        lastPrepareUri = sourceUri
+        lastPrepareType = intentType
+        prepareBlock?.invoke()
+        return prepareResult
+    }
 
     override suspend fun commitPrepared(prepared: PreparedOpen): CommitOutcome = commitResult
 
@@ -370,6 +489,33 @@ private class FakeDocumentDao : DocumentDao {
     override suspend fun upsert(document: DocumentEntity) {
         rows[document.id] = document
         recent.value = rows.values.toList()
+    }
+
+    override suspend fun insertDocument(document: DocumentEntity): Long {
+        check(document.id !in rows)
+        rows[document.id] = document
+        recent.value = rows.values.toList()
+        return rows.size.toLong()
+    }
+
+    override suspend fun updateDocument(document: DocumentEntity) {
+        if (document.id in rows) rows[document.id] = document
+        recent.value = rows.values.toList()
+    }
+
+    override suspend fun assignContentSha256IfNull(
+        id: String,
+        contentSha256: String,
+        lastOpenedAt: Long,
+    ): Int {
+        val existing = rows[id] ?: return 0
+        if (existing.contentSha256 != null) return 0
+        rows[id] = existing.copy(
+            contentSha256 = contentSha256,
+            lastOpenedAt = lastOpenedAt,
+        )
+        recent.value = rows.values.toList()
+        return 1
     }
 
     override suspend fun deleteById(id: String) {

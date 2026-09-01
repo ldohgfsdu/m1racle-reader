@@ -131,6 +131,8 @@ class ZipExternalOpenContractTest {
             pdfPrintPageAnchorDao = ZbUnusedPdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = ZbUnusedTextbookOutlineNodeDao(),
             searchRepository = com.m1racle.reader.testing.testSearchRepository(),
+            documentAliasDao = com.m1racle.reader.testing.TestDocumentAliasDao(),
+            importTransactionRunner = com.m1racle.reader.testing.ImmediateImportTransactionRunner(),
         )
         return repo to dao
     }
@@ -216,9 +218,9 @@ class ZipExternalOpenContractTest {
         assertTrue(dao.upserts.isEmpty())
         // No extracted package tree may survive a failed intake.
         assertEquals(0, File(context.filesDir, "packages").listFiles()?.size ?: 0)
-        // And no binary staged copy lingers under library/.
-        val library = File(context.filesDir, "library")
-        val leftovers = library.walkTopDown().filter { it.isFile && it.extension == "zip" }.toList()
+        // And no resolver-owned .importing source lingers.
+        val staging = File(context.filesDir, "identity-staging")
+        val leftovers = staging.walkTopDown().filter { it.isFile }.toList()
         assertTrue("staged zip leaked: $leftovers", leftovers.isEmpty())
     }
 
@@ -288,6 +290,34 @@ private class ZbRecordingDocumentDao : DocumentDao {
         upserts.removeAll { it.id == document.id }
         upserts.add(document)
         recent.value = upserts.toList()
+    }
+
+    override suspend fun insertDocument(document: DocumentEntity): Long {
+        check(upserts.none { it.id == document.id || it.contentSha256 == document.contentSha256 })
+        upserts.add(document)
+        recent.value = upserts.toList()
+        return upserts.size.toLong()
+    }
+
+    override suspend fun updateDocument(document: DocumentEntity) {
+        val index = upserts.indexOfFirst { it.id == document.id }
+        if (index >= 0) upserts[index] = document
+        recent.value = upserts.toList()
+    }
+
+    override suspend fun assignContentSha256IfNull(
+        id: String,
+        contentSha256: String,
+        lastOpenedAt: Long,
+    ): Int {
+        val index = upserts.indexOfFirst { it.id == id && it.contentSha256 == null }
+        if (index < 0) return 0
+        upserts[index] = upserts[index].copy(
+            contentSha256 = contentSha256,
+            lastOpenedAt = lastOpenedAt,
+        )
+        recent.value = upserts.toList()
+        return 1
     }
 
     override suspend fun deleteById(id: String) {

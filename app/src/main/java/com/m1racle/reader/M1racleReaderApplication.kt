@@ -6,10 +6,16 @@ import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.repository.ReadingRepository
 import com.m1racle.reader.data.repository.SearchRepository
 import com.m1racle.reader.data.settings.ReaderSettingsRepository
+import com.m1racle.reader.identity.ContentIdentityResolver
+import com.m1racle.reader.identity.RoomSidecarAliasMigrationTransaction
+import com.m1racle.reader.identity.SidecarIdentityMigrationFiles
+import com.m1racle.reader.identity.SidecarIdentityMigrationV1
+import com.m1racle.reader.identity.SidecarIdentityV1Reader
 import com.m1racle.reader.share.ExternalOpenCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class M1racleReaderApplication : Application() {
 
@@ -32,6 +38,29 @@ class M1racleReaderApplication : Application() {
         AppDatabase.getInstance(this)
     }
 
+    val contentIdentityResolver: ContentIdentityResolver by lazy {
+        ContentIdentityResolver(this, database.documentDao())
+    }
+
+    val sidecarIdentityMigration: SidecarIdentityMigrationV1 by lazy {
+        SidecarIdentityMigrationV1(
+            reader = SidecarIdentityV1Reader(),
+            files = SidecarIdentityMigrationFiles(filesDir),
+            transaction = RoomSidecarAliasMigrationTransaction(
+                database = database,
+                documentDao = database.documentDao(),
+                aliasDao = database.documentAliasDao(),
+            ),
+        )
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        applicationScope.launch {
+            runCatching { sidecarIdentityMigration.ensureCompleted() }
+        }
+    }
+
     val documentRepository: DocumentRepository by lazy {
         DocumentRepository(
             context = this,
@@ -40,6 +69,9 @@ class M1racleReaderApplication : Application() {
             pdfPrintPageAnchorDao = database.pdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = database.textbookOutlineNodeDao(),
             searchRepository = searchRepository,
+            documentAliasDao = database.documentAliasDao(),
+            contentIdentityResolver = contentIdentityResolver,
+            sidecarIdentityMigration = sidecarIdentityMigration,
         )
     }
 

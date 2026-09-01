@@ -61,7 +61,8 @@ class ContentIdentityResolver internal constructor(
                 stageSource(input.sourceUri, maximumBytes)
             }
             currentCoroutineContext().ensureActive()
-            val existing = documentDao.getByContentSha256(staged.contentSha256)
+            val existing = findExistingDocument(staged.contentSha256)
+                ?: findLegacyDocumentWithExactContent(staged)
             currentCoroutineContext().ensureActive()
 
             val decision = if (existing != null) {
@@ -88,6 +89,73 @@ class ContentIdentityResolver internal constructor(
         } catch (error: Exception) {
             staged?.file?.delete()
             return ContentIdentityResolution.Failed(error)
+        }
+    }
+
+    /**
+     * The single indexed content-identity lookup boundary. Commit callers invoke
+     * this again from their Room transaction because [resolve] returns only a
+     * pre-commit candidate and another import may have won meanwhile.
+     */
+    internal suspend fun findExistingDocument(contentSha256: String): DocumentEntity? {
+        require(CONTENT_SHA256.matches(contentSha256)) {
+            "contentSha256 must be 64 lowercase hexadecimal characters"
+        }
+        return documentDao.getByContentSha256(contentSha256)
+    }
+
+    /**
+     * v12 Path-A rows intentionally migrated with a null content hash. A renamed SAF URI
+     * cannot reach those rows through their old URI alias, so an indexed hash miss must
+     * verify the still-readable legacy source before deciding that the content is new.
+     *
+     * This remains resolver-owned exact-byte identity: metadata and filenames only prune
+     * impossible candidates, and no database state is changed here.
+     */
+    private suspend fun findLegacyDocumentWithExactContent(
+        staged: StagedSource,
+    ): DocumentEntity? {
+        val candidates = documentDao.getAll()
+            .asSequence()
+            .filter { it.contentSha256 == null }
+            .sortedWith(compareBy<DocumentEntity>({ it.createdAt }, { it.id }))
+            .toList()
+
+        return runInterruptible(Dispatchers.IO) {
+            candidates.firstOrNull { candidate ->
+                sourceHasExactContent(candidate.uri, staged)
+            }
+        }
+    }
+
+    private fun sourceHasExactContent(
+        uriString: String,
+        staged: StagedSource,
+    ): Boolean {
+        return try {
+            val sourceUri = Uri.parse(uriString)
+            val input = openSource(sourceUri) ?: return false
+            val digest = MessageDigest.getInstance(SHA_256)
+            var byteCount = 0L
+            input.use { source ->
+                val buffer = ByteArray(BUFFER_BYTES)
+                while (true) {
+                    if (Thread.currentThread().isInterrupted) {
+                        throw InterruptedException("Legacy identity verification interrupted")
+                    }
+                    val read = source.read(buffer)
+                    if (read < 0) break
+                    if (read == 0) continue
+                    byteCount += read
+                    if (byteCount > staged.byteCount) return false
+                    digest.update(buffer, 0, read)
+                }
+            }
+            byteCount == staged.byteCount && digest.digest().toHex() == staged.contentSha256
+        } catch (interrupted: InterruptedException) {
+            throw interrupted
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -158,6 +226,7 @@ class ContentIdentityResolver internal constructor(
         private const val STAGING_DIRECTORY_NAME = "identity-staging"
         private const val STAGING_FILE_PREFIX = "identity-"
         private const val STAGING_FILE_SUFFIX = ".importing"
+        private val CONTENT_SHA256 = Regex("^[0-9a-f]{64}$")
     }
 }
 
@@ -175,7 +244,10 @@ sealed interface ContentIdentityResolution {
 }
 
 sealed interface ContentIdentityDecision {
-    /** Exact content already exists; a later commit layer may evaluate merge state. */
+    /**
+     * Exact content already exists. The row may be a normal hash owner or a verified
+     * legacy null-hash row that the commit layer must enrich without changing its id.
+     */
     data class ExistingDocumentFound(val document: DocumentEntity) : ContentIdentityDecision
 
     /** No exact content owner exists; a later commit layer may create one. */

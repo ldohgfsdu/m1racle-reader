@@ -17,8 +17,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         HighlightEntity::class,
         NoteEntity::class,
         SearchIndexEntity::class,
+        DocumentAliasEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun highlightDao(): HighlightDao
     abstract fun noteDao(): NoteDao
     abstract fun searchIndexDao(): SearchIndexDao
+    abstract fun documentAliasDao(): DocumentAliasDao
 
     companion object {
         private const val DB_NAME = "m1racle-reader.db"
@@ -378,6 +380,102 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v12 -> v13: add location aliases and backfill only identity values
+         * proven by the historical primary-key shape. Existing ids and child
+         * rows are never rewritten or deleted.
+         */
+        val MIGRATION_12_13: Migration = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(MIGRATION_12_13_CREATE_ALIASES_SQL)
+                db.execSQL(MIGRATION_12_13_INDEX_ALIASES_DOC_SQL)
+                db.query(MIGRATION_12_13_COLLISION_COUNT_SQL).use { cursor ->
+                    cursor.moveToFirst()
+                    val collisions = cursor.getLong(0)
+                    if (collisions != 0L) {
+                        throw IllegalStateException(
+                            "contentSha256 backfill would collide ($collisions rows)",
+                        )
+                    }
+                }
+                db.execSQL(MIGRATION_12_13_BACKFILL_CONTENT_SHA_SQL)
+                db.query(MIGRATION_12_13_BACKFILL_VALIDATE_SQL).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getString(0)
+                        val hash = cursor.getString(1)
+                        val suffix = id.substring(2)
+                        if (hash == null || hash != suffix || !CONTENT_SHA256_HEX.matches(suffix)) {
+                            throw IllegalStateException(
+                                "invalid contentSha256 backfill for id=$id",
+                            )
+                        }
+                    }
+                }
+                db.execSQL(MIGRATION_12_13_BACKFILL_LEGACY_URI_ALIASES_SQL)
+            }
+        }
+
+        internal val MIGRATION_12_13_CREATE_ALIASES_SQL =
+            """
+            CREATE TABLE IF NOT EXISTS document_aliases (
+                aliasKey TEXT NOT NULL,
+                documentId TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                lastSeenAt INTEGER NOT NULL,
+                PRIMARY KEY(aliasKey),
+                FOREIGN KEY(documentId) REFERENCES documents(id) ON DELETE CASCADE
+            )
+            """.trimIndent()
+
+        internal const val MIGRATION_12_13_INDEX_ALIASES_DOC_SQL =
+            "CREATE INDEX IF NOT EXISTS index_document_aliases_documentId " +
+                "ON document_aliases(documentId)"
+
+        internal val MIGRATION_12_13_COLLISION_COUNT_SQL =
+            """
+            SELECT COUNT(*) FROM documents AS a
+            JOIN documents AS b
+              ON lower(substr(a.id, 3)) = b.contentSha256
+            WHERE a.id GLOB 'c:[0-9a-f][0-9a-f]*'
+              AND length(a.id) = 66
+              AND a.contentSha256 IS NULL
+              AND b.contentSha256 IS NOT NULL
+              AND a.id != b.id
+            """.trimIndent()
+
+        internal val MIGRATION_12_13_BACKFILL_CONTENT_SHA_SQL =
+            """
+            UPDATE documents
+            SET contentSha256 = substr(id, 3)
+            WHERE contentSha256 IS NULL
+              AND length(id) = 66
+              AND id GLOB 'c:[0-9a-f][0-9a-f]*'
+            """.trimIndent()
+
+        internal val MIGRATION_12_13_BACKFILL_VALIDATE_SQL =
+            """
+            SELECT id, contentSha256 FROM documents
+            WHERE length(id) = 66
+              AND substr(id, 1, 2) = 'c:'
+            """.trimIndent()
+
+        internal val MIGRATION_12_13_BACKFILL_LEGACY_URI_ALIASES_SQL =
+            """
+            INSERT INTO document_aliases (aliasKey, documentId, kind, createdAt, lastSeenAt)
+            SELECT
+              'legacy-raw-uri-v1:' || id,
+              id,
+              'legacy-raw-uri-v1',
+              createdAt,
+              lastOpenedAt
+            FROM documents
+            WHERE length(id) = 64
+              AND id GLOB '[0-9a-f][0-9a-f]*'
+            """.trimIndent()
+
+        private val CONTENT_SHA256_HEX = Regex("^[0-9a-f]{64}$")
+
         internal val MIGRATION_11_12_CREATE_SEARCH_INDEX_SQL =
             """
             CREATE TABLE IF NOT EXISTS search_index (
@@ -424,6 +522,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_9_10,
                         MIGRATION_10_11,
                         MIGRATION_11_12,
+                        MIGRATION_12_13,
                     )
                     .build()
                     .also { instance = it }

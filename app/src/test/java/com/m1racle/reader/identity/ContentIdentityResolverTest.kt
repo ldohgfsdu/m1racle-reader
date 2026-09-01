@@ -112,15 +112,65 @@ class ContentIdentityResolverTest {
     }
 
     @Test
-    fun nullHashDocument_doesNotMatchIncomingContent() = runBlocking {
+    fun nullHashDocument_withSameBytesAtDifferentUri_isVerifiedAndReused() = runBlocking {
         val bytes = "legacy content".toByteArray()
+        val oldUri = Uri.parse("content://provider/original/legacy.md")
+        val newUri = Uri.parse("content://provider/renamed/legacy-copy.md")
         val resolver = resolver(
-            dao = ResolverDocumentDao(listOf(document("legacy-null", null))),
-            openSource = { ByteArrayInputStream(bytes) },
+            dao = ResolverDocumentDao(
+                listOf(
+                    document("legacy-null", null).copy(
+                        uri = oldUri.toString(),
+                        // Stored provider metadata is not content identity.
+                        fileSize = 1L,
+                    ),
+                ),
+            ),
+            openSource = { uri ->
+                when (uri) {
+                    oldUri, newUri -> ByteArrayInputStream(bytes)
+                    else -> null
+                }
+            },
         )
 
         val resolved = resolver.resolve(
-            input(Uri.parse("content://provider/legacy"), "legacy.md", bytes.size.toLong()),
+            input(newUri, "legacy-copy.md", bytes.size.toLong()),
+        ).resolved()
+        try {
+            val decision = resolved.decision as ContentIdentityDecision.ExistingDocumentFound
+            assertEquals("legacy-null", decision.document.id)
+        } finally {
+            resolved.close()
+        }
+    }
+
+    @Test
+    fun nullHashDocument_withDifferentBytes_isNotReused() = runBlocking {
+        val incoming = "incoming content".toByteArray()
+        val legacy = "different legacy".toByteArray()
+        val oldUri = Uri.parse("content://provider/original/legacy.md")
+        val newUri = Uri.parse("content://provider/renamed/legacy-copy.md")
+        val resolver = resolver(
+            dao = ResolverDocumentDao(
+                listOf(
+                    document("legacy-null", null).copy(
+                        uri = oldUri.toString(),
+                        fileSize = incoming.size.toLong(),
+                    ),
+                ),
+            ),
+            openSource = { uri ->
+                when (uri) {
+                    oldUri -> ByteArrayInputStream(legacy)
+                    newUri -> ByteArrayInputStream(incoming)
+                    else -> null
+                }
+            },
+        )
+
+        val resolved = resolver.resolve(
+            input(newUri, "legacy-copy.md", incoming.size.toLong()),
         ).resolved()
         try {
             assertTrue(resolved.decision is ContentIdentityDecision.NoExistingDocument)
@@ -257,6 +307,44 @@ private class ResolverDocumentDao(
     override suspend fun upsert(document: DocumentEntity) {
         rows[document.id] = document
         recent.value = rows.values.toList()
+    }
+    override suspend fun insertDocument(document: DocumentEntity): Long {
+        check(document.id !in rows) { "duplicate document id: ${document.id}" }
+        check(
+            document.contentSha256 == null ||
+                rows.values.none { it.contentSha256 == document.contentSha256 },
+        ) { "duplicate contentSha256: ${document.contentSha256}" }
+        rows[document.id] = document
+        recent.value = rows.values.toList()
+        return rows.size.toLong()
+    }
+    override suspend fun updateDocument(document: DocumentEntity) {
+        if (document.id !in rows) return
+        check(
+            document.contentSha256 == null ||
+                rows.values.none {
+                    it.id != document.id && it.contentSha256 == document.contentSha256
+                },
+        ) { "duplicate contentSha256: ${document.contentSha256}" }
+        rows[document.id] = document
+        recent.value = rows.values.toList()
+    }
+    override suspend fun assignContentSha256IfNull(
+        id: String,
+        contentSha256: String,
+        lastOpenedAt: Long,
+    ): Int {
+        val existing = rows[id] ?: return 0
+        if (existing.contentSha256 != null) return 0
+        check(rows.values.none { it.id != id && it.contentSha256 == contentSha256 }) {
+            "duplicate contentSha256: $contentSha256"
+        }
+        rows[id] = existing.copy(
+            contentSha256 = contentSha256,
+            lastOpenedAt = lastOpenedAt,
+        )
+        recent.value = rows.values.toList()
+        return 1
     }
     override suspend fun deleteById(id: String) {
         rows.remove(id)

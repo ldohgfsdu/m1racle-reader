@@ -314,6 +314,8 @@ class ImportAcceptanceParityGoldenTest {
             pdfPrintPageAnchorDao = UnusedPdfPrintPageAnchorDao(),
             textbookOutlineNodeDao = UnusedTextbookOutlineNodeDao(),
             searchRepository = com.m1racle.reader.testing.testSearchRepository(),
+            documentAliasDao = com.m1racle.reader.testing.TestDocumentAliasDao(),
+            importTransactionRunner = com.m1racle.reader.testing.ImmediateImportTransactionRunner(),
         )
     }
 
@@ -381,9 +383,10 @@ class ImportAcceptanceParityGoldenTest {
 
         val pathB = importerWithTinyStream(installRepository())
             .prepare(uri, intentType = null)
-        val preparedB = (pathB as PrepareOutcome.Success).prepared as PreparedOpen.NewContent
-        assertEquals("notes123.txt.importing", preparedB.stagedFile.name)
-        assertEquals("MARKDOWN", preparedB.documentTypeName)
+        val preparedB = (pathB as PrepareOutcome.Success).prepared
+        assertTrue(preparedB.importRequest.content.stagedFile.name.startsWith("identity-"))
+        assertTrue(preparedB.importRequest.content.stagedFile.name.endsWith(".importing"))
+        assertEquals(DocumentType.MARKDOWN, preparedB.importRequest.documentType)
     }
 
     /** D2 pair: text/plain + wrong (image) extension. */
@@ -457,8 +460,8 @@ class ImportAcceptanceParityGoldenTest {
         val outcome = importerWithTinyStream(repo)
             .prepare(stubUri("d3c", "doc"), intentType = null)
 
-        val prepared = (outcome as PrepareOutcome.Success).prepared as PreparedOpen.NewContent
-        assertTrue(prepared.stagedFile.isFile)
+        val prepared = (outcome as PrepareOutcome.Success).prepared
+        assertTrue(prepared.importRequest.content.stagedFile.isFile)
         // Copied byte count wins as final size authority (resolveFinalSizeBytes).
         assertEquals("# tiny".toByteArray().size.toLong(), prepared.sizeBytes)
     }
@@ -478,6 +481,34 @@ private class RecordingDocumentDao : DocumentDao {
         upserts.removeAll { it.id == document.id }
         upserts.add(document)
         recent.value = upserts.toList()
+    }
+
+    override suspend fun insertDocument(document: DocumentEntity): Long {
+        check(upserts.none { it.id == document.id || it.contentSha256 == document.contentSha256 })
+        upserts.add(document)
+        recent.value = upserts.toList()
+        return upserts.size.toLong()
+    }
+
+    override suspend fun updateDocument(document: DocumentEntity) {
+        val index = upserts.indexOfFirst { it.id == document.id }
+        if (index >= 0) upserts[index] = document
+        recent.value = upserts.toList()
+    }
+
+    override suspend fun assignContentSha256IfNull(
+        id: String,
+        contentSha256: String,
+        lastOpenedAt: Long,
+    ): Int {
+        val index = upserts.indexOfFirst { it.id == id && it.contentSha256 == null }
+        if (index < 0) return 0
+        upserts[index] = upserts[index].copy(
+            contentSha256 = contentSha256,
+            lastOpenedAt = lastOpenedAt,
+        )
+        recent.value = upserts.toList()
+        return 1
     }
 
     override suspend fun deleteById(id: String) {

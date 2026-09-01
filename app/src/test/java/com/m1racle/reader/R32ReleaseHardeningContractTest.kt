@@ -50,14 +50,20 @@ class R32ReleaseHardeningContractTest {
     }
 
     @Test
-    fun `v12 is the public Room baseline without fabricated next migration`() {
+    fun `v12 public baseline upgrades explicitly to v13`() {
         val database = source("data/local/AppDatabase.kt")
-        assertTrue(database.contains("version = 12"))
-        assertFalse(database.contains("MIGRATION_12_13"))
+        assertTrue(database.contains("version = 13"))
+        assertTrue(database.contains("MIGRATION_12_13"))
         assertTrue(
             File(
                 projectRoot(),
                 "app/schemas/com.m1racle.reader.data.local.AppDatabase/12.json",
+            ).isFile,
+        )
+        assertTrue(
+            File(
+                projectRoot(),
+                "app/schemas/com.m1racle.reader.data.local.AppDatabase/13.json",
             ).isFile,
         )
         val checklist = File(projectRoot(), "RELEASE_CHECKLIST.md").readText()

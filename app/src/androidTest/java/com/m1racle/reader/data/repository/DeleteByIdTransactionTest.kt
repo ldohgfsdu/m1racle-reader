@@ -149,6 +149,15 @@ class DeleteByIdTransactionTest {
             real.getByContentSha256(contentSha256)
         override suspend fun getAll() = real.getAll()
         override suspend fun upsert(document: DocumentEntity) = real.upsert(document)
+        override suspend fun insertDocument(document: DocumentEntity) =
+            real.insertDocument(document)
+        override suspend fun updateDocument(document: DocumentEntity) =
+            real.updateDocument(document)
+        override suspend fun assignContentSha256IfNull(
+            id: String,
+            contentSha256: String,
+            lastOpenedAt: Long,
+        ) = real.assignContentSha256IfNull(id, contentSha256, lastOpenedAt)
         override suspend fun deleteById(id: String) {
             throw RuntimeException("simulated document delete failure")
         }
