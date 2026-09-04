@@ -70,14 +70,13 @@ fun TocDrawerContent(
             text = stringResource(R.string.toc_title),
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.Medium,
-                fontSize = 16.sp,
             ),
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
         )
         Text(
             text = documentName,
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -140,7 +139,7 @@ private fun TocRow(
         2 -> ReaderTypography.tocH2Size
         else -> ReaderTypography.tocH3Size
     }
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(8.dp) // Registered drawer-row radius.
     val scheme = MaterialTheme.colorScheme
     val bg = if (selected) {
         scheme.surfaceContainerHighest

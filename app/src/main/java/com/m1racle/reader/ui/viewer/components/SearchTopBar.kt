@@ -32,7 +32,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.m1racle.reader.R
 import kotlinx.coroutines.delay
 
@@ -75,7 +74,7 @@ fun SearchTopBar(
             modifier = Modifier
                 .weight(1f)
                 .height(40.dp)
-                .background(scheme.surfaceContainerHigh, RoundedCornerShape(8.dp))
+                .background(scheme.surfaceContainerHigh, RoundedCornerShape(8.dp)) // Registered search-field radius.
                 .padding(start = 12.dp, end = 4.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -122,7 +121,7 @@ fun SearchTopBar(
         }
         Text(
             text = matchLabel,
-            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+            style = MaterialTheme.typography.labelMedium,
             color = scheme.onSurfaceVariant,
             modifier = Modifier
                 .widthIn(min = 36.dp)

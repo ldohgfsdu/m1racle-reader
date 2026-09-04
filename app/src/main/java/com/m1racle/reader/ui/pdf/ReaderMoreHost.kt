@@ -60,7 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.m1racle.reader.ui.theme.M1racleReaderTypography
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.GlassMaterialEngine
 import com.m1racle.reader.ui.material.glassMutedContentAlpha
@@ -203,12 +203,8 @@ internal val MenuRowHPad = 18.dp
 internal val MenuVerticalPad = 3.dp
 internal val OptionIndent = MenuRowHPad + MenuIconColWidth + MenuIconGap
 
-/** Level-1 label: 16–17sp Medium/Semibold (not pure black bold print look). */
-internal val Level1FontSize = 16.sp
-internal val Level1FontWeight = FontWeight.SemiBold
-/** Level-2 / secondary: 13–14sp Regular/Medium. */
-internal val Level2FontSize = 13.sp
-internal val Level2FontWeight = FontWeight.Normal
+/** Menu label sizes source M1racleTypography directly (titleMedium/labelLarge);
+ * text weights stay explicit SemiBold/Normal. No fourth scale. */
 
 // ── Motion ────────────────────────────────────────────────────────────────
 private const val MorphCollapseMs = 170
@@ -761,8 +757,8 @@ private fun MainMenuContent(
                         chevron = false,
                         indentLabel = true,
                         rowHeight = MenuOptionRowHeight,
-                        labelSize = Level2FontSize,
-                        labelWeight = Level2FontWeight,
+                        labelSize = M1racleReaderTypography.labelLarge.fontSize,
+                        labelWeight = FontWeight.Normal,
                         onClick = {
                             opt.onClick()
                             onSectionToggle(ReaderMoreState.INLINE_READING_MODE)
@@ -795,8 +791,8 @@ private fun MainMenuContent(
                         chevron = false,
                         indentLabel = true,
                         rowHeight = MenuOptionRowHeight,
-                        labelSize = Level2FontSize,
-                        labelWeight = Level2FontWeight,
+                        labelSize = M1racleReaderTypography.labelLarge.fontSize,
+                        labelWeight = FontWeight.Normal,
                         onClick = {
                             opt.onClick()
                             onSectionToggle(ReaderMoreState.INLINE_READING_UI)
@@ -916,8 +912,8 @@ internal fun PdfChromeMenuRow(
     chevronRotation: Float? = null,
     indentLabel: Boolean = false,
     rowHeight: Dp = MenuRowHeight,
-    labelSize: TextUnit = Level1FontSize,
-    labelWeight: FontWeight = Level1FontWeight,
+    labelSize: TextUnit = M1racleReaderTypography.titleMedium.fontSize,
+    labelWeight: FontWeight = FontWeight.SemiBold,
     /** 0f hides icon/title/chevron but keeps the row as a layout placeholder
      *  (r26 §6 single-instance rule: the ChildCard header takes over). */
     contentAlpha: Float = 1f,

@@ -33,14 +33,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.m1racle.reader.data.settings.ReaderSettings
 import com.m1racle.reader.image.LocalImageLoader
 import com.m1racle.reader.image.LocalImageState
 import com.m1racle.reader.markdown.MarkdownBlock
+import com.m1racle.reader.ui.theme.M1racleReaderTypography
 import kotlinx.coroutines.CancellationException
 
-private val ImageCorner = 12.dp
+private val ImageCorner = 12.dp // Registered content-image radius (not a UI-chrome token).
 private val FailHeight = 140.dp
 /** Loading / unknown-size placeholder — stable list height before decode. */
 private const val PlaceholderAspect = 16f / 9f
@@ -83,7 +83,7 @@ fun ImageBlockView(
     val failTitle = scheme.onSurface
     val failSupport = scheme.onSurfaceVariant
 
-    val captionSize = 14.sp
+    val captionSize = M1racleReaderTypography.bodyMedium.fontSize
     val captionStyle = MaterialTheme.typography.bodySmall.copy(
         fontSize = captionSize,
         lineHeight = ReaderTypography.captionLineHeight(settings, captionSize.value),

@@ -16,13 +16,16 @@ import androidx.compose.ui.unit.sp
  * Styles applied to inline Markdown spans.
  * Colors should come from the current Material theme at the call site.
  */
+
+/** Inline-code size, single-sourced inside the parser (matches ReaderTypography.inlineCodeFontSize). */
+internal const val InlineCodeFontSizeSp = 14.5f
 data class InlineMarkdownStyles(
     // Emphasized spans only; surrounding body stays Normal.
     val bold: SpanStyle = SpanStyle(fontWeight = FontWeight.SemiBold),
     val italic: SpanStyle = SpanStyle(fontStyle = FontStyle.Italic),
     val code: SpanStyle = SpanStyle(
         fontFamily = FontFamily.Monospace,
-        fontSize = 14.5.sp,
+        fontSize = InlineCodeFontSizeSp.sp,
         fontWeight = FontWeight.Normal,
         background = Color(0x1A2F5D50),
     ),

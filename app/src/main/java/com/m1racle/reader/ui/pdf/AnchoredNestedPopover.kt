@@ -177,7 +177,7 @@ internal fun AnchoredNestedPopover(
     val widthDp = with(density) { reveal.width.toDp() }
     val heightDp = with(density) { reveal.height.toDp() }
 
-    val cornerStart = with(density) { 14.dp.toPx() }
+    val cornerStart = with(density) { 14.dp.toPx() } // Registered morph keyframe (matches collapsed menu radius).
     val cornerEnd = with(density) { MoreMenuCorner.toPx() }
     val cornerNow = cornerStart + (cornerEnd - cornerStart) * p
     val cornerDp = with(density) { cornerNow.toDp() }
@@ -291,8 +291,7 @@ private fun NestedSourceHeader(
         Spacer(modifier = Modifier.width(MenuIconGap))
         Text(
             text = stringResource(nestedHeaderLabel(state)),
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontSize = Level1FontSize,
+            style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.SemiBold,
             ),
             color = scheme.onSurface,

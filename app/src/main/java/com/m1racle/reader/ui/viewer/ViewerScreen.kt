@@ -1264,9 +1264,9 @@ private fun ReaderTopBarRow(
                             text = title,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                             style = TextStyle(
-                                fontSize = 15.sp,
+                                fontSize = ReaderTypography.tocH1Size,
                                 fontWeight = FontWeight.Normal,
-                                lineHeight = (15f * 1.4f).sp,
+                                lineHeight = (ReaderTypography.tocH1Size.value * 1.4f).sp,
                                 color = titleColor,
                             ),
                         )

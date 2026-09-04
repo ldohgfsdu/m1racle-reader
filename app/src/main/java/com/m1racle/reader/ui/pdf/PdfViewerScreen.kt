@@ -83,7 +83,6 @@ import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Tag
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -1741,6 +1740,10 @@ private fun Modifier.capsuleLocalPressHighlight(
         }
 }
 
+/** Capsule motion-spec radii: collapsed pill + popover flare (single source for all 3 sites). */
+private val CapsuleRadiusDp = 22.dp
+private val CapsuleFlareRadiusDp = 16.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PdfInfoCapsule(
@@ -1765,11 +1768,11 @@ private fun PdfInfoCapsule(
         CapsulePopoverShape(
             topWidth = collapsedWidth,
             bottomWidth = surfaceWidthDp,
-            topRadius = 22.dp,
-            bottomRadius = 16.dp,
+            topRadius = CapsuleRadiusDp,
+            bottomRadius = CapsuleFlareRadiusDp,
         )
     } else {
-        RoundedCornerShape(22.dp)
+        RoundedCornerShape(CapsuleRadiusDp)
     }
     var lastCapsuleAnchor by remember { mutableStateOf(IntArray(0)) }
     var bodyNaturalHeightPx by remember { mutableFloatStateOf(0f) }
@@ -1810,7 +1813,7 @@ private fun PdfInfoCapsule(
                 .width(collapsedWidth)
                 .height(44.dp)
                 .align(Alignment.CenterHorizontally)
-                .clip(RoundedCornerShape(22.dp))
+                .clip(RoundedCornerShape(CapsuleRadiusDp))
                 .then(
                     if (onClick != null) {
                         Modifier
@@ -1922,6 +1925,9 @@ private fun Modifier.capsuleTitleMarquee(): Modifier = basicMarquee(
     repeatDelayMillis = 1200,
 )
 
+/** Capsule jump-input corner: clip + border share it so they cannot drift apart. */
+private val JumpInputCornerDp = 11.dp
+
 /**
  * Jump-to-page body: grows inside the capsule surface, under the header.
  * Compact expansion: small title + single helper line + 50dp number field
@@ -1977,7 +1983,7 @@ private fun JumpPageBody(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(44.dp)
-                .clip(RoundedCornerShape(11.dp))
+                .clip(RoundedCornerShape(JumpInputCornerDp))
                 .background(scheme.onSurface.copy(alpha = 0.06f))
                 .border(
                     width = 1.dp,
@@ -1986,7 +1992,7 @@ private fun JumpPageBody(
                     } else {
                         scheme.outline.copy(alpha = 0.4f)
                     },
-                    shape = RoundedCornerShape(11.dp),
+                    shape = RoundedCornerShape(JumpInputCornerDp),
                 )
                 .padding(horizontal = 14.dp),
             contentAlignment = Alignment.CenterStart,
@@ -3366,6 +3372,7 @@ internal fun PdfHorizontalPagedArea(
                 when {
                     bmp != null -> {
                         Surface(
+                            // Registered paper-sheet radius (matches the intentional paper-white exception).
                             shape = RoundedCornerShape(2.dp),
                             color = Color.White,
                             border = androidx.compose.foundation.BorderStroke(

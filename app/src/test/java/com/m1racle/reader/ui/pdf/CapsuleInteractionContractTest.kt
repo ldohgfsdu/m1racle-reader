@@ -125,7 +125,9 @@ class CapsuleInteractionContractTest {
         assertTrue(r.contains("if (fraction > 0f && expandedWidth > collapsedWidth)"))
         assertTrue(r.contains("topWidth = collapsedWidth"))
         assertTrue(r.contains("bottomWidth = surfaceWidthDp"))
-        assertTrue(r.contains("} else { RoundedCornerShape(22.dp) }"))
+        assertTrue(r.contains("} else { RoundedCornerShape(CapsuleRadiusDp) }"))
+        // 22dp 值仍被钉死（顶层声明，与 popover topRadius 同源；region 切片不含声明行故读全文件）。
+        assertTrue(norm(source("PdfViewerScreen.kt")).contains("private val CapsuleRadiusDp = 22.dp"))
         // 锚点稳定性的另一半：header 行永远钉在收起态宽度上。
         assertTrue(r.contains(".width(collapsedWidth)"))
         assertTrue(r.contains(".height(44.dp)"))

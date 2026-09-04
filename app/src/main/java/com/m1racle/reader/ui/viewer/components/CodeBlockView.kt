@@ -45,7 +45,7 @@ import com.m1racle.reader.search.withSearchHighlights
 // EmptyRanges for search-closed
 
 private object CodeBlockChrome {
-    val corner = 12.dp
+    val corner = 12.dp // Registered code-content radius (matches image content radius).
     val headerMinHeight = 36.dp
     val bodyMinHeightEmpty = 40.dp
     val bodyPadH = 16.dp
@@ -122,7 +122,6 @@ fun CodeBlockView(
                 text = languageLabel,
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontWeight = FontWeight.Medium,
-                    fontSize = 13.sp,
                     letterSpacing = 0.2.sp,
                 ),
                 color = labelColor,

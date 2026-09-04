@@ -38,26 +38,8 @@ object M1racleReaderTheme {
  * Semantic aliases — business UI should call these (or ColorScheme roles)
  * instead of hard-coding grays.
  */
-val ColorScheme.cardContainer: Color
-    get() = surfaceContainerLow
-
 val ColorScheme.sheetContainer: Color
     get() = surfaceContainer
-
-val ColorScheme.selectedRow: Color
-    get() = surfaceContainerHighest
-
-val ColorScheme.inlineCodeBackground: Color
-    get() = surfaceContainerHighest
-
-val ColorScheme.imagePlaceholder: Color
-    get() = surfaceContainerHigh
-
-val ColorScheme.codeBlockHeader: Color
-    get() = surfaceContainerHigh
-
-val ColorScheme.codeBlockBody: Color
-    get() = surfaceContainerLow
 
 /** Shared OutlinedTextField colors — no dynamic purple, no fixed white. */
 @Composable

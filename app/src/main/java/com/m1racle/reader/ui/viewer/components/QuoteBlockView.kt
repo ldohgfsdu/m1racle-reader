@@ -39,6 +39,7 @@ fun QuoteBlockView(
     val scheme = MaterialTheme.colorScheme
     val bodySize = ReaderTypography.quoteFontSize.scaled(settings.fontScale)
     val bodyLine = ReaderTypography.quoteLineHeight(settings)
+    // Attribution runs 1sp under body with an 11sp floor (labelSmall) — formula, intentionally untokenized.
     val attrSize = (bodySize.value - 1f).coerceAtLeast(11f).sp
     val attrLine = ReaderTypography.captionLineHeight(settings, attrSize.value)
 
