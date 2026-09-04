@@ -58,4 +58,26 @@ object AdvancedChildLayoutSpec {
 
     /** One textbook-outline row (single-line title). */
     const val OutlineRowHeightDp = 36f
+
+    /**
+     * Small-element corner, converged from the historical 2/3/4/6dp mix
+     * (marker bar, thumb cells, count badges). Thumb clip + border share it
+     * so the two can never drift apart again.
+     */
+    const val CardCornerDp = 4f
+
+    /** Recurring gaps/paddings (values unchanged — pure rename, zero visual delta). */
+    const val Space2Dp = 2f
+    const val Space4Dp = 4f
+    const val Space6Dp = 6f
+    const val Space8Dp = 8f
+    const val Space10Dp = 10f
+    const val Space12Dp = 12f
+    const val Space16Dp = 16f
+
+    /** Standard interactive heights (values unchanged). */
+    const val ButtonHeightDp = 44f
+    const val ControlHeightDp = 48f
+    const val TextButtonHeightDp = 32f
+    const val RadioSizeDp = 24f
 }

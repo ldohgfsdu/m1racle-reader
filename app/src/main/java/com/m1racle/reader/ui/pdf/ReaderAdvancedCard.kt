@@ -85,7 +85,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.glassMutedContentAlpha
 import com.m1racle.reader.R
@@ -203,23 +202,20 @@ internal fun TextbookPageAdvancedContent(
             .heightIn(max = bodyMaxHeightDp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = MenuRowHPad)
-            .padding(top = 8.dp, bottom = 16.dp),
+            .padding(top = AdvancedChildLayoutSpec.Space8Dp.dp, bottom = AdvancedChildLayoutSpec.Space16Dp.dp),
     ) {
         Text(
             text = summary,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Normal,
-            ),
+            style = MaterialTheme.typography.bodySmall,
             color = scheme.onSurface.copy(alpha = muted),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space8Dp.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(AdvancedChildLayoutSpec.ControlHeightDp.dp)
                 .clip(RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp))
                 .background(scheme.onSurface.copy(alpha = 0.05f))
                 .border(
@@ -242,7 +238,6 @@ internal fun TextbookPageAdvancedContent(
                 },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = scheme.onSurface,
                 ),
@@ -258,7 +253,6 @@ internal fun TextbookPageAdvancedContent(
                             Text(
                                 text = stringResource(R.string.pdf_print_label),
                                 style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 15.sp,
                                     color = scheme.onSurface.copy(alpha = muted),
                                 ),
                             )
@@ -271,7 +265,7 @@ internal fun TextbookPageAdvancedContent(
         }
         val errorMsg = error
         if (errorMsg != null) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space4Dp.dp))
             Text(
                 text = errorMsg,
                 style = MaterialTheme.typography.labelSmall,
@@ -279,7 +273,7 @@ internal fun TextbookPageAdvancedContent(
                 maxLines = 1,
             )
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space12Dp.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
@@ -289,28 +283,27 @@ internal fun TextbookPageAdvancedContent(
                 TextButton(onClick = params.onClear) {
                     Text(
                         text = stringResource(R.string.pdf_print_clear),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
             TextButton(onClick = onCancel) {
                 Text(
                     text = stringResource(R.string.pdf_dialog_cancel),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(AdvancedChildLayoutSpec.Space4Dp.dp))
             // Full in-body save (≥44dp) — never a clipped absolute footer pill.
             Button(
                 onClick = { submit() },
-                modifier = Modifier.height(44.dp),
+                modifier = Modifier.height(AdvancedChildLayoutSpec.ButtonHeightDp.dp),
                 shape = RoundedCornerShape(AdvancedChildLayoutSpec.ActionCornerDp.dp),
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
+                contentPadding = PaddingValues(horizontal = MenuRowHPad, vertical = 0.dp),
             ) {
                 Text(
                     text = stringResource(R.string.pdf_print_save),
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                     ),
                 )
@@ -360,7 +353,6 @@ internal fun OutlineAdvancedContent(
                     stringResource(R.string.pdf_outline_count, flatAll.size)
                 },
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                 ),
                 color = scheme.onSurface.copy(alpha = muted),
@@ -370,12 +362,12 @@ internal fun OutlineAdvancedContent(
             )
             TextButton(
                 onClick = params.onImportEmbedded,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                modifier = Modifier.height(32.dp),
+                contentPadding = PaddingValues(horizontal = AdvancedChildLayoutSpec.Space8Dp.dp, vertical = 0.dp),
+                modifier = Modifier.height(AdvancedChildLayoutSpec.TextButtonHeightDp.dp),
             ) {
                 Text(
                     stringResource(R.string.pdf_outline_scan_ready),
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
             TextButton(
@@ -391,18 +383,18 @@ internal fun OutlineAdvancedContent(
                         ),
                     )
                 },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                modifier = Modifier.height(32.dp),
+                contentPadding = PaddingValues(horizontal = AdvancedChildLayoutSpec.Space8Dp.dp, vertical = 0.dp),
+                modifier = Modifier.height(AdvancedChildLayoutSpec.TextButtonHeightDp.dp),
             ) {
                 Text(
                     stringResource(R.string.pdf_outline_new_short),
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
         }
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = AdvancedChildLayoutSpec.Space16Dp.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -437,16 +429,15 @@ private fun OutlineNodeRow(
     ) {
         Box(
             modifier = Modifier
-                .padding(start = 8.dp)
+                .padding(start = AdvancedChildLayoutSpec.Space8Dp.dp)
                 .width(3.dp)
                 .height(16.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(RoundedCornerShape(AdvancedChildLayoutSpec.CardCornerDp.dp))
                 .background(if (selected) scheme.primary else Color.Transparent),
         )
         Text(
             text = row.node.title,
             style = MaterialTheme.typography.bodyMedium.copy(
-                fontSize = 14.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             ),
             color = if (selected) scheme.primary else scheme.onSurface,
@@ -460,12 +451,11 @@ private fun OutlineNodeRow(
             Text(
                 text = stringResource(R.string.pdf_outline_current_badge),
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                 ),
                 color = scheme.onPrimary,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(AdvancedChildLayoutSpec.CardCornerDp.dp))
                     .background(scheme.primary)
                     .padding(horizontal = 5.dp, vertical = 1.dp),
             )
@@ -506,25 +496,24 @@ internal fun ThumbnailsAdvancedContent(
                 stringResource(R.string.pdf_thumbs_status, params.currentPageIndex + 1, params.pageCount)
             },
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             ),
             color = scheme.onSurface.copy(alpha = muted),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = MenuRowHPad, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = MenuRowHPad, vertical = AdvancedChildLayoutSpec.Space6Dp.dp),
         )
         LazyVerticalGrid(
             state = gridState,
             columns = GridCells.Fixed(ThumbnailGridColumns),
             contentPadding = PaddingValues(
-                start = 10.dp,
-                top = 2.dp,
-                end = 10.dp,
-                bottom = 12.dp,
+                start = AdvancedChildLayoutSpec.Space10Dp.dp,
+                top = AdvancedChildLayoutSpec.Space2Dp.dp,
+                end = AdvancedChildLayoutSpec.Space10Dp.dp,
+                bottom = AdvancedChildLayoutSpec.Space12Dp.dp,
             ),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(AdvancedChildLayoutSpec.Space6Dp.dp),
+            verticalArrangement = Arrangement.spacedBy(AdvancedChildLayoutSpec.Space6Dp.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -596,13 +585,13 @@ internal fun ThumbCell(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.707f)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(AdvancedChildLayoutSpec.CardCornerDp.dp))
             .background(scheme.surfaceContainerHigh)
             .clickable(enabled = ui is ThumbCellUi.Ready, onClick = onClick)
             .border(
                 width = if (selected) 2.dp else 0.5.dp,
                 color = borderColor,
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(AdvancedChildLayoutSpec.CardCornerDp.dp),
             ),
     ) {
         when (val s = ui) {
@@ -629,14 +618,13 @@ internal fun ThumbCell(
         Text(
             text = "${pageIndex + 1}",
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
             ),
             color = Color.White,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(4.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .clip(RoundedCornerShape(AdvancedChildLayoutSpec.CardCornerDp.dp))
                 .background(Color.Black.copy(alpha = 0.45f))
                 .padding(horizontal = 4.dp, vertical = 1.dp),
         )
@@ -701,15 +689,15 @@ internal fun ExportAdvancedContent(
             .heightIn(max = bodyMaxHeightDp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = MenuRowHPad)
-            .padding(top = 8.dp, bottom = 16.dp),
+            .padding(top = AdvancedChildLayoutSpec.Space8Dp.dp, bottom = AdvancedChildLayoutSpec.Space16Dp.dp),
     ) {
         if (plan == null) {
             Text(
                 text = stringResource(R.string.pdf_export_no_nodes),
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurface.copy(alpha = muted),
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space12Dp.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onCancel) {
                     Text(stringResource(R.string.pdf_dialog_cancel))
@@ -722,15 +710,14 @@ internal fun ExportAdvancedContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(AdvancedChildLayoutSpec.ControlHeightDp.dp)
                 .clickable { pickerExpanded = !pickerExpanded }
-                .padding(horizontal = 2.dp),
+                .padding(horizontal = AdvancedChildLayoutSpec.Space2Dp.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = summary,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                 ),
                 color = scheme.onSurface,
@@ -768,15 +755,15 @@ internal fun ExportAdvancedContent(
                                 },
                                 role = Role.RadioButton,
                             )
-                            .padding(start = (row.depth * 16).dp, top = 4.dp, bottom = 4.dp),
+                            .padding(start = (row.depth * 16).dp, top = AdvancedChildLayoutSpec.Space4Dp.dp, bottom = AdvancedChildLayoutSpec.Space4Dp.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(selected = selected, onClick = null, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
+                        RadioButton(selected = selected, onClick = null, modifier = Modifier.size(AdvancedChildLayoutSpec.RadioSizeDp.dp))
+                        Spacer(modifier = Modifier.width(AdvancedChildLayoutSpec.Space8Dp.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = row.node.title,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -786,7 +773,7 @@ internal fun ExportAdvancedContent(
                                     row.node.startPageIndex + 1,
                                     row.node.endPageIndex + 1,
                                 ),
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp),
+                                style = MaterialTheme.typography.labelMedium,
                                 color = scheme.onSurface.copy(alpha = muted),
                             )
                         }
@@ -794,7 +781,7 @@ internal fun ExportAdvancedContent(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space8Dp.dp))
         // Format radios: top-aligned, title ≤2 lines, hint secondary.
         ChapterExportFormat.entries.forEach { option ->
             val selected = format == option
@@ -806,22 +793,21 @@ internal fun ExportAdvancedContent(
                         onClick = { format = option },
                         role = Role.RadioButton,
                     )
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = AdvancedChildLayoutSpec.Space4Dp.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 RadioButton(
                     selected = selected,
                     onClick = null,
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(AdvancedChildLayoutSpec.RadioSizeDp.dp)
                         .padding(top = 1.dp),
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(AdvancedChildLayoutSpec.Space10Dp.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = exportFormatTitle(option),
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                         ),
                         color = scheme.onSurface,
@@ -830,10 +816,7 @@ internal fun ExportAdvancedContent(
                     )
                     Text(
                         text = exportFormatShortHint(option),
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Normal,
-                        ),
+                        style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurface.copy(alpha = muted),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -841,7 +824,7 @@ internal fun ExportAdvancedContent(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space8Dp.dp))
         // Start/end half-width fields; list/actions stay in one scroll.
         Row(modifier = Modifier.fillMaxWidth()) {
             ExportCompactField(
@@ -853,7 +836,7 @@ internal fun ExportAdvancedContent(
                 },
                 modifier = Modifier.weight(1f),
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(AdvancedChildLayoutSpec.Space12Dp.dp))
             ExportCompactField(
                 label = stringResource(R.string.pdf_export_end_page),
                 value = endText,
@@ -865,14 +848,14 @@ internal fun ExportAdvancedContent(
             )
         }
         if (error != null) {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space6Dp.dp))
             Text(
                 text = error!!,
                 color = scheme.error,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.bodySmall,
             )
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space12Dp.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
@@ -881,20 +864,19 @@ internal fun ExportAdvancedContent(
             TextButton(onClick = onCancel) {
                 Text(
                     stringResource(R.string.pdf_dialog_cancel),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(AdvancedChildLayoutSpec.Space8Dp.dp))
             Button(
                 onClick = { submit() },
-                modifier = Modifier.height(44.dp),
+                modifier = Modifier.height(AdvancedChildLayoutSpec.ButtonHeightDp.dp),
                 shape = RoundedCornerShape(AdvancedChildLayoutSpec.ActionCornerDp.dp),
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
+                contentPadding = PaddingValues(horizontal = MenuRowHPad, vertical = 0.dp),
             ) {
                 Text(
                     text = stringResource(R.string.pdf_export_confirm),
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                     ),
                 )
@@ -928,16 +910,15 @@ private fun ExportCompactField(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             ),
             color = scheme.onSurface.copy(alpha = muted),
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(AdvancedChildLayoutSpec.Space6Dp.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(AdvancedChildLayoutSpec.ControlHeightDp.dp)
                 .clip(RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp))
                 .background(scheme.onSurface.copy(alpha = 0.05f))
                 .border(
@@ -945,7 +926,7 @@ private fun ExportCompactField(
                     color = scheme.onSurface.copy(alpha = 0.08f),
                     shape = RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp),
                 )
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = AdvancedChildLayoutSpec.Space12Dp.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
             BasicTextField(
@@ -953,7 +934,6 @@ private fun ExportCompactField(
                 onValueChange = onValueChange,
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = scheme.onSurface,
                 ),

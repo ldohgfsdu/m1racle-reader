@@ -130,7 +130,11 @@ class ReaderChromeTokensContractTest {
     @Test
     fun `page mapping geometry and input behavior remain unchanged`() {
         val card = sourceFile("ReaderAdvancedCard.kt").readText()
-        assertTrue(card.contains("height(44.dp)"))
+        // 44dp save/confirm height is pinned by value (now via LayoutSpec token).
+        assertTrue(card.contains("ButtonHeightDp.dp)"))
+        assertFalse(card.contains("height(44.dp)"))
+        val spec = sourceFile("AdvancedChildLayoutSpec.kt").readText()
+        assertTrue(spec.contains("ButtonHeightDp = 44f"))
         assertTrue(card.contains("ImeAction.Done"))
         assertFalse(card.contains("requestFocus()"))
         assertFalse(card.contains("showSoftInput"))
