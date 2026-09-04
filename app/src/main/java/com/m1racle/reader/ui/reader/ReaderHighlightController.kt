@@ -50,9 +50,11 @@ class ReaderHighlightController(
 
     /**
      * 提交高亮：内部驱动 AnnotationCreationFlow
-     * select → prepareDraft(HIGHLIGHT) → commit。
+     * select → prepareDraft(HIGHLIGHT) → commit.
+     * 接受任意 [TextSelection]：PDF 用 [TextSelection.PdfSelection]，
+     * Markdown 用 [TextSelection.MarkdownSelection]（同一状态机，无第二实现）。
      */
-    suspend fun commitHighlight(selection: TextSelection.PdfSelection, nowMs: Long = System.currentTimeMillis()): CommitResult {
+    suspend fun commitHighlight(selection: TextSelection, nowMs: Long = System.currentTimeMillis()): CommitResult {
         flow.select(selection)
         when (val draft = flow.prepareDraft(AnnotationType.HIGHLIGHT)) {
             is AnnotationCreationFlow.Stage.DraftReady -> Unit

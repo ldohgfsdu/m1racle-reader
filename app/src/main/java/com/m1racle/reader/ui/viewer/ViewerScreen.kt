@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Bookmarks
@@ -113,6 +115,7 @@ import com.m1racle.reader.BuildConfig
 import com.m1racle.reader.R
 import com.m1racle.reader.data.anchor.DocumentAnchor
 import com.m1racle.reader.data.settings.ReaderSettings
+import com.m1racle.reader.markdown.MarkdownBlock
 import com.m1racle.reader.markdown.MarkdownPerformance
 import com.m1racle.reader.markdown.TocItem
 import com.m1racle.reader.markdown.blockContentType
@@ -137,6 +140,10 @@ fun ViewerScreen(
     modifier: Modifier = Modifier,
     /** R23 书签中介（NavGraph 注入；null = 能力未启用，顶栏不显示书签钮）。 */
     bookmarkController: com.m1racle.reader.ui.reader.ReaderBookmarkController? = null,
+    /** P0-1 高亮中介（与 PDF 同一实现；null = 无长按入口与标注钮）。 */
+    highlightController: com.m1racle.reader.ui.reader.ReaderHighlightController? = null,
+    /** P0-1 批注中介（与 PDF 同一实现；null = 批注编辑不可用）。 */
+    noteController: com.m1racle.reader.ui.reader.ReaderNoteController? = null,
     initialAnchor: DocumentAnchor? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -170,6 +177,8 @@ fun ViewerScreen(
                 viewModel = viewModel,
                 onBack = onBack,
                 bookmarkController = bookmarkController,
+                highlightController = highlightController,
+                noteController = noteController,
                 initialAnchor = initialAnchor,
                 modifier = modifier,
             )
@@ -264,6 +273,8 @@ private fun ViewerSuccessScreen(
     viewModel: ViewerViewModel,
     onBack: () -> Unit,
     bookmarkController: com.m1racle.reader.ui.reader.ReaderBookmarkController?,
+    highlightController: com.m1racle.reader.ui.reader.ReaderHighlightController?,
+    noteController: com.m1racle.reader.ui.reader.ReaderNoteController?,
     initialAnchor: DocumentAnchor?,
     modifier: Modifier = Modifier,
 ) {
@@ -376,6 +387,91 @@ private fun ViewerSuccessScreen(
                         context.getString(R.string.reader_bookmark_removed),
                     )
                 }
+            }
+        }
+    }
+
+    // ── P0-1 Markdown 标注（SCROLL_POSITION 坐标系；location = 内容块索引，
+    // 与书签的绝对列表索引不同，不可混用） ──
+    var annotationVersion by remember(state.document.id) { mutableStateOf(0) }
+    var annotatedBlocks by remember(state.document.id) { mutableStateOf<Set<Int>>(emptySet()) }
+    var showAnnotationSheet by remember(state.document.id) { mutableStateOf(false) }
+    var noteTarget by remember(state.document.id) { mutableStateOf<MarkdownNoteTarget?>(null) }
+    var managementHighlights by remember(state.document.id) {
+        mutableStateOf<List<com.m1racle.reader.data.local.HighlightEntity>>(emptyList())
+    }
+    var managementNotes by remember(state.document.id) {
+        mutableStateOf<List<com.m1racle.reader.data.local.NoteEntity>>(emptyList())
+    }
+    LaunchedEffect(highlightController, noteController, state.document.id, annotationVersion) {
+        annotatedBlocks = highlightController?.listForDocument()
+            ?.filter { it.locationKind == "SCROLL_POSITION" }
+            ?.map { it.location }
+            ?.toSet() ?: emptySet()
+        managementHighlights = highlightController?.listForDocument() ?: emptyList()
+        managementNotes = noteController?.list() ?: emptyList()
+    }
+
+    /** 打开指定块的批注编辑器：优先关联既有高亮的锚点，否则用整块锚点新建。 */
+    fun openNoteEditorForBlock(blockIndex: Int, returnToManagement: Boolean = false) {
+        val highlights = highlightController ?: return
+        if (noteController == null) return
+        val block = state.blocks.getOrNull(blockIndex) ?: return
+        val plain = block.plainTextForAnnotation()
+        if (plain.isEmpty()) return
+        scope.launch {
+            val highlight = highlights.listForDocument().firstOrNull {
+                it.locationKind == "SCROLL_POSITION" && it.location == blockIndex
+            }
+            val anchor = highlight?.let { highlights.anchorOf(it) }
+                ?: com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock(
+                    blockIndex = blockIndex,
+                    charStart = 0,
+                    charEnd = plain.length,
+                )
+            val linked = noteController.linkedAt(anchor)
+            noteTarget = MarkdownNoteTarget(
+                anchor = anchor,
+                note = linked,
+                returnToManagement = returnToManagement,
+            )
+        }
+    }
+
+    /**
+     * 长按块的唯一入口：无高亮则整块高亮；已有高亮则进批注编辑器
+     *（新建关联批注或编辑既有关联批注）。置于 openNoteEditorForBlock 之后
+     *（Kotlin 局部函数先声明后调用）。
+     */
+    fun annotateBlock(blockIndex: Int) {
+        val highlights = highlightController ?: return
+        val block = state.blocks.getOrNull(blockIndex) ?: return
+        val plain = block.plainTextForAnnotation()
+        if (plain.isEmpty()) return
+        scope.launch {
+            if (blockIndex !in annotatedBlocks) {
+                when (highlights.commitHighlight(
+                    com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection(
+                        blockIndex = blockIndex,
+                        charStart = 0,
+                        charEnd = plain.length,
+                        excerpt = plain.take(200),
+                    ),
+                )) {
+                    is com.m1racle.reader.ui.reader.ReaderHighlightController.CommitResult.Success -> {
+                        annotationVersion++
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.reader_highlight_added),
+                        )
+                    }
+                    is com.m1racle.reader.ui.reader.ReaderHighlightController.CommitResult.Failure -> {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.reader_highlight_failed),
+                        )
+                    }
+                }
+            } else {
+                openNoteEditorForBlock(blockIndex)
             }
         }
     }
@@ -587,6 +683,11 @@ private fun ViewerSuccessScreen(
             } else {
                 null
             },
+            onOpenAnnotations = if (highlightController != null) {
+                { showAnnotationSheet = true }
+            } else {
+                null
+            },
             bookmarkActive = listState.firstVisibleItemIndex in bookmarkedIndexes,
             snackbarHostState = snackbarHostState,
             // Pass state object only — body never reads .visible (avoids recompose cascade).
@@ -614,6 +715,12 @@ private fun ViewerSuccessScreen(
                 innerPadding = innerPadding,
                 tableLayoutCache = tableLayoutCache,
                 onAnchorJump = topBarScrollState::forceShow,
+                annotatedBlocks = annotatedBlocks,
+                onBlockLongPress = if (highlightController != null) {
+                    { blockIndex -> annotateBlock(blockIndex) }
+                } else {
+                    null
+                },
             )
         }
 
@@ -627,6 +734,116 @@ private fun ViewerSuccessScreen(
                 onDismiss = { showSettings = false },
             )
         }
+
+        if (showAnnotationSheet) {
+            com.m1racle.reader.ui.annotation.AnnotationsManagementSheet(
+                highlights = managementHighlights,
+                notes = managementNotes,
+                onDismiss = { showAnnotationSheet = false },
+                onJump = { highlight ->
+                    showAnnotationSheet = false
+                    scope.launch {
+                        scrollToBlockIndex(
+                            listState = listState,
+                            blockIndex = highlight.location,
+                            listHeaderCount = listHeaderCount,
+                            blockCount = state.blocks.size,
+                        )
+                    }
+                },
+                onDeleteHighlight = { highlight ->
+                    scope.launch {
+                        highlightController?.deleteHighlight(highlight.id)
+                        annotationVersion++
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.reader_annotation_deleted),
+                        )
+                    }
+                },
+                onAddNoteForHighlight = { highlight ->
+                    scope.launch {
+                        val target = highlightController?.anchorOf(highlight)
+                        if (target != null) {
+                            noteTarget = MarkdownNoteTarget(
+                                anchor = target,
+                                note = null,
+                                returnToManagement = true,
+                            )
+                        }
+                    }
+                },
+                onEditNote = { note ->
+                    scope.launch {
+                        val target = noteController?.anchorOf(note)
+                        if (target != null) {
+                            noteTarget = MarkdownNoteTarget(
+                                anchor = target,
+                                note = note,
+                                returnToManagement = true,
+                            )
+                        }
+                    }
+                },
+                onDeleteNote = { note ->
+                    scope.launch {
+                        noteController?.delete(note.id)
+                        annotationVersion++
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.reader_note_deleted),
+                        )
+                    }
+                },
+            )
+        }
+
+        noteTarget?.let { target ->
+            val notes = noteController
+            if (notes != null) {
+                val blockLine = stringResource(
+                    R.string.reader_note_editor_title,
+                    context.getString(
+                        R.string.reader_note_block_line,
+                        (target.anchor as? DocumentAnchor.MarkdownBlock)?.blockIndex?.plus(1) ?: 1,
+                    ),
+                )
+                val closeEditor: () -> Unit = {
+                    noteTarget = null
+                    if (target.returnToManagement) showAnnotationSheet = true
+                }
+                com.m1racle.reader.ui.annotation.NoteEditDialog(
+                    title = blockLine,
+                    initialContent = target.note?.content.orEmpty(),
+                    isEditing = target.note != null,
+                    onSave = { content ->
+                        scope.launch {
+                            if (target.note == null) {
+                                notes.create(target.anchor, content)
+                            } else {
+                                notes.update(target.note.id, content)
+                            }
+                            annotationVersion++
+                            closeEditor()
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.reader_note_saved),
+                            )
+                        }
+                    },
+                    onDelete = target.note?.let { note ->
+                        {
+                            scope.launch {
+                                notes.delete(note.id)
+                                annotationVersion++
+                                closeEditor()
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.reader_note_deleted),
+                                )
+                            }
+                        }
+                    },
+                    onDismiss = closeEditor,
+                )
+            }
+        }
     }
 }
 
@@ -635,6 +852,7 @@ private fun ViewerSuccessScreen(
  * Each Markdown block is its own LazyColumn item with stable key + contentType.
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ReaderDocumentBody(
     state: ViewerUiState.Success,
     listState: LazyListState,
@@ -645,6 +863,10 @@ private fun ReaderDocumentBody(
     innerPadding: PaddingValues,
     tableLayoutCache: TableLayoutCache,
     onAnchorJump: () -> Unit,
+    /** 已高亮的内容块索引（SCROLL_POSITION）；空集 = 零绘制路径。 */
+    annotatedBlocks: Set<Int> = emptySet(),
+    /** null = 标注未启用，不挂长按。 */
+    onBlockLongPress: ((Int) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -835,11 +1057,31 @@ private fun ReaderDocumentBody(
                             }
                         },
                         // QA: strip block semantics tree to measure a11y update cost in isolation.
-                        modifier = if (ReaderPerformanceExperiments.clearBlockSemantics) {
+                        modifier = (if (ReaderPerformanceExperiments.clearBlockSemantics) {
                             Modifier.clearAndSetSemantics { }
                         } else {
                             Modifier
-                        },
+                        })
+                            // P0-1：已高亮块底色 + 长按创建/编辑标注；未启用时零修饰。
+                            .then(
+                                if (annotatedBlocks.contains(index)) {
+                                    Modifier.background(
+                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .then(
+                                if (onBlockLongPress != null) {
+                                    Modifier.combinedClickable(
+                                        onClick = {},
+                                        onLongClick = { onBlockLongPress.invoke(index) },
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            ),
                     )
                 }
             }
@@ -907,6 +1149,7 @@ private fun ReaderTopBarRow(
     onOpenToc: () -> Unit,
     onToggleBookmark: (() -> Unit)? = null,
     bookmarkActive: Boolean = false,
+    onOpenAnnotations: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     // Full-contrast chrome icons (not muted gray) for dark/light consistency.
@@ -1052,6 +1295,16 @@ private fun ReaderTopBarRow(
                 },
             )
         }
+        // P0-1 标注列表（null = 未启用，不占顶栏位）。
+        if (onOpenAnnotations != null) {
+            ReaderTopBarIconButton(
+                imageVector = Icons.Filled.FormatListBulleted,
+                contentDescription = stringResource(R.string.reader_annotations_title),
+                onClick = { closePopupThen(onOpenAnnotations) },
+                enabled = true,
+                tint = iconTint,
+            )
+        }
         ReaderTopBarIconButton(
             imageVector = Icons.Default.Search,
             contentDescription = stringResource(R.string.search_open),
@@ -1132,6 +1385,8 @@ private fun ViewerScaffold(
     /** R23 书签切换（null = 未启用，顶栏不渲染书签钮）。 */
     onToggleBookmark: (() -> Unit)? = null,
     bookmarkActive: Boolean = false,
+    /** P0-1 标注列表入口（null = 未启用，顶栏不渲染标注钮）。 */
+    onOpenAnnotations: (() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
     /**
      * Null for loading/error chrome; when set, only [ReaderTopBarOverlay] reads
@@ -1192,6 +1447,7 @@ private fun ViewerScaffold(
                     onOpenToc = onOpenToc,
                     onToggleBookmark = onToggleBookmark,
                     bookmarkActive = bookmarkActive,
+                    onOpenAnnotations = onOpenAnnotations,
                     onSearchQueryChange = onSearchQueryChange,
                     onCloseSearch = onCloseSearch,
                     onSearchPrevious = onSearchPrevious,
@@ -1227,6 +1483,7 @@ private fun ReaderTopBarOverlay(
     onOpenToc: () -> Unit,
     onToggleBookmark: (() -> Unit)? = null,
     bookmarkActive: Boolean = false,
+    onOpenAnnotations: (() -> Unit)? = null,
     onSearchQueryChange: (String) -> Unit,
     onCloseSearch: () -> Unit,
     onSearchPrevious: () -> Unit,
@@ -1282,6 +1539,7 @@ private fun ReaderTopBarOverlay(
                     onOpenToc = onOpenToc,
                     onToggleBookmark = onToggleBookmark,
                     bookmarkActive = bookmarkActive,
+                    onOpenAnnotations = onOpenAnnotations,
                 )
             }
         }
@@ -1392,3 +1650,28 @@ internal fun anchorJumpMode(
 }
 
 private const val TOC_LOG_TAG = "MARKDOWN_TOC"
+
+/** P0-1 批注编辑器目标：锚点 + 既有批注（null = 新建）+ 是否返回管理表。 */
+private data class MarkdownNoteTarget(
+    val anchor: com.m1racle.reader.data.anchor.DocumentAnchor,
+    val note: com.m1racle.reader.data.local.NoteEntity?,
+    val returnToManagement: Boolean = false,
+)
+
+/**
+ * P0-1 块纯文本（标注选区与摘录用）：与搜索文本口径一致的去标记文本；
+ * 无文本块（分割线等）返回空串，调用方跳过。
+ */
+private fun MarkdownBlock.plainTextForAnnotation(): String = when (this) {
+    is MarkdownBlock.Heading ->
+        com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(text)
+    is MarkdownBlock.Paragraph ->
+        com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(text)
+    is MarkdownBlock.Quote ->
+        com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(text)
+    is MarkdownBlock.CodeBlock -> code
+    is MarkdownBlock.ListBlock -> items.joinToString("\n")
+    is MarkdownBlock.Table -> (headers + rows.flatten()).joinToString(" ")
+    is MarkdownBlock.Image -> alt
+    is MarkdownBlock.Divider -> ""
+}

@@ -243,6 +243,23 @@ fun M1racleReaderNavGraph(
                     )
                 }
             }
+            // P0-1 标注中介：复用与 PDF 同一 Controller → Repository → Anchor 链。
+            val highlightController = remember(documentId) {
+                readingRepo?.let {
+                    com.m1racle.reader.ui.reader.ReaderHighlightController(
+                        readingRepository = it,
+                        documentId = documentId,
+                    )
+                }
+            }
+            val noteController = remember(documentId) {
+                readingRepo?.let {
+                    com.m1racle.reader.ui.reader.ReaderNoteController(
+                        readingRepository = it,
+                        documentId = documentId,
+                    )
+                }
+            }
             val viewerViewModel: ViewerViewModel = viewModel(
                 factory = ViewerViewModel.Factory(
                     documentId = documentId,
@@ -270,6 +287,8 @@ fun M1racleReaderNavGraph(
                     navController.popBackStack(Routes.HOME, inclusive = false)
                 },
                 bookmarkController = bookmarkController,
+                highlightController = highlightController,
+                noteController = noteController,
                 initialAnchor = initialAnchor,
             )
         }
