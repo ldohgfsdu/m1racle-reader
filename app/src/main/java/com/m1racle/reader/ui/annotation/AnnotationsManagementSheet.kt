@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.m1racle.reader.R
+import com.m1racle.reader.ui.theme.sheetContainer
 import com.m1racle.reader.data.local.HighlightEntity
 import com.m1racle.reader.data.local.NoteEntity
 import com.m1racle.reader.ui.hub.BookmarkRowFormatter
@@ -50,7 +51,10 @@ fun AnnotationsManagementSheet(
     onEditNote: (NoteEntity) -> Unit,
     onDeleteNote: (NoteEntity) -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.sheetContainer,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -59,7 +63,7 @@ fun AnnotationsManagementSheet(
         ) {
             Text(
                 text = stringResource(R.string.reader_annotations_title),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
             )
             Spacer(Modifier.height(8.dp))
 

@@ -1,12 +1,9 @@
 package com.m1racle.reader.ui.annotation
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -18,13 +15,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.m1racle.reader.R
+import com.m1racle.reader.ui.material.GlassAlertDialog
+import com.m1racle.reader.ui.theme.m1racleReaderOutlinedFieldColors
 
 /**
  * R27 轻量批注编辑器（创建/编辑双模式）。非空校验在本地；删除仅在编辑态提供。
  * 不承载任何富文本能力——保持「轻量 Note 闭环」边界。
+ * 容器与字阶走统一 Glass Dialog（与目录/导出弹窗同材质）。
  */
 @Composable
 fun NoteEditDialog(
@@ -37,23 +36,20 @@ fun NoteEditDialog(
 ) {
     var text by remember { mutableStateOf(initialContent) }
     val trimmed = text.trim()
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
-        },
+        title = { Text(title) },
         text = {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text(stringResource(R.string.reader_note_hint)) },
-                    minLines = 3,
-                    maxLines = 6,
-                    singleLine = false,
-                )
-            }
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier.fillMaxWidth(),
+                colors = m1racleReaderOutlinedFieldColors(),
+                placeholder = { Text(stringResource(R.string.reader_note_hint)) },
+                minLines = 3,
+                maxLines = 6,
+                singleLine = false,
+            )
         },
         confirmButton = {
             TextButton(
