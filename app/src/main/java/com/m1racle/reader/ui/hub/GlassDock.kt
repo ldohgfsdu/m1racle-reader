@@ -36,10 +36,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -47,6 +53,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
@@ -59,7 +66,6 @@ import com.m1racle.reader.ui.material.GlassBackdropSource
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.LocalGlassBackdropHost
 import com.m1racle.reader.ui.material.glassMaterial
-import kotlin.math.abs
 
 /**
  * Hub backdrop owner: captured page content and the sampling Dock are siblings.
@@ -116,15 +122,35 @@ fun GlassDock(
 ) {
     val motion = LocalHubDockMotion.current
     val scheme = MaterialTheme.colorScheme
+    val tabsBackdrop = rememberLayerBackdrop()
     val interactions = remember { List(dockEntries.size) { MutableInteractionSource() } }
     val pressedStates = interactions.map { it.collectIsPressedAsState() }
     val anyPressed = pressedStates.any { it.value }
     val dragging by remember(motion.preview) { derivedStateOf { motion.preview.position != null } }
+    val held = anyPressed || dragging
     val pressProgress = animateFloatAsState(
-        if (anyPressed || dragging) 1f else 0f,
-        spring(dampingRatio = 0.7f, stiffness = 380f),
+        if (held) 1f else 0f,
+        spring(dampingRatio = 1f, stiffness = 1000f, visibilityThreshold = 0.001f),
         label = "dockHoldExpansion",
     )
+    val capsuleScaleX = animateFloatAsState(
+        if (held) DockCapsulePressedScale else 1f,
+        spring(dampingRatio = 0.6f, stiffness = 250f, visibilityThreshold = 0.001f),
+        label = "dockCapsuleScaleX",
+    )
+    val capsuleScaleY = animateFloatAsState(
+        if (held) DockCapsulePressedScale else 1f,
+        spring(dampingRatio = 0.7f, stiffness = 250f, visibilityThreshold = 0.001f),
+        label = "dockCapsuleScaleY",
+    )
+    var dragVelocity by remember { mutableFloatStateOf(0f) }
+    var lastDragUptime by remember { mutableLongStateOf(0L) }
+    val velocity = animateFloatAsState(
+        if (dragging) dragVelocity else 0f,
+        spring(dampingRatio = 0.5f, stiffness = 300f),
+        label = "dockCapsuleVelocity",
+    )
+    val contentScale = 1f + (DockContentPressedScale - 1f) * pressProgress.value
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Box(modifier = modifier.fillMaxSize()) {
         BoxWithConstraints(
@@ -147,59 +173,48 @@ fun GlassDock(
             val slotWidth = (maxWidth - HomeDesignTokens.DockContentPadding * 2) / dockEntries.size
             Box(Modifier.fillMaxSize().padding(HomeDesignTokens.DockContentPadding), contentAlignment = AbsoluteAlignment.TopLeft) {
                 val slotWidthPx = with(LocalDensity.current) { slotWidth.toPx() }
-                // Measure once. Frame-by-frame position/stretch is consumed only
-                // in the render layer, never by layout or the navigation model.
-                Box(
-                    modifier = Modifier
-                        .width(slotWidth)
-                        .height(HomeDesignTokens.DockHeight - HomeDesignTokens.DockContentPadding * 2)
-                        .graphicsLayer {
-                            val logical = motion.position.value
-                            translationX = dockPhysicalPosition(logical, rtl) * slotWidthPx
-                            val stretch = abs(logical - motion.selected.ordinal).coerceAtMost(1f) * 0.10f
-                            val expansion = 1f + 0.18f * pressProgress.value
-                            scaleX = expansion + stretch
-                            scaleY = expansion - stretch * 0.25f
-                        }
-                        .glassMaterial(
-                            role = GlassMaterialRole.DockSelection,
-                            shape = HomeDesignTokens.DockShape,
-                        ),
-                )
+                val dragModifier = Modifier.pointerInput(motion.selected, slotWidthPx, rtl) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { offset ->
+                            lastDragUptime = 0L
+                            dragVelocity = 0f
+                            motion.preview.moveTo(dockPhysicalPosition(offset.x / slotWidthPx - 0.5f, rtl))
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            val dtMs = (change.uptimeMillis - lastDragUptime).coerceAtLeast(1L)
+                            if (lastDragUptime != 0L) {
+                                dragVelocity = (dragAmount / slotWidthPx) / (dtMs / 1000f)
+                            }
+                            lastDragUptime = change.uptimeMillis
+                            // Absolute pointer position avoids counting the slop-crossing event twice.
+                            motion.preview.moveTo(dockPhysicalPosition(change.position.x / slotWidthPx - 0.5f, rtl))
+                        },
+                        onDragEnd = {
+                            lastDragUptime = 0L
+                            dragVelocity = 0f
+                            motion.preview.finish()?.let { target ->
+                                if (target != motion.selected) onSelect(target)
+                            }
+                        },
+                        onDragCancel = {
+                            lastDragUptime = 0L
+                            dragVelocity = 0f
+                            motion.preview.cancel()
+                        },
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
                         .selectableGroup()
-                        .pointerInput(motion.selected, slotWidthPx, rtl) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { offset ->
-                                    motion.preview.moveTo(dockPhysicalPosition(offset.x / slotWidthPx - 0.5f, rtl))
-                                },
-                                onHorizontalDrag = { change, _ ->
-                                    change.consume()
-                                    // Absolute pointer position avoids counting the slop-crossing event twice.
-                                    motion.preview.moveTo(dockPhysicalPosition(change.position.x / slotWidthPx - 0.5f, rtl))
-                                },
-                                onDragEnd = {
-                                    motion.preview.finish()?.let { target ->
-                                        if (target != motion.selected) onSelect(target)
-                                    }
-                                },
-                                onDragCancel = { motion.preview.cancel() },
-                            )
-                        },
+                        .then(dragModifier),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     dockEntries.forEachIndexed { index, entry ->
                         val selected = entry.destination == motion.selected
                         val interaction = interactions[index]
-                        val pressed = pressedStates[index].value
-                        val scale = animateFloatAsState(
-                            if (pressed || (dragging && index == (motion.preview.position ?: 0f).toInt())) 1.2f else 1f,
-                            spring(dampingRatio = 0.75f, stiffness = 500f),
-                            label = "dockIconPress",
-                        )
                         val color = if (selected) scheme.primary else scheme.onSurfaceVariant
                         Column(
                             modifier = Modifier
@@ -213,35 +228,104 @@ fun GlassDock(
                                     onClick = { if (!selected) onSelect(entry.destination) },
                                 ),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                            verticalArrangement = Arrangement.Center,
                         ) {
+                            DockTabVisual(entry = entry, selected = selected, color = color, scale = contentScale)
+                        }
+                    }
+                }
+                GlassBackdropSource(
+                    backdrop = tabsBackdrop,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clearAndSetSemantics {}
+                        .alpha(0f),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { colorFilter = ColorFilter.tint(scheme.primary) },
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        dockEntries.forEach { entry ->
+                            val selected = entry.destination == motion.selected
                             Column(
-                                modifier = Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value },
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                            Icon(
-                                imageVector = if (selected) entry.selectedIcon else entry.icon,
-                                contentDescription = null,
-                                tint = color,
                                 modifier = Modifier
-                                    .size(HomeDesignTokens.DockItemIcon),
-                            )
-                            Text(
-                                text = stringResource(entry.labelRes),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = HomeDesignTokens.DockLabelSize,
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                                ),
-                                color = color,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                                    .weight(HomeDesignTokens.DockItemWeight)
+                                    .fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                DockTabVisual(
+                                    entry = entry,
+                                    selected = selected,
+                                    color = Color.White,
+                                    scale = contentScale,
+                                )
                             }
                         }
                     }
                 }
+                // Drawn last so the lens sits on the icons; it has no pointer input,
+                // so tab hits still land on the row beneath.
+                Box(
+                    modifier = Modifier
+                        .width(slotWidth)
+                        .height(HomeDesignTokens.DockHeight - HomeDesignTokens.DockContentPadding * 2)
+                        .graphicsLayer {
+                            val logical = motion.position.value
+                            translationX = dockPhysicalPosition(logical, rtl) * slotWidthPx
+                            val scales = dockCapsuleScales(
+                                capsuleScaleX.value,
+                                capsuleScaleY.value,
+                                velocity.value,
+                            )
+                            scaleX = scales.first
+                            scaleY = scales.second
+                        }
+                        .glassMaterial(
+                            role = GlassMaterialRole.DockSelection,
+                            shape = HomeDesignTokens.DockShape,
+                            pressed = held,
+                            extraBackdrop = tabsBackdrop,
+                        ),
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun DockTabVisual(
+    entry: DockEntry,
+    selected: Boolean,
+    color: Color,
+    scale: Float,
+) {
+    Column(
+        modifier = Modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Icon(
+            imageVector = if (selected) entry.selectedIcon else entry.icon,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(HomeDesignTokens.DockItemIcon),
+        )
+        Text(
+            text = stringResource(entry.labelRes),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = HomeDesignTokens.DockLabelSize,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            ),
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

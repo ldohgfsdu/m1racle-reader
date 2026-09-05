@@ -196,7 +196,10 @@ class GlassMaterialRegressionTest {
 
     @Test
     fun `pressed state shifts only the press channels`() {
-        for (role in roles) {
+        val frozenRoles = roles.filter {
+            it != GlassMaterialRole.Dock && it != GlassMaterialRole.DockSelection
+        }
+        for (role in frozenRoles) {
             for (dark in listOf(false, true)) {
                 val idle = spec(role, dark)
                 val pressed = spec(role, dark, pressed = true)
@@ -237,13 +240,50 @@ class GlassMaterialRegressionTest {
     }
 
     @Test
+    fun `dock selection press reveals lens inner shadow and clears the idle frost`() {
+        for (dark in listOf(false, true)) {
+            val idle = spec(GlassMaterialRole.DockSelection, dark)
+            val pressed = spec(GlassMaterialRole.DockSelection, dark, pressed = true)
+            assertEquals(0.dp, idle.lensHeight)
+            assertEquals(0.dp, idle.lensAmount)
+            assertEquals(0.dp, idle.innerShadow)
+            assertEquals(10.dp, pressed.lensHeight)
+            assertEquals(14.dp, pressed.lensAmount)
+            assertEquals(8.dp, pressed.innerShadow)
+            assertTrue(pressed.chromaticAberration)
+            assertEquals(1f, idle.scale, 0f)
+            assertEquals(1f, pressed.scale, 0f)
+            assertEquals(0.03f, pressed.surfaceColor.alpha, 0.004f)
+            assertTrue(pressed.surfaceColor.alpha < idle.surfaceColor.alpha)
+            assertEquals(
+                0.10f,
+                pressed.highlightColor.alpha - idle.highlightColor.alpha,
+                0.006f,
+            )
+            assertEquals(idle.blur, pressed.blur)
+            assertEquals(idle.shadow, pressed.shadow)
+        }
+        val dock = spec(GlassMaterialRole.Dock)
+        val dockPressed = spec(GlassMaterialRole.Dock, pressed = true)
+        assertTrue(dock.vibrancy)
+        assertEquals(24.dp, dock.lensHeight)
+        assertEquals(24.dp, dock.lensAmount)
+        assertEquals(1f, dock.scale, 0f)
+        assertEquals(1f, dockPressed.scale, 0f)
+        assertEquals(dock.lensHeight, dockPressed.lensHeight)
+    }
+
+    @Test
     fun `press response interpolates through one spring instead of swapping material`() {
         // 冻结的按压弹簧：阻尼/刚度/可见阈值任一漂移都会改变手感。
         assertEquals(0.82f, GlassMaterialEngine.PressSpring.dampingRatio, 1e-6f)
         assertEquals(Spring.StiffnessMedium.toFloat(), GlassMaterialEngine.PressSpring.stiffness, 0f)
         assertEquals(0.001f, GlassMaterialEngine.PressSpring.visibilityThreshold!!, 1e-9f)
 
-        for (role in roles) {
+        val frozenRoles = roles.filter {
+            it != GlassMaterialRole.Dock && it != GlassMaterialRole.DockSelection
+        }
+        for (role in frozenRoles) {
             val idle = spec(role)
             val pressedSpec = spec(role, pressed = true)
             var prevSurface = -1f

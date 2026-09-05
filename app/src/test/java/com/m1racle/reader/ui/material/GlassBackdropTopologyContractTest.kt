@@ -48,6 +48,23 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
+    fun `dock capsule samples captured tab icons through the guarded source`() {
+        val dock = appSource("ui/hub/GlassDock.kt").readText()
+        assertTrue(dock.contains("extraBackdrop = tabsBackdrop"))
+        assertTrue(dock.contains("rememberLayerBackdrop()"))
+        assertTrue(dock.contains("GlassBackdropSource("))
+        assertTrue(dock.contains("DockCapsulePressedScale"))
+        assertTrue(dock.contains("dockCapsuleScales("))
+        assertFalse(dock.contains(".layerBackdrop("))
+        val engine = appSource("ui/material/GlassMaterial.kt").readText()
+        assertTrue(engine.contains("extraBackdrop: Backdrop? = null"))
+        assertTrue(engine.contains("rememberCombinedBackdrop(baseBackdrop, extraBackdrop)"))
+        assertTrue(engine.contains("InnerShadow("))
+        assertTrue(engine.contains("chromaticAberration"))
+        assertTrue(engine.contains("vibrancy()"))
+    }
+
+    @Test
     fun `shared hub shell owns dock outside captured page content`() {
         val hub = appSource("ui/hub/GlassDock.kt").readText()
         val sourceCall = trailingLambda(hub, "GlassBackdropSource(")

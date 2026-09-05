@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp as lerpFloat
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
@@ -32,7 +33,9 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 
 /**
@@ -79,6 +82,9 @@ class GlassMaterialSpec internal constructor(
     val depthEffect: Boolean,
     val scale: Float,
     val contentPressedOverlayAlpha: Float,
+    val vibrancy: Boolean,
+    val chromaticAberration: Boolean,
+    val innerShadow: Dp,
     internal val renderState: GlassRenderState,
     internal val backdropLayer: GlassBackdropLayer,
     internal val exportsForSettingsCard: Boolean,
@@ -104,6 +110,13 @@ private data class GlassRecipe(
     val darkContentMutedAlpha: Float = 0.75f,
     val depthEffect: Boolean,
     val pressedScale: Float = 0.965f,
+    val vibrancy: Boolean = false,
+    val chromaticAberration: Boolean = false,
+    val innerShadow: Dp = 0.dp,
+    val pressedLensHeight: Dp? = null,
+    val pressedLensAmount: Dp? = null,
+    val pressedInnerShadow: Dp? = null,
+    val pressedSurfaceAlpha: Float? = null,
     val backdropLayer: GlassBackdropLayer = GlassBackdropLayer.Root,
     val exportsForSettingsCard: Boolean = false,
 )
@@ -142,13 +155,15 @@ object GlassMaterialEngine {
             lightSurfaceAlpha = 0.18f,
             darkSurfaceAlpha = 0.24f,
             blur = 8.dp,
-            lensHeight = 20.dp,
-            lensAmount = 20.dp,
+            lensHeight = 24.dp,
+            lensAmount = 24.dp,
             shadow = 8.dp,
             highlightWidth = 0.5.dp,
             lightHighlightAlpha = 0.35f,
             darkHighlightAlpha = 0.30f,
             depthEffect = false,
+            pressedScale = 1f,
+            vibrancy = true,
         ),
         GlassMaterialRole.DockSelection to GlassRecipe(
             lightTint = Color(0xFF8F99A3),
@@ -156,13 +171,19 @@ object GlassMaterialEngine {
             lightSurfaceAlpha = 0.16f,
             darkSurfaceAlpha = 0.20f,
             blur = 8.dp,
-            lensHeight = 8.dp,
-            lensAmount = 12.dp,
+            lensHeight = 0.dp,
+            lensAmount = 0.dp,
             shadow = 3.dp,
             highlightWidth = 0.5.dp,
             lightHighlightAlpha = 0.40f,
             darkHighlightAlpha = 0.38f,
             depthEffect = false,
+            pressedScale = 1f,
+            chromaticAberration = true,
+            pressedLensHeight = 10.dp,
+            pressedLensAmount = 14.dp,
+            pressedInnerShadow = 8.dp,
+            pressedSurfaceAlpha = 0.03f,
         ),
         GlassMaterialRole.Control to GlassRecipe(
             lightSurfaceAlpha = 0.50f,
@@ -240,11 +261,13 @@ object GlassMaterialEngine {
         overDocument: Boolean = false,
     ): GlassMaterialSpec {
         val recipe = checkNotNull(recipes[role]) { "Missing glass recipe for $role" }
-        val surfaceBoost = if (pressed) PressedSurfaceAlphaBoost else 0f
+        val idleSurfaceAlpha = if (dark) recipe.darkSurfaceAlpha else recipe.lightSurfaceAlpha
+        val surfaceAlpha = if (pressed) {
+            recipe.pressedSurfaceAlpha ?: (idleSurfaceAlpha + PressedSurfaceAlphaBoost)
+        } else {
+            idleSurfaceAlpha
+        }
         val highlightBoost = if (pressed) PressedHighlightAlphaBoost else 0f
-        val surfaceAlpha = (
-            if (dark) recipe.darkSurfaceAlpha else recipe.lightSurfaceAlpha
-            ) + surfaceBoost
         val highlightAlpha = (
             if (dark) recipe.darkHighlightAlpha else recipe.lightHighlightAlpha
             ) + highlightBoost
@@ -259,8 +282,16 @@ object GlassMaterialEngine {
                 alpha = surfaceAlpha.coerceIn(0f, 0.98f),
             ),
             blur = recipe.blur,
-            lensHeight = recipe.lensHeight,
-            lensAmount = recipe.lensAmount,
+            lensHeight = if (pressed) {
+                recipe.pressedLensHeight ?: recipe.lensHeight
+            } else {
+                recipe.lensHeight
+            },
+            lensAmount = if (pressed) {
+                recipe.pressedLensAmount ?: recipe.lensAmount
+            } else {
+                recipe.lensAmount
+            },
             shadow = recipe.shadow,
             shadowColor = Color.Black.copy(
                 alpha = if (dark) DarkShadowAlpha else LightShadowAlpha,
@@ -282,6 +313,13 @@ object GlassMaterialEngine {
                 DarkPressedContentOverlayAlpha
             } else {
                 LightPressedContentOverlayAlpha
+            },
+            vibrancy = recipe.vibrancy,
+            chromaticAberration = recipe.chromaticAberration,
+            innerShadow = if (pressed) {
+                recipe.pressedInnerShadow ?: recipe.innerShadow
+            } else {
+                recipe.innerShadow
             },
             renderState = if (
                 pressed || interaction ||
@@ -338,6 +376,7 @@ fun Modifier.glassMaterial(
     sampleBackdrop: Boolean = true,
     pressed: Boolean = false,
     interaction: Boolean = false,
+    extraBackdrop: Backdrop? = null,
 ): Modifier {
     val dark = isSystemInDarkTheme()
     val host = LocalGlassBackdropHost.current
@@ -388,6 +427,7 @@ fun Modifier.glassMaterial(
         pressedSpec = pressedSpec,
         pressProgress = pressProgress,
         pressLayerActive = pressLayerActive,
+        extraBackdrop = extraBackdrop,
     )
 }
 
@@ -448,18 +488,27 @@ private fun drawGlassMaterial(
     pressedSpec: GlassMaterialSpec,
     pressProgress: State<Float>,
     pressLayerActive: Boolean,
+    extraBackdrop: Backdrop? = null,
 ): Modifier {
     val density = LocalDensity.current
-    val backdrop: Backdrop = when (idleSpec.backdropLayer) {
+    val baseBackdrop: Backdrop = when (idleSpec.backdropLayer) {
         GlassBackdropLayer.Root -> host.root
         GlassBackdropLayer.RootAndMenu -> rememberCombinedBackdrop(host.root, host.menuExport)
+    }
+    val backdrop = if (extraBackdrop != null) {
+        rememberCombinedBackdrop(baseBackdrop, extraBackdrop)
+    } else {
+        baseBackdrop
     }
     val exportedBackdrop = if (idleSpec.exportsForSettingsCard) host.menuExport else null
     val blurPx = with(density) { idleSpec.blur.toPx() }
     val lensHeightPx = with(density) { idleSpec.lensHeight.toPx() }
     val lensAmountPx = with(density) { idleSpec.lensAmount.toPx() }
+    val pressedLensHeightPx = with(density) { pressedSpec.lensHeight.toPx() }
+    val pressedLensAmountPx = with(density) { pressedSpec.lensAmount.toPx() }
     val lensEnabled = supportsGlassLens(shape) &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    val innerShadowEnabled = idleSpec.innerShadow > 0.dp || pressedSpec.innerShadow > 0.dp
 
     // drawBackdrop owns one GraphicsLayer per modifier node and releases it on
     // detach. Remembering the complete modifier keeps that node and its
@@ -476,7 +525,10 @@ private fun drawGlassMaterial(
         blurPx,
         lensHeightPx,
         lensAmountPx,
+        pressedLensHeightPx,
+        pressedLensAmountPx,
         lensEnabled,
+        innerShadowEnabled,
     ) {
         Modifier.drawBackdrop(
             backdrop = backdrop,
@@ -487,13 +539,22 @@ private fun drawGlassMaterial(
                     contrast = idleSpec.contrast,
                     saturation = idleSpec.saturation,
                 )
+                if (idleSpec.vibrancy) {
+                    vibrancy()
+                }
                 blur(blurPx)
                 if (lensEnabled) {
-                    lens(
-                        refractionHeight = lensHeightPx,
-                        refractionAmount = lensAmountPx,
-                        depthEffect = idleSpec.depthEffect,
-                    )
+                    val progress = pressProgress.value.coerceIn(0f, 1f)
+                    val refractionHeight = lerpFloat(lensHeightPx, pressedLensHeightPx, progress)
+                    val refractionAmount = lerpFloat(lensAmountPx, pressedLensAmountPx, progress)
+                    if (refractionHeight > 0f || refractionAmount > 0f) {
+                        lens(
+                            refractionHeight = refractionHeight,
+                            refractionAmount = refractionAmount,
+                            depthEffect = idleSpec.depthEffect,
+                            chromaticAberration = idleSpec.chromaticAberration,
+                        )
+                    }
                 }
             },
             layerBlock = if (pressLayerActive) {
@@ -520,6 +581,21 @@ private fun drawGlassMaterial(
                     radius = idleSpec.shadow,
                     color = idleSpec.shadowColor,
                 )
+            },
+            innerShadow = if (innerShadowEnabled) {
+                {
+                    val progress = pressProgress.value.coerceIn(0f, 1f)
+                    InnerShadow(
+                        radius = androidx.compose.ui.unit.lerp(
+                            idleSpec.innerShadow,
+                            pressedSpec.innerShadow,
+                            progress,
+                        ),
+                        alpha = progress,
+                    )
+                }
+            } else {
+                null
             },
             exportedBackdrop = exportedBackdrop,
             onDrawSurface = {

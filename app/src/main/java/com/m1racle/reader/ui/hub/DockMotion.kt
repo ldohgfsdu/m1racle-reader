@@ -68,6 +68,25 @@ internal fun HubDockMotionProvider(
     CompositionLocalProvider(LocalHubDockMotion provides motion, content = content)
 }
 
+/** Official LiquidBottomTabs pressed capsule is 78dp on a 56dp idle slot. */
+internal const val DockCapsulePressedScale = 78f / 56f
+internal const val DockContentPressedScale = 1.2f
+
 /** Logical slot geometry is shared by rendering and touch handling, including RTL. */
 internal fun dockPhysicalPosition(logicalPosition: Float, rtl: Boolean): Float =
     if (rtl) HubDestination.entries.lastIndex - logicalPosition else logicalPosition
+
+/**
+ * Velocity stretch from the official LiquidBottomTabs capsule layerBlock.
+ * [velocity] is in tab-slots per second; positive is physical right.
+ */
+internal fun dockCapsuleScales(
+    scaleX: Float,
+    scaleY: Float,
+    velocity: Float,
+): Pair<Float, Float> {
+    val unitVelocity = velocity / 10f
+    val xMorph = (unitVelocity * 0.75f).coerceIn(-0.2f, 0.2f)
+    val yMorph = (unitVelocity * 0.25f).coerceIn(-0.2f, 0.2f)
+    return (scaleX / (1f - xMorph)) to (scaleY * (1f - yMorph))
+}
