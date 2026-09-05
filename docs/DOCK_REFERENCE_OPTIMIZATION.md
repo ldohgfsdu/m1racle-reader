@@ -63,3 +63,11 @@ implemented / automated_verified 已具备；device_verified 为 NOT_RUN（ADB �
 全量 `:app:testQaUnitTest` 1408 / 0 / 0 / 0。新增胶囊速度形变纯逻辑、DockSelection 按压透镜配方、捕获拓扑契约。Release 构建、production signer、v2 签名与 Download 摘要核验通过。ADB 无设备，透镜与手感待安装确认。
 
 源码 `185c242b171465f6da6c1e69f54aba1fd87b0631`；APK 6,702,410 bytes，SHA-256 `f249ab9e859a2a11e6a30b87cf385edd56ad85f701e5dda9683467142b618147`。已覆盖 Download 同名包；证据 `.external_outbox/dock-liquid-20260905/`。implemented / automated_verified；device_verified: NOT_RUN。lintVital ASM 异常仍出现，不声称完整 lint 通过。
+
+## 可见图标被采样层盖住（2026-09-05）
+
+用户反馈图标全部消失。根因：捕获层画在整排标签上面。RiseDiary 可见层始终画空心图标，实心图标只给胶囊采样，捕获层不能盖住可见标签。
+
+现在先画透明采样层，再把空心图标放进外壳，胶囊最后只盖选中格。全量 1409 / 0 / 0 / 0；标签可见性与绘制顺序已回归。ADB 仍无设备。
+
+源码 `8ac90e563fb550b92db34e44c3414e0016e3bb71`；APK 6,702,410 bytes，SHA-256 `de9af083a375ddb365e7639f57f8ac96bb064643a9b3f38bb2df059fdda989d9`。已覆盖 Download 同名包；证据 `.external_outbox/dock-icons-20260905/`。implemented / automated_verified；device_verified: NOT_RUN。

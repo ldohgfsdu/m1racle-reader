@@ -1,6 +1,6 @@
 id: RISE_DIARY_INSPIRED_DOCK
 status: implemented_automated_verified_device_pending
-scope: Refine the four-tab Dock with a translucent shell, moving selection capsule, press lens, velocity morph, and captured tab refraction.
+scope: Refine the four-tab Dock with a translucent shell, moving selection capsule, press lens, velocity morph, captured tab refraction, and visible outlined icons.
 report: docs/DOCK_REFERENCE_OPTIMIZATION.md
 project_state: docs/CURRENT_STATUS.md
 updated: 2026-09-05
