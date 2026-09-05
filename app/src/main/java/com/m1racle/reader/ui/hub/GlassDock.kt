@@ -117,8 +117,14 @@ fun GlassDock(
     val motion = LocalHubDockMotion.current
     val scheme = MaterialTheme.colorScheme
     val interactions = remember { List(dockEntries.size) { MutableInteractionSource() } }
-    val selectionPressed by interactions[motion.selected.ordinal].collectIsPressedAsState()
+    val pressedStates = interactions.map { it.collectIsPressedAsState() }
+    val anyPressed = pressedStates.any { it.value }
     val dragging by remember(motion.preview) { derivedStateOf { motion.preview.position != null } }
+    val pressProgress = animateFloatAsState(
+        if (anyPressed || dragging) 1f else 0f,
+        spring(dampingRatio = 0.7f, stiffness = 380f),
+        label = "dockHoldExpansion",
+    )
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Box(modifier = modifier.fillMaxSize()) {
         BoxWithConstraints(
@@ -130,101 +136,109 @@ fun GlassDock(
                 .padding(bottom = HomeDesignTokens.DockBottomGap)
                 .widthIn(max = HomeDesignTokens.DockMaxWidth)
                 .fillMaxWidth()
-                .height(HomeDesignTokens.DockHeight)
-                .glassMaterial(
-                    role = GlassMaterialRole.Dock,
-                    shape = HomeDesignTokens.DockShape,
-                )
-                .padding(HomeDesignTokens.DockContentPadding),
+                .height(HomeDesignTokens.DockHeight),
         ) {
-            val slotWidth = maxWidth / dockEntries.size
-            val slotWidthPx = with(LocalDensity.current) { slotWidth.toPx() }
-            // Measure once. Frame-by-frame position/stretch is consumed only
-            // in the render layer, never by layout or the navigation model.
-            Box(
-                modifier = Modifier
-                    .width(slotWidth)
-                    .height(HomeDesignTokens.DockHeight - HomeDesignTokens.DockContentPadding * 2)
-                    .graphicsLayer {
-                        val logical = motion.position.value
-                        translationX = dockPhysicalPosition(logical, rtl) * slotWidthPx
-                        val stretch = abs(logical - motion.selected.ordinal).coerceAtMost(1f) * 0.10f
-                        scaleX = 1f + stretch
-                        scaleY = 1f - stretch * 0.25f
-                    }
-                    .glassMaterial(
-                        role = GlassMaterialRole.DockSelection,
-                        shape = HomeDesignTokens.DockShape,
-                        pressed = selectionPressed || dragging,
-                    ),
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .selectableGroup()
-                    .pointerInput(motion.selected, slotWidthPx, rtl) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                motion.preview.moveTo(dockPhysicalPosition(offset.x / slotWidthPx - 0.5f, rtl))
-                            },
-                            onHorizontalDrag = { change, _ ->
-                                change.consume()
-                                // Absolute pointer position avoids counting the slop-crossing event twice.
-                                motion.preview.moveTo(dockPhysicalPosition(change.position.x / slotWidthPx - 0.5f, rtl))
-                            },
-                            onDragEnd = {
-                                motion.preview.finish()?.let { target ->
-                                    if (target != motion.selected) onSelect(target)
-                                }
-                            },
-                            onDragCancel = { motion.preview.cancel() },
+            // Background is a sibling: its capsule clip must not crop the enlarged selection.
+            Box(Modifier.matchParentSize().graphicsLayer {
+                val scale = 1f + 16.dp.toPx() / size.width * pressProgress.value
+                scaleX = scale
+                scaleY = scale
+            }.glassMaterial(role = GlassMaterialRole.Dock, shape = HomeDesignTokens.DockShape))
+            val slotWidth = (maxWidth - HomeDesignTokens.DockContentPadding * 2) / dockEntries.size
+            Box(Modifier.fillMaxSize().padding(HomeDesignTokens.DockContentPadding), contentAlignment = AbsoluteAlignment.TopLeft) {
+                val slotWidthPx = with(LocalDensity.current) { slotWidth.toPx() }
+                // Measure once. Frame-by-frame position/stretch is consumed only
+                // in the render layer, never by layout or the navigation model.
+                Box(
+                    modifier = Modifier
+                        .width(slotWidth)
+                        .height(HomeDesignTokens.DockHeight - HomeDesignTokens.DockContentPadding * 2)
+                        .graphicsLayer {
+                            val logical = motion.position.value
+                            translationX = dockPhysicalPosition(logical, rtl) * slotWidthPx
+                            val stretch = abs(logical - motion.selected.ordinal).coerceAtMost(1f) * 0.10f
+                            val expansion = 1f + 0.18f * pressProgress.value
+                            scaleX = expansion + stretch
+                            scaleY = expansion - stretch * 0.25f
+                        }
+                        .glassMaterial(
+                            role = GlassMaterialRole.DockSelection,
+                            shape = HomeDesignTokens.DockShape,
+                        ),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .selectableGroup()
+                        .pointerInput(motion.selected, slotWidthPx, rtl) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    motion.preview.moveTo(dockPhysicalPosition(offset.x / slotWidthPx - 0.5f, rtl))
+                                },
+                                onHorizontalDrag = { change, _ ->
+                                    change.consume()
+                                    // Absolute pointer position avoids counting the slop-crossing event twice.
+                                    motion.preview.moveTo(dockPhysicalPosition(change.position.x / slotWidthPx - 0.5f, rtl))
+                                },
+                                onDragEnd = {
+                                    motion.preview.finish()?.let { target ->
+                                        if (target != motion.selected) onSelect(target)
+                                    }
+                                },
+                                onDragCancel = { motion.preview.cancel() },
+                            )
+                        },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    dockEntries.forEachIndexed { index, entry ->
+                        val selected = entry.destination == motion.selected
+                        val interaction = interactions[index]
+                        val pressed = pressedStates[index].value
+                        val scale = animateFloatAsState(
+                            if (pressed || (dragging && index == (motion.preview.position ?: 0f).toInt())) 1.2f else 1f,
+                            spring(dampingRatio = 0.75f, stiffness = 500f),
+                            label = "dockIconPress",
                         )
-                    },
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                dockEntries.forEachIndexed { index, entry ->
-                    val selected = entry.destination == motion.selected
-                    val interaction = interactions[index]
-                    val pressed by interaction.collectIsPressedAsState()
-                    val scale = animateFloatAsState(
-                        if (pressed) 1.08f else 1f,
-                        spring(dampingRatio = 0.75f, stiffness = 500f),
-                        label = "dockIconPress",
-                    )
-                    val color = if (selected) scheme.primary else scheme.onSurfaceVariant
-                    Column(
-                        modifier = Modifier
-                            .weight(HomeDesignTokens.DockItemWeight)
-                            .fillMaxSize()
-                            .selectable(
-                                selected = selected,
-                                interactionSource = interaction,
-                                indication = null,
-                                role = Role.Tab,
-                                onClick = { if (!selected) onSelect(entry.destination) },
-                            ),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
-                    ) {
-                        Icon(
-                            imageVector = if (selected) entry.selectedIcon else entry.icon,
-                            contentDescription = null,
-                            tint = color,
+                        val color = if (selected) scheme.primary else scheme.onSurfaceVariant
+                        Column(
                             modifier = Modifier
-                                .size(HomeDesignTokens.DockItemIcon)
-                                .graphicsLayer { scaleX = scale.value; scaleY = scale.value },
-                        )
-                        Text(
-                            text = stringResource(entry.labelRes),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = HomeDesignTokens.DockLabelSize,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                            ),
-                            color = color,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                                .weight(HomeDesignTokens.DockItemWeight)
+                                .fillMaxSize()
+                                .selectable(
+                                    selected = selected,
+                                    interactionSource = interaction,
+                                    indication = null,
+                                    role = Role.Tab,
+                                    onClick = { if (!selected) onSelect(entry.destination) },
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                        ) {
+                            Column(
+                                modifier = Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                            Icon(
+                                imageVector = if (selected) entry.selectedIcon else entry.icon,
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier
+                                    .size(HomeDesignTokens.DockItemIcon),
+                            )
+                            Text(
+                                text = stringResource(entry.labelRes),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = HomeDesignTokens.DockLabelSize,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                ),
+                                color = color,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            }
+                        }
                     }
                 }
             }

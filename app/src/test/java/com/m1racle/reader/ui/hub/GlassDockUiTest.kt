@@ -122,6 +122,25 @@ class GlassDockUiTest {
     }
 
     @Test
+    fun `holding a tab does not navigate until release and cancel clears press`() {
+        val requested = mutableListOf<HubDestination>()
+        rule.setContent {
+            M1racleReaderTheme {
+                HubDockMotionProvider(HubDestination.HOME) { GlassDock(onSelect = requested::add) }
+            }
+        }
+        val tab = rule.onAllNodes(isSelectable())[1]
+        tab.performTouchInput { down(center); advanceEventTime(800) }
+        rule.mainClock.advanceTimeBy(800)
+        rule.runOnIdle { assertTrue(requested.isEmpty()) }
+        rule.onAllNodes(isSelectable())[0].assertIsSelected()
+        tab.performTouchInput { cancel() }
+        rule.runOnIdle { assertTrue(requested.isEmpty()) }
+        tab.performTouchInput { down(center); advanceEventTime(800); up() }
+        rule.runOnIdle { assertEquals(listOf(HubDestination.LIBRARY), requested) }
+    }
+
+    @Test
     fun `rtl drag selects the destination under the finger`() {
         val selected = mutableStateOf(HubDestination.HOME)
         rule.setContent {
