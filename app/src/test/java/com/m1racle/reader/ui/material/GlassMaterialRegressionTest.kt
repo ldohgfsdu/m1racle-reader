@@ -42,9 +42,12 @@ class GlassMaterialRegressionTest {
                 val normalExcursion = kotlin.math.abs(
                     compositeGray(normal, 1f) - compositeGray(normal, 0f),
                 )
-                assertTrue("$role/$dark background modulation $excursion", excursion <= 0.101f)
-                assertTrue("$role/$dark must attenuate moving ink", excursion <= normalExcursion * 0.26f)
-                assertTrue("retain live backdrop variation", excursion > 0f)
+                // User rejected the first 20% treatment as too opaque. The
+                // accepted direction needs BOTH visible transmission and some
+                // attenuation: a near-solid plate and unfiltered ink both fail.
+                val transmission = excursion / normalExcursion
+                assertTrue("$role/$dark retain glass transmission $transmission", transmission >= 0.60f)
+                assertTrue("$role/$dark attenuate moving ink $transmission", transmission <= 0.70f)
                 // The neutral field must not become gray in light mode or
                 // wash out dark mode as a mid-gray contrast filter would.
                 val neutral = if (dark) 0f else 1f

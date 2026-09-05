@@ -116,7 +116,7 @@ object GlassMaterialEngine {
 
     // Bound document-driven light/dark modulation without switching material
     // during scroll/pinch. Blur alone cannot suppress large moving ink regions.
-    private const val DocumentBackdropContrast = 0.20f
+    private const val DocumentBackdropContrast = 0.65f
 
     private const val LightBrightness = 0.20f
     private const val DarkBrightness = -0.18f

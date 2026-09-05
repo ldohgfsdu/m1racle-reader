@@ -4,7 +4,7 @@
 
 ## 当前任务
 
-PDF 顶部控件背景随文字/图案移动、缩放而闪烁。修复在 `fix/pdf-chrome-background-flicker`，详见 [修复记录](PDF_CHROME_BACKGROUND_FLICKER_FIX.md)。修复实现、1396 项单测、签名 Release 构建及交付核验均已通过；实际视觉效果仍待真机验收。
+PDF 顶部控件背景随文字/图案移动、缩放而闪烁。修复在 `fix/pdf-chrome-background-flicker`，详见 [修复记录](PDF_CHROME_BACKGROUND_FLICKER_FIX.md)。首版被用户反馈‘太不透’，视觉验收未通过。已回调文档采样对比度 0.20 → 0.65，保留采样底色修复；17 项定向测试通过，回调版构建与实机验收待完成。下方 APK 身份暂为首版。
 
 ## 源码与候选
 
