@@ -2,7 +2,7 @@
 
 **一句话：** 面向 Android 的本地优先、无账号、无广告、无联网依赖的**本地文档阅读器**，当前支持 **Markdown** 与 **PDF**。
 
-当前候选版本：**v1.0.0**（`versionName=1.0.0`，`versionCode=23`）
+当前候选与发布状态见 [项目状态](docs/CURRENT_STATUS.md)。
 
 技术身份：
 
@@ -35,7 +35,7 @@
 | 阅读显示 | 字号 / 行高 / 边距（DataStore 持久化） |
 | PDF 阅读 | 连续/单页模式、双指缩放平移、页面缩略图、教材目录大纲、章节导出（ZIP 包 / 标注 PDF） |
 | Markdown 包 | 导入 `.zip` 打包的 Markdown + 相对图片（防 Zip-Slip / 炸弹条目） |
-| 阅读资产 | 收藏、书签、PDF 高亮与轻量笔记；按文档和 canonical anchor 恢复 |
+| 阅读资产 | 收藏、书签、Markdown / PDF 高亮与轻量笔记；按文档和 canonical anchor 恢复 |
 | 本地搜索 | 跨文档搜索文档标题、高亮摘录与笔记，并跳回原文页/段 |
 | 主题 | 跟随系统深浅色（夜间独立液态玻璃配方），Material 3 Dynamic Color |
 

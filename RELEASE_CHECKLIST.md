@@ -1,6 +1,6 @@
 # M1racle Reader Public Release Checklist
 
-This checklist is the authority for the next public M1racle Reader release. It does not alter or replace the immutable pre-migration `v0.1.0-c-local` history.
+以下勾选项保留 R32–R33 当时的验证快照，不代表当前候选状态。当前源码、签名、数据库版本、发布状态与待验收项以 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) 为准；实际构建和设备操作遵循 AGENTS.md 指定的脚本与协议。
 
 ## Signing
 

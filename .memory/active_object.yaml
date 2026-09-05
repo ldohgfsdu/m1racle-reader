@@ -1,26 +1,6 @@
-id: R33_1_IDENTITY_MIGRATION_COMMIT_FINALIZATION
+id: WORKSPACE_STATE_CLEANUP_20260905
 status: complete
-scope: >
-  Finalize the completed M1racle Reader identity migration as one reviewed commit,
-  without changing runtime behavior or entering release publication.
-verification:
-  application_id_namespace: PASS (com.m1racle.reader)
-  package_paths: PASS (main/test/androidTest/debug/qa/benchmark)
-  providers_manifest_theme_brand: PASS
-  active_legacy_identity: PASS (zero in active code/scripts)
-  historical_identity_classification: PASS (pre-R33 evidence retained)
-  room_schema_bytes: PASS (v6-v12 unchanged)
-  migration_sql: PASS (unchanged)
-  frozen_logic_transform_compare: PASS (Anchor/Glass/Reader/Annotation/Search)
-  version: PASS (1.0.0 / 23)
-  test_qa_unit: PASS (1355 tests; zero failures/errors/skipped)
-  compile_qa_android_test: PASS
-  compile_benchmark_kotlin: PASS
-  release_tag_v1_0_0: NOT_CREATED_BY_DESIGN
-  production_signer: NOT_USED
-  production_apk: NOT_BUILT_BY_DESIGN
-next_actions:
-  - rename/create the external Git hosting repository as m1racle-reader when owner-approved
-  - inject the M1RACLE production signer and build the first canonical artifact in a later gate
-report: docs/R33_1_IDENTITY_COMMIT_REPORT.md
-updated: 2026-08-27
+scope: Correct stale project state and clean worktrees while preserving prior work.
+report: docs/WORKSPACE_CLEANUP_20260905.md
+project_state: docs/CURRENT_STATUS.md
+updated: 2026-09-05
