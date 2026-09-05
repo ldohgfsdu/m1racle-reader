@@ -124,6 +124,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.TransformOrigin
@@ -1435,13 +1436,25 @@ private fun PdfChrome(
     val edgeButtonsVisible = chromeLevel == PdfChromeLevel.FULL ||
         chromeLevel == PdfChromeLevel.BUTTONS_ONLY
 
-    // Liquid-only chrome (r26.1): stable rememberLayerBackdrop() (default onDraw).
+    // Liquid-only chrome: stable root capture and menu export.
     // Parent exportedBackdrop → Child samples export (glass-on-glass CORRECT).
-    val rootBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
+    // Capture the same opaque page surround seen on screen, including gaps.
+    // Keep the recording callback stable across scroll/zoom recompositions.
+    val backdropBackground = scheme.background
+    val drawPdfBackdrop: ContentDrawScope.() -> Unit = remember(backdropBackground) {
+        {
+            drawRect(backdropBackground)
+            drawContent()
+        }
+    }
+    val rootBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop(
+        onDraw = drawPdfBackdrop,
+    )
     val parentExportBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
     val backdropHost = GlassBackdropHost(
         root = rootBackdrop,
         menuExport = parentExportBackdrop,
+        overDocument = true,
     )
 
     CompositionLocalProvider(

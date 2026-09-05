@@ -72,6 +72,7 @@ class GlassMaterialSpec internal constructor(
     val contentDividerAlpha: Float,
     val contentMutedAlpha: Float,
     val brightness: Float,
+    val contrast: Float,
     val saturation: Float,
     val depthEffect: Boolean,
     val scale: Float,
@@ -112,6 +113,10 @@ private data class GlassRecipe(
 object GlassMaterialEngine {
     private val LightSurfaceTint = Color(0xFFFAFAFA)
     private val DarkSurfaceTint = Color(0xFF111820)
+
+    // Bound document-driven light/dark modulation without switching material
+    // during scroll/pinch. Blur alone cannot suppress large moving ink regions.
+    private const val DocumentBackdropContrast = 0.20f
 
     private const val LightBrightness = 0.20f
     private const val DarkBrightness = -0.18f
@@ -205,6 +210,7 @@ object GlassMaterialEngine {
         dark: Boolean,
         pressed: Boolean = false,
         interaction: Boolean = false,
+        overDocument: Boolean = false,
     ): GlassMaterialSpec {
         val recipe = checkNotNull(recipes[role]) { "Missing glass recipe for $role" }
         val surfaceBoost = if (pressed) PressedSurfaceAlphaBoost else 0f
@@ -215,6 +221,12 @@ object GlassMaterialEngine {
         val highlightAlpha = (
             if (dark) recipe.darkHighlightAlpha else recipe.lightHighlightAlpha
             ) + highlightBoost
+        val contrast = if (overDocument) DocumentBackdropContrast else 1f
+        val baseBrightness = if (dark) DarkBrightness else LightBrightness
+        // colorControls pivots contrast around mid-gray. Re-anchor it to white
+        // in light mode and black in dark mode, preserving the paper/ink field.
+        val brightness = baseBrightness * contrast +
+            (if (dark) -0.5f else 0.5f) * (1f - contrast)
         return GlassMaterialSpec(
             surfaceColor = (if (dark) DarkSurfaceTint else LightSurfaceTint).copy(
                 alpha = surfaceAlpha.coerceIn(0f, 0.98f),
@@ -234,7 +246,8 @@ object GlassMaterialEngine {
             } else {
                 recipe.lightContentMutedAlpha
             },
-            brightness = if (dark) DarkBrightness else LightBrightness,
+            brightness = brightness,
+            contrast = contrast,
             saturation = if (dark) DarkSaturation else LightSaturation,
             depthEffect = recipe.depthEffect,
             scale = if (pressed) recipe.pressedScale else 1f,
@@ -279,6 +292,7 @@ fun glassPressedContentOverlayAlpha(role: GlassMaterialRole): Float =
 data class GlassBackdropHost(
     val root: LayerBackdrop,
     val menuExport: LayerBackdrop,
+    val overDocument: Boolean = false,
 )
 
 val LocalGlassBackdropHost = staticCompositionLocalOf<GlassBackdropHost?> { null }
@@ -299,21 +313,25 @@ fun Modifier.glassMaterial(
     interaction: Boolean = false,
 ): Modifier {
     val dark = isSystemInDarkTheme()
+    val host = LocalGlassBackdropHost.current
+    val overDocument = host?.overDocument == true
     // Stable endpoint specs prevent unrelated parent recompositions from
     // replacing the renderer's effect lambdas and invalidating its draw cache.
-    val idleSpec = remember(role, dark, interaction) {
+    val idleSpec = remember(role, dark, interaction, overDocument) {
         GlassMaterialEngine.resolve(
             role = role,
             dark = dark,
             interaction = interaction,
+            overDocument = overDocument,
         )
     }
-    val pressedSpec = remember(role, dark, interaction) {
+    val pressedSpec = remember(role, dark, interaction, overDocument) {
         GlassMaterialEngine.resolve(
             role = role,
             dark = dark,
             pressed = true,
             interaction = interaction,
+            overDocument = overDocument,
         )
     }
     val pressProgress = animateFloatAsState(
@@ -324,7 +342,6 @@ fun Modifier.glassMaterial(
     // Reading the progress here keeps the temporary scale layer alive through
     // the release spring. It does not replace the remembered effect modifier.
     val pressLayerActive = pressed || pressProgress.value > 0.001f
-    val host = LocalGlassBackdropHost.current
     if (!sampleBackdrop || host == null) {
         return then(
             softGlassPlate(
@@ -440,6 +457,7 @@ private fun drawGlassMaterial(
             effects = {
                 colorControls(
                     brightness = idleSpec.brightness,
+                    contrast = idleSpec.contrast,
                     saturation = idleSpec.saturation,
                 )
                 blur(blurPx)

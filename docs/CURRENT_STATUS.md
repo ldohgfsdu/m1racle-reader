@@ -2,11 +2,15 @@
 
 更新：2026-09-05。此文件是当前工程与发布状态的唯一入口；阶段报告只描述当时证据。
 
+## 当前任务
+
+PDF 顶部控件背景随文字/图案移动、缩放而闪烁。修复在 `fix/pdf-chrome-background-flicker`，详见 [修复记录](PDF_CHROME_BACKGROUND_FLICKER_FIX.md)。代码与 1396 项单测已通过；新 APK 构建、真机验收待执行。以下候选信息为本次修复前的基线。
+
 ## 源码与候选
 
-- 当前开发目录：`/root/code/MarkLeaf`；整理分支 `maintenance/workspace-state-cleanup`。
+- 当前开发目录：`/root/code/MarkLeaf`；修复分支 `fix/pdf-chrome-background-flicker`。
 - 产品源码基线：`release-1.0.0-canonical` 的 `691cb65dd14459e2ee35c5aba01a9076832099bd`。
-- 本次只整理状态和工作区，`app/`、依赖、版本与该基线一致。
+- 当前改动仅 PDF 玻璃背景合成及回归测试；依赖和版本沿用基线。
 - 版本 `1.0.0 / 23`，Room v13；Markdown 批注、批注样式、阅读设置 token 与设计规范清理已合入。
 - 候选 APK：6,669,642 bytes，SHA-256 `19adf629e8f380c8ca49f946dfa740b6489e425d2204ea89e192d6f7c7e5fc89`。
 - production signer SHA-256：`2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1`。

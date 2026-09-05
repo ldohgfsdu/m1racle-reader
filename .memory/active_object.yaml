@@ -1,6 +1,6 @@
-id: WORKSPACE_STATE_CLEANUP_20260905
-status: complete
-scope: Correct stale project state and clean worktrees while preserving prior work.
-report: docs/WORKSPACE_CLEANUP_20260905.md
+id: PDF_CHROME_BACKGROUND_FLICKER
+status: in_progress
+scope: Stabilize PDF top-control backdrop over moving text and graphics.
+report: docs/PDF_CHROME_BACKGROUND_FLICKER_FIX.md
 project_state: docs/CURRENT_STATUS.md
 updated: 2026-09-05

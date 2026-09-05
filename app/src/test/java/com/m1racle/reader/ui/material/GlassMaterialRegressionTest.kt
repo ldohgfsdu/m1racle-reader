@@ -27,6 +27,61 @@ class GlassMaterialRegressionTest {
     private fun spec(role: GlassMaterialRole, dark: Boolean = false, pressed: Boolean = false) =
         GlassMaterialEngine.resolve(role, dark = dark, pressed = pressed)
 
+    @Test
+    fun `document controls bound moving black white background modulation`() {
+        for (dark in listOf(false, true)) {
+            for (role in listOf(GlassMaterialRole.Control, GlassMaterialRole.Capsule)) {
+                val normal = GlassMaterialEngine.resolve(role, dark = dark)
+                val document = GlassMaterialEngine.resolve(role, dark = dark, overDocument = true)
+                // A large black/white region survives Gaussian blur. Evaluate
+                // colorControls' grayscale transform followed by the tint,
+                // rather than assuming a larger blur eliminates that region.
+                val excursion = kotlin.math.abs(
+                    compositeGray(document, 1f) - compositeGray(document, 0f),
+                )
+                val normalExcursion = kotlin.math.abs(
+                    compositeGray(normal, 1f) - compositeGray(normal, 0f),
+                )
+                assertTrue("$role/$dark background modulation $excursion", excursion <= 0.101f)
+                assertTrue("$role/$dark must attenuate moving ink", excursion <= normalExcursion * 0.26f)
+                assertTrue("retain live backdrop variation", excursion > 0f)
+                // The neutral field must not become gray in light mode or
+                // wash out dark mode as a mid-gray contrast filter would.
+                val neutral = if (dark) 0f else 1f
+                assertEquals(compositeGray(normal, neutral), compositeGray(document, neutral), 1e-6f)
+                assertEquals(normal.surfaceColor, document.surfaceColor)
+                assertEquals(normal.blur, document.blur)
+            }
+        }
+    }
+
+    @Test
+    fun `document filter remains constant across gesture and press states`() {
+        for (dark in listOf(false, true)) {
+            for (role in roles) {
+                val idle = GlassMaterialEngine.resolve(role, dark = dark, overDocument = true)
+                for (pressed in listOf(false, true)) {
+                    for (interaction in listOf(false, true)) {
+                        val active = GlassMaterialEngine.resolve(
+                            role, dark = dark, pressed = pressed,
+                            interaction = interaction, overDocument = true,
+                        )
+                        assertEquals(idle.contrast, active.contrast, 0f)
+                        assertEquals(idle.brightness, active.brightness, 0f)
+                        assertEquals(idle.blur, active.blur)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun compositeGray(spec: GlassMaterialSpec, gray: Float): Float {
+        val sampled = (spec.contrast * (gray - 0.5f) + 0.5f + spec.brightness)
+            .coerceIn(0f, 1f)
+        return spec.surfaceColor.red * spec.surfaceColor.alpha +
+            sampled * (1f - spec.surfaceColor.alpha)
+    }
+
     // ── 1. 材质层级 ────────────────────────────────────────────────────────
 
     @Test

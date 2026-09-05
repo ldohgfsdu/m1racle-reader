@@ -74,6 +74,18 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
+    fun `pdf capture includes opaque surround and a stable document material context`() {
+        val reader = appSource("ui/pdf/PdfViewerScreen.kt").readText()
+        val normalized = reader.replace(Regex("\\s+"), " ")
+        assertTrue(normalized.contains("remember(backdropBackground) { { drawRect(backdropBackground) drawContent() } }"))
+        assertTrue(normalized.contains("rememberLayerBackdrop( onDraw = drawPdfBackdrop,"))
+        assertTrue(normalized.contains("menuExport = parentExportBackdrop, overDocument = true,"))
+        val material = appSource("ui/material/GlassMaterial.kt").readText()
+        assertTrue(material.contains("contrast = idleSpec.contrast"))
+        assertTrue(material.contains("overDocument = overDocument"))
+    }
+
+    @Test
     fun `dialog and menu retain isolated soft plate behavior`() {
         val dialog = appSource("ui/material/GlassAlertDialog.kt").readText()
         val home = appSource("ui/home/HomeScreen.kt").readText()
