@@ -1,5 +1,5 @@
 id: PDF_CHROME_BACKGROUND_FLICKER
-status: in_progress
+status: implemented_automated_verified_device_pending
 scope: Restore PDF chrome translucency after user rejected the first treatment as too opaque.
 report: docs/PDF_CHROME_BACKGROUND_FLICKER_FIX.md
 project_state: docs/CURRENT_STATUS.md
