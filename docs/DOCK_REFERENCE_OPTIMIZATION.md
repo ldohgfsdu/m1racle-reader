@@ -50,4 +50,6 @@ implemented / automated_verified 已具备；device_verified 为 NOT_RUN（ADB �
 
 用户反馈上一版缺少参考底栏明显的长按放大。根因：只给图标 1.08 倍缩放，选中胶囊仅在位移时拉伸，外壳没有按压缩放。现在按住任意入口或拖动时，外壳按宽度增加 16dp 的比例放大，胶囊放大至 1.18 倍，当前按压内容（图标与标签）放大至 1.2 倍；松手/取消弹性恢复。背景与交互内容改为兄弟层，避免外壳裁剪放大的胶囊；命中区域不缩放。
 
-新增长按期间不提前导航、取消不导航、松手仅请求一次的交互回归；定向测试和 Release 构建进行中。本轮 ADB 无设备，实际放大观感待安装验收。
+新增长按期间不提前导航、取消不导航、松手仅请求一次的交互回归；9 项定向测试通过，Release 构建、production 签名与交付副本校验通过。本轮 ADB 无设备，实际放大观感待安装验收。
+
+长按版源码 `addf17da51daa5fab10d4c727fedb64ac72339e5`；APK 6686026 bytes，SHA-256 `68675db7aea7b9db3dd44580217a3a77a8cbd5dc1ac0376594a825cc53b42489`。已覆盖 Download 同名包；证据 `.external_outbox/dock-hold-20260905/`。implemented / automated_verified；device_verified: NOT_RUN；pending: 实机观感。既有 lintVital ASM 异常仍出现，不声称完整 lint 通过。

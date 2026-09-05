@@ -1,5 +1,5 @@
 id: RISE_DIARY_INSPIRED_DOCK
-status: in_progress
+status: implemented_automated_verified_device_pending
 scope: Refine the four-tab Dock with a translucent shell, moving selection capsule, and press-drag feedback.
 report: docs/DOCK_REFERENCE_OPTIMIZATION.md
 project_state: docs/CURRENT_STATUS.md

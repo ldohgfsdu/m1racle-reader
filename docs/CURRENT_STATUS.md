@@ -4,15 +4,15 @@
 
 ## 当前任务
 
-参考 RiseDiary 优化四入口底栏，分支 `feat/risediary-inspired-dock`。通透外壳、移动选中胶囊、按压/拖动和路由权威已实现；全量 1404 项测试、签名 Release 构建与交付校验通过，实机验收待完成。见 [底栏优化记录](DOCK_REFERENCE_OPTIMIZATION.md)。以下 APK 为本轮底栏优化版。
+参考 RiseDiary 优化四入口底栏，分支 `feat/risediary-inspired-dock`。通透外壳、移动选中胶囊、按压/拖动和路由权威已实现；初版全量 1404 项测试通过；长按补齐后 9 项定向测试、签名 Release 构建与交付校验通过，实机验收待完成。见 [底栏优化记录](DOCK_REFERENCE_OPTIMIZATION.md)。以下 APK 为本轮底栏优化版。
 
 ## 源码与候选
 
 - 当前开发目录：`/root/code/MarkLeaf`；底栏分支 `feat/risediary-inspired-dock`。
-- 当前修复包源码：`4c3159243106623284813db047694a3f4cb11d24`；包含此前 PDF 透明感回调和本轮底栏优化，基于 `691cb65` 候选继续修复，未改 canonical 分支或 tag。
+- 当前修复包源码：`addf17da51daa5fab10d4c727fedb64ac72339e5`；包含此前 PDF 透明感回调和本轮底栏优化，基于 `691cb65` 候选继续修复，未改 canonical 分支或 tag。
 - 本次仅底栏外观、手势、动画宿主与 Hub 过渡；沿用已有依赖、版本、导入入口和阅读器。
 - 版本 `1.0.0 / 23`，Room v13；Markdown 批注、批注样式、阅读设置 token 与设计规范清理已合入。
-- 候选 APK：6,686,026 bytes，SHA-256 `648037982281e195d488175428370d4d7f182d5d4cb2082d980edabc9afd7da1`。
+- 候选 APK：6,686,026 bytes，SHA-256 `68675db7aea7b9db3dd44580217a3a77a8cbd5dc1ac0376594a825cc53b42489`。
 - production signer SHA-256：`2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1`。
 - 交付入口：本目录 `.external_outbox/m1racle-reader-release-latest.apk` 与 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk`。
 
@@ -27,8 +27,8 @@
 
 ## 验证与剩余事项
 
-- implemented：既有产品改动在 `691cb65`；PDF 背景稳定化及用户反馈后的透明感回调在 `ff1ee2a`；底栏优化在 `4c31592`。
-- automated_verified：本轮全量 testQaUnitTest 为 1404 / 0 / 0 / 0；Release 构建、Manifest、production signer、v2 签名与 outbox/Download SHA-256 核验通过。
+- implemented：既有产品改动在 `691cb65`；PDF 背景稳定化及用户反馈后的透明感回调在 `ff1ee2a`；底栏优化在 `4c31592`，长按整体放大补齐在 `addf17d`。
+- automated_verified：底栏初版全量 testQaUnitTest 为 1404 / 0 / 0 / 0；长按补齐后定向 9 / 0 / 0 / 0；Release 构建、Manifest、production signer、v2 签名与 outbox/Download SHA-256 核验通过。
 - device_verified：最新候选未验证；不把旧版本的设备结果归给它。
 - pending：最新候选真机验收；构建报告中的 lintVital ASM 异常仍需独立诊断（构建成功不等于完整 lint 通过）；发布时需处理当前 tag/Draft 与候选源码不一致的问题。
 - 未建立新的功能目标，未自动启动路线图下一阶段。
