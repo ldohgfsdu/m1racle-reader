@@ -53,3 +53,13 @@ implemented / automated_verified 已具备；device_verified 为 NOT_RUN（ADB �
 新增长按期间不提前导航、取消不导航、松手仅请求一次的交互回归；9 项定向测试通过，Release 构建、production 签名与交付副本校验通过。本轮 ADB 无设备，实际放大观感待安装验收。
 
 长按版源码 `addf17da51daa5fab10d4c727fedb64ac72339e5`；APK 6686026 bytes，SHA-256 `68675db7aea7b9db3dd44580217a3a77a8cbd5dc1ac0376594a825cc53b42489`。已覆盖 Download 同名包；证据 `.external_outbox/dock-hold-20260905/`。implemented / automated_verified；device_verified: NOT_RUN；pending: 实机观感。既有 lintVital ASM 异常仍出现，不声称完整 lint 通过。
+
+## 官方 LiquidBottomTabs 按压透镜（2026-09-05）
+
+对照 Kyant `AndroidLiquidGlass` 的 [LiquidBottomTabs](https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/components/LiquidBottomTabs.kt)。上一版只有缩放，缺少按压透镜、速度形变和图标折射。
+
+现在胶囊按住放大到 78/56，拖动按速度拉伸；选中胶囊按压时才出现 10/14 色差透镜和内阴影，空闲霜层降到 0.03 让透镜透出来。着色后的标签行经 `GlassBackdropSource` 捕获，胶囊采样页面与该层的合成背景。外壳补 vibrancy，透镜 24/24。导航仍由路由持有，拖动只预览。
+
+全量 `:app:testQaUnitTest` 1408 / 0 / 0 / 0。新增胶囊速度形变纯逻辑、DockSelection 按压透镜配方、捕获拓扑契约。Release 构建、production signer、v2 签名与 Download 摘要核验通过。ADB 无设备，透镜与手感待安装确认。
+
+源码 `185c242b171465f6da6c1e69f54aba1fd87b0631`；APK 6,702,410 bytes，SHA-256 `f249ab9e859a2a11e6a30b87cf385edd56ad85f701e5dda9683467142b618147`。已覆盖 Download 同名包；证据 `.external_outbox/dock-liquid-20260905/`。implemented / automated_verified；device_verified: NOT_RUN。lintVital ASM 异常仍出现，不声称完整 lint 通过。
