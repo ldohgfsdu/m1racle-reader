@@ -71,3 +71,11 @@ implemented / automated_verified 已具备；device_verified 为 NOT_RUN（ADB �
 现在先画透明采样层，再把空心图标放进外壳，胶囊最后只盖选中格。全量 1409 / 0 / 0 / 0；标签可见性与绘制顺序已回归。ADB 仍无设备。
 
 源码 `8ac90e563fb550b92db34e44c3414e0016e3bb71`；APK 6,702,410 bytes，SHA-256 `de9af083a375ddb365e7639f57f8ac96bb064643a9b3f38bb2df059fdda989d9`。已覆盖 Download 同名包；证据 `.external_outbox/dock-icons-20260905/`。implemented / automated_verified；device_verified: NOT_RUN。
+
+## 图标必须画在玻璃节点外面（2026-09-05）
+
+上一版把可见标签放进外壳 `drawBackdrop` 的子节点。Kyant 的透镜会在布局里加内边距，64dp 底栏不够放下 28dp 图标，看起来像整排图标消失。RiseDiary 可见层是空心图标行，实心图标只给胶囊采样，两者都不是外壳的子节点。
+
+现在：透明采样层 → 空玻璃外壳 → 空心图标行叠在外壳上 → 选中胶囊。图标 28dp、标签 12sp。全量 1409 / 0 / 0 / 0。ADB 仍无设备。
+
+源码 `dba5edf47adbc14ddb0298ff0ed23cc7a506ee6b`；APK 6,702,410 bytes，SHA-256 `b97dbe9c851b6dc552cccbd3a732ee50d417e4bde01bdaa4a2665d8029a899e3`。已覆盖 Download 同名包；证据 `.external_outbox/dock-icons-sibling-20260905/`。implemented / automated_verified；device_verified: NOT_RUN。
