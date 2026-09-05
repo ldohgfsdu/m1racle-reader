@@ -6,9 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.LayoutDirection
@@ -29,6 +31,22 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-normal-notlong-notround-any-420dpi-keyshidden-nonav")
 class GlassDockUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun `visible tab labels stay displayed above the sampling overlay`() {
+        rule.setContent {
+            M1racleReaderTheme {
+                HubDockMotionProvider(HubDestination.HOME) {
+                    GlassDock(onSelect = {})
+                }
+            }
+        }
+        rule.onNodeWithText("首页").assertIsDisplayed()
+        rule.onNodeWithText("文库").assertIsDisplayed()
+        rule.onAllNodes(isSelectable()).fetchSemanticsNodes().let { nodes ->
+            assertEquals(4, nodes.size)
+        }
+    }
 
     @Test
     fun `selection follows owner even when callback refuses navigation`() {

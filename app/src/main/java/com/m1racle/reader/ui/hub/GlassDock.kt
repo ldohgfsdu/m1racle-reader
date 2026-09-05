@@ -164,49 +164,90 @@ fun GlassDock(
                 .fillMaxWidth()
                 .height(HomeDesignTokens.DockHeight),
         ) {
-            // Background is a sibling: its capsule clip must not crop the enlarged selection.
-            Box(Modifier.matchParentSize().graphicsLayer {
-                val scale = 1f + 16.dp.toPx() / size.width * pressProgress.value
-                scaleX = scale
-                scaleY = scale
-            }.glassMaterial(role = GlassMaterialRole.Dock, shape = HomeDesignTokens.DockShape))
             val slotWidth = (maxWidth - HomeDesignTokens.DockContentPadding * 2) / dockEntries.size
-            Box(Modifier.fillMaxSize().padding(HomeDesignTokens.DockContentPadding), contentAlignment = AbsoluteAlignment.TopLeft) {
-                val slotWidthPx = with(LocalDensity.current) { slotWidth.toPx() }
-                val dragModifier = Modifier.pointerInput(motion.selected, slotWidthPx, rtl) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { offset ->
-                            lastDragUptime = 0L
-                            dragVelocity = 0f
-                            motion.preview.moveTo(dockPhysicalPosition(offset.x / slotWidthPx - 0.5f, rtl))
-                        },
-                        onHorizontalDrag = { change, dragAmount ->
-                            change.consume()
-                            val dtMs = (change.uptimeMillis - lastDragUptime).coerceAtLeast(1L)
-                            if (lastDragUptime != 0L) {
-                                dragVelocity = (dragAmount / slotWidthPx) / (dtMs / 1000f)
-                            }
-                            lastDragUptime = change.uptimeMillis
-                            // Absolute pointer position avoids counting the slop-crossing event twice.
-                            motion.preview.moveTo(dockPhysicalPosition(change.position.x / slotWidthPx - 0.5f, rtl))
-                        },
-                        onDragEnd = {
-                            lastDragUptime = 0L
-                            dragVelocity = 0f
-                            motion.preview.finish()?.let { target ->
-                                if (target != motion.selected) onSelect(target)
-                            }
-                        },
-                        onDragCancel = {
-                            lastDragUptime = 0L
-                            dragVelocity = 0f
-                            motion.preview.cancel()
-                        },
-                    )
-                }
+            val slotWidthPx = with(LocalDensity.current) { slotWidth.toPx() }
+            val dragModifier = Modifier.pointerInput(motion.selected, slotWidthPx, rtl) {
+                detectHorizontalDragGestures(
+                    onDragStart = { offset ->
+                        lastDragUptime = 0L
+                        dragVelocity = 0f
+                        motion.preview.moveTo(dockPhysicalPosition(offset.x / slotWidthPx - 0.5f, rtl))
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        val dtMs = (change.uptimeMillis - lastDragUptime).coerceAtLeast(1L)
+                        if (lastDragUptime != 0L) {
+                            dragVelocity = (dragAmount / slotWidthPx) / (dtMs / 1000f)
+                        }
+                        lastDragUptime = change.uptimeMillis
+                        // Absolute pointer position avoids counting the slop-crossing event twice.
+                        motion.preview.moveTo(dockPhysicalPosition(change.position.x / slotWidthPx - 0.5f, rtl))
+                    },
+                    onDragEnd = {
+                        lastDragUptime = 0L
+                        dragVelocity = 0f
+                        motion.preview.finish()?.let { target ->
+                            if (target != motion.selected) onSelect(target)
+                        }
+                    },
+                    onDragCancel = {
+                        lastDragUptime = 0L
+                        dragVelocity = 0f
+                        motion.preview.cancel()
+                    },
+                )
+            }
+            // Capture first so the invisible sampling layer cannot cover visible tabs.
+            // RiseDiary: outlined icons stay in the visible glass; filled icons exist
+            // only for the capsule to sample.
+            GlassBackdropSource(
+                backdrop = tabsBackdrop,
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(HomeDesignTokens.DockContentPadding)
+                    .clearAndSetSemantics {}
+                    .alpha(0f),
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
+                        .graphicsLayer { colorFilter = ColorFilter.tint(scheme.primary) },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    dockEntries.forEach { entry ->
+                        Column(
+                            modifier = Modifier
+                                .weight(HomeDesignTokens.DockItemWeight)
+                                .fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            DockTabVisual(
+                                entry = entry,
+                                filled = true,
+                                selected = entry.destination == motion.selected,
+                                color = Color.White,
+                                scale = contentScale,
+                            )
+                        }
+                    }
+                }
+            }
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        val scale = 1f + 16.dp.toPx() / size.width * pressProgress.value
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .glassMaterial(role = GlassMaterialRole.Dock, shape = HomeDesignTokens.DockShape),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(HomeDesignTokens.DockContentPadding)
                         .selectableGroup()
                         .then(dragModifier),
                     horizontalArrangement = Arrangement.Center,
@@ -214,15 +255,13 @@ fun GlassDock(
                 ) {
                     dockEntries.forEachIndexed { index, entry ->
                         val selected = entry.destination == motion.selected
-                        val interaction = interactions[index]
-                        val color = if (selected) scheme.primary else scheme.onSurfaceVariant
                         Column(
                             modifier = Modifier
                                 .weight(HomeDesignTokens.DockItemWeight)
                                 .fillMaxSize()
                                 .selectable(
                                     selected = selected,
-                                    interactionSource = interaction,
+                                    interactionSource = interactions[index],
                                     indication = null,
                                     role = Role.Tab,
                                     onClick = { if (!selected) onSelect(entry.destination) },
@@ -230,68 +269,40 @@ fun GlassDock(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            DockTabVisual(entry = entry, selected = selected, color = color, scale = contentScale)
-                        }
-                    }
-                }
-                GlassBackdropSource(
-                    backdrop = tabsBackdrop,
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clearAndSetSemantics {}
-                        .alpha(0f),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { colorFilter = ColorFilter.tint(scheme.primary) },
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        dockEntries.forEach { entry ->
-                            val selected = entry.destination == motion.selected
-                            Column(
-                                modifier = Modifier
-                                    .weight(HomeDesignTokens.DockItemWeight)
-                                    .fillMaxSize(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                            ) {
-                                DockTabVisual(
-                                    entry = entry,
-                                    selected = selected,
-                                    color = Color.White,
-                                    scale = contentScale,
-                                )
-                            }
-                        }
-                    }
-                }
-                // Drawn last so the lens sits on the icons; it has no pointer input,
-                // so tab hits still land on the row beneath.
-                Box(
-                    modifier = Modifier
-                        .width(slotWidth)
-                        .height(HomeDesignTokens.DockHeight - HomeDesignTokens.DockContentPadding * 2)
-                        .graphicsLayer {
-                            val logical = motion.position.value
-                            translationX = dockPhysicalPosition(logical, rtl) * slotWidthPx
-                            val scales = dockCapsuleScales(
-                                capsuleScaleX.value,
-                                capsuleScaleY.value,
-                                velocity.value,
+                            DockTabVisual(
+                                entry = entry,
+                                filled = false,
+                                selected = selected,
+                                color = scheme.onSurface,
+                                scale = contentScale,
                             )
-                            scaleX = scales.first
-                            scaleY = scales.second
                         }
-                        .glassMaterial(
-                            role = GlassMaterialRole.DockSelection,
-                            shape = HomeDesignTokens.DockShape,
-                            pressed = held,
-                            extraBackdrop = tabsBackdrop,
-                        ),
-                )
+                    }
+                }
             }
+            Box(
+                modifier = Modifier
+                    .padding(HomeDesignTokens.DockContentPadding)
+                    .width(slotWidth)
+                    .height(HomeDesignTokens.DockHeight - HomeDesignTokens.DockContentPadding * 2)
+                    .graphicsLayer {
+                        val logical = motion.position.value
+                        translationX = dockPhysicalPosition(logical, rtl) * slotWidthPx
+                        val scales = dockCapsuleScales(
+                            capsuleScaleX.value,
+                            capsuleScaleY.value,
+                            velocity.value,
+                        )
+                        scaleX = scales.first
+                        scaleY = scales.second
+                    }
+                    .glassMaterial(
+                        role = GlassMaterialRole.DockSelection,
+                        shape = HomeDesignTokens.DockShape,
+                        pressed = held,
+                        extraBackdrop = tabsBackdrop,
+                    ),
+            )
         }
     }
 }
@@ -299,6 +310,7 @@ fun GlassDock(
 @Composable
 private fun DockTabVisual(
     entry: DockEntry,
+    filled: Boolean,
     selected: Boolean,
     color: Color,
     scale: Float,
@@ -312,7 +324,7 @@ private fun DockTabVisual(
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Icon(
-            imageVector = if (selected) entry.selectedIcon else entry.icon,
+            imageVector = if (filled) entry.selectedIcon else entry.icon,
             contentDescription = null,
             tint = color,
             modifier = Modifier.size(HomeDesignTokens.DockItemIcon),
