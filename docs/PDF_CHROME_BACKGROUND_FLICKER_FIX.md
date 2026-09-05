@@ -21,4 +21,18 @@ ADB 单次探测为空。尚无本轮真机验收；没有证据证明驱动/Ren
 - automated_verified：完整 `:app:testQaUnitTest --no-daemon` 1396 / 0 / 0 / 0（JDK17）；新增 3 项回归覆盖黑白背景调制幅度、手势/按压参数恒定与采样源背景接线。既有非文档配方测试原样通过。
 - 模型范围：黑白大片采样的最终背景通道跨度降至原来的 20%，浅色约 0.080、深色约 0.052；这是颜色合成计算，不是实机帧测结果。未改变 alpha、blur、lens、阴影或按压弹簧。
 - device_verified：NOT_RUN，本轮 ADB 为空。
-- pending：签名构建与交付；两种 PDF 阅读模式的移动/缩放、浅深主题及页缝场景真机验收。
+- pending：两种 PDF 阅读模式的移动/缩放、浅深主题及页缝场景真机验收。
+
+## 构建与交付
+
+- 源码提交：`e75b7c432dad081223bc56bcd45322f13cbf3a08`；版本 1.0.0 / 23（本地修复候选，未改 tag/Draft）。
+- `:app:assembleRelease --no-daemon`（JDK17）：exit 0，3m 27s，53 tasks。
+- APK：6686026 bytes；SHA-256 `8a12f7df3c3c1590c8bec98a02f259cc8479c0dbcfb7f97a20cc3179c9b7e267`。
+- 既有 production signer，v2 验签通过；Manifest 包名与版本正确，无 INTERNET。
+- outbox latest、Download latest、按 source/hash 命名的归档副本字节一致；checksum sidecar 已更新。
+- 安装入口：`/storage/emulated/0/Download/m1racle-reader-release-latest.apk`。
+- 构建/测试/签名/Manifest/身份 JSON 证据：`.external_outbox/pdf-chrome-flicker-20260905/`（gitignored）。
+- `lintVitalAnalyzeRelease` 再次出现既有 ASM `NegativeArraySizeException`，构建 exit 0；没有关闭检查或调整依赖，不声明完整 lint 通过，该独立问题继续 pending。
+- ADB 本轮为空，未安装、未清数据；旧录像只能证明旧版本现象，不能作为本修复的 device PASS。
+
+本轮风险为中：改动位于共享材质合成，但文档上下文仅由 PDF host 启用。非文档配方、按压参数与拓扑回归均通过。最终视觉验收仍需要同一文档文字/图案下的移动和缩放对照。
