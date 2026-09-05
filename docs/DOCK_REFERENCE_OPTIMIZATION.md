@@ -32,4 +32,16 @@ Dock / DockSelection 独立材质、64dp 外壳、最大宽 440dp、4dp 内边�
 
 既有材质参数/按压、Backdrop sibling 拓扑、导航和阅读器回归均通过。测试用 Robolectric LEGACY graphics 验证语义、输入和动画状态，不把它当 GPU 玻璃视觉或实机性能证据。
 
-implemented / automated_verified 已具备；签名构建与交付待执行；device_verified 为 NOT_RUN（ADB 无设备）。风险中：导航过渡与动态材质；没有新依赖、数据库改动或阅读器行为改动。
+implemented / automated_verified 已具备；device_verified 为 NOT_RUN（ADB 无设备）。没有新依赖、数据库改动或阅读器行为改动。
+
+## Release 交付
+
+- 源码：`4c3159243106623284813db047694a3f4cb11d24`；版本保持 `1.0.0 / 23`。
+- `:app:assembleRelease --no-daemon` 成功；production signer 与 v2 签名核验通过，Manifest 无 INTERNET 权限。
+- APK：6,686,026 bytes，SHA-256 `648037982281e195d488175428370d4d7f182d5d4cb2082d980edabc9afd7da1`。
+- outbox 与 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk` 已逐字节摘要核验一致。
+- 证据：`.external_outbox/risediary-dock-20260905/` 中测试摘要、构建日志、签名、Manifest、构建记录与固定命名 APK。
+- 构建中既有 lintVital ASM 异常仍出现；不将构建成功表述为完整 lint 通过。
+- pending：实机玻璃显示、拖动手感及性能验收；Robolectric 结果不代替设备验收。
+
+参考仓库临时克隆及本轮临时日志已清理，必要日志归入上述证据目录。
