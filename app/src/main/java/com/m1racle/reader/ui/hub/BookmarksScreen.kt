@@ -59,7 +59,6 @@ fun BookmarksScreen(
 ) {
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle(initialValue = emptyList())
     HubGlassShell(
-        selected = HubDestination.BOOKMARKS,
         onSelect = onNavigateHub,
         modifier = modifier.fillMaxSize(),
     ) {

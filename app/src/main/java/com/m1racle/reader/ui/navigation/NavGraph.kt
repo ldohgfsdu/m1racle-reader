@@ -1,17 +1,23 @@
 package com.m1racle.reader.ui.navigation
 
 import android.app.Application
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
@@ -27,6 +33,7 @@ import com.m1racle.reader.ui.home.HomeViewModel
 import com.m1racle.reader.ui.hub.BookmarksScreen
 import com.m1racle.reader.ui.hub.BookmarksViewModel
 import com.m1racle.reader.ui.hub.HubDestination
+import com.m1racle.reader.ui.hub.HubDockMotionProvider
 import com.m1racle.reader.ui.hub.LibraryScreen
 import com.m1racle.reader.ui.hub.LibraryViewModel
 import com.m1racle.reader.ui.hub.HubSettingsScreen
@@ -118,12 +125,23 @@ fun M1racleReaderNavGraph(
     val searchRepo = searchRepository
         ?: (application as? com.m1racle.reader.M1racleReaderApplication)?.searchRepository
 
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val selectedHub = HubDestination.fromRoute(currentEntry?.destination?.route)
+        ?: HubDestination.fromRoute(navController.previousBackStackEntry?.destination?.route)
+        ?: HubDestination.HOME
+    val hubEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition? = {
+        if (HubDestination.isTopLevelRoute(initialState.destination.route)) EnterTransition.None else null
+    }
+    val hubExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition? = {
+        if (HubDestination.isTopLevelRoute(targetState.destination.route)) ExitTransition.None else null
+    }
+    HubDockMotionProvider(selected = selectedHub) {
     NavHost(
         navController = navController,
         startDestination = Routes.HOME,
         modifier = modifier,
     ) {
-        composable(Routes.HOME) {
+        composable(Routes.HOME, enterTransition = hubEnter, exitTransition = hubExit) {
             val homeViewModel: HomeViewModel = viewModel(
                 factory = HomeViewModel.Factory(repository),
             )
@@ -139,7 +157,7 @@ fun M1racleReaderNavGraph(
             )
         }
 
-        composable(Routes.LIBRARY) {
+        composable(Routes.LIBRARY, enterTransition = hubEnter, exitTransition = hubExit) {
             val libraryViewModel: LibraryViewModel = viewModel(
                 factory = LibraryViewModel.Factory(repository),
             )
@@ -176,7 +194,7 @@ fun M1racleReaderNavGraph(
             )
         }
 
-        composable(Routes.BOOKMARKS) {
+        composable(Routes.BOOKMARKS, enterTransition = hubEnter, exitTransition = hubExit) {
             val bookmarksViewModel: BookmarksViewModel = viewModel(
                 factory = object : androidx.lifecycle.ViewModelProvider.Factory {
                     @Suppress("UNCHECKED_CAST")
@@ -209,7 +227,7 @@ fun M1racleReaderNavGraph(
             )
         }
 
-        composable(Routes.SETTINGS) {
+        composable(Routes.SETTINGS, enterTransition = hubEnter, exitTransition = hubExit) {
             HubSettingsScreen(
                 onNavigateHub = { destination ->
                     navController.navigateToHub(destination)
@@ -374,4 +392,5 @@ fun M1racleReaderNavGraph(
             )
         }
     }
+    } // HubDockMotionProvider
 }

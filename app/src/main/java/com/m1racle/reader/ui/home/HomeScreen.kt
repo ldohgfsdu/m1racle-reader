@@ -246,7 +246,6 @@ fun HomeScreen(
                 }
                 // Sibling overlay: samples rootBackdrop without being captured by it.
                 com.m1racle.reader.ui.hub.GlassDock(
-                    selected = com.m1racle.reader.ui.hub.HubDestination.HOME,
                     onSelect = onNavigateHub,
                 )
             }

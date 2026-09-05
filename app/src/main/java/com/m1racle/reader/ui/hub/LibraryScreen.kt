@@ -108,7 +108,6 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle(initialValue = LibraryUiState())
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     HubGlassShell(
-        selected = HubDestination.LIBRARY,
         onSelect = onNavigateHub,
         modifier = modifier.fillMaxSize(),
     ) {

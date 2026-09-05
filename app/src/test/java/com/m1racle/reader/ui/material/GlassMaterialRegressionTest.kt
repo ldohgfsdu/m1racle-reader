@@ -113,6 +113,8 @@ class GlassMaterialRegressionTest {
     @Test
     fun `surface alpha values stay at frozen recipe numbers`() {
         val expectedLight = mapOf(
+            GlassMaterialRole.Dock to 0.18f,
+            GlassMaterialRole.DockSelection to 0.16f,
             GlassMaterialRole.Control to 0.50f,
             GlassMaterialRole.Capsule to 0.50f,
             GlassMaterialRole.Menu to 0.60f,
@@ -120,6 +122,8 @@ class GlassMaterialRegressionTest {
             GlassMaterialRole.Dialog to 0.97f,
         )
         val expectedDark = mapOf(
+            GlassMaterialRole.Dock to 0.24f,
+            GlassMaterialRole.DockSelection to 0.20f,
             GlassMaterialRole.Control to 0.68f,
             GlassMaterialRole.Capsule to 0.68f,
             GlassMaterialRole.Menu to 0.74f,

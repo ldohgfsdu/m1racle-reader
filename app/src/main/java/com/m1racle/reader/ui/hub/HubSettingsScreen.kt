@@ -29,7 +29,6 @@ fun HubSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     HubGlassShell(
-        selected = HubDestination.SETTINGS,
         onSelect = onNavigateHub,
         modifier = modifier.fillMaxSize(),
     ) {

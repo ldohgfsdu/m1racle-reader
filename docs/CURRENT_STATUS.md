@@ -4,13 +4,13 @@
 
 ## 当前任务
 
-PDF 顶部控件背景随文字/图案移动、缩放而闪烁。修复在 `fix/pdf-chrome-background-flicker`，详见 [修复记录](PDF_CHROME_BACKGROUND_FLICKER_FIX.md)。首版被用户反馈‘太不透’，视觉验收未通过。已回调文档采样对比度 0.20 → 0.65，保留采样底色修复；17 项定向测试、回调版签名构建和交付核验通过；实机透明感与闪烁仍待确认。
+参考 RiseDiary 优化四入口底栏，分支 `feat/risediary-inspired-dock`。通透外壳、移动选中胶囊、按压/拖动和路由权威已实现；全量 1404 项测试通过，签名构建及实机验收待完成。见 [底栏优化记录](DOCK_REFERENCE_OPTIMIZATION.md)。以下 APK 暂为上一次 PDF 回调版。
 
 ## 源码与候选
 
-- 当前开发目录：`/root/code/MarkLeaf`；修复分支 `fix/pdf-chrome-background-flicker`。
+- 当前开发目录：`/root/code/MarkLeaf`；底栏分支 `feat/risediary-inspired-dock`。
 - 当前修复包源码：`ff1ee2ad7a282bea7289e885728f515dca11f81e`；基于 `691cb65` 候选继续修复，未改 canonical 分支或 tag。
-- 当前改动仅 PDF 玻璃背景合成及回归测试；依赖和版本沿用基线。
+- 本次仅底栏外观、手势、动画宿主与 Hub 过渡；沿用已有依赖、版本、导入入口和阅读器。
 - 版本 `1.0.0 / 23`，Room v13；Markdown 批注、批注样式、阅读设置 token 与设计规范清理已合入。
 - 候选 APK：6,686,026 bytes，SHA-256 `45fa085b7ad93bf25972949a2f9f73c655bf1ca7cd6b085b4ea4c1bcc0123a14`。
 - production signer SHA-256：`2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1`。

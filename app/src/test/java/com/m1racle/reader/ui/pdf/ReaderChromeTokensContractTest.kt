@@ -14,7 +14,7 @@ class ReaderChromeTokensContractTest {
 
     @Test
     fun `every product role has a complete bounded recipe`() {
-        assertEquals(5, GlassMaterialRole.entries.size)
+        assertEquals(7, GlassMaterialRole.entries.size)
         GlassMaterialRole.entries.forEach { role ->
             listOf(false, true).forEach { dark ->
                 val spec = GlassMaterialEngine.resolve(role, dark)

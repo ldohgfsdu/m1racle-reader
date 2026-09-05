@@ -106,16 +106,17 @@ object HomeDesignTokens {
     val HeroMetaSize = 12.sp
 
     /**
-     * 底部悬浮 Glass Dock（GlassMaterialRole.Control，强度低于内容卡）：
+     * 底部悬浮 Glass Dock（GlassMaterialRole.Dock，独立通透配方）：
      * 悬浮胶囊，四入口，内容以底部 inset 避让——永不遮挡内容。
      */
-    val DockHeight = 62.dp
-    val DockBottomGap = 14.dp
-    val DockHorizontalMargin = 48.dp
-    val DockCorner = 26.dp
+    val DockHeight = 64.dp
+    val DockBottomGap = 12.dp
+    val DockHorizontalMargin = 20.dp
+    val DockCorner = 32.dp
     val DockShape = RoundedCornerShape(DockCorner)
-    val DockItemIcon = 22.dp
-    val DockLabelSize = 10.sp
+    val DockItemIcon = 24.dp
+    val DockLabelSize = 11.sp
     val DockItemWeight: Float = 1f
-    val DockSelectedAlpha = 0.10f
+    val DockMaxWidth = 440.dp
+    val DockContentPadding = 4.dp
 }

@@ -41,6 +41,8 @@ import com.kyant.backdrop.shadow.Shadow
  */
 enum class GlassMaterialRole {
     Control,
+    Dock,
+    DockSelection,
     Capsule,
     Menu,
     SettingsCard,
@@ -84,6 +86,10 @@ class GlassMaterialSpec internal constructor(
 
 @Immutable
 private data class GlassRecipe(
+    val lightTint: Color = Color(0xFFFAFAFA),
+    val darkTint: Color = Color(0xFF111820),
+    val lightBrightness: Float = 0.20f,
+    val darkBrightness: Float = -0.18f,
     val lightSurfaceAlpha: Float,
     val darkSurfaceAlpha: Float,
     val blur: Dp,
@@ -111,15 +117,10 @@ private data class GlassRecipe(
  * a separate platform window and cannot safely sample the app backdrop.
  */
 object GlassMaterialEngine {
-    private val LightSurfaceTint = Color(0xFFFAFAFA)
-    private val DarkSurfaceTint = Color(0xFF111820)
-
     // Bound document-driven light/dark modulation without switching material
     // during scroll/pinch. Blur alone cannot suppress large moving ink regions.
     private const val DocumentBackdropContrast = 0.65f
 
-    private const val LightBrightness = 0.20f
-    private const val DarkBrightness = -0.18f
     private const val LightSaturation = 1.25f
     private const val DarkSaturation = 1.25f
     private const val LightShadowAlpha = 0.10f
@@ -137,6 +138,32 @@ object GlassMaterialEngine {
     )
 
     private val recipes = mapOf(
+        GlassMaterialRole.Dock to GlassRecipe(
+            lightSurfaceAlpha = 0.18f,
+            darkSurfaceAlpha = 0.24f,
+            blur = 8.dp,
+            lensHeight = 20.dp,
+            lensAmount = 20.dp,
+            shadow = 8.dp,
+            highlightWidth = 0.5.dp,
+            lightHighlightAlpha = 0.35f,
+            darkHighlightAlpha = 0.30f,
+            depthEffect = false,
+        ),
+        GlassMaterialRole.DockSelection to GlassRecipe(
+            lightTint = Color(0xFF8F99A3),
+            darkBrightness = 0f,
+            lightSurfaceAlpha = 0.16f,
+            darkSurfaceAlpha = 0.20f,
+            blur = 8.dp,
+            lensHeight = 8.dp,
+            lensAmount = 12.dp,
+            shadow = 3.dp,
+            highlightWidth = 0.5.dp,
+            lightHighlightAlpha = 0.40f,
+            darkHighlightAlpha = 0.38f,
+            depthEffect = false,
+        ),
         GlassMaterialRole.Control to GlassRecipe(
             lightSurfaceAlpha = 0.50f,
             darkSurfaceAlpha = 0.68f,
@@ -222,13 +249,13 @@ object GlassMaterialEngine {
             if (dark) recipe.darkHighlightAlpha else recipe.lightHighlightAlpha
             ) + highlightBoost
         val contrast = if (overDocument) DocumentBackdropContrast else 1f
-        val baseBrightness = if (dark) DarkBrightness else LightBrightness
+        val baseBrightness = if (dark) recipe.darkBrightness else recipe.lightBrightness
         // colorControls pivots contrast around mid-gray. Re-anchor it to white
         // in light mode and black in dark mode, preserving the paper/ink field.
         val brightness = baseBrightness * contrast +
             (if (dark) -0.5f else 0.5f) * (1f - contrast)
         return GlassMaterialSpec(
-            surfaceColor = (if (dark) DarkSurfaceTint else LightSurfaceTint).copy(
+            surfaceColor = (if (dark) recipe.darkTint else recipe.lightTint).copy(
                 alpha = surfaceAlpha.coerceIn(0f, 0.98f),
             ),
             blur = recipe.blur,
