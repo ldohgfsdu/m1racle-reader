@@ -114,8 +114,8 @@ object HomeDesignTokens {
     val DockHorizontalMargin = 20.dp
     val DockCorner = 32.dp
     val DockShape = RoundedCornerShape(DockCorner)
-    val DockItemIcon = 24.dp
-    val DockLabelSize = 11.sp
+    val DockItemIcon = 28.dp
+    val DockLabelSize = 12.sp
     val DockItemWeight: Float = 1f
     val DockMaxWidth = 440.dp
     val DockContentPadding = 4.dp

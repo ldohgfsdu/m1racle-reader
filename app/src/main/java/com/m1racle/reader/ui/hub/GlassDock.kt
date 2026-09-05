@@ -197,9 +197,10 @@ fun GlassDock(
                     },
                 )
             }
-            // Capture first so the invisible sampling layer cannot cover visible tabs.
-            // RiseDiary: outlined icons stay in the visible glass; filled icons exist
-            // only for the capsule to sample.
+            // RiseDiary / Kyant layering: filled icons exist only as a sampling
+            // source; the visible outlined row is a sibling above the glass
+            // shell. Icons must not be children of drawBackdrop — its lens
+            // layout padding clips a 64dp bar down to less than the icon size.
             GlassBackdropSource(
                 backdrop = tabsBackdrop,
                 modifier = Modifier
@@ -243,40 +244,39 @@ fun GlassDock(
                         scaleY = scale
                     }
                     .glassMaterial(role = GlassMaterialRole.Dock, shape = HomeDesignTokens.DockShape),
+            )
+            Row(
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(HomeDesignTokens.DockContentPadding)
+                    .selectableGroup()
+                    .then(dragModifier),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(HomeDesignTokens.DockContentPadding)
-                        .selectableGroup()
-                        .then(dragModifier),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    dockEntries.forEachIndexed { index, entry ->
-                        val selected = entry.destination == motion.selected
-                        Column(
-                            modifier = Modifier
-                                .weight(HomeDesignTokens.DockItemWeight)
-                                .fillMaxSize()
-                                .selectable(
-                                    selected = selected,
-                                    interactionSource = interactions[index],
-                                    indication = null,
-                                    role = Role.Tab,
-                                    onClick = { if (!selected) onSelect(entry.destination) },
-                                ),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            DockTabVisual(
-                                entry = entry,
-                                filled = false,
+                dockEntries.forEachIndexed { index, entry ->
+                    val selected = entry.destination == motion.selected
+                    Column(
+                        modifier = Modifier
+                            .weight(HomeDesignTokens.DockItemWeight)
+                            .fillMaxSize()
+                            .selectable(
                                 selected = selected,
-                                color = scheme.onSurface,
-                                scale = contentScale,
-                            )
-                        }
+                                interactionSource = interactions[index],
+                                indication = null,
+                                role = Role.Tab,
+                                onClick = { if (!selected) onSelect(entry.destination) },
+                            ),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        DockTabVisual(
+                            entry = entry,
+                            filled = false,
+                            selected = selected,
+                            color = scheme.onSurface,
+                            scale = contentScale,
+                        )
                     }
                 }
             }
@@ -326,8 +326,10 @@ private fun DockTabVisual(
         Icon(
             imageVector = if (filled) entry.selectedIcon else entry.icon,
             contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(HomeDesignTokens.DockItemIcon),
+            tint = Color.Unspecified,
+            modifier = Modifier
+                .size(HomeDesignTokens.DockItemIcon)
+                .graphicsLayer { colorFilter = ColorFilter.tint(color) },
         )
         Text(
             text = stringResource(entry.labelRes),

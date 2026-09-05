@@ -57,9 +57,15 @@ class GlassBackdropTopologyContractTest {
         assertTrue(dock.contains("dockCapsuleScales("))
         assertFalse(dock.contains(".layerBackdrop("))
         val tabCapture = dock.lastIndexOf("GlassBackdropSource(")
+        val dockGlass = dock.indexOf("GlassMaterialRole.Dock")
         val visibleTabs = dock.indexOf("selectableGroup()")
         assertTrue("tab capture must be composed before visible tabs", tabCapture in 0 until visibleTabs)
+        assertTrue(dockGlass in 0 until visibleTabs)
         assertTrue(visibleTabs < dock.indexOf("extraBackdrop = tabsBackdrop"))
+        assertFalse(
+            "visible tabs must be siblings above the dock glass, not children of drawBackdrop",
+            dock.substring(dockGlass, visibleTabs).contains("{"),
+        )
         assertTrue(dock.contains("filled = false"))
         assertTrue(dock.contains("filled = true"))
         val engine = appSource("ui/material/GlassMaterial.kt").readText()
