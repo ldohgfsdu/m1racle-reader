@@ -32,6 +32,51 @@ class GlassOpticalPolicyTest {
     }
 
     @Test
+    fun `light tint candidates vary only tint at frozen blur`() {
+        // R36.2 LIGHT TINT batch: comparison may move light tint alpha and nothing else.
+        val role = GlassMaterialRole.Capsule
+        val production = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
+        val candidates = mapOf(
+            GlassPreviewPreset.Tint86 to .86f,
+            GlassPreviewPreset.Tint80 to .80f,
+            GlassPreviewPreset.Tint75 to .75f,
+            GlassPreviewPreset.Tint70 to .70f,
+            GlassPreviewPreset.Tint65 to .65f,
+            GlassPreviewPreset.Tint60 to .60f,
+            GlassPreviewPreset.Tint55 to .55f,
+            GlassPreviewPreset.Tint50 to .50f,
+            GlassPreviewPreset.Tint45 to .45f,
+            GlassPreviewPreset.Tint35 to .35f,
+        )
+        for ((preset, tint) in candidates) {
+            val spec = GlassMaterialEngine.resolve(
+                role, GlassEnvironment.READER_LIGHT, previewPreset = preset)
+            assertEquals("blur frozen for $preset", 26.dp, spec.blur)
+            assertEquals("tint for $preset", tint, spec.surfaceColor.alpha, .005f)
+            assertEquals("tint rgb for $preset",
+                production.surfaceColor.copy(alpha = 1f), spec.surfaceColor.copy(alpha = 1f))
+            assertEquals(production.shadow, spec.shadow)
+            assertEquals(production.shadowColor, spec.shadowColor)
+            assertEquals(production.highlightWidth, spec.highlightWidth)
+            assertEquals(production.highlightColor, spec.highlightColor)
+            assertEquals(production.vibrancy, spec.vibrancy)
+            assertEquals(production.lensEnabled, spec.lensEnabled)
+            assertEquals(production.lensHeight, spec.lensHeight)
+            assertEquals(production.lensAmount, spec.lensAmount)
+            assertEquals(production.family, spec.family)
+            assertEquals(production.foreground, spec.foreground)
+            assertEquals(production.chromaticAberration, spec.chromaticAberration)
+            assertEquals(production.brightness, spec.brightness, 0f)
+            assertEquals(production.saturation, spec.saturation, 0f)
+        }
+        // Production path (no preset) is unaffected by candidate evaluation.
+        val productionAgain =
+            GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
+        assertEquals(production.surfaceColor, productionAgain.surfaceColor)
+        assertEquals(production.blur, productionAgain.blur)
+    }
+
+    @Test
     fun `renderers honor effective capability and share progressive endpoints`() {
         val root = listOf(File("src/main/java/com/m1racle/reader/ui"),
             File("app/src/main/java/com/m1racle/reader/ui")).first { it.isDirectory }

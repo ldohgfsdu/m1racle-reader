@@ -323,8 +323,11 @@ object GlassMaterialEngine {
         val tint = when (previewPreset) {
             GlassPreviewPreset.Tint86 -> .86f
             GlassPreviewPreset.Tint80 -> .80f
+            GlassPreviewPreset.Tint75 -> .75f
             GlassPreviewPreset.Tint70 -> .70f
+            GlassPreviewPreset.Tint65 -> .65f
             GlassPreviewPreset.Tint60 -> .60f
+            GlassPreviewPreset.Tint55 -> .55f
             GlassPreviewPreset.Tint50 -> .50f
             GlassPreviewPreset.Tint45, GlassPreviewPreset.Blur32, GlassPreviewPreset.Blur40 -> .45f
             GlassPreviewPreset.Tint35 -> .35f

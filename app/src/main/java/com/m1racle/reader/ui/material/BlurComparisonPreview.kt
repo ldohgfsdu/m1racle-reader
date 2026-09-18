@@ -44,8 +44,8 @@ fun BlurComparisonPreview() {
     var dark by remember { mutableStateOf(false) }
     var textBackground by remember { mutableStateOf(true) }
     val presets = GlassPreviewPreset.entries
-    val labels = listOf("当前配方", "渐变", "折射参考", "26 / .86", "26 / .80", "26 / .70",
-        "26 / .60", "26 / .50", "26 / .45", "32 / .45", "40 / .45", "26 / .35")
+    val labels = listOf("当前配方", "渐变", "折射参考", "26 / .86", "26 / .80", "26 / .75", "26 / .70",
+        "26 / .65", "26 / .60", "26 / .55", "26 / .50", "26 / .45", "32 / .45", "40 / .45", "26 / .35")
     val preset = presets[selected]
     val spec = GlassMaterialEngine.resolve(
         GlassMaterialEngine.previewRole(preset), GlassEnvironment.reader(dark),
@@ -74,7 +74,7 @@ fun BlurComparisonPreview() {
             TextButton(onClick = { dark = !dark }) { Text(if (dark) "暗色 · 点此切浅色" else "浅色 · 点此切暗色") }
             TextButton(onClick = { textBackground = !textBackground }) { Text(if (textBackground) "正文 · 点此切图案" else "图案 · 点此切正文") }
         }
-        Text("方案标签：模糊 dp / tint。横滑选择；32、40dp 与 .35 为新候选。", style = MaterialTheme.typography.bodySmall)
+        Text("方案标签：模糊 dp / tint。横滑选择；.75/.65/.55 为 light-tint 中间候选，32/40dp 与 .35 为远端参考。", style = MaterialTheme.typography.bodySmall)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
             labels.forEachIndexed { index,label ->
                 Column(Modifier.width(104.dp).clip(RoundedCornerShape(10.dp))

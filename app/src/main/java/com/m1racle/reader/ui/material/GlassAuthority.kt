@@ -48,7 +48,7 @@ enum class GlassPreviewPreset {
     CurrentThick,
     ProgressiveLegacy,
     CapsuleReference,
-    Tint86, Tint80, Tint70, Tint60, Tint50, Tint45,
+    Tint86, Tint80, Tint75, Tint70, Tint65, Tint60, Tint55, Tint50, Tint45,
     Blur32, Blur40, Tint35,
 
 }
