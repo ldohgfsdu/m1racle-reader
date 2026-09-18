@@ -11,7 +11,7 @@
 1. **先判断 ADB 是否在线**（`adb devices` 有 `device`）。
 2. **在线** → 自动 `install -r` + 冷启动冒烟。
 3. **离线** → **不要假装已测**；把 APK 拷到手机 `Download/`，写明路径，请人手动安装。
-4. 日常交付优先 **release（minify，~10–11MB）**，不要默认塞 70MB+ 的 QA/debug。
+4. 用户交付只用 **Release（minify）**，不主动构建或交付 Debug；签名缺失不降级，详见 [AGENTS.md 构建类型规则](../AGENTS.md#构建类型用户明确要求2026-09-15)。包体以本次测量为准。
 
 ---
 
@@ -76,7 +76,7 @@ bash scripts/install-release-outbox.sh /path/to/app.apk
 |------|--------|------|----------|------|
 | **release** | `:app:assembleRelease` | `com.m1racle.reader` | **~10–11MB**（R8 on） | **交付 / 人工验收默认** |
 | qa | `:app:assembleQa` | `com.m1racle.reader.qa` | ~70MB | 隔离测试沙箱 |
-| debug | `:app:assembleDebug` | `com.m1racle.reader` | ~70MB | 调试 |
+| debug | `:app:assembleDebug` | `com.m1racle.reader` | ~70MB | 仅保留能力，用户未明确要求时禁止使用 |
 | benchmark | `:app:assembleBenchmark` | `com.m1racle.reader.benchmark` | 较大 | Macrobenchmark |
 
 **Release 已开启** `isMinifyEnabled` + `isShrinkResources`（见 `app/build.gradle.kts`）。

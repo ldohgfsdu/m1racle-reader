@@ -4,7 +4,7 @@ Android 本地优先文档阅读器：Markdown + PDF。
 
 ## Scope
 
-Follow `docs/PRD.md`（2026-08-23 范围修订版）：本地 Markdown + PDF 阅读；编辑、云同步、全文索引、EPUB 等明确不做。
+Follow `docs/PRD.md`（含 2026-09-07 用户授权的 PDF 正文编辑范围补充）：本地 Markdown + PDF 阅读及有限 PDF 正文编辑；Markdown 编辑、云同步、正文全文索引、EPUB 等明确不做。
 
 - No INTERNET permission
 - No ads / analytics / accounts / cloud sync
@@ -44,9 +44,17 @@ Follow `docs/PRD.md`（2026-08-23 范围修订版）：本地 Markdown + PDF 阅
 - Inbox (inputs): `/storage/emulated/0/inbox/M1racleReader/`
 - **Outbox (built APKs):** `.external_outbox/` — every successful `assemble*` copies APKs here automatically
 
+## 构建类型（用户明确要求，2026-09-15）
+
+- 只构建和交付 **Release** APK，使用 `:app:assembleRelease`；不主动构建、安装或交付 Debug APK，也不以 Debug 构建作为验证替代。
+- Release 签名凭据缺失或构建失败时，报告具体阻塞并继续可执行的单测/静态检查；禁止退回 Debug、临时签名或未签名 APK。
+- QA / benchmark 保留为隔离测试能力，仅在任务确需对应设备测试时使用，不作为用户交付包。
+- 本规则取代全局公约中默认 `assembleDebug` / latest Debug APK 的要求；除非用户后续明确要求 Debug，否则不得使用。
+- 旧 Release 不得冒充本轮产物，不因其他变体构建成功而复制旧 Release 作为本轮交付。
+
 ## 构建后交付（强制，无需提示）
 
-**每次 `assemble*` 成功后，必须自动执行：**
+**每次 `assembleRelease` 成功后，确认 Outbox Release 来自本次构建，再自动执行：**
 
 ```bash
 cp .external_outbox/m1racle-reader-release-latest.apk /storage/emulated/0/Download/m1racle-reader-release-latest.apk
@@ -62,7 +70,7 @@ cp .external_outbox/m1racle-reader-release-latest.apk /storage/emulated/0/Downlo
 
 - Check `adb devices` first. Only `device` state allows auto-install/smoke.
 - If offline: copy release APK to `/storage/emulated/0/Download/` and ask human to install; **do not mark device smoke as PASS**.
-- Prefer release minify package: `.external_outbox/m1racle-reader-release-latest.apk` (~10–11MB), not 70MB+ QA unless tasked.
+- Only deliver the release minify package: `.external_outbox/m1racle-reader-release-latest.apk`; no Debug or QA delivery. Measure the actual APK size.
 - Helper: `bash scripts/install-release-outbox.sh`
 
 ## Agent startup / handoff

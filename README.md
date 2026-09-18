@@ -73,8 +73,9 @@
 export ANDROID_HOME=/path/to/Android/Sdk
 echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-./gradlew :app:assembleDebug
-# 正式 release 需先安全注入签名环境，见 RELEASE_CHECKLIST.md
+# 先安全注入正式 Release 签名环境，见 RELEASE_CHECKLIST.md
+./gradlew :app:assembleRelease
+# 只构建和交付 Release；签名缺失时停止打包，不改用 Debug
 # 注意：本机默认 JDK 25 时需 export JAVA_HOME 指向 JDK 17
 ```
 

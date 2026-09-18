@@ -2,11 +2,13 @@
 
 **完整真机安装 / ADB 判断协议见：`docs/DEVICE_INSTALL_AND_ADB_TEST.md`（Agent 必读）。**
 
+**构建类型权威规则见 [AGENTS.md](../AGENTS.md#构建类型用户明确要求2026-09-15)：用户只要 Release，禁止主动构建或交付 Debug；缺少正式签名时报告阻塞，不切换变体或签名。**
+
 ## 构建能力（保留，勿删）
 
 | 变体 | 用途 | Gradle |
 |------|------|--------|
-| debug | 功能验证 | `:app:assembleDebug` |
+| debug | 仅保留构建能力，用户未明确要求时禁止使用 | `:app:assembleDebug` |
 | **release** | **公开候选/人工实机验收交付（minify，要求注入 signer）** | `:app:assembleRelease` |
 | qa | 隔离仪器测试 | `:app:assembleQa` |
 | benchmark | Macrobenchmark / FrameTiming | `:app:assembleBenchmark` + `:benchmark:assembleBenchmark` |
@@ -28,18 +30,19 @@
 ./gradlew :app:exportApksToOutbox
 ```
 
-### 交付优先级
+### 交付与测试用途
 
 | 场景 | 用哪个 |
 |------|--------|
 | 给人安装 / 日常验收 | **`.external_outbox/m1racle-reader-release-latest.apk`（~10–11MB）** |
 | 仪器测试 | QA 包 `com.m1racle.reader.qa` |
-| 调试 | debug（一般不交付） |
+| Debug | 禁止主动构建或交付，不替代 Release 验证 |
 
 ### 手机 Download
 
 - ADB **离线**时：复制 release 到 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk` 供手动安装
-- Debug / benchmark：**不要**默认丢进 Download
+- Debug / QA / benchmark：不作为用户交付包，不复制到 Download
+- 仅在本次 Release 构建成功并确认 Outbox 产物已更新后复制；旧包不得作为本次改动交付。
 - 详见 `DEVICE_INSTALL_AND_ADB_TEST.md`
 
 ## 命名
