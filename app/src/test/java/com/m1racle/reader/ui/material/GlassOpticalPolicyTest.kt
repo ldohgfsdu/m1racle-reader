@@ -77,6 +77,51 @@ class GlassOpticalPolicyTest {
     }
 
     @Test
+    fun `production light recipe uses frozen authority`() {
+        // LIGHT_TINT_PRODUCTION_AUTHORITY = FROZEN_086. Change these numbers
+        // only as an explicit authority promotion after device/human approval
+        // of a candidate (.45/.55/.65/.75 stay preview-only until then).
+        val expectedLight = mapOf(
+            GlassMaterialRole.Control to 0.86f,
+            GlassMaterialRole.Capsule to 0.86f,
+            GlassMaterialRole.Menu to 0.86f,
+            GlassMaterialRole.ExpandedMenu to 0.90f,
+            GlassMaterialRole.SettingsCard to 0.90f,
+            GlassMaterialRole.Dialog to 0.97f,
+            GlassMaterialRole.ProgressiveChrome to 0.62f,
+        )
+        for ((role, alpha) in expectedLight) {
+            val spec = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
+            assertEquals("production light $role", alpha, spec.surfaceColor.alpha, 0.004f)
+        }
+        // Current frozen dark authority (DARK batch audits from here, changes nothing yet).
+        val expectedDark = mapOf(
+            GlassMaterialRole.Control to 0.80f,
+            GlassMaterialRole.Capsule to 0.80f,
+            GlassMaterialRole.Menu to 0.80f,
+            GlassMaterialRole.ExpandedMenu to 0.86f,
+            GlassMaterialRole.SettingsCard to 0.86f,
+            GlassMaterialRole.Dialog to 0.97f,
+            GlassMaterialRole.ProgressiveChrome to 0.62f,
+        )
+        for ((role, alpha) in expectedDark) {
+            val spec = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_DARK)
+            assertEquals("production dark $role", alpha, spec.surfaceColor.alpha, 0.004f)
+        }
+        // Frozen production blur (18dp) for the reader overlay family.
+        for (role in listOf(
+            GlassMaterialRole.Control,
+            GlassMaterialRole.Capsule,
+            GlassMaterialRole.Menu,
+            GlassMaterialRole.ExpandedMenu,
+            GlassMaterialRole.SettingsCard,
+        )) {
+            assertEquals("production blur $role", 18.dp,
+                GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT).blur)
+        }
+    }
+
+    @Test
     fun `renderers honor effective capability and share progressive endpoints`() {
         val root = listOf(File("src/main/java/com/m1racle/reader/ui"),
             File("app/src/main/java/com/m1racle/reader/ui")).first { it.isDirectory }

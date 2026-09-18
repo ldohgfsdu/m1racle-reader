@@ -160,8 +160,9 @@ object GlassMaterialEngine {
         visibilityThreshold = 0.001f,
     )
 
-    // Shared thick frost. Batch 1 locked Content blur at 26dp (18/22/26 all
-    // still leaked glyphs at 0.86 tint). Tint is the next single variable.
+    // Shared thick frost. Frozen baseline (R36.1 visual equivalence): 18dp.
+    // R36.2 Batch 1/2 working values (26dp blur, .45 light tint) were NOT
+    // approved and live only in previewPreset candidates, never here.
     private val regularFrost = GlassRecipe(
         family = GlassOpticalFamily.CONTENT,
         lightTint = Color(0xFFF5F5F5),
@@ -170,7 +171,7 @@ object GlassMaterialEngine {
         darkTint = Color.Black,
         lightSurfaceAlpha = 0.62f,
         darkSurfaceAlpha = 0.58f,
-        blur = 26.dp,
+        blur = 18.dp,
         lensHeight = 0.dp,
         lensAmount = 0.dp,
         shadow = 6.dp,
@@ -182,9 +183,11 @@ object GlassMaterialEngine {
         lensEnabled = false,
     )
 
-    // Controls over document pages must keep their own labels readable.
+    // Controls over document pages use the frozen light authority (.86) until
+    // a device/human-approved promotion changes it. Candidates (.45/.55/.65/
+    // .75 at 26dp) exist only as previewPreset harness entries.
     private val readerOverlayFrost = regularFrost.copy(
-        lightSurfaceAlpha = 0.45f,
+        lightSurfaceAlpha = 0.86f,
         darkSurfaceAlpha = 0.80f,
     )
 
@@ -193,7 +196,7 @@ object GlassMaterialEngine {
         family = GlassOpticalFamily.PANEL,
         lightSurfaceAlpha = 0.90f,
         darkSurfaceAlpha = 0.86f,
-        blur = 26.dp,
+        blur = 18.dp,
     )
 
     // Production Dock is the hub L3 plate (opaque paper/ink + 2.dp elevation).

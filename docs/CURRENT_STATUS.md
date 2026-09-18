@@ -4,6 +4,13 @@
 
 ## 当前任务（唯一 active object：R36_2_LIGHT_TINT_CLOSURE）
 
+### 2026-09-18 R36.2 Light Tint Reconciliation（LIGHT_RECONCILIATION_PASS）
+
+- 追踪：4 frozen 失败全部绑定 production recipe（`resolve(role, dark)` null-preset 路径），故生产回归 frozen：light `.45`→`.86`、blur 26dp→18dp；dark 与 frozen 一致未动。
+- 语义三分：PRODUCTION `.86`/CLOSED_ON_FROZEN_BASELINE；FROZEN CONTRACT `.86`（`LIGHT_TINT_PRODUCTION_AUTHORITY = FROZEN_086`）；CANDIDATE HARNESS `.45/.55/.65/.75` preview-only/DEVICE_APPROVAL_PENDING。新增 production authority test 防回退。
+- 验证：`compileReleaseKotlin` PASS；`testQaUnitTest` **1505 / 0 / 0 / 0**；`assembleRelease` 仍 BLOCKED_EXTERNAL_CONFIGURATION。证据 `.external_outbox/r36-2/light-tint/reconciliation-verify.log`。
+- 授权进入：R36.2 DARK OPTICAL RECIPE（dark 先审计当前 authority，再提有限候选；edge/shadow/lens 继续冻结）。
+
 ### 2026-09-18 R36.2 Light Tint Closure（ENGINEERING_CANDIDATE，DEVICE_APPROVAL_PENDING）
 
 - 起点：clean HEAD `bed8bf4`（`images/r36-home.png` 已移入 `.external_outbox/r36-2/recovery/`，不覆盖旧证据）。

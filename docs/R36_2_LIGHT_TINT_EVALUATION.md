@@ -67,10 +67,15 @@ Evidence 目录：`.external_outbox/r36-2/light-tint/{baseline-086,candidate-045
 
 .45 不得默认成为结论。它在白页上“看起来没问题”是因为 backdrop 本身就是白色（§4 第一行）——这是 backdrop 的功劳，不是 recipe 的功劳。到了彩色图/黑色区域/复杂 PDF，它放过 55% 背景亮度，深色底表面掉到 #7B8084（黑字 5.3:1）。在 B 场景同变量对照完成前，.45 的真实位置未知。**禁止用白页截图批准 .45。**
 
-## 7. 裁决：NOT APPROVED（本轮）
+## 7. 裁决：NOT APPROVED（本轮）→ RECONCILIATION PASS（生产已回归 frozen）
 
-- 最终 authority 保持 frozen `.86`；4 个 frozen optical tests 不改，继续作为 gate。
-- 工程状态：`LIGHT_TINT_ENGINEERING_CANDIDATE`；设备状态：`CANDIDATE_READY / DEVICE_APPROVAL_PENDING`。
-- 站立工作候选仍为 `.45`（代码与现装包已有值，保持不动，不回滚——回滚本身也是一次无证据的 authority 变更）。
-- 真机轮任务：harness 内 5 候选 × 场景 B（深色/彩色）优先对照，同变量截图进 `light-tint/` 五目录；白页场景仅作 sanity，不计票。
-- 明确未发生：FINAL_VISUAL_PASS、authority 变更、frozen 断言更新、旧 .86 deprecated。批准条件：B 场景同变量证据 + 4 frozen tests 按新 authority 更新（token 引用，不散布 magic number）。
+- 追踪结论：4 条 frozen 失败全部绑定 **production recipe**（`resolve(role, dark)`，previewPreset=null），不是 harness、不是 stale 路径。因此生产必须回归 frozen，候选不得留在默认路径。
+- 执行：`readerOverlayFrost` light `.45`→`.86`；`regularFrost`/`panelFrost` blur 26dp→18dp；dark 值本就与 frozen 一致（.80/.86），未动。
+- 最终语义：
+  - PRODUCTION = `.86`（light）/ 18dp；FROZEN CONTRACT = `.86`；`LIGHT_TINT_PRODUCTION_AUTHORITY = FROZEN_086` → **Production: CLOSED_ON_FROZEN_BASELINE**。
+  - CANDIDATE HARNESS = `.45 / .55 / .65 / .75`（previewPreset only，26dp）+ `.86` 可对照 → **Experiment: DEVICE_APPROVAL_PENDING**。
+  - 新增 `GlassOpticalPolicyTest.production light recipe uses frozen authority`：任何 promotion 必须是显式的 authority 变更。
+- Light production authority remains .86. Candidate set .45/.55/.65/.75 awaits controlled device comparison. No candidate has been promoted to production. 未来批准 .65 即 `.86`→`.65` 的 promotion 事件。
+- “.45 未获得成为 production authority 所需的视觉证据”——不是“.45 是错误值”；`candidate-045/` 证据与本结论保留。
+- 验证：`testQaUnitTest` **1505 / 0 / 0 / 0**；`compileReleaseKotlin` PASS；`assembleRelease` 仍 `BLOCKED_EXTERNAL_CONFIGURATION`。
+- 明确未发生：FINAL_VISUAL_PASS。批准条件不变：B 场景同变量证据 + 按新 authority 更新断言（token 引用）。
