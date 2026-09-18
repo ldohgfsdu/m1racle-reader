@@ -2,11 +2,11 @@
 <resources>
     <string name="app_name">M1racle Reader</string>
     <string name="app_subtitle">本地 Markdown / PDF 阅读器</string>
-    <string name="empty_title">还没有导入文档</string>
-    <string name="empty_subtitle">选择 Markdown 或 PDF 文件，开始本地阅读。</string>
+    <string name="empty_title">还没有阅读记录</string>
+    <string name="empty_subtitle">导入 Markdown 或 PDF，从这里接着读。</string>
     <string name="import_file">导入文件</string>
     <string name="delete_record">删除记录</string>
-    <string name="recent_reads">最近文件</string>
+    <string name="recent_reads">最近阅读</string>
     <string name="error_unsupported_format">暂只支持 .md / .markdown / .txt / .pdf / .zip 文件</string>
     <string name="error_unsupported_format_detail">暂不支持此文件格式\n文件：%1$s\n类型：%2$s</string>
     <string name="error_send_multiple_not_supported">一次只能打开一个文档</string>
@@ -32,6 +32,7 @@
     <string name="pdf_capsule_progress_percent">%1$d%%</string>
     <string name="pdf_capsule_reading_progress">阅读进度 %1$d%%</string>
     <string name="pdf_jump_label">PDF 页码</string>
+    <string name="pdf_jump_range">PDF 页码 1 – %1$d</string>
     <string name="pdf_jump_invalid">页码须为 1 – %1$d 的整数</string>
     <string name="pdf_jump_go">跳转</string>
     <string name="pdf_dialog_cancel">取消</string>
@@ -101,6 +102,8 @@
     <string name="pdf_outline_save">保存</string>
     <string name="pdf_outline_path_prefix">目录</string>
     <string name="pdf_outline_expand">展开</string>
+    <string name="pdf_control_expanded">已展开</string>
+    <string name="pdf_control_collapsed">已收起</string>
     <string name="pdf_outline_collapse">折叠</string>
     <string name="pdf_embedded_title">PDF 内置目录</string>
     <string name="pdf_embedded_found">发现 PDF 内置目录，共 %1$d 个节点</string>
@@ -207,7 +210,7 @@
     <string name="hub_filter_all">全部</string>
     <string name="hub_filter_pdf">PDF</string>
     <string name="hub_filter_markdown">Markdown</string>
-    <string name="hub_library_empty">还没有文档，回首页导入后即可在此浏览。</string>
+    <string name="hub_library_empty">还没有阅读记录。回首页导入后会出现在这里。</string>
     <string name="hub_bookmarks_title">书签</string>
     <string name="hub_bookmarks_empty">还没有书签。在阅读器中创建的书签会出现在这里。</string>
     <string name="hub_settings_title">设置</string>
@@ -237,4 +240,13 @@
     <string name="reader_note_saved">批注已保存</string>
     <string name="reader_note_deleted">已删除批注</string>
     <string name="cancel">取消</string>
+    <string name="home_document_actions">文档操作</string>
+    <string name="home_remove_title">从文库移除</string>
+    <string name="home_remove_confirm">移除</string>
+    <string name="home_remove_warning">将清除这份文档的阅读进度、书签、收藏、批注和应用内副本，无法撤销。不会删除原始文件。</string>
+    <string name="home_delete_failed">移除失败，文档仍保留在文库中，请重试。</string>
+    <string name="home_importing">正在导入，请稍候…</string>
+    <string name="home_import_too_large">文件超过 %1$d MiB 导入上限，请选择较小的文件。</string>
+    <string name="home_document_information">文件信息</string>
+    <string name="home_close_information">关闭</string>
 </resources>

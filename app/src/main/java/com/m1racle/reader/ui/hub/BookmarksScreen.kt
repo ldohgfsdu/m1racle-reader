@@ -1,7 +1,5 @@
 package com.m1racle.reader.ui.hub
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,7 +22,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -31,19 +29,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.m1racle.reader.R
 import com.m1racle.reader.data.local.BookmarkLocationKind
 import com.m1racle.reader.data.local.BookmarkWithDocument
 import com.m1racle.reader.data.repository.ReadingRepository
 import com.m1racle.reader.ui.home.HomeDesignTokens
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
-/** 书签页 ViewModel：冷流直出（列表查询在 DAO/Repository，格式化在纯 Formatter）。 */
+data class BookmarksUiState(
+    val bookmarks: List<BookmarkWithDocument> = emptyList(),
+    val ready: Boolean = false,
+)
+
+/** 书签页 ViewModel：列表查询在 DAO/Repository，格式化在纯 Formatter。 */
 class BookmarksViewModel(
     readingRepository: ReadingRepository,
 ) : ViewModel() {
-    val bookmarks: kotlinx.coroutines.flow.Flow<List<BookmarkWithDocument>> =
+    val uiState: StateFlow<BookmarksUiState> =
         readingRepository.observeAllBookmarks()
+            .map { BookmarksUiState(bookmarks = it, ready = true) }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.Lazily,
+                initialValue = BookmarksUiState(),
+            )
 }
 
 /**
@@ -57,15 +71,16 @@ fun BookmarksScreen(
     onNavigateHub: (HubDestination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle(initialValue = emptyList())
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val bookmarks = uiState.bookmarks
     HubGlassShell(
-        onSelect = onNavigateHub,
         modifier = modifier.fillMaxSize(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding(),
+                .statusBarsPadding()
+                .navigationBarsPadding(),
         ) {
             Text(
                 text = stringResource(R.string.hub_bookmarks_title),
@@ -76,20 +91,20 @@ fun BookmarksScreen(
                     vertical = 12.dp,
                 ),
             )
-            if (bookmarks.isEmpty()) {
+            if (uiState.ready && bookmarks.isEmpty()) {
                 EmptyBookmarksHint(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
                 )
-            } else {
+            } else if (bookmarks.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         start = HomeDesignTokens.PageHorizontal,
                         end = HomeDesignTokens.PageHorizontal,
                         top = 4.dp,
-                        bottom = 110.dp,
+                        bottom = HomeDesignTokens.DockContentClearance,
                     ),
                 ) {
                     items(bookmarks, key = { it.id }) { bookmark ->
@@ -114,17 +129,13 @@ private fun BookmarkRow(
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val interaction = remember { MutableInteractionSource() }
     Surface(
         shape = HomeDesignTokens.CardShape,
         color = scheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.45f)),
         tonalElevation = 1.dp,
-        modifier = modifier.clickable(
-            interactionSource = interaction,
-            indication = null,
-            onClick = onClick,
-        ),
+        modifier = modifier,
+        onClick = onClick,
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -142,7 +153,7 @@ private fun BookmarkRow(
                         nowMs = System.currentTimeMillis(),
                     ),
                     style = MaterialTheme.typography.labelSmall,
-                    color = scheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    color = scheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.height(4.dp))

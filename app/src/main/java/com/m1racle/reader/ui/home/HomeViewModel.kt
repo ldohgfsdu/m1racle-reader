@@ -7,12 +7,13 @@ import androidx.lifecycle.viewModelScope
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.repository.ImportResult
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -21,7 +22,9 @@ import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val documents: List<DocumentEntity> = emptyList(),
-    val isEmpty: Boolean = true,
+    val isEmpty: Boolean = false,
+    /** First Room emission has arrived. Empty-copy is forbidden until this is true. */
+    val ready: Boolean = false,
     /** H2.2 继续阅读 hero 目标（无阅读记录时为 null → UI 降级隐藏）。 */
     val continueReading: DocumentEntity? = null,
 )
@@ -38,6 +41,7 @@ internal fun homeUiState(
     return HomeUiState(
         documents = visible,
         isEmpty = visible.isEmpty(),
+        ready = true,
         continueReading = HomeHubSelectors.continueReading(visible),
     )
 }
@@ -46,15 +50,14 @@ sealed class HomeEvent {
     data class OpenDocument(val document: DocumentEntity) : HomeEvent()
     data object UnsupportedFormat : HomeEvent()
     data object ReadFailed : HomeEvent()
+    data object SourceTooLarge : HomeEvent()
+    data object DeleteFailed : HomeEvent()
 }
 
 internal fun ImportResult.toHomeEvent(): HomeEvent = when (this) {
     is ImportResult.Success -> HomeEvent.OpenDocument(document)
     ImportResult.UnsupportedFormat -> HomeEvent.UnsupportedFormat
-    // UI frozen by policy-batch constraints: the dedicated "file too large"
-    // copy lands with the next UI-touching batch; until then it shares the
-    // generic failure toast.
-    ImportResult.SourceTooLarge -> HomeEvent.ReadFailed
+    ImportResult.SourceTooLarge -> HomeEvent.SourceTooLarge
     ImportResult.ReadFailed -> HomeEvent.ReadFailed
 }
 
@@ -75,14 +78,18 @@ class HomeViewModel(
         homeUiState(source, pending)
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
+        started = SharingStarted.Lazily,
         initialValue = HomeUiState(),
     )
 
-    private val _events = MutableSharedFlow<HomeEvent>(extraBufferCapacity = 1)
-    val events: SharedFlow<HomeEvent> = _events.asSharedFlow()
+    private val _events = Channel<HomeEvent>(Channel.BUFFERED)
+    val events = _events.receiveAsFlow()
+
+    private val _isImporting = MutableStateFlow(false)
+    val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
 
     fun deleteDocument(id: String) {
+        if (id in pendingDeleteIds.value) return
         // Instant reflow — drop from UI before Room IO completes.
         pendingDeleteIds.update { it + id }
         viewModelScope.launch {
@@ -92,16 +99,28 @@ class HomeViewModel(
                 repository.observeRecentDocuments().first { docs ->
                     docs.none { it.id == id }
                 }
-                pendingDeleteIds.update { it - id }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
+                _events.send(HomeEvent.DeleteFailed)
+            } finally {
                 pendingDeleteIds.update { it - id }
             }
         }
     }
 
     fun onImportDocument(uri: Uri) {
+        if (!_isImporting.compareAndSet(expect = false, update = true)) return
         viewModelScope.launch {
-            _events.emit(repository.importDocument(uri).toHomeEvent())
+            try {
+                _events.send(repository.importDocument(uri).toHomeEvent())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _events.send(HomeEvent.ReadFailed)
+            } finally {
+                _isImporting.value = false
+            }
         }
     }
 

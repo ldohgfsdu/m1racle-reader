@@ -25,6 +25,7 @@ class HomeImportEventTest {
             HomeEvent.UnsupportedFormat,
             ImportResult.UnsupportedFormat.toHomeEvent(),
         )
+        assertEquals(HomeEvent.SourceTooLarge, ImportResult.SourceTooLarge.toHomeEvent())
         assertEquals(
             HomeEvent.ReadFailed,
             ImportResult.ReadFailed.toHomeEvent(),

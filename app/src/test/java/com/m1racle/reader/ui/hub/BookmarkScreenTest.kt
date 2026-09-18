@@ -11,10 +11,15 @@ import com.m1racle.reader.data.local.BookmarkWithDocument
 import com.m1racle.reader.data.local.FavoriteDocumentDao
 import com.m1racle.reader.data.local.FavoriteDocumentEntity
 import com.m1racle.reader.data.repository.ReadingRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -94,28 +99,35 @@ class BookmarkScreenTest {
         documentName = documentName,
     )
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `bookmarks query emits joined rows newest first`() = runTest {
-        val dao = FakeBookmarkDao()
-        val repo = ReadingRepository(
-            bookmarkDao = dao,
-            favoriteDao = NoFavorites(),
-            highlightDao = NoHighlights(),
-            noteDao = NoNotes(),
-            searchRepository = com.m1racle.reader.testing.testSearchRepository(),
-        )
-        val vm = BookmarksViewModel(repo)
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val dao = FakeBookmarkDao()
+            val repo = ReadingRepository(
+                bookmarkDao = dao,
+                favoriteDao = NoFavorites(),
+                highlightDao = NoHighlights(),
+                noteDao = NoNotes(),
+                searchRepository = com.m1racle.reader.testing.testSearchRepository(),
+            )
+            val vm = BookmarksViewModel(repo)
 
-        assertTrue(vm.bookmarks.first().isEmpty()) // 初始空态
+            assertEquals(false, vm.uiState.value.ready)
+            assertTrue(vm.uiState.first { it.ready }.bookmarks.isEmpty())
 
-        dao.rows.value = listOf(
-            row(id = 2, kind = "SCROLL_POSITION", location = 340, createdAt = 200L, documentName = "b.md"),
-            row(id = 1, kind = "PAGE_INDEX", location = 41, createdAt = 100L, documentName = "a.pdf", note = "回头看"),
-        )
-        val list = vm.bookmarks.first()
-        assertEquals(listOf(2L, 1L), list.map { it.id }) // DAO 排序直通（新在前）
-        assertEquals("b.md", list[0].documentName)
-        assertEquals("回头看", list[1].note)
+            dao.rows.value = listOf(
+                row(id = 2, kind = "SCROLL_POSITION", location = 340, createdAt = 200L, documentName = "b.md"),
+                row(id = 1, kind = "PAGE_INDEX", location = 41, createdAt = 100L, documentName = "a.pdf", note = "回头看"),
+            )
+            val list = vm.uiState.first { it.bookmarks.isNotEmpty() }.bookmarks
+            assertEquals(listOf(2L, 1L), list.map { it.id }) // DAO 排序直通（新在前）
+            assertEquals("b.md", list[0].documentName)
+            assertEquals("回头看", list[1].note)
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 
     @Test

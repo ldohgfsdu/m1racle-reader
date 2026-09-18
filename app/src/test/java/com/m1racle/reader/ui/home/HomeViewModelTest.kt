@@ -68,7 +68,11 @@ class HomeViewModelTest {
     fun `empty state degrades - no continue card`() {
         val state = homeUiState(source = emptyList(), pendingDeleteIds = emptySet())
         assertEquals(true, state.isEmpty)
+        assertEquals(true, state.ready)
         assertNull(state.continueReading)
+        val loading = HomeUiState()
+        assertEquals(false, loading.ready)
+        assertEquals(false, loading.isEmpty)
     }
 
     @Test
@@ -94,7 +98,7 @@ class HomeViewModelTest {
     @Test
     fun `pdf position line uses page of total`() {
         val line = readingPositionLine(doc("p", isPdf = true, pageCount = 982, scrollIndex = 77))
-        assertEquals("第 78 / 982 页", line)
+        assertEquals("78 / 982", line)
     }
 
     @Test
