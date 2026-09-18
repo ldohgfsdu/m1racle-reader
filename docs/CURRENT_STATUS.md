@@ -2,9 +2,19 @@
 
 更新：2026-09-18。此文件是当前工程与发布状态的唯一入口；阶段报告只描述当时证据。
 
-## 当前任务（唯一 active object：R36_RECOVERY_AND_R36_2_CLOSURE）
+## 当前任务（唯一 active object：R36_2_LIGHT_TINT_CLOSURE）
 
-### 2026-09-18 R36 Recovery / State Reconciliation Gate（进行中）
+### 2026-09-18 R36.2 Light Tint Closure（ENGINEERING_CANDIDATE，DEVICE_APPROVAL_PENDING）
+
+- 起点：clean HEAD `bed8bf4`（`images/r36-home.png` 已移入 `.external_outbox/r36-2/recovery/`，不覆盖旧证据）。
+- 单变量已证：对照只动 light tint α（blur 26dp 等全冻结），`GlassOpticalPolicyTest` 新增隔离契约 PASS；harness 新增 .75/.65/.55（preview 路径专用，生产调用不受影响）。
+- 评估见 [R36_2_LIGHT_TINT_EVALUATION](R36_2_LIGHT_TINT_EVALUATION.md)：白底 5 候选无判别力（19.4–20.1:1）；深色底 .86→14.6:1、.45→5.3:1；.45 白页“好看”是 backdrop 的功劳，禁止据此批准。
+- 裁决：**NOT APPROVED**。frozen authority 保持 `.86`，4 frozen tests 不改；站立工作候选仍 `.45`（不动，不回滚）。
+- Audit（只读）：[R36_INTERACTION_ARCHITECTURE_AUDIT](R36_INTERACTION_ARCHITECTURE_AUDIT.md)，11 surfaces / 8 transitions / 6 risks；R11 picker 等 4 个缺口待下一阶段。
+- 验证：`compileReleaseKotlin` PASS；`testQaUnitTest` **1504 / 4 failed**（恰为 frozen gate；harness 新测试通过）；`assembleRelease` Wilmington `BLOCKED_EXTERNAL_CONFIGURATION`（无签名环境，未绕过、未冒充）。证据 `.external_outbox/r36-2/light-tint/`。
+- device_verified / human_visual：NOT_RUN（单次 adb 为空，不轮询）。
+
+### 2026-09-18 R36 Recovery / State Reconciliation Gate（PASS，已归档，内容保留）
 
 - authority：`.memory/active_object.yaml` = `R36_RECOVERY_AND_R36_2_CLOSURE / state_reconciliation_in_progress`；本节与该文件一致，不再以旧 `R36_2_OPTICAL_MATERIAL_REWRITE / foundation_verified…` 作为当前可执行任务。
 - 现场：分支 `feat/risediary-inspired-dock`，HEAD `5284f80` + 74 tracked + 63 untracked 脏工作区；HEAD 不是当前实现状态。冻结见 [R36_RECOVERY_SNAPSHOT_20260918](R36_RECOVERY_SNAPSHOT_20260918.md)，归类见 [R36_DIRTY_WORKTREE_INVENTORY](R36_DIRTY_WORKTREE_INVENTORY.md)。

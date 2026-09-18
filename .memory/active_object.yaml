@@ -1,11 +1,15 @@
-id: R36_RECOVERY_AND_R36_2_CLOSURE
-status: state_reconciliation_in_progress
-scope: Reconcile 74-tracked + 63-untracked dirty worktree into a traceable R36 baseline; close settings-batch test authority without visual changes. No R36.3 interaction implementation; interaction audit only.
+id: R36_2_LIGHT_TINT_CLOSURE
+status: engineering_candidate_device_approval_pending
+scope: Light-tint authority evaluation only (frozen .86 kept; .45 standing candidate; .55/.65/.75 harness added). No dark/lens/edge/shadow work; interaction audit only, no implementation.
+verdict: NOT_APPROVED
+frozen_authority: light tint .86
+standing_candidate: light tint .45 (unapproved)
 blocked:
   PDF_GLASS_FLICKER: BLOCKED_REPRODUCTION / WAITING_FOR_DEVICE_SCENE_CONFIRMATION
-  SETTINGS_GLASS_COMPARISON: IMPLEMENTATION_DONE / DEVICE_VISUAL_NOT_RUN
+  ASSEMBLE_RELEASE: BLOCKED_EXTERNAL_CONFIGURATION
+  DEVICE_VISUAL: NOT_RUN
 project_state: docs/CURRENT_STATUS.md
-snapshot: docs/R36_RECOVERY_SNAPSHOT_20260918.md
-inventory: docs/R36_DIRTY_WORKTREE_INVENTORY.md
-report: docs/R36_2_OPTICAL_MATERIAL_REPORT.md
+evaluation: docs/R36_2_LIGHT_TINT_EVALUATION.md
+audit: docs/R36_INTERACTION_ARCHITECTURE_AUDIT.md
+evidence: .external_outbox/r36-2/light-tint/
 updated: 2026-09-18
