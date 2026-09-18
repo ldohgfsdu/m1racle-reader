@@ -336,7 +336,20 @@ object GlassMaterialEngine {
             GlassPreviewPreset.Tint35 -> .35f
             else -> null
         }
-        val roleRecipe = if (tint == null) baseRecipe else baseRecipe.copy(
+        val roleRecipe = if (tint == null) {
+            // R36.2 dark families: uniform delta on dark alpha only. Light alpha,
+            // blur and every other channel stay at the role's frozen values, so the
+            // +.06 panel-over-control delta survives the experiment.
+            val darkDelta = when (previewPreset) {
+                GlassPreviewPreset.DarkD1 -> -0.06f
+                GlassPreviewPreset.DarkD2 -> -0.12f
+                GlassPreviewPreset.DarkD3 -> 0.06f
+                else -> null
+            }
+            if (darkDelta == null) baseRecipe else baseRecipe.copy(
+                darkSurfaceAlpha = (baseRecipe.darkSurfaceAlpha + darkDelta).coerceIn(0f, 1f),
+            )
+        } else baseRecipe.copy(
             blur = when (previewPreset) {
                 GlassPreviewPreset.Blur32 -> 32.dp
                 GlassPreviewPreset.Blur40 -> 40.dp

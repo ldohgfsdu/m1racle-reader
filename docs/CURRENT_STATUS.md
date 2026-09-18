@@ -2,7 +2,15 @@
 
 更新：2026-09-18。此文件是当前工程与发布状态的唯一入口；阶段报告只描述当时证据。
 
-## 当前任务（唯一 active object：R36_2_LIGHT_TINT_CLOSURE）
+## 当前任务（唯一 active object：R36_2_DARK_OPTICAL_RECIPE）
+
+### 2026-09-18 R36.2 Dark Recipe（AUDIT_DONE，DEVICE_APPROVAL_PENDING）
+
+- 审计：production dark authority 逐 role 落表（Control 系 .80 / Panel 系 .86，DARK_ROLE_OPACITY_DELTA=+.06 intentional；Dialog #121212/.97/18dp/.46；Dock #171717/.98），见 [R36_2_DARK_RECIPE_EVALUATION](R36_2_DARK_RECIPE_EVALUATION.md)。无 production bug，frozen 不动。
+- 候选：D0(.80/.86) / D1(−.06) / D2(−.12) / D3(+.06)，DarkD1–D3 previewPreset 全 role 统一 delta、frozen blur、前景独立，隔离契约 PASS；R11 审计缺口已闭合（picker 继承 S4，无独立 surface）。
+- 分析：白底 D0 已是 #333333 深灰板（场景 A 最高优判别）；D2 白底 #525252 灰板风险最高；深色底四档无判别力、风险在表面同化。视觉列 NOT_RUN。
+- 验证：`compileReleaseKotlin` PASS；`testQaUnitTest` **1506 / 0 / 0 / 0**；`assembleRelease` BLOCKED_EXTERNAL_CONFIGURATION。证据 `.external_outbox/r36-2/dark/`。
+- device/human：NOT_RUN。Audit 文档 R11 行已更新。
 
 ### 2026-09-18 R36.2 Light Tint Reconciliation（LIGHT_RECONCILIATION_PASS）
 

@@ -17,7 +17,7 @@
 | S8 | Home 行 DropdownMenu | Dock role（SOLID）行 + 系统 DropdownMenu | DocumentListRow 三点按钮 | 无 glass 采样 | 按钮锚点 | expanded=false | popup window | 无 |
 | S9 | Dialogs（删除确认/导出/大纲导入/大纲编辑/正文编辑确认/批注编辑） | Dialog（fallbackPlate：跨 window 不采样） | 各调用方；GlassAlertDialog role=Dialog + interaction=true | 不采样（soft plate） | 居中 window | dismiss | platform window | 无 |
 | S10 | Markdown 顶栏渐变 | ProgressiveChrome（16dp/.62 legacy） | ViewerScreen + readerGradient | reader backdrop | 顶部 | scroll | foreground | 无 |
-| S11 | 缩略图/目录选择器（ReaderAdvancedCard picker） | 未标注 glass role（待确认） | pickerExpanded AnimatedVisibility（ReaderAdvancedCard.kt:737） | 待确认 | 待确认 | 收起 | 待确认 | **审计缺口** |
+| S11 | 章节导出 picker（ReaderAdvancedCard 内） | 无独立 role（继承 S4 SettingsCard popover） | picker 行点击 | 父 popover backdrop | 父容器内 | 选中即收起 | 父层内 | 无 |
 
 ## 2. Transition inventory
 
@@ -34,7 +34,7 @@
 
 ## 3. Architecture risks（只记录，不修）
 
-1. R11 审计缺口：ReaderAdvancedCard picker 的 AnimatedVisibility（:737）未确认 glass role/backdrop；下一阶段补。
+1. R11 已闭合（2026-09-18）：picker 是 S4 popover 内部行展开（默认 AnimatedVisibility fade+expand），无独立 glass surface/backdrop；但默认 `expandVertically` 与 motion-token 纪律的关系待下一阶段裁定（见风险 5 同类问题）。
 2. 两组 chrome fade 时长并存（PdfViewerScreen :1563–1593 vs :1666–1667）；motion token 是否应收敛——下一阶段决定。
 3. HubTabTransitions 曲线未细读；SEARCH 无 hub 转场是刻意还是遗漏——下一阶段确认。
 4. GlassAlertDialog 动画未细读；Dialog 在跨 window 无采样路径下 interaction=true 的 press 语义——下一阶段确认。

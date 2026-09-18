@@ -122,6 +122,67 @@ class GlassOpticalPolicyTest {
     }
 
     @Test
+    fun `dark candidates keep foreground policy and frozen channels`() {
+        // R36.2 dark families: uniform delta on dark alpha only. Role delta
+        // (+.06 panel over control) must survive; frozen blur untouched.
+        val deltas = mapOf(
+            GlassPreviewPreset.DarkD1 to -0.06f,
+            GlassPreviewPreset.DarkD2 to -0.12f,
+            GlassPreviewPreset.DarkD3 to 0.06f,
+        )
+        val roles = listOf(
+            GlassMaterialRole.Control,
+            GlassMaterialRole.Capsule,
+            GlassMaterialRole.Menu,
+            GlassMaterialRole.ExpandedMenu,
+            GlassMaterialRole.SettingsCard,
+            GlassMaterialRole.Dialog,
+            GlassMaterialRole.Dock,
+            GlassMaterialRole.ProgressiveChrome,
+            GlassMaterialRole.PreviewCapsule,
+        )
+        for ((preset, delta) in deltas) {
+            for (role in roles) {
+                val production = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_DARK)
+                val spec = GlassMaterialEngine.resolve(
+                    role, GlassEnvironment.READER_DARK, previewPreset = preset)
+                val expectedDark =
+                    (production.surfaceColor.alpha + delta).coerceIn(0f, 0.98f)
+                assertEquals("dark tint $preset/$role", expectedDark, spec.surfaceColor.alpha, .005f)
+                assertEquals("dark tint rgb $preset/$role",
+                    production.surfaceColor.copy(alpha = 1f), spec.surfaceColor.copy(alpha = 1f))
+                assertEquals(production.blur, spec.blur)
+                assertEquals(production.shadow, spec.shadow)
+                assertEquals(production.shadowColor, spec.shadowColor)
+                assertEquals(production.highlightWidth, spec.highlightWidth)
+                assertEquals(production.highlightColor, spec.highlightColor)
+                assertEquals(production.vibrancy, spec.vibrancy)
+                assertEquals(production.lensEnabled, spec.lensEnabled)
+                assertEquals(production.lensHeight, spec.lensHeight)
+                assertEquals(production.lensAmount, spec.lensAmount)
+                assertEquals(production.family, spec.family)
+                assertEquals(production.foreground, spec.foreground)
+                assertEquals(production.chromaticAberration, spec.chromaticAberration)
+                assertEquals(production.brightness, spec.brightness, 0f)
+                assertEquals(production.saturation, spec.saturation, 0f)
+                // Light side completely untouched by dark candidates.
+                val lightProd = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
+                val lightSpec = GlassMaterialEngine.resolve(
+                    role, GlassEnvironment.READER_LIGHT, previewPreset = preset)
+                assertEquals("light untouched $preset/$role", lightProd.surfaceColor, lightSpec.surfaceColor)
+                assertEquals(lightProd.blur, lightSpec.blur)
+            }
+            // Role hierarchy delta survives every family.
+            val control = GlassMaterialEngine.resolve(
+                GlassMaterialRole.Control, GlassEnvironment.READER_DARK, previewPreset = preset)
+            val panel = GlassMaterialEngine.resolve(
+                GlassMaterialRole.SettingsCard, GlassEnvironment.READER_DARK, previewPreset = preset)
+            assertEquals("role delta $preset", 0.06f,
+                panel.surfaceColor.alpha - control.surfaceColor.alpha, 0.006f)
+        }
+    }
+
+    @Test
     fun `renderers honor effective capability and share progressive endpoints`() {
         val root = listOf(File("src/main/java/com/m1racle/reader/ui"),
             File("app/src/main/java/com/m1racle/reader/ui")).first { it.isDirectory }

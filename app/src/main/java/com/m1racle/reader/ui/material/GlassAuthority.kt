@@ -50,6 +50,8 @@ enum class GlassPreviewPreset {
     CapsuleReference,
     Tint86, Tint80, Tint75, Tint70, Tint65, Tint60, Tint55, Tint50, Tint45,
     Blur32, Blur40, Tint35,
+    /** R36.2 dark families: uniform delta on dark alpha, frozen blur. */
+    DarkD1, DarkD2, DarkD3,
 
 }
 

@@ -1,15 +1,17 @@
 id: R36_2_DARK_OPTICAL_RECIPE
-status: light_reconciliation_pass_dark_audit_pending
-scope: Dark-tint authority audit first, then limited dark candidates only. Edge/shadow/lens frozen. Interaction audit only, no implementation.
+status: audit_done_device_approval_pending
+scope: Dark families D1-D3 harness only; production frozen D0 untouched. Edge/shadow/lens frozen. Interaction audit only, no implementation.
 light_production_authority: FROZEN_086
-light_status: CLOSED_ON_FROZEN_BASELINE
+dark_production_authority: FROZEN_D0
+production_status: CLOSED_ON_FROZEN_BASELINE
 experiment_status: DEVICE_APPROVAL_PENDING
+role_delta: DARK_ROLE_OPACITY_DELTA_PLUS_006
 blocked:
   PDF_GLASS_FLICKER: BLOCKED_REPRODUCTION / WAITING_FOR_DEVICE_SCENE_CONFIRMATION
   ASSEMBLE_RELEASE: BLOCKED_EXTERNAL_CONFIGURATION
   DEVICE_VISUAL: NOT_RUN
 project_state: docs/CURRENT_STATUS.md
-evaluation: docs/R36_2_LIGHT_TINT_EVALUATION.md
+evaluation: docs/R36_2_DARK_RECIPE_EVALUATION.md
 audit: docs/R36_INTERACTION_ARCHITECTURE_AUDIT.md
-evidence: .external_outbox/r36-2/light-tint/
+evidence: .external_outbox/r36-2/dark/
 updated: 2026-09-18
