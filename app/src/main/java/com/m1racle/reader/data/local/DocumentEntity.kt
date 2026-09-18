@@ -50,12 +50,17 @@ data class DocumentEntity(
     val pdfViewportScale: Float? = null,
     val pdfViewportGeneration: Long? = null,
     /**
-     * SHA-256 of the original imported source bytes when known.
+     * SHA-256 of the current reading revision when known.
+     * The last verified external source version is stored separately in sourceSha256.
      *
      * Nullable for documents created before the v6 -> v7 migration. Multiple
      * legacy NULL values are permitted by SQLite's UNIQUE index semantics.
      */
     val contentSha256: String? = null,
+    /** Original external source; independent from the current managed reading revision. */
+    val sourceUri: String? = null,
+    /** Last verified external-source bytes, used to reject overwriting outside edits. */
+    val sourceSha256: String? = null,
 ) {
     val type: DocumentType
         get() = DocumentType.fromStorage(documentType)

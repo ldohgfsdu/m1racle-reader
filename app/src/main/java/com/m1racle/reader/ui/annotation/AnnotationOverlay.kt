@@ -9,7 +9,7 @@ import com.m1racle.reader.data.repository.ReadingRepository
  * R25 覆盖层绘制**数据契约**（只定义消费什么，不定义怎么画）。
  *
  * 渲染层（未来任务）按坐标系取快照后自行换算：
- * - PDF：[AnnotationOverlayItem.pdfRectNormalized] 给出页内归一化矩形，
+ * - PDF：[AnnotationOverlayItem.pdfRectsNormalized] 给出页内归一化矩形，
  *   乘以当前页面渲染尺寸即得屏幕矩形——与缩放无关；
  * - Markdown：blockIndex 定位块，字符区间由消费方映射到文本布局。
  */
@@ -20,8 +20,8 @@ data class AnnotationOverlayItem(
     val excerpt: String?,
 ) {
     /** PDF 页内归一化矩形；非 PDF 锚点返回 null。 */
-    fun pdfRectNormalized(): NormalizedRect? =
-        (anchor as? DocumentAnchor.PdfPage)?.rect
+    fun pdfRectsNormalized(): List<NormalizedRect> =
+        (anchor as? DocumentAnchor.PdfPage)?.rects.orEmpty()
 
     fun markdownRange(): Pair<Int, Int>? =
         (anchor as? DocumentAnchor.MarkdownBlock)

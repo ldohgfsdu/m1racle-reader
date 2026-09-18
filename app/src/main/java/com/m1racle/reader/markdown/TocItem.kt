@@ -12,3 +12,7 @@ data class TocItem(
     val anchor: String,
     val blockIndex: Int,
 )
+
+/** Current section at a document block, shared by the drawer and reading chrome. */
+internal fun List<TocItem>.activeAt(blockIndex: Int): TocItem? =
+    lastOrNull { it.blockIndex <= blockIndex.coerceAtLeast(0) } ?: firstOrNull()

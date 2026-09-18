@@ -40,6 +40,7 @@ import com.m1racle.reader.ui.navigation.M1racleReaderNavGraph
 import com.m1racle.reader.ui.navigation.Routes
 import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import com.m1racle.reader.ui.viewer.ReaderPerformanceExperiments
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -102,6 +103,16 @@ class MainActivity : ComponentActivity() {
                         coordinator.pendingNavigation.collectLatest { req ->
                             if (req != null) {
                                 try {
+                                    val current = navController.currentBackStackEntry
+                                    if (current?.destination?.route == Routes.PDF_EDITOR) {
+                                        if (current.arguments?.getString("documentId") == req.documentId) {
+                                            return@collectLatest
+                                        }
+                                        toast("文档已导入，退出正文编辑后打开")
+                                        navController.currentBackStackEntryFlow.first {
+                                            it.destination.route != Routes.PDF_EDITOR
+                                        }
+                                    }
                                     navigateReplaceViewer(
                                         navController = navController,
                                         documentId = req.documentId,

@@ -182,7 +182,7 @@ class ReaderChromeGeometryTest {
     fun `capsule expansion keeps top and centerX`() {
         val screenW = 412
         // The expanded popover's TOP EDGE keeps the pill's width and position;
-        // only the body widens below (CapsulePopoverShape).
+        // only the body widens below the parent card.
         val pillWidth = 200
         val bodyWidth = 240
         val pillLeft = screenW / 2 - pillWidth / 2

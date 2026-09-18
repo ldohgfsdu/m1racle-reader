@@ -1,5 +1,13 @@
 package com.m1racle.reader.ui.pdf
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -88,8 +96,13 @@ class ReaderMoreHostUiTest {
         ),
     )
 
-    private fun launchContent(initial: ReaderMoreState = ReaderMoreState.MAIN) {
+    private fun launchContent(
+        initial: ReaderMoreState = ReaderMoreState.MAIN,
+        fontScale: Float = 1f,
+        height: Dp? = null,
+    ) {
         composeRule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
             M1racleReaderTheme {
                 var state by remember { mutableStateOf(initial) }
                 var childClosing by remember { mutableStateOf(false) }
@@ -149,7 +162,10 @@ class ReaderMoreHostUiTest {
                     nestedData = advancedData(),
                     nestedMaxHeightDp = 520.dp,
                     viewportBottomRoot = 1800f,
+                    onPreparingLayoutReady = { state = it },
+                    modifier = height?.let { Modifier.height(it) } ?: Modifier,
                 )
+            }
             }
         }
     }
@@ -234,5 +250,15 @@ class ReaderMoreHostUiTest {
     fun `collapsed shows one more circle`() {
         launchContent(ReaderMoreState.CLOSED)
         composeRule.onAllNodesWithContentDescription("打开菜单").assertCountEquals(1)
+    }
+
+    @Test
+    fun `short viewport can enter a child after collapsing inline options`() {
+        launchContent(fontScale = 2f, height = 260.dp)
+        composeRule.onNodeWithText("阅读方式").performClick()
+        composeRule.onNodeWithText("设置教材页码").performScrollTo().assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        org.junit.Assert.assertEquals(ReaderMoreState.CHILD_PAGE_MAPPING, lastState)
+        composeRule.onAllNodesWithText("印刷页码").onFirst().assertExists()
     }
 }

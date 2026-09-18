@@ -212,6 +212,77 @@ class ContentIdentityImportWiringTest {
         assertTrue(fixture.aliasDao.allAliases().isEmpty())
     }
 
+    @Test
+    fun savingEditedPdfKeepsStableIdentityAndReadingAssets() = runBlocking {
+        val source=fixture.localPdf("original PDF bytes")
+        fixture.seedLegacyPathA("editable",Uri.fromFile(source))
+        val before=fixture.documentDao.getById("editable")!!
+        val candidate=fixture.localPdf("edited PDF bytes")
+        val saved=fixture.repository.savePdfEdits(before.id,com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),candidate)
+        assertEquals(before.id,saved.id); assertEquals(before.lastScrollIndex,saved.lastScrollIndex)
+        assertEquals(before.readingProgress,saved.readingProgress)
+        assertEquals(1,fixture.documentDao.rows.size); assertEquals(0,fixture.documentDao.replaceCalls)
+        assertEquals("original PDF bytes",source.readText())
+        assertEquals("edited PDF bytes",File(Uri.parse(saved.uri).path!!).readText())
+        assertTrue(fixture.documentDao.bookmarks.any { it.second == saved.id })
+        assertTrue(fixture.documentDao.highlights.any { it.second == saved.id })
+        assertTrue(fixture.documentDao.notes.any { it.second == saved.id })
+    }
+
+    @Test
+    fun overwriteAfterLocalSaveUsesOriginalSourceHashAndUpdatesSameBook() = runBlocking {
+        val source=fixture.localPdf("original PDF bytes")
+        fixture.seedLegacyPathA("editable",Uri.fromFile(source))
+        val first=fixture.localPdf("first revision")
+        val local=fixture.repository.savePdfEdits("editable",com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),first)
+        val next=fixture.localPdf("second revision")
+        val saved=fixture.repository.savePdfEdits(local.id,local.contentSha256!!,next,Uri.fromFile(source))
+        assertEquals("second revision",source.readText())
+        assertEquals(local.id,saved.id); assertEquals(saved.contentSha256,saved.sourceSha256)
+        assertEquals(Uri.fromFile(source).toString(),saved.sourceUri)
+        assertEquals(1,fixture.documentDao.rows.size)
+        assertEquals(null,fixture.repository.pdfSourceRecoveryBackup(saved.id))
+    }
+
+    @Test
+    fun failedDocumentUpdateRestoresExternalSource() = runBlocking {
+        val source=fixture.localPdf("original PDF bytes")
+        fixture.seedLegacyPathA("editable",Uri.fromFile(source))
+        val candidate=fixture.localPdf("replacement PDF bytes")
+        fixture.documentDao.rejectUpdates=true
+        var failed=false
+        try { fixture.repository.savePdfEdits("editable",com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),candidate,Uri.fromFile(source)) }
+        catch (_: IllegalStateException) { failed=true }
+        assertTrue(failed); assertEquals("original PDF bytes",source.readText())
+        assertEquals(Uri.fromFile(source).toString(),fixture.documentDao.getById("editable")!!.uri)
+        assertEquals(null,fixture.repository.pdfSourceRecoveryBackup("editable"))
+    }
+
+    @Test
+    fun changedLibraryRevisionRejectsStaleEditorSave() = runBlocking {
+        val source=fixture.localPdf("original PDF bytes")
+        fixture.seedLegacyPathA("editable",Uri.fromFile(source))
+        val candidate=fixture.localPdf("new revision")
+        var failed=false
+        try { fixture.repository.savePdfEdits("editable","stale hash",candidate) }
+        catch (_: IllegalStateException) { failed=true }
+        assertTrue(failed); assertEquals("original PDF bytes",source.readText())
+        assertEquals(1,fixture.documentDao.rows.size)
+    }
+
+    @Test
+    fun equalBytesFromAnotherFileUpdateTheWriteBackTarget() = runBlocking {
+        val first=fixture.source("content://r37.test/source-a.pdf")
+        val second=fixture.source("content://r37.test/source-b.pdf")
+        val a=(fixture.repository.importDocument(first) as ImportResult.Success).document
+        val b=(fixture.repository.importDocument(second) as ImportResult.Success).document
+        assertEquals(a.id,b.id)
+        assertEquals(second.toString(),b.sourceUri)
+        assertEquals(second.toString(),fixture.documentDao.getById(a.id)!!.sourceUri)
+        assertEquals(b.contentSha256,b.sourceSha256)
+        assertEquals(0,fixture.documentDao.replaceCalls)
+    }
+
     private class Fixture(private val context: Context) {
         val documentDao = IdentityDocumentDao()
         val aliasDao = TestDocumentAliasDao()
@@ -269,6 +340,8 @@ class ContentIdentityImportWiringTest {
             repository = repository,
             contentIdentityResolver = resolver,
         )
+
+        fun localPdf(text: String): File = File(staging,"${UUID.randomUUID()}.pdf").apply { writeText(text) }
 
         fun source(value: String): Uri = Uri.parse(value).also {
             sources[it.toString()] = PDF_BYTES
@@ -335,6 +408,8 @@ class ContentIdentityImportWiringTest {
         }
 
         fun assertNewPdf(document: DocumentEntity, sourceUri: Uri) {
+            assertEquals(sourceUri.toString(), document.sourceUri)
+            assertEquals(EXPECTED_SHA256, document.sourceSha256)
             assertEquals(EXPECTED_SHA256, document.contentSha256)
             assertEquals(DocumentType.PDF, document.type)
             assertEquals(PDF_BYTES.size.toLong(), document.fileSize)
@@ -391,7 +466,9 @@ class ContentIdentityImportWiringTest {
             return rows.size.toLong()
         }
 
+        var rejectUpdates = false
         override suspend fun updateDocument(document: DocumentEntity) {
+            check(!rejectUpdates) { "Injected database update failure" }
             if (document.id in rows) rows[document.id] = document
             publish()
         }

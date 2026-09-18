@@ -1,5 +1,9 @@
 package com.m1racle.reader.data.repository
 
+import com.m1racle.reader.pdf.edit.PdfSourceWriteStore
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
+import java.io.FileOutputStream
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteConstraintException
@@ -83,6 +87,94 @@ class DocumentRepository(
 
     fun observeRecentDocuments(): Flow<List<DocumentEntity>> =
         documentDao.observeRecentDocuments()
+
+    private val pdfSourceWrites by lazy {
+        PdfSourceWriteStore(File(context.filesDir,"pdf-source-writes"),
+            read = { value -> context.contentResolver.openInputStream(Uri.parse(value)) ?: error("无法读取源文件") },
+            write = { value -> context.contentResolver.openOutputStream(Uri.parse(value),"wt") ?: error("无法写入源文件，请重新授权") },
+        )
+    }
+
+    /** A new immutable revision plus a Room pointer update preserves id and every child row. */
+    suspend fun savePdfEdits(id: String, expectedHash: String, candidate: File, sourceTarget: Uri? = null): DocumentEntity =
+        withContext(Dispatchers.IO) {
+            ensureIdentityRuntimeReady()
+            identityCommitMutex.withLock {
+                if(sourceTarget!=null) check(pdfSourceWrites.pending().none { it.documentId == id }) { "存在未完成的源文件恢复，请先导出备份；当前修改仍可保存到书库" }
+                val before = documentDao.getById(id) ?: error("文档已移除")
+                check(before.isPdf) { "只能保存 PDF 正文" }
+                val actual = context.contentResolver.openInputStream(Uri.parse(before.uri))?.use(PdfSourceWriteStore::sha256)
+                check(actual == expectedHash) { "书库文档已发生变化，请重新打开后编辑" }
+                val nextHash = PdfSourceWriteStore.sha256(candidate)
+                val owner = contentIdentityResolver.findExistingDocument(nextHash)
+                check(owner == null || owner.id == id) { "相同内容已在书库中，请使用另存副本" }
+                val folder = File(context.filesDir,"library/$nextHash/${UUID.randomUUID()}")
+                check(folder.mkdirs()) { "无法创建保存文件" }
+                val revision = File(folder,ExternalDocumentImporter.sanitizeFileName(before.displayName,"pdf"))
+                var ticket: PdfSourceWriteStore.Ticket? = null
+                var writing = false
+                var committed = false
+                try {
+                    FileOutputStream(revision).use { out -> candidate.inputStream().use { it.copyTo(out) }; out.fd.sync() }
+                    check(PdfSourceWriteStore.sha256(revision) == nextHash) { "保存文件核验失败" }
+                    if (sourceTarget != null) {
+                        ticket = pdfSourceWrites.prepare(id,sourceTarget.toString(),before.sourceSha256 ?: expectedHash,revision)
+                    }
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    // Once external truncation starts, finish commit/rollback even if the editor exits.
+                    val result = withContext(NonCancellable) {
+                        ticket?.let { pdfSourceWrites.replace(it) { writing = true } }
+                        importTransactionRunner.run {
+                            val current = documentDao.getById(id) ?: error("文档已移除")
+                            check(current.uri == before.uri && current.contentSha256 == before.contentSha256) { "文档已发生变化，未保存" }
+                            val updated = current.copy(uri=Uri.fromFile(revision).toString(),contentSha256=nextHash,
+                                fileSize=revision.length(),lastOpenedAt=System.currentTimeMillis(),
+                                sourceUri=sourceTarget?.toString() ?: current.sourceUri,
+                                sourceSha256=if(sourceTarget!=null) nextHash else current.sourceSha256 ?: expectedHash)
+                            documentDao.updateDocument(updated)
+                            searchRepository.index(updated,indexedAt=System.currentTimeMillis())
+                            updated
+                        }.also { committed = true }
+                    }
+                    ticket?.let(pdfSourceWrites::finish)
+                    runCatching { deleteAppPrivateLibraryCopy(context.filesDir,before.uri) }
+                    result
+                } catch (error: Exception) {
+                    if (!committed) {
+                        val pending = ticket
+                        if (pending != null && writing) {
+                            try {
+                                withContext(NonCancellable) { pdfSourceWrites.restore(pending) }
+                                pdfSourceWrites.finish(pending)
+                            } catch (restore: Exception) {
+                                throw java.io.IOException("保存未完成，源文件备份已保留。可导出备份后恢复。",restore)
+                            }
+                        } else pending?.let(pdfSourceWrites::finish)
+                        folder.deleteRecursively()
+                    }
+                    throw error
+                }
+            }
+        }
+
+    /** Reconcile an interrupted external write using the durable Room commit as authority. */
+    suspend fun recoverPdfSourceWrites(documentId: String? = null): List<String> = withContext(Dispatchers.IO) {
+        identityCommitMutex.withLock {
+            pdfSourceWrites.pending().filter { documentId == null || it.documentId == documentId }.mapNotNull { ticket ->
+                try {
+                    val document = documentDao.getById(ticket.documentId)
+                    val committed = document?.sourceUri == ticket.uri && document.sourceSha256 == ticket.after
+                    pdfSourceWrites.recover(ticket,committed)
+                    if (!committed) deleteAppPrivateLibraryCopy(context.filesDir,Uri.fromFile(ticket.candidate).toString())
+                    null
+                } catch (e: Exception) { e.message ?: "源文件恢复失败，备份已保留" }
+            }
+        }
+    }
+
+    suspend fun pdfSourceRecoveryBackup(id: String): File? = withContext(Dispatchers.IO) {
+        identityCommitMutex.withLock { pdfSourceWrites.pending().firstOrNull { it.documentId == id }?.backup }
+    }
 
     suspend fun getById(id: String): DocumentEntity? =
         documentDao.getById(id)
@@ -220,10 +312,15 @@ class DocumentRepository(
         val prepared = request.content
         val hashOwner = contentIdentityResolver.findExistingDocument(prepared.contentSha256)
         if (hashOwner != null) {
-            documentDao.updateLastOpenedAt(hashOwner.id, now)
+            // Equal bytes may come from different external files. Write back to the
+            // source the user actually opened, rather than the first imported alias.
+            val opened = hashOwner.copy(lastOpenedAt=now,
+                sourceUri=if(hashOwner.isPdf) prepared.sourceUri.toString() else hashOwner.sourceUri,
+                sourceSha256=if(hashOwner.isPdf) prepared.contentSha256 else hashOwner.sourceSha256)
+            documentDao.updateDocument(opened)
             bindVerifiedSourceAliases(request, hashOwner.id, now)
             return ResolvedImportCommit(
-                document = hashOwner.copy(lastOpenedAt = now),
+                document = opened,
                 reusedExisting = true,
             )
         }
@@ -300,6 +397,8 @@ class DocumentRepository(
             documentType = request.documentType.name,
             pageCount = 0,
             contentSha256 = prepared.contentSha256,
+            sourceUri = if (request.documentType == DocumentType.PDF) prepared.sourceUri.toString() else null,
+            sourceSha256 = if (request.documentType == DocumentType.PDF) prepared.contentSha256 else null,
         )
         documentDao.insertDocument(entity)
         searchRepository.index(entity, indexedAt = now)

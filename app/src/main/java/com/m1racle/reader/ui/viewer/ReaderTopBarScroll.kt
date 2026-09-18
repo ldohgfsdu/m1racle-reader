@@ -10,14 +10,14 @@ import androidx.compose.ui.unit.Velocity
 import kotlin.math.abs
 
 /**
- * Continuous TopChrome collapse driven by NestedScrollSource.UserInput drag only.
+ * Continuous chrome collapse driven by observed drag and scroll inertia.
  *
  * Design goals (R9 chrome recovery + X-style immersive collapse):
  * - Observe scroll; never consume body deltas (always return [Offset.Zero] / zero velocity).
  * - Same-direction user deltas move [hiddenOffsetPx] 1:1 (pixel-sync with the finger).
  * - Small reverse deltas accumulate as reverse noise; only after [jitterIgnorePx] does direction
  *   switch and start moving the chrome the other way (R9 reverse-jitter semantics).
- * - Fling / postFling never move chrome mid-stream; velocity is recorded for settle only.
+ * - Inertia continues the observed motion; postFling records velocity for settle.
  * - UI-layer only: no ViewModel / DB / SavedState writes.
  *
  * Drag conventions (Compose nested scroll):
@@ -40,7 +40,7 @@ class ReaderTopBarScrollState(
     private val settleHideFraction: Float = 0.28f,
 ) {
     /**
-     * Total chrome height that must leave the screen: status bar inset + top bar (+ divider).
+     * Gesture distance for a complete controls fade: status bar inset + top bar.
      * Updated when density / orientation / insets change.
      */
     var maxHiddenOffsetPx by mutableFloatStateOf(maxHiddenOffsetPx.coerceAtLeast(0f))
@@ -65,6 +65,13 @@ class ReaderTopBarScrollState(
      */
     val visible: Boolean
         get() = hiddenOffsetPx <= 0.5f
+
+    private var interactionPinned = false
+
+    fun setInteractionPinned(pinned: Boolean) {
+        interactionPinned = pinned
+        if (pinned) forceShow()
+    }
 
     /** +1 last committed motion hides chrome; -1 shows; 0 none yet this gesture chain. */
     private var committedSign = 0
@@ -106,6 +113,7 @@ class ReaderTopBarScrollState(
      * Snap chrome to an absolute offset (settle animation frames / tests).
      */
     fun snapTo(offsetPx: Float) {
+        if (interactionPinned) return
         hiddenOffsetPx = offsetPx.coerceIn(0f, maxHiddenOffsetPx)
     }
 
@@ -113,6 +121,7 @@ class ReaderTopBarScrollState(
      * Apply one user-drag delta in pixels (Compose nested-scroll Y).
      */
     fun onUserDragDelta(dy: Float) {
+        if (interactionPinned) return
         if (!dy.isFinite() || dy == 0f || maxHiddenOffsetPx <= 0f) return
 
         // wantSign +1: hide more; -1: show more
@@ -165,6 +174,7 @@ class ReaderTopBarScrollState(
      * - Low speed → fraction threshold
      */
     fun resolveSettleTarget(velocityY: Float = consumePendingFlingVelocity()): Float {
+        if (interactionPinned) return 0f
         val max = maxHiddenOffsetPx
         if (max <= 0f) return 0f
         if (!velocityY.isFinite()) {

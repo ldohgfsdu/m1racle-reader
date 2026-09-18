@@ -27,6 +27,21 @@ class ReaderTopBarScrollStateTest {
     )
 
     @Test
+    fun openMenuPinsChromeAgainstPendingSettleAndFling() {
+        val s = state()
+        s.snapTo(45f)
+        s.setInteractionPinned(true)
+        s.snapTo(90f)
+        s.onUserDragDelta(-200f)
+        s.recordFlingVelocity(-2000f)
+        assertEquals(0f, s.hiddenOffsetPx, 0f)
+        assertEquals(0f, s.resolveSettleTarget(), 0f)
+        s.setInteractionPinned(false)
+        s.onUserDragDelta(-100f)
+        assertEquals(1f, s.collapseFraction, 0f)
+    }
+
+    @Test
     fun startsFullyShown() {
         val s = state()
         assertEquals(0f, s.hiddenOffsetPx, 0.001f)

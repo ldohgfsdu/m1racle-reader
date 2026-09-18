@@ -2,9 +2,11 @@ package com.m1racle.reader.ui.navigation
 
 import android.app.Application
 import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -32,8 +34,10 @@ import com.m1racle.reader.ui.home.HomeScreen
 import com.m1racle.reader.ui.home.HomeViewModel
 import com.m1racle.reader.ui.hub.BookmarksScreen
 import com.m1racle.reader.ui.hub.BookmarksViewModel
+import com.m1racle.reader.ui.hub.GlassDock
 import com.m1racle.reader.ui.hub.HubDestination
 import com.m1racle.reader.ui.hub.HubDockMotionProvider
+import com.m1racle.reader.ui.hub.HubTabTransitions
 import com.m1racle.reader.ui.hub.LibraryScreen
 import com.m1racle.reader.ui.hub.LibraryViewModel
 import com.m1racle.reader.ui.hub.HubSettingsScreen
@@ -53,6 +57,7 @@ object Routes {
     const val HOME = "home"
     const val VIEWER = "viewer/{documentId}?anchor={anchor}"
     const val PDF_VIEWER = "pdf/{documentId}?anchor={anchor}"
+    const val PDF_EDITOR = "pdf-edit/{documentId}?page={page}"
 
     // H2.2 Hub 顶层目的地（Dock 四入口；与 HubDestination.route 一一对应）。
     const val LIBRARY = "library"
@@ -129,17 +134,18 @@ fun M1racleReaderNavGraph(
     val selectedHub = HubDestination.fromRoute(currentEntry?.destination?.route)
         ?: HubDestination.fromRoute(navController.previousBackStackEntry?.destination?.route)
         ?: HubDestination.HOME
-    val hubEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition? = {
-        if (HubDestination.isTopLevelRoute(initialState.destination.route)) EnterTransition.None else null
+    val hubEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> androidx.compose.animation.EnterTransition? = {
+        HubTabTransitions.enter(initialState.destination.route, targetState.destination.route)
     }
-    val hubExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition? = {
-        if (HubDestination.isTopLevelRoute(targetState.destination.route)) ExitTransition.None else null
+    val hubExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> androidx.compose.animation.ExitTransition? = {
+        HubTabTransitions.exit(initialState.destination.route, targetState.destination.route)
     }
     HubDockMotionProvider(selected = selectedHub) {
+    Box(modifier = modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = Routes.HOME,
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
     ) {
         composable(Routes.HOME, enterTransition = hubEnter, exitTransition = hubExit) {
             val homeViewModel: HomeViewModel = viewModel(
@@ -312,6 +318,28 @@ fun M1racleReaderNavGraph(
         }
 
         composable(
+            route = Routes.PDF_EDITOR,
+            arguments = listOf(navArgument("documentId") { type = NavType.StringType }, navArgument("page") { type = NavType.IntType; defaultValue = 0 }),
+        ) { entry ->
+            val editor: com.m1racle.reader.ui.pdf.edit.PdfBodyEditorViewModel = viewModel(
+                factory = com.m1racle.reader.ui.pdf.edit.PdfBodyEditorViewModel.Factory(application, repository,
+                    entry.arguments?.getString("documentId").orEmpty(), entry.arguments?.getInt("page") ?: 0),
+            )
+            com.m1racle.reader.ui.pdf.edit.PdfBodyEditorScreen(editor,
+                onBack = {
+                    navController.navigate(Routes.pdfViewer(entry.arguments?.getString("documentId").orEmpty(),
+                        DocumentAnchor.PdfPage(editor.state.value.page?.index ?: 0))) {
+                        popUpTo(Routes.PDF_EDITOR) { inclusive=true }
+                    }
+                },
+                onSaved = { id ->
+                    navController.popBackStack(Routes.HOME, inclusive = false)
+                    navController.navigate(Routes.pdfViewer(id, DocumentAnchor.PdfPage(editor.state.value.page?.index ?: 0)))
+                },
+            )
+        }
+
+        composable(
             route = Routes.PDF_VIEWER,
             arguments = listOf(
                 navArgument("documentId") {
@@ -380,8 +408,27 @@ fun M1racleReaderNavGraph(
                     c?.onViewerClosed(documentId, sessionId)
                 }
             }
+            val editorLaunchScope = rememberCoroutineScope()
+            var openingEditor by remember { mutableStateOf(false) }
             PdfViewerScreen(
                 viewModel = pdfViewModel,
+                onEditBody = { page ->
+                    if (!openingEditor) {
+                        openingEditor=true
+                        editorLaunchScope.launch {
+                            try {
+                                pdfViewModel.releaseForEditing()
+                                navController.navigate("pdf-edit/$documentId?page=$page") {
+                                    popUpTo(Routes.PDF_VIEWER) { inclusive=true }
+                                }
+                            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                            catch (_: Exception) {
+                                navController.popBackStack(Routes.HOME,inclusive=false)
+                                android.widget.Toast.makeText(application,"暂时无法进入编辑，请重新打开文档",android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                },
                 onBack = {
                     navController.popBackStack(Routes.HOME, inclusive = false)
                 },
@@ -391,6 +438,12 @@ fun M1racleReaderNavGraph(
                 initialAnchor = initialAnchor,
             )
         }
+    }
+    if (HubDestination.isTopLevelRoute(currentEntry?.destination?.route)) {
+        GlassDock(
+            onSelect = { destination -> navController.navigateToHub(destination) },
+        )
+    }
     }
     } // HubDockMotionProvider
 }

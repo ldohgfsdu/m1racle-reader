@@ -14,32 +14,20 @@ class SelectionAnchorConversionTest {
 
     @Test
     fun `pdf selection converts to normalized page anchor`() {
-        val selection = TextSelection.PdfSelection(
-            page = 12,
-            leftPx = 100f, topPx = 200f, rightPx = 400f, bottomPx = 320f,
-            pageWidthPx = 1000f, pageHeightPx = 1414f,
-        )
+        val selection = TextSelection.PdfSelection(page = 12, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((100f) / (1000f), (200f) / (1414f), ((400f) - (100f)).coerceAtLeast(0f) / (1000f), ((320f) - (200f)).coerceAtLeast(0f) / (1414f))))
         val anchor = selection.toAnchor() as DocumentAnchor.PdfPage
         assertEquals(12, anchor.page)
-        assertEquals(0.1f, anchor.rect!!.x, 1e-6f)
-        assertEquals(200f / 1414f, anchor.rect!!.y, 1e-6f)
-        assertEquals(0.3f, anchor.rect!!.width, 1e-6f)
-        assertEquals((320f - 200f) / 1414f, anchor.rect!!.height, 1e-6f)
+        assertEquals(0.1f, anchor.rects.single().x, 1e-6f)
+        assertEquals(200f / 1414f, anchor.rects.single().y, 1e-6f)
+        assertEquals(0.3f, anchor.rects.single().width, 1e-6f)
+        assertEquals((320f - 200f) / 1414f, anchor.rects.single().height, 1e-6f)
     }
 
     @Test
     fun `same visual region at multiple pdf sizes yields identical anchor`() {
         // A4 视觉区域在 1×/3× 渲染尺寸下捕获：归一化锚点必须完全一致。
-        val small = TextSelection.PdfSelection(
-            page = 5,
-            leftPx = 60f, topPx = 90f, rightPx = 260f, bottomPx = 150f,
-            pageWidthPx = 595f, pageHeightPx = 842f,
-        )
-        val large = TextSelection.PdfSelection(
-            page = 5,
-            leftPx = 180f, topPx = 270f, rightPx = 780f, bottomPx = 450f,
-            pageWidthPx = 1785f, pageHeightPx = 2526f,
-        )
+        val small = TextSelection.PdfSelection(page = 5, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((60f) / (595f), (90f) / (842f), ((260f) - (60f)).coerceAtLeast(0f) / (595f), ((150f) - (90f)).coerceAtLeast(0f) / (842f))))
+        val large = TextSelection.PdfSelection(page = 5, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((180f) / (1785f), (270f) / (2526f), ((780f) - (180f)).coerceAtLeast(0f) / (1785f), ((450f) - (270f)).coerceAtLeast(0f) / (2526f))))
         assertEquals(small.toAnchor(), large.toAnchor())
     }
 
@@ -61,14 +49,10 @@ class SelectionAnchorConversionTest {
         assertNull(TextSelection.MarkdownSelection(0, 20, 5).toAnchor())
         // PDF：零面积 / 倒序矩形。
         assertNull(
-            TextSelection.PdfSelection(
-                0, 50f, 50f, 50f, 80f, 1000f, 1414f,
-            ).toAnchor(),
+            TextSelection.PdfSelection(page = 0, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((50f) / (1000f), (50f) / (1414f), ((50f) - (50f)).coerceAtLeast(0f) / (1000f), ((80f) - (50f)).coerceAtLeast(0f) / (1414f)))).toAnchor(),
         )
         assertNull(
-            TextSelection.PdfSelection(
-                0, 300f, 100f, 100f, 200f, 1000f, 1414f,
-            ).toAnchor(),
+            TextSelection.PdfSelection(page = 0, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((300f) / (1000f), (100f) / (1414f), ((100f) - (300f)).coerceAtLeast(0f) / (1000f), ((200f) - (100f)).coerceAtLeast(0f) / (1414f)))).toAnchor(),
         )
     }
 

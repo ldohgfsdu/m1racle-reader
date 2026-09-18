@@ -3,8 +3,8 @@ package com.m1racle.reader.data.anchor
 /**
  * 锚点的确定性文本编解码（存储形态）。零依赖、顺序固定、纯 JVM 可测。
  *
- * 格式（版本化前缀，未来演进以新增前缀实现）：
- * - `pdf:<page>|-|<x>,<y>,<w>,<h>`
+ * 格式（矩形列表使用分号分隔，已有单矩形是长度为 1 的列表）：
+ * - `pdf:<page>|-` 或 `pdf:<page>|<x>,<y>,<w>,<h>[;<x>,<y>,<w>,<h>...]`
  * - `md:<block>|-|<start>,<end>`
  *
  * 任何无法解析的输入 → null（恢复端永不抛异常）。
@@ -19,15 +19,10 @@ object AnchorCodec {
             append(PDF_PREFIX)
             append(anchor.page)
             append('|')
-            val r = anchor.rect
-            if (r == null) {
-                append('-')
-            } else {
-                appendFloat(r.x); append(',')
-                appendFloat(r.y); append(',')
-                appendFloat(r.width); append(',')
-                appendFloat(r.height)
-            }
+            if (anchor.rects.isEmpty()) append('-')
+            else append(anchor.rects.joinToString(";") { r ->
+                "${r.x},${r.y},${r.width},${r.height}"
+            })
         }
         is DocumentAnchor.MarkdownBlock -> buildString {
             append(MD_PREFIX)
@@ -60,18 +55,12 @@ object AnchorCodec {
         val parts = body.split('|')
         if (parts.size != 2) return null
         val page = parts[0].toIntOrNull()?.takeIf { it >= 0 } ?: return null
-        val rect = if (parts[1] == "-") {
-            null
-        } else {
-            val f = parts[1].split(',')
-            if (f.size != 4) return null
-            val x = f[0].toFloatOrNull() ?: return null
-            val y = f[1].toFloatOrNull() ?: return null
-            val w = f[2].toFloatOrNull() ?: return null
-            val h = f[3].toFloatOrNull() ?: return null
-            NormalizedRect(x, y, w, h).normalized()
+        val rects = if (parts[1] == "-") emptyList() else parts[1].split(';').map { encoded ->
+            val f = encoded.split(',').map { it.toFloatOrNull() ?: return null }
+            if (f.size != 4 || f.any { !it.isFinite() }) return null
+            NormalizedRect(f[0], f[1], f[2], f[3]).normalized()
         }
-        return DocumentAnchor.PdfPage(page = page, rect = rect)
+        return DocumentAnchor.PdfPage(page = page, rects = rects)
     }
 
     private fun decodeMd(body: String): DocumentAnchor? {
@@ -89,8 +78,4 @@ object AnchorCodec {
         }
     }
 
-    /** 统一浮点输出（Float.toString 已是确定性的最短往返表示）。 */
-    private fun StringBuilder.appendFloat(v: Float) {
-        append(v.toString())
-    }
 }

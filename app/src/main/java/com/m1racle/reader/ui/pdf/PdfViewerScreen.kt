@@ -70,6 +70,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -113,6 +114,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -145,6 +147,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -210,9 +216,12 @@ import com.m1racle.reader.ui.annotation.NoteEditDialog
 import com.m1racle.reader.ui.annotation.PdfHighlightLayer
 import com.m1racle.reader.ui.material.GlassBackdropHost
 import com.m1racle.reader.ui.material.GlassBackdropSource
+import com.m1racle.reader.ui.material.GlassEnvironment
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.LocalGlassBackdropHost
+import com.m1racle.reader.ui.material.LocalGlassEnvironment
 import com.m1racle.reader.ui.material.glassMaterial
+import com.m1racle.reader.ui.theme.LocalReaderDarkTheme
 import com.m1racle.reader.ui.reader.ReaderBookmarkController
 import com.m1racle.reader.ui.reader.ReaderHighlightController
 import com.m1racle.reader.ui.reader.ReaderNoteController
@@ -267,6 +276,8 @@ private const val MENU_CLOSE_MORPH_MS = 200L
 
 private val CapsuleMorphSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 450f)
 
+
+
 @Composable
 fun PdfViewerScreen(
     viewModel: PdfViewerViewModel,
@@ -277,6 +288,7 @@ fun PdfViewerScreen(
     highlightController: ReaderHighlightController? = null,
     noteController: ReaderNoteController? = null,
     initialAnchor: DocumentAnchor? = null,
+    onEditBody: ((Int) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val embeddedOffer by viewModel.embeddedOutlineOffer.collectAsStateWithLifecycle()
@@ -350,8 +362,6 @@ fun PdfViewerScreen(
         // Lock expiry is passive: the state machine checks the timestamp itself.
     }
 
-    // Center tap = explicit control (never the stepwise scroll rules):
-    // HIDDEN/BUTTONS_ONLY → FULL directly; FULL → HIDDEN directly.
     val toggleChromeByTap: () -> Unit = {
         chromeStateMachine.onCenterTap()?.let { applyChromeChange(it) }
     }
@@ -710,11 +720,25 @@ fun PdfViewerScreen(
                 LaunchedEffect(page, highlightController, highlightVersion) {
                     pageItems = highlightController?.itemsForPage(page).orEmpty()
                 }
+                var textPage by remember(state.document.uri, page) {
+                    mutableStateOf<com.m1racle.reader.pdf.PdfSelectablePage?>(null)
+                }
+                var textError by remember(state.document.uri, page) { mutableStateOf<String?>(null) }
+                LaunchedEffect(state.document.uri, page) {
+                    try {
+                        textPage = viewModel.selectableText(page)
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                    catch (_: Exception) { textError = "此页文字读取失败，请重新打开文档后重试" }
+                }
                 if (highlightController != null) {
                     PdfHighlightLayer(
                         pageIndex = page,
                         items = pageItems,
                         selectionEnabled = true,
+                        textPage = textPage,
+                        onSelectionUnavailable = {
+                            scope.launch { snackbarHostState.showSnackbar(textError ?: textPage?.unavailableReason ?: "正在读取此页文字，请稍后长按选择") }
+                        },
                         onSelectCompleted = { selection ->
                             scope.launch {
                                 when (highlightController.commitHighlight(selection)) {
@@ -891,6 +915,13 @@ fun PdfViewerScreen(
                     ),
                 ),
                 plainMenuItems = listOfNotNull(
+                    onEditBody?.let { edit ->
+                        PdfChromeMenuItem(
+                            icon = Icons.Outlined.Edit,
+                            label = "编辑正文",
+                            onClick = { viewModel.flushProgress(); edit(state.pageIndex) },
+                        )
+                    },
                     // Four advanced entries — each opens nested child from its own row.
                     PdfChromeMenuItem(
                         icon = Icons.Outlined.Tag,
@@ -1454,11 +1485,11 @@ private fun PdfChrome(
     val backdropHost = GlassBackdropHost(
         root = rootBackdrop,
         menuExport = parentExportBackdrop,
-        overDocument = true,
     )
 
     CompositionLocalProvider(
         LocalGlassBackdropHost provides backdropHost,
+        LocalGlassEnvironment provides GlassEnvironment.reader(LocalReaderDarkTheme.current),
     ) {
     Box(
         modifier = modifier
@@ -1521,17 +1552,20 @@ private fun PdfChrome(
                 .toPx()
         }
 
+        val moreChromeSlidePx = with(chromeDensity) { 22.dp.roundToPx() }
+
         // Left back button — fixed TopStart anchor; visible IFF the two circles
         // are on (FULL / BUTTONS_ONLY). Scroll NEVER hides it alone; only the
         // full-hide stage (or explicit entry) does.
-        AnimatedVisibility(
+        PdfChromeVisibility(
+            role = GlassMaterialRole.Control,
             visible = edgeButtonsVisible,
-            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -it / 2 },
+            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -moreChromeSlidePx },
             // Both round buttons exit with a 100ms delay so the hide order is
             // always capsule first, then the two circles (staggered by the
             // scroll rules; buttons re-enter immediately on restore).
             exit = fadeOut(tween(180, delayMillis = 100)) +
-                slideOutVertically(tween(180, delayMillis = 100)) { -it / 2 },
+                slideOutVertically(tween(180, delayMillis = 100)) { -moreChromeSlidePx },
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(start = 20.dp, top = chromeRowTopDp)
@@ -1549,9 +1583,9 @@ private fun PdfChrome(
         // the circle grown leftward/downward, never a second surface). The
         // layer stays alive while the menu is active so the morph container
         // is never torn down mid-animation.
-        val moreChromeSlidePx = with(chromeDensity) { 22.dp.roundToPx() }
         val menuActiveLayer = menuExpanded || menuClosing
-        AnimatedVisibility(
+        PdfChromeVisibility(
+            role = GlassMaterialRole.Menu,
             visible = edgeButtonsVisible || menuActiveLayer,
             // Slide amount is pinned to the circle size (the layer itself is
             // full-screen because it hosts the outside-tap catcher).
@@ -1626,7 +1660,8 @@ private fun PdfChrome(
                 .zIndex(if (capsuleExpanded) 3f else 1f),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            AnimatedVisibility(
+            PdfChromeVisibility(
+                role = GlassMaterialRole.Capsule,
                 visible = capsuleVisible && !menuActiveLayer,
                 enter = fadeIn(tween(180, delayMillis = 100)),
                 exit = fadeOut(tween(180)),

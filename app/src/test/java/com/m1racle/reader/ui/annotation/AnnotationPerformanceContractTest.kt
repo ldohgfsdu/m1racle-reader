@@ -86,7 +86,7 @@ class AnnotationPerformanceContractTest {
                 val id = index + 1L
                 val anchor = DocumentAnchor.PdfPage(
                     page = page,
-                    rect = NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f),
+                    rects = listOf(NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f)),
                 )
                 highlights.rows[id] = HighlightEntity(
                     id = id,
@@ -155,7 +155,7 @@ class AnnotationPerformanceContractTest {
         ReadingRepository(NoBookmarks(), NoFavorites(), highlights, notes, com.m1racle.reader.testing.testSearchRepository())
 
     private fun highlight(id: Long, documentId: String, page: Int): HighlightEntity {
-        val anchor = DocumentAnchor.PdfPage(page, NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f))
+        val anchor = DocumentAnchor.PdfPage(page, listOf(NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f)))
         return HighlightEntity(
             id = id,
             documentId = documentId,
@@ -167,7 +167,7 @@ class AnnotationPerformanceContractTest {
     }
 
     private fun note(id: Long, documentId: String, page: Int): NoteEntity {
-        val anchor = DocumentAnchor.PdfPage(page, NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f))
+        val anchor = DocumentAnchor.PdfPage(page, listOf(NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f)))
         return NoteEntity(
             id = id,
             documentId = documentId,

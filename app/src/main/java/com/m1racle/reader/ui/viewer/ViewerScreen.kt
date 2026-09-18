@@ -36,7 +36,6 @@ import androidx.compose.foundation.layout.statusBars
 
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListPrefetchScope
@@ -70,6 +69,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -83,6 +83,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -118,9 +119,20 @@ import com.m1racle.reader.data.settings.ReaderSettings
 import com.m1racle.reader.markdown.MarkdownBlock
 import com.m1racle.reader.markdown.MarkdownPerformance
 import com.m1racle.reader.markdown.TocItem
+import com.m1racle.reader.markdown.activeAt
 import com.m1racle.reader.markdown.blockContentType
 import com.m1racle.reader.markdown.blockId
-import com.m1racle.reader.ui.common.StatusBarProtection
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.derivedStateOf
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.m1racle.reader.ui.material.GlassEnvironment
+import com.m1racle.reader.ui.material.LocalGlassEnvironment
+import com.m1racle.reader.ui.theme.LocalReaderDarkTheme
+import com.m1racle.reader.ui.material.GlassBackdropSource
+import com.m1racle.reader.ui.material.GlassMaterialRole
+import com.m1racle.reader.ui.material.glassMaterial
 import com.m1racle.reader.ui.viewer.components.MarkdownBlockView
 import com.m1racle.reader.ui.viewer.components.headingTopPadding
 import com.m1racle.reader.ui.viewer.components.ReaderSettingsSheet
@@ -296,7 +308,7 @@ private fun ViewerSuccessScreen(
         ReaderTopBarScrollState(
             maxHiddenOffsetPx = with(density) {
                 // Placeholder until first composition measures status bars; updated below.
-                (ReaderTopBarHeight + ReaderTopBarDividerHeight).toPx()
+                (ReaderTopBarHeight).toPx()
             },
             // 8dp reverse noise: still debounces micro-jitter, closer to X re-show latency
             // than the previous 12dp gate (which felt late after full hide).
@@ -307,7 +319,7 @@ private fun ViewerSuccessScreen(
         WindowInsets.statusBars.asPaddingValues().calculateTopPadding().toPx()
     }
     val topChromeMaxPx = with(density) {
-        statusBarTopPx + (ReaderTopBarHeight + ReaderTopBarDividerHeight).toPx()
+        statusBarTopPx + (ReaderTopBarHeight).toPx()
     }
     // Keep max clamp in sync with inset / density without recreating the state object.
     SideEffect {
@@ -545,8 +557,8 @@ private fun ViewerSuccessScreen(
     // Force chrome fully shown while searching, when the list *settles* at top, and settle
     // collapse after finger-up / fling (fraction or fling velocity). Body never reads offset.
     // collectLatest cancels an in-flight settle as soon as the user starts another gesture.
-    LaunchedEffect(listState, searchState.isActive, topBarScrollState) {
-        if (searchState.isActive) {
+    LaunchedEffect(listState, searchState.isActive, showSettings, showAnnotationSheet, drawerState.isOpen, topBarScrollState) {
+        if (searchState.isActive || showSettings || showAnnotationSheet || drawerState.isOpen) {
             topBarScrollState.forceShow()
             return@LaunchedEffect
         }
@@ -659,6 +671,18 @@ private fun ViewerSuccessScreen(
     ) {
         ViewerScaffold(
             title = title,
+            subtitle = {
+                val caption by remember(listState, state.toc, listHeaderCount) {
+                    derivedStateOf {
+                        val chapter = state.toc.activeAt(listState.firstVisibleItemIndex - listHeaderCount)?.title
+                        val progress = (readingProgressOf(listState) * 100).toInt()
+                        listOfNotNull(chapter, "$progress%").joinToString(" · ")
+                    }
+                }
+                Text(caption, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
             onBack = onBack,
             tocEnabled = hasToc,
             onOpenToc = {
@@ -698,7 +722,7 @@ private fun ViewerSuccessScreen(
             // Search owns the scaffold topBar; disable scroll-hide while searching.
             // QA: also drop nestedScroll when isolating top-bar flip cost.
             nestedScrollConnection = if (
-                searchState.isActive || ReaderPerformanceExperiments.disableTopBar
+                searchState.isActive || showSettings || showAnnotationSheet || drawerState.isOpen || ReaderPerformanceExperiments.disableTopBar
             ) {
                 null
             } else {
@@ -875,7 +899,7 @@ private fun ReaderDocumentBody(
     // Initial top chrome reservation lives in LazyColumn contentPadding only — never as a
     // fixed outer Box padding — so fully-hidden chrome leaves zero permanent top blank.
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val listTopInset = statusBarTop + ReaderTopBarHeight + ReaderTopBarDividerHeight + 8.dp
+    val listTopInset = statusBarTop + ReaderTopBarHeight + 8.dp
     val navBottom = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
@@ -1123,14 +1147,13 @@ private object DisabledLazyListPrefetchStrategy : LazyListPrefetchStrategy {
 
 /** Reader chrome row height only — excludes status bar. */
 private val ReaderTopBarHeight = 56.dp
-private val ReaderTopBarDividerHeight = 0.5.dp
 private val ReaderTopBarIconButton = 48.dp
 private val ReaderTopBarIcon = 24.dp
 /** Gap after back button so icon-edge → title ≈ 12dp (12dp internal + 4dp). */
 private val ReaderTopBarTitleStartGap = 4.dp
 
 /**
- * Custom reader top bar: [Back + title] left group, [Search][Settings][TOC] right group.
+ * Reader top bar: back/title/section, search, TOC, and a menu for secondary actions.
  * Title click shows a lightweight popover with the same title string fully expanded.
  *
  * Visibility is observed via [topBarScrollState] only for dismissing the popup —
@@ -1139,6 +1162,7 @@ private val ReaderTopBarTitleStartGap = 4.dp
 @Composable
 private fun ReaderTopBarRow(
     title: String,
+    subtitle: @Composable () -> Unit = {},
     topBarScrollState: ReaderTopBarScrollState?,
     onBack: () -> Unit,
     searchEnabled: Boolean,
@@ -1159,6 +1183,11 @@ private fun ReaderTopBarRow(
     val titlePopupCd = stringResource(R.string.viewer_title_popup_cd)
 
     var showTitlePopup by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
+    DisposableEffect(topBarScrollState, showTitlePopup, showMore) {
+        topBarScrollState?.setInteractionPinned(showTitlePopup || showMore)
+        onDispose { topBarScrollState?.setInteractionPinned(false) }
+    }
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
     val popupMaxWidth = minOf(300.dp, (screenWidthDp - 32.dp).coerceAtLeast(160.dp))
@@ -1221,6 +1250,7 @@ private fun ReaderTopBarRow(
                 ),
             contentAlignment = Alignment.CenterStart,
         ) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 text = title,
                 style = TextStyle(
@@ -1234,6 +1264,8 @@ private fun ReaderTopBarRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+                subtitle()
+            }
 
             if (showTitlePopup) {
                 val yOffsetPx = with(density) {
@@ -1275,36 +1307,6 @@ private fun ReaderTopBarRow(
             }
         }
 
-        // R23 书签切换（SCROLL_POSITION）：实心=当前位置已收藏；null 控制器不渲染。
-        if (onToggleBookmark != null) {
-            ReaderTopBarIconButton(
-                imageVector = if (bookmarkActive) {
-                    Icons.Filled.Bookmarks
-                } else {
-                    Icons.Outlined.Bookmarks
-                },
-                contentDescription = stringResource(
-                    if (bookmarkActive) R.string.reader_bookmark_remove else R.string.reader_bookmark_add,
-                ),
-                onClick = { closePopupThen(onToggleBookmark) },
-                enabled = true,
-                tint = if (bookmarkActive) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    iconTint
-                },
-            )
-        }
-        // P0-1 标注列表（null = 未启用，不占顶栏位）。
-        if (onOpenAnnotations != null) {
-            ReaderTopBarIconButton(
-                imageVector = Icons.Filled.FormatListBulleted,
-                contentDescription = stringResource(R.string.reader_annotations_title),
-                onClick = { closePopupThen(onOpenAnnotations) },
-                enabled = true,
-                tint = iconTint,
-            )
-        }
         ReaderTopBarIconButton(
             imageVector = Icons.Default.Search,
             contentDescription = stringResource(R.string.search_open),
@@ -1313,23 +1315,57 @@ private fun ReaderTopBarRow(
             tint = iconTint,
         )
         ReaderTopBarIconButton(
-            imageVector = Icons.Default.Tune,
-            contentDescription = stringResource(R.string.reader_settings_open),
-            onClick = { closePopupThen(onOpenSettings) },
-            enabled = settingsEnabled,
-            tint = iconTint,
-        )
-        ReaderTopBarIconButton(
             imageVector = Icons.AutoMirrored.Filled.List,
-            contentDescription = if (tocEnabled) {
-                stringResource(R.string.toc_open)
-            } else {
-                stringResource(R.string.toc_empty)
-            },
+            contentDescription = stringResource(if (tocEnabled) R.string.toc_open else R.string.toc_empty),
             onClick = { closePopupThen(onOpenToc) },
             enabled = tocEnabled,
             tint = iconTint,
         )
+        Box {
+            ReaderTopBarIconButton(
+                imageVector = Icons.Default.MoreHoriz,
+                contentDescription = "更多",
+                onClick = { closePopupThen { showMore = true } },
+                enabled = true,
+                tint = iconTint,
+            )
+            if (showMore) {
+                Popup(
+                    alignment = Alignment.TopEnd,
+                    offset = IntOffset(0, with(density) { 52.dp.roundToPx() }),
+                    onDismissRequest = { showMore = false },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    Column(
+                        Modifier.width(224.dp)
+                            .glassMaterial(
+                                GlassMaterialRole.ExpandedMenu,
+                                RoundedCornerShape(20.dp),
+                                sampleBackdrop = false,
+                                interaction = true,
+                            )
+                            .padding(vertical = 8.dp),
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.reader_settings_open)) },
+                            leadingIcon = { Icon(Icons.Default.Tune, null) },
+                            enabled = settingsEnabled,
+                            onClick = { showMore = false; onOpenSettings() },
+                        )
+                        if (onToggleBookmark != null) DropdownMenuItem(
+                            text = { Text(stringResource(if (bookmarkActive) R.string.reader_bookmark_remove else R.string.reader_bookmark_add)) },
+                            leadingIcon = { Icon(if (bookmarkActive) Icons.Filled.Bookmarks else Icons.Outlined.Bookmarks, null) },
+                            onClick = { showMore = false; onToggleBookmark() },
+                        )
+                        if (onOpenAnnotations != null) DropdownMenuItem(
+                            text = { Text(stringResource(R.string.reader_annotations_title)) },
+                            leadingIcon = { Icon(Icons.Filled.FormatListBulleted, null) },
+                            onClick = { showMore = false; onOpenAnnotations() },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1370,6 +1406,7 @@ private fun ReaderTopBarIconButton(
 @Composable
 private fun ViewerScaffold(
     title: String,
+    subtitle: @Composable () -> Unit = {},
     onBack: () -> Unit,
     tocEnabled: Boolean,
     onOpenToc: () -> Unit,
@@ -1399,6 +1436,14 @@ private fun ViewerScaffold(
 ) {
     val activeSearch = searchState?.takeIf { it.isActive }
     val readerBg = MaterialTheme.colorScheme.background
+    val readerEnv = GlassEnvironment.reader(LocalReaderDarkTheme.current)
+    val drawReaderBackdrop: ContentDrawScope.() -> Unit = remember(readerBg) {
+        {
+            drawRect(readerBg)
+            drawContent()
+        }
+    }
+    val backdrop = rememberLayerBackdrop(onDraw = drawReaderBackdrop)
 
     Scaffold(
         modifier = modifier
@@ -1421,21 +1466,20 @@ private fun ViewerScaffold(
         },
         topBar = {},
         content = { scaffoldPadding ->
+            CompositionLocalProvider(LocalGlassEnvironment provides readerEnv) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(readerBg),
             ) {
-                content(scaffoldPadding)
-
-                StatusBarProtection(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .zIndex(1f),
-                )
+                GlassBackdropSource(backdrop, Modifier.fillMaxSize().background(readerBg)) {
+                    content(scaffoldPadding)
+                }
 
                 ReaderTopBarOverlay(
+                    backdrop = backdrop,
                     title = title,
+                    subtitle = subtitle,
                     topBarScrollState = if (activeSearch != null) null else topBarScrollState,
                     searchState = activeSearch,
                     onBack = onBack,
@@ -1458,20 +1502,23 @@ private fun ViewerScaffold(
                         .zIndex(2f),
                 )
             }
+            }
         },
     )
 }
 
 /**
- * Solid top chrome (status fill + reading row or in-bar search).
+ * Fixed gradient backdrop with independently fading controls.
  *
- * - Moves with [graphicsLayer] translationY = -[hiddenOffsetPx] only.
+ * - Backdrop extent and opacity never depend on collapse; only controls fade and move 6dp.
  * - Search replaces the reading row in place (same 56dp) so the body does not jump.
  * - LazyColumn contentPadding reserves status+bar once; body never reads offset.
  */
 @Composable
-private fun ReaderTopBarOverlay(
+internal fun ReaderTopBarOverlay(
+    backdrop: LayerBackdrop,
     title: String,
+    subtitle: @Composable () -> Unit = {},
     topBarScrollState: ReaderTopBarScrollState?,
     searchState: DocumentSearchUiState?,
     onBack: () -> Unit,
@@ -1490,65 +1537,58 @@ private fun ReaderTopBarOverlay(
     onSearchNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Do NOT read hiddenOffsetPx in composition — that recomposes the whole overlay
-    // every drag pixel. Read inside graphicsLayer so only the layer invalidates.
-    val surface = MaterialTheme.colorScheme.surface
     val scrollState = topBarScrollState
     val searching = searchState != null
-
-    Column(
-        modifier = modifier
-            .graphicsLayer {
-                translationY = -(scrollState?.hiddenOffsetPx ?: 0f)
-            }
-            .background(surface),
-    ) {
-        Spacer(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsTopHeight(WindowInsets.statusBars)
-                .background(surface),
-        )
-        AnimatedContent(
-            targetState = searching,
-            transitionSpec = {
-                fadeIn(tween(200)) togetherWith fadeOut(tween(120))
+    val controlsVisible by remember(scrollState) {
+        derivedStateOf { (scrollState?.collapseFraction ?: 0f) < 1f }
+    }
+    val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    Box(modifier.height(statusHeight + ReaderTopBarHeight + 24.dp)) {
+        Box(Modifier.fillMaxSize().readerGradient(backdrop))
+        if (controlsVisible) Column(
+            Modifier.graphicsLayer {
+                val fraction = scrollState?.collapseFraction ?: 0f
+                alpha = 1f - fraction
+                translationY = -6.dp.toPx() * fraction
             },
-            label = "readerSearchChrome",
-        ) { showSearch ->
-            if (showSearch && searchState != null) {
-                SearchTopBar(
-                    query = searchState.query,
-                    matchLabel = searchState.counterLabel,
-                    hasMatches = searchState.matches.isNotEmpty(),
-                    onQueryChange = onSearchQueryChange,
-                    onClose = onCloseSearch,
-                    onPrevious = onSearchPrevious,
-                    onNext = onSearchNext,
-                )
-            } else {
-                ReaderTopBarRow(
-                    title = title,
-                    topBarScrollState = topBarScrollState,
-                    onBack = onBack,
-                    searchEnabled = searchEnabled,
-                    onOpenSearch = onOpenSearch,
-                    settingsEnabled = settingsEnabled,
-                    onOpenSettings = onOpenSettings,
-                    tocEnabled = tocEnabled,
-                    onOpenToc = onOpenToc,
-                    onToggleBookmark = onToggleBookmark,
-                    bookmarkActive = bookmarkActive,
-                    onOpenAnnotations = onOpenAnnotations,
-                )
+        ) {
+            Spacer(Modifier.fillMaxWidth().height(statusHeight))
+            AnimatedContent(
+                targetState = searching,
+                transitionSpec = {
+                    fadeIn(tween(200)) togetherWith fadeOut(tween(120))
+                },
+                label = "readerSearchChrome",
+            ) { showSearch ->
+                if (showSearch && searchState != null) {
+                    SearchTopBar(
+                        query = searchState.query,
+                        matchLabel = searchState.counterLabel,
+                        hasMatches = searchState.matches.isNotEmpty(),
+                        onQueryChange = onSearchQueryChange,
+                        onClose = onCloseSearch,
+                        onPrevious = onSearchPrevious,
+                        onNext = onSearchNext,
+                    )
+                } else {
+                    ReaderTopBarRow(
+                        title = title,
+                        subtitle = subtitle,
+                        topBarScrollState = topBarScrollState,
+                        onBack = onBack,
+                        searchEnabled = searchEnabled,
+                        onOpenSearch = onOpenSearch,
+                        settingsEnabled = settingsEnabled,
+                        onOpenSettings = onOpenSettings,
+                        tocEnabled = tocEnabled,
+                        onOpenToc = onOpenToc,
+                        onToggleBookmark = onToggleBookmark,
+                        bookmarkActive = bookmarkActive,
+                        onOpenAnnotations = onOpenAnnotations,
+                    )
+                }
             }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(ReaderTopBarDividerHeight)
-                .background(MaterialTheme.colorScheme.outlineVariant),
-        )
     }
 }
 

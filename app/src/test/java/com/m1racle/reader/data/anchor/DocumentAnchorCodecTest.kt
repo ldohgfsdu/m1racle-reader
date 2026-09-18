@@ -15,7 +15,7 @@ class DocumentAnchorCodecTest {
         val wholePage = DocumentAnchor.PdfPage(page = 41)
         val withRect = DocumentAnchor.PdfPage(
             page = 77,
-            rect = NormalizedRect(0.1f, 0.25f, 0.5f, 0.125f),
+            rects = listOf(NormalizedRect(0.1f, 0.25f, 0.5f, 0.125f)),
         )
         listOf(wholePage, withRect).forEach { anchor ->
             val encoded = AnchorCodec.encode(anchor)

@@ -116,7 +116,7 @@ class AnnotationManagementTest {
         assertEquals(41, row.location)
         val anchor = repo.resolveHighlightAnchor("pdf-7", row.id) as DocumentAnchor.PdfPage
         assertEquals(row.location, anchor.page)
-        assertTrue(anchor.rect != null) // 矩形随锚点完整恢复
+        assertTrue(anchor.rects.isNotEmpty()) // 矩形随锚点完整恢复
     }
 
     @Test
@@ -160,13 +160,5 @@ class AnnotationManagementTest {
         r: Float = 260f,
         b: Float = 140f,
     ) =
-        com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(
-            page = page,
-            leftPx = l,
-            topPx = t,
-            rightPx = r,
-            bottomPx = b,
-            pageWidthPx = 800f,
-            pageHeightPx = 1131f,
-        )
+        com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(page = page, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((l) / (800f), (t) / (1131f), ((r) - (l)).coerceAtLeast(0f) / (800f), ((b) - (t)).coerceAtLeast(0f) / (1131f))))
 }

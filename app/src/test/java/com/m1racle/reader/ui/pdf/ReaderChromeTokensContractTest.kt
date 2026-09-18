@@ -14,15 +14,32 @@ class ReaderChromeTokensContractTest {
 
     @Test
     fun `every product role has a complete bounded recipe`() {
-        assertEquals(7, GlassMaterialRole.entries.size)
+        assertEquals(9, GlassMaterialRole.entries.size)
         GlassMaterialRole.entries.forEach { role ->
             listOf(false, true).forEach { dark ->
                 val spec = GlassMaterialEngine.resolve(role, dark)
-                assertTrue(spec.surfaceColor.alpha in 0f..0.98f)
-                assertTrue(spec.blur.value > 0f)
-                assertTrue(spec.shadow.value > 0f)
-                assertEquals(0.5f, spec.highlightWidth.value, 0.001f)
-                assertTrue(spec.highlightColor.alpha in 0.15f..0.40f)
+                assertTrue(spec.surfaceColor.alpha in 0f..1f)
+                assertEquals(1f, spec.foreground.contentAlpha, 0f)
+                assertEquals(spec.contentMutedAlpha, spec.foreground.mutedAlpha, 0f)
+                if (role == GlassMaterialRole.Dock) {
+                    assertEquals("solid overlay keeps zero blur", 0f, spec.blur.value, 0f)
+                } else {
+                    assertTrue(spec.blur.value > 0f)
+                }
+                if (role != GlassMaterialRole.ProgressiveChrome) {
+                    assertTrue("$role shadow", spec.shadow.value > 0f)
+                }
+                val expectedHighlightW = when (role) {
+                    GlassMaterialRole.Dialog, GlassMaterialRole.PreviewCapsule -> 0.5f
+                    else -> 0f
+                }
+                assertEquals(expectedHighlightW, spec.highlightWidth.value, 0.001f)
+                val expectedHighlightA = when (role) {
+                    GlassMaterialRole.Dialog -> if (dark) 0.38f else 0.30f
+                    GlassMaterialRole.PreviewCapsule -> if (dark) 0.78f else 0.96f
+                    else -> 0f
+                }
+                assertEquals(expectedHighlightA, spec.highlightColor.alpha, 0.004f)
                 assertTrue(spec.contentDividerAlpha in 0.04f..0.08f)
                 assertTrue(spec.contentPressedOverlayAlpha in 0.04f..0.05f)
                 assertEquals(1f, spec.scale, 0.001f)
@@ -37,8 +54,8 @@ class ReaderChromeTokensContractTest {
             val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark)
             assertEquals(0.97f, dialog.surfaceColor.alpha, 0.002f)
             assertTrue(dialog.surfaceColor.alpha < 1f)
-            val minimumHierarchyGap = if (dark) 0.18f else 0.30f
-            assertTrue(dialog.surfaceColor.alpha - settings.surfaceColor.alpha >= minimumHierarchyGap)
+            val expectedHierarchyGap = if (dark) 0.11f else 0.07f
+            assertEquals(expectedHierarchyGap, dialog.surfaceColor.alpha - settings.surfaceColor.alpha, 0.004f)
         }
     }
 
@@ -51,7 +68,7 @@ class ReaderChromeTokensContractTest {
             pressed = true,
         )
         assertEquals(0.04f, pressed.surfaceColor.alpha - rest.surfaceColor.alpha, 0.01f)
-        assertEquals(0.10f, pressed.highlightColor.alpha - rest.highlightColor.alpha, 0.01f)
+        assertEquals(0f, pressed.highlightColor.alpha, 0f)
         assertEquals(rest.blur, pressed.blur)
         assertEquals(rest.shadow, pressed.shadow)
         assertEquals(0.965f, pressed.scale, 0.001f)
@@ -74,8 +91,16 @@ class ReaderChromeTokensContractTest {
             ).renderState,
         )
         assertEquals(
-            GlassRenderState.INTERACTION,
+            GlassRenderState.IDLE,
             GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false).renderState,
+        )
+        assertEquals(
+            GlassRenderState.INTERACTION,
+            GlassMaterialEngine.resolve(
+                GlassMaterialRole.Menu,
+                dark = false,
+                interaction = true,
+            ).renderState,
         )
     }
 
@@ -88,9 +113,13 @@ class ReaderChromeTokensContractTest {
         assertTrue(engine.contains("blur(blurPx)"))
         assertTrue(engine.contains("lens("))
         assertTrue(engine.contains("Highlight.Plain.copy("))
-        assertTrue(engine.contains("Shadow("))
+        assertTrue(engine.contains("dropShadow("))
+        assertTrue(engine.contains("shadow = null"))
         assertTrue(engine.contains("animationSpec = GlassMaterialEngine.PressSpring"))
-        assertTrue(engine.contains("layerBlock = if (pressLayerActive)"))
+        assertTrue(engine.contains("layerBlock = if (pressLayerActive || layerBlock != null)"))
+        assertTrue(engine.contains("layerBlock?.invoke(this)"))
+        assertTrue(engine.contains("scaleX *= scale"))
+        assertTrue(engine.contains("scaleY *= scale"))
         assertTrue(engine.contains("val resourceModifier = remember("))
         assertTrue(engine.contains("return modifier.then(resourceModifier)"))
         assertFalse(engine.contains("ReaderChromeTokens"))

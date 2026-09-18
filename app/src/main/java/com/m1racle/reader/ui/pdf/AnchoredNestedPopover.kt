@@ -1,11 +1,10 @@
 package com.m1racle.reader.ui.pdf
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.isSystemInDarkTheme
+import com.m1racle.reader.ui.material.LocalGlassEnvironment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -64,10 +63,8 @@ import com.m1racle.reader.ui.material.glassMutedContentAlpha
 import com.m1racle.reader.ui.material.glassMaterial
 import kotlin.math.roundToInt
 
-/** Open: 180–220ms band. */
-internal const val AnchoredRevealOpenMs = 200
-/** Close: 160–200ms band. */
-internal const val AnchoredRevealCloseMs = 180
+internal const val AnchoredRevealOpenMs = com.m1racle.reader.ui.theme.M1racleMotion.SlowMs
+internal const val AnchoredRevealCloseMs = com.m1racle.reader.ui.theme.M1racleMotion.NormalMs
 
 /**
  * Preferred open content height by kind via [AdvancedChildLayoutSpec]
@@ -147,14 +144,14 @@ internal fun AnchoredNestedPopover(
             keyboard?.hide()
             progress.animateTo(
                 0f,
-                tween(AnchoredRevealCloseMs, easing = MoreMorphEasing),
+                com.m1racle.reader.ui.theme.M1racleMotion.normalIn,
             )
             onCollapsed()
         } else {
             progress.snapTo(0f)
             progress.animateTo(
                 1f,
-                tween(AnchoredRevealOpenMs, easing = MoreMorphEasing),
+                com.m1racle.reader.ui.theme.M1racleMotion.slow,
             )
         }
     }
@@ -207,6 +204,7 @@ internal fun AnchoredNestedPopover(
             .glassMaterial(
                 role = GlassMaterialRole.SettingsCard,
                 shape = RoundedCornerShape(cornerDp),
+                interaction = true,
             ),
     ) {
         // Content fills the morphing container (same width as card — never laid
@@ -242,7 +240,7 @@ internal fun AnchoredNestedPopover(
                     color = MaterialTheme.colorScheme.onSurface.copy(
                         alpha = GlassMaterialEngine.resolve(
                             role = GlassMaterialRole.SettingsCard,
-                            dark = isSystemInDarkTheme(),
+                            environment = LocalGlassEnvironment.current,
                         ).contentDividerAlpha,
                     ),
                 )

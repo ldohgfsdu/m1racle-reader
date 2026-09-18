@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.m1racle.reader.R
 import com.m1racle.reader.markdown.TocItem
+import com.m1racle.reader.markdown.activeAt
 
 @Composable
 fun TocDrawerContent(
@@ -53,7 +54,7 @@ fun TocDrawerContent(
             } else {
                 val contentIndex =
                     (state.firstVisibleItemIndex - listHeaderCount).coerceAtLeast(0)
-                (toc.lastOrNull { it.blockIndex <= contentIndex } ?: toc.first()).anchor
+                toc.activeAt(contentIndex)?.anchor
             }
         }
     }

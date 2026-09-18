@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SearchIndexEntity::class,
         DocumentAliasEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -385,6 +385,15 @@ abstract class AppDatabase : RoomDatabase() {
          * proven by the historical primary-key shape. Existing ids and child
          * rows are never rewritten or deleted.
          */
+        internal const val MIGRATION_13_14_SOURCE_URI_SQL = "ALTER TABLE documents ADD COLUMN sourceUri TEXT"
+        internal const val MIGRATION_13_14_SOURCE_SHA_SQL = "ALTER TABLE documents ADD COLUMN sourceSha256 TEXT"
+        val MIGRATION_13_14: Migration = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(MIGRATION_13_14_SOURCE_URI_SQL)
+                db.execSQL(MIGRATION_13_14_SOURCE_SHA_SQL)
+            }
+        }
+
         val MIGRATION_12_13: Migration = object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(MIGRATION_12_13_CREATE_ALIASES_SQL)
@@ -523,6 +532,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_10_11,
                         MIGRATION_11_12,
                         MIGRATION_12_13,
+                        MIGRATION_13_14,
                     )
                     .build()
                     .also { instance = it }

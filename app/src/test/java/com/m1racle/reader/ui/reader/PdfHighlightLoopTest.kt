@@ -98,10 +98,8 @@ class PdfHighlightLoopTest {
 
     /** 捕获：与渲染层同一几何入口。 */
     private fun capture(page: Int, l: Float, t: Float, r: Float, b: Float, w: Float, h: Float) =
-        PdfHighlightGeometry.selectionOrNull(
-            startX = l, startY = t, endX = r, endY = b,
-            pageWidthPx = w, pageHeightPx = h, page = page,
-        )!!
+        com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(page,
+            listOf(com.m1racle.reader.data.anchor.NormalizedRect(l/w,t/h,(r-l)/w,(b-t)/h)))
 
     @Test
     fun `full loop - selection to flow to repository to overlay items`() = runTest {
@@ -124,8 +122,8 @@ class PdfHighlightLoopTest {
 
         // 屏幕矩形恢复 == 选择时的归一化 × 当前渲染尺寸。
         val expected = selection.toAnchor() as DocumentAnchor.PdfPage
-        val restoredRect = item.pdfRectNormalized()!!
-        assertEquals(expected.rect, restoredRect)
+        val restoredRect = item.pdfRectsNormalized().single()
+        assertEquals(expected.rects.single(), restoredRect)
     }
 
     @Test
@@ -138,7 +136,7 @@ class PdfHighlightLoopTest {
 
         val item: AnnotationOverlayItem = RepositoryAnnotationOverlaySource(repo)
             .itemsFor("pdf-1", "PAGE_INDEX", 3).single()
-        val n = item.pdfRectNormalized()!!
+        val n = item.pdfRectsNormalized().single()
 
         // 任意两种渲染尺寸下换算出的相对几何必须一致（缩放不漂移）。
         listOf(595f to 842f, 1785f to 2526f, 300f to 500f).forEach { (w, h) ->
@@ -167,11 +165,28 @@ class PdfHighlightLoopTest {
     }
 
     @Test
-    fun `tiny accidental drags are gated out before persistence`() = runTest {
-        assertNull(
-            PdfHighlightGeometry.selectionOrNull(
-                50f, 50f, 55f, 54f, 1000f, 1414f, page = 1,
-            ),
+    fun `multiline highlight restores and deletes as one item`() = runTest {
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val controller = ReaderHighlightController(repo,"pdf-1")
+        val rects = listOf(
+            com.m1racle.reader.data.anchor.NormalizedRect(.2f,.2f,.3f,.02f),
+            com.m1racle.reader.data.anchor.NormalizedRect(.1f,.3f,.2f,.02f),
         )
+        val selection = com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(3,rects,"first\nsecond")
+        val result = controller.commitHighlight(selection) as ReaderHighlightController.CommitResult.Success
+        val reopened = ReaderHighlightController(repo,"pdf-1").itemsForPage(3).single()
+        assertEquals(rects,reopened.pdfRectsNormalized())
+        assertEquals("first\nsecond",reopened.excerpt)
+        controller.deleteHighlight(result.id)
+        assertTrue(controller.itemsForPage(3).isEmpty())
+    }
+
+    @Test
+    fun `blank text selection is rejected before persistence`() = runTest {
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val controller = ReaderHighlightController(repo, "pdf-1")
+        val result = controller.commitHighlight(com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(1, emptyList()))
+        assertTrue(result is ReaderHighlightController.CommitResult.Failure)
+        assertTrue(controller.itemsForPage(1).isEmpty())
     }
 }

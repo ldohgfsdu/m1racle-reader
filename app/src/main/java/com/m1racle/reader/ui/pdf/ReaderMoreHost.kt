@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -53,14 +54,18 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import com.m1racle.reader.ui.theme.M1racleReaderTypography
+import com.m1racle.reader.R
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.GlassMaterialEngine
 import com.m1racle.reader.ui.material.glassMutedContentAlpha
@@ -196,6 +201,11 @@ internal val MoreMenuCornerClosed = 22.dp
 internal val MoreMenuCorner = 28.dp
 internal val MenuRowHeight = 52.dp
 internal val MenuOptionRowHeight = 48.dp
+
+/** Share font-aware row geometry between the content and its morphing container. */
+@Composable
+private fun scaledMenuRowHeight(base: Dp): Dp =
+    base * LocalDensity.current.fontScale.coerceAtLeast(1f)
 internal val MenuIconSize = 24.dp
 internal val MenuIconColWidth = 24.dp
 internal val MenuIconGap = 14.dp
@@ -343,8 +353,9 @@ internal fun ReaderMoreHost(
     var readingModeExpandedHeightPx by remember { mutableFloatStateOf(0f) }
     var topBarExpandedHeightPx by remember { mutableFloatStateOf(0f) }
     val totalRowCount = submenuEntries.size + plainMenuItems.size
+    val mainRowHeight = scaledMenuRowHeight(MenuRowHeight)
     val baseHeightPx = with(density) {
-        (MenuVerticalPad * 2 + MenuRowHeight * totalRowCount).toPx()
+        (MenuVerticalPad * 2 + mainRowHeight * totalRowCount).toPx()
     }
     val sixRowLayout =
         readingModeProgress.value == 0f &&
@@ -376,6 +387,7 @@ internal fun ReaderMoreHost(
     LaunchedEffect(
         state, childClosing, closing, rowRectsRoot, mainCardRectRoot,
         readingModeProgress.value, topBarProgress.value, canonicalMainBounds,
+        cardHeight.value, baseHeightPx,
     ) {
         when {
             closing && !childClosing -> {
@@ -389,7 +401,7 @@ internal fun ReaderMoreHost(
                 // Prefer canonical Main bounds; fall back to current six-row measure.
                 val row = canonicalMainBounds[rowIdx] ?: rowRectsRoot[rowIdx]
                 if (row != null && mainCardRectRoot.width > 0f &&
-                    kotlin.math.abs(mainCardRectRoot.height - baseHeightPx) < 8f
+                    kotlin.math.abs(cardHeight.value - baseHeightPx) < 8f
                 ) {
                     // Wait one frame so Compose finishes measure after collapse.
                     kotlinx.coroutines.delay(1)
@@ -470,6 +482,7 @@ internal fun ReaderMoreHost(
         readingModeProgress.value, topBarProgress.value,
         readingModeExpandedHeightPx, topBarExpandedHeightPx,
         active, closing, state, nestedActive,
+        baseHeightPx,
     ) {
         if (closing) {
             cardHeight.animateTo(circlePx, tween(MorphCollapseMs, easing = MoreMorphEasing))
@@ -576,6 +589,7 @@ internal fun ReaderMoreHost(
                         .glassMaterial(
                             role = GlassMaterialRole.Menu,
                             shape = shape,
+                            interaction = true,
                         )
                         .onGloballyPositioned { coords ->
                             mainCardRectRoot = coords.boundsInRoot()
@@ -738,6 +752,7 @@ private fun MainMenuContent(
                 icon = readingEntry.icon,
                 label = readingEntry.label,
                 chevron = true,
+                chevronExpanded = state == ReaderMoreState.INLINE_READING_MODE,
                 chevronRotation = readingModeProgress * 90f,
                 onClick = { onSectionToggle(ReaderMoreState.INLINE_READING_MODE) },
             )
@@ -772,6 +787,7 @@ private fun MainMenuContent(
                 icon = topBarEntry.icon,
                 label = topBarEntry.label,
                 chevron = true,
+                chevronExpanded = state == ReaderMoreState.INLINE_READING_UI,
                 chevronRotation = topBarProgress * 90f,
                 onClick = { onSectionToggle(ReaderMoreState.INLINE_READING_UI) },
             )
@@ -906,7 +922,7 @@ internal fun Modifier.reportNaturalHeight(onNaturalHeight: (Int) -> Unit): Modif
 internal fun PdfChromeMenuRow(
     icon: ImageVector?,
     label: String,
-    checked: Boolean = false,
+    checked: Boolean? = null,
     chevron: Boolean = false,
     chevronExpanded: Boolean = false,
     chevronRotation: Float? = null,
@@ -936,19 +952,35 @@ internal fun PdfChromeMenuRow(
         label = "menuRowPress",
     )
     val muted = glassMutedContentAlpha(GlassMaterialRole.Menu)
+    val expandedDescription = stringResource(
+        if (chevronExpanded) R.string.pdf_control_expanded else R.string.pdf_control_collapsed,
+    )
+    val rowClick = if (checked != null) {
+        Modifier.selectable(
+            selected = checked,
+            role = Role.RadioButton,
+            interactionSource = rowInteraction,
+            indication = null,
+            onClick = onClick,
+        )
+    } else {
+        Modifier.clickable(
+            role = Role.Button,
+            interactionSource = rowInteraction,
+            indication = null,
+            onClick = onClick,
+        )
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(rowHeight)
+            .height(scaledMenuRowHeight(rowHeight))
             .background(
                 scheme.onSurface.copy(alpha = rowHighlight),
                 RoundedCornerShape(10.dp),
             )
-            .clickable(
-                interactionSource = rowInteraction,
-                indication = null,
-                onClick = onClick,
-            )
+            .then(rowClick)
+            .semantics { if (chevron) stateDescription = expandedDescription }
             .padding(horizontal = MenuRowHPad),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -978,13 +1010,13 @@ internal fun PdfChromeMenuRow(
             ),
             // Level-2 uses muted secondary; level-1 stays full onSurface Medium/SemiBold.
             color = if (indentLabel) scheme.onSurface.copy(alpha = muted + 0.12f) else scheme.onSurface,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .weight(1f)
                 .graphicsLayer { alpha = contentAlpha },
         )
-        if (checked) {
+        if (checked == true) {
             Icon(
                 imageVector = Icons.Filled.Check,
                 contentDescription = null,

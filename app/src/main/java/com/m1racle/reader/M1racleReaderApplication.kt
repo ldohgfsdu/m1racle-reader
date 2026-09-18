@@ -58,6 +58,7 @@ class M1racleReaderApplication : Application() {
         super.onCreate()
         applicationScope.launch {
             runCatching { sidecarIdentityMigration.ensureCompleted() }
+            runCatching { documentRepository.recoverPdfSourceWrites() }
         }
     }
 

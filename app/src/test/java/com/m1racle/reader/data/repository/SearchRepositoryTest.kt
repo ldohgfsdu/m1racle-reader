@@ -233,7 +233,7 @@ class SearchRepositoryTest {
     ): HighlightEntity {
         val anchor = DocumentAnchor.PdfPage(
             page = page,
-            rect = NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f),
+            rects = listOf(NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f)),
         )
         return HighlightEntity(
             id = id,

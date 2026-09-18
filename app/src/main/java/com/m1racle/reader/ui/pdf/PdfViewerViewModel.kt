@@ -76,6 +76,7 @@ import com.m1racle.reader.pdf.export.ExportCancellationToken
 import com.m1racle.reader.pdf.export.ExportRangePlan
 import com.m1racle.reader.pdf.export.ExportRangeResolver
 import com.m1racle.reader.pdf.export.PdfAnnotatedExporter
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -260,6 +261,21 @@ class PdfViewerViewModel(
     private var printSections: List<PrintPageSection> = emptyList()
     private var outlineNodes: List<TextbookOutlineNodeEntity> = emptyList()
     private var documentUri: String? = null
+    private val textSelectionMutex = Mutex()
+    private val selectablePages = linkedMapOf<Pair<String,Int>, com.m1racle.reader.pdf.PdfSelectablePage>()
+
+    suspend fun selectableText(page: Int): com.m1racle.reader.pdf.PdfSelectablePage = textSelectionMutex.withLock {
+        check(!closed)
+        val uri = checkNotNull(documentUri)
+        val key = uri to page
+        selectablePages[key]?.let { return@withLock it }
+        val result = com.m1racle.reader.pdf.PdfTextSelectionReader.read(appContext,uri,page)
+        check(!closed)
+        if (selectablePages.size >= 4) selectablePages.remove(selectablePages.keys.first())
+        selectablePages[key] = result
+        result
+    }
+
     private var cachedDrafts: List<EmbeddedOutlineNodeDraft> = emptyList()
     private var readingMode: PdfReadingMode = PdfReadingMode.default()
     private var showPageButtons: Boolean = true
@@ -298,12 +314,13 @@ class PdfViewerViewModel(
     private var lastTileHealthLogNanos: Long = 0L
     private val tileDocumentGeneration: Long get() = tileWorkQueue.currentGeneration()
     /**
-     * P0A lifecycle hardening: set to true in onCleared so that any subsequent
+     * P0A lifecycle hardening: set before editing handoff or in onCleared so that any subsequent
      * render/tile/thumbnail request is a no-op. Without this, a race between
      * onCleared and a pending Compose callback could queue new work after
      * applicationScope has issued the close.
      */
     @Volatile private var closed: Boolean = false
+    private var clearHandled: Boolean = false
     /**
      * P0A lifecycle hardening: idempotent close guard. close() / closeAsync()
      * may be invoked from onCleared AND from openDocument; only the first
@@ -1866,6 +1883,15 @@ class PdfViewerViewModel(
         _uiState.value = ReadyBase(ready)
     }
 
+    /** Editing may overwrite the source, so both native readers must be closed first. */
+    suspend fun releaseForEditing() {
+        closed = true
+        viewModelScope.coroutineContext.cancelChildren()
+        textSelectionMutex.withLock { selectablePages.clear() }
+        renderer.closeAsync()
+        thumbnailLoader.closeAsync()
+    }
+
     private fun openDocument() {
         viewModelScope.launch {
             _uiState.value = PdfViewerUiState.Loading
@@ -2517,10 +2543,11 @@ class PdfViewerViewModel(
         // So viewModelScope is NOT active here; viewModelScope.launch would not
         // run reliably. Use applicationScope (process lifetime, SupervisorJob,
         // IO) for the final close.
-        if (closed) {
+        if (clearHandled) {
             super.onCleared()
             return
         }
+        clearHandled = true
         closed = true
 
         // 1. Capture immutable stable snapshots before cancelling anything.

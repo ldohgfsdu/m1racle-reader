@@ -16,7 +16,7 @@ class AnchorResolverTest {
     fun `same pdf anchor resolves identically across repeated calls`() {
         val anchor = DocumentAnchor.PdfPage(
             page = 9,
-            rect = NormalizedRect(0.05f, 0.4f, 0.6f, 0.2f),
+            rects = listOf(NormalizedRect(0.05f, 0.4f, 0.6f, 0.2f)),
         )
         val first = PdfPageAnchorResolver.project(anchor)
         repeat(10) {
@@ -66,9 +66,9 @@ class AnchorResolverTest {
         )
         assertEquals(rectPx, zoomedRectPx)
         // 且经编解码往返后仍然一致（存储不引入尺度敏感信息）。
-        val stored = DocumentAnchor.PdfPage(page = 5, rect = rectPx)
+        val stored = DocumentAnchor.PdfPage(page = 5, rects = listOf(rectPx))
         val restored = AnchorCodec.decode(AnchorCodec.encode(stored)) as DocumentAnchor.PdfPage
-        assertEquals(rectPx, restored.rect)
+        assertEquals(rectPx, restored.rects.single())
     }
 
     @Test

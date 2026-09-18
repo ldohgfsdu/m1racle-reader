@@ -12,10 +12,10 @@ package com.m1racle.reader.data.anchor
  */
 sealed class DocumentAnchor {
 
-    /** PDF 页锚：page 为 0-based 页索引；rect 为 null 表示整页锚。 */
+    /** PDF 页锚：page 为 0-based；rects 是逐行范围，空列表表示整页。 */
     data class PdfPage(
         val page: Int,
-        val rect: NormalizedRect? = null,
+        val rects: List<NormalizedRect> = emptyList(),
     ) : DocumentAnchor() {
         init {
             require(page >= 0) { "page must be >= 0" }

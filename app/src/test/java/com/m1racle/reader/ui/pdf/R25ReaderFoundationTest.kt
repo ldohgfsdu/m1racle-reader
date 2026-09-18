@@ -17,13 +17,13 @@ class R25ReaderFoundationTest {
     @Test
     fun `reader roles form one translucent material hierarchy`() {
         val control = GlassMaterialEngine.resolve(GlassMaterialRole.Control, dark = false)
-        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false)
+        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.ExpandedMenu, dark = false)
         val child = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
-        assertTrue(control.surfaceColor.alpha < menu.surfaceColor.alpha)
-        assertTrue(menu.surfaceColor.alpha < child.surfaceColor.alpha)
-        assertTrue(control.blur < menu.blur)
-        assertTrue(menu.shadow <= child.shadow)
-        assertEquals(0.5f, menu.highlightWidth.value, 0.001f)
+        assertTrue(menu.surfaceColor.alpha > control.surfaceColor.alpha)
+        assertEquals(menu.surfaceColor.alpha, child.surfaceColor.alpha, 0f)
+        assertEquals(control.blur, menu.blur)
+        assertEquals(menu.shadow, child.shadow)
+        assertEquals(0f, menu.highlightWidth.value, 0.001f)
     }
 
     @Test
@@ -38,7 +38,6 @@ class R25ReaderFoundationTest {
         val screen = screenSource()
         assertTrue(screen.contains("GlassMaterialRole.Control"))
         assertTrue(screen.contains("GlassMaterialRole.Capsule"))
-        // No opaque white plate override.
         assertFalse(host.contains("containerAlpha = 1f"))
         assertFalse(pop.contains("containerAlpha = 1f"))
     }
@@ -84,12 +83,10 @@ class R25ReaderFoundationTest {
     @Test
     fun `open and close morph durations in target bands`() {
         val pop = popoverSource()
-        assertTrue(pop.contains("AnchoredRevealOpenMs = 200") ||
-            pop.contains("AnchoredRevealOpenMs = 190") ||
-            pop.contains("AnchoredRevealOpenMs = 210"))
-        assertTrue(pop.contains("AnchoredRevealCloseMs = 180") ||
-            pop.contains("AnchoredRevealCloseMs = 170") ||
-            pop.contains("AnchoredRevealCloseMs = 190"))
+        assertTrue(pop.contains("M1racleMotion.slow"))
+        assertTrue(pop.contains("M1racleMotion.normalIn"))
+        assertTrue(pop.contains("AnchoredRevealOpenMs = com.m1racle.reader.ui.theme.M1racleMotion.SlowMs"))
+        assertTrue(pop.contains("AnchoredRevealCloseMs = com.m1racle.reader.ui.theme.M1racleMotion.NormalMs"))
     }
 
     @Test

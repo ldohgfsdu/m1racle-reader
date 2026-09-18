@@ -97,7 +97,7 @@ class AnnotationOverlayContractTest {
         // 页 9：一个高亮；页 10 与 MD 块：不应出现在页 9 查询里。
         repo.addHighlight(
             "pdf-1",
-            DocumentAnchor.PdfPage(page = 9, rect = com.m1racle.reader.data.anchor.NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f)),
+            DocumentAnchor.PdfPage(page = 9, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f))),
             createdAt = 1L,
             excerpt = "sel",
         )
@@ -117,9 +117,9 @@ class AnnotationOverlayContractTest {
         val source = RepositoryAnnotationOverlaySource(repo)
         val page9 = source.itemsFor("pdf-1", "PAGE_INDEX", 9)
         assertEquals(2, page9.size)
-        assertTrue(page9.all { it.pdfRectNormalized() != null || it.type == AnnotationType.NOTE })
+        assertTrue(page9.all { it.pdfRectsNormalized().isNotEmpty() || it.type == AnnotationType.NOTE })
         val rectItem = page9.first { it.type == AnnotationType.HIGHLIGHT }
-        assertEquals(0.1f, rectItem.pdfRectNormalized()!!.x, 1e-6f)
+        assertEquals(0.1f, rectItem.pdfRectsNormalized().single().x, 1e-6f)
 
         val block9 = source.itemsFor("md-1", "SCROLL_POSITION", 9)
         assertEquals(1, block9.size)
@@ -137,7 +137,7 @@ class AnnotationOverlayContractTest {
         val item = RepositoryAnnotationOverlaySource(repo)
             .itemsFor("d", "PAGE_INDEX", 3)
             .single { it.type == AnnotationType.NOTE }
-        assertNull(item.pdfRectNormalized())
+        assertTrue(item.pdfRectsNormalized().isEmpty())
         assertNull(item.markdownRange())
     }
 }
