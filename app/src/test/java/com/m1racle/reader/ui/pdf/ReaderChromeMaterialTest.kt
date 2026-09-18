@@ -2,8 +2,8 @@ package com.m1racle.reader.ui.pdf
 
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.m1racle.reader.ui.material.GlassMaterialEngine
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.supportsGlassLens
@@ -27,41 +27,42 @@ class ReaderChromeMaterialTest {
     fun `semantic roles preserve regular frost hierarchy`() {
         val control = GlassMaterialEngine.resolve(GlassMaterialRole.Control, dark = false)
         val capsule = GlassMaterialEngine.resolve(GlassMaterialRole.Capsule, dark = false)
-        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false)
+        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.ExpandedMenu, dark = false)
         val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
         val dialog = GlassMaterialEngine.resolve(GlassMaterialRole.Dialog, dark = false)
 
-        assertEquals(0.50f, control.surfaceColor.alpha, 0.01f)
-        assertEquals(0.50f, capsule.surfaceColor.alpha, 0.01f)
-        assertEquals(0.60f, menu.surfaceColor.alpha, 0.01f)
-        assertEquals(0.66f, settings.surfaceColor.alpha, 0.01f)
+        assertEquals(0.86f, control.surfaceColor.alpha, 0.01f)
+        assertEquals(0.86f, capsule.surfaceColor.alpha, 0.01f)
+        assertEquals(0.90f, menu.surfaceColor.alpha, 0.01f)
+        assertEquals(0.90f, settings.surfaceColor.alpha, 0.01f)
         assertEquals(0.97f, dialog.surfaceColor.alpha, 0.01f)
-        assertTrue(control.blur < menu.blur)
-        assertTrue(menu.shadow <= settings.shadow)
+        assertEquals(0.14f, control.shadowColor.alpha, 0.01f)
+        assertEquals(control.blur, menu.blur)
+        assertEquals(menu.shadow, settings.shadow)
     }
 
     @Test
     fun `night frost remains translucent and uses one palette`() {
         val expected = mapOf(
-            GlassMaterialRole.Control to (0.68f to 0.34f),
-            GlassMaterialRole.Capsule to (0.68f to 0.34f),
-            GlassMaterialRole.Menu to (0.74f to 0.30f),
-            GlassMaterialRole.SettingsCard to (0.78f to 0.32f),
+            GlassMaterialRole.Control to (0.80f to 0f),
+            GlassMaterialRole.Capsule to (0.80f to 0f),
+            GlassMaterialRole.ExpandedMenu to (0.86f to 0f),
+            GlassMaterialRole.SettingsCard to (0.86f to 0f),
             GlassMaterialRole.Dialog to (0.97f to 0.38f),
         )
         expected.forEach { (role, values) ->
             val spec = GlassMaterialEngine.resolve(role, dark = true)
             assertEquals(values.first, spec.surfaceColor.alpha, 0.01f)
-            assertEquals(-0.18f, spec.brightness, 0.001f)
-            assertEquals(1.25f, spec.saturation, 0.001f)
+            assertEquals(0f, spec.brightness, 0.001f)
+            assertEquals(1f, spec.saturation, 0.001f)
             assertEquals(values.second, spec.highlightColor.alpha, 0.01f)
-            assertEquals(Color(0xFF111820), spec.surfaceColor.copy(alpha = 1f))
+            assertEquals(if (role == GlassMaterialRole.Dialog) Color(0xFF121212) else Color.Black, spec.surfaceColor.copy(alpha = 1f))
         }
     }
 
     @Test
     fun `settings card samples exported menu material`() {
-        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false)
+        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.ExpandedMenu, dark = false)
         val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
         assertTrue(menu.exportsForSettingsCard)
         assertEquals("RootAndMenu", settings.backdropLayer.name)
@@ -139,11 +140,16 @@ class ReaderChromeMaterialTest {
     @Test
     fun `home shares engine while content cards stay solid`() {
         val home = appSource("com/m1racle/reader/ui/home/HomeScreen.kt").readText()
-        assertTrue(home.contains("wic.show(all)"))
-        assertTrue(home.contains("glassMaterial"))
-        assertTrue(home.contains("GlassMaterialRole.Control"))
-        assertTrue(home.contains("GlassMaterialRole.Menu"))
-        assertTrue(home.contains("GlassBackdropSource("))
+        val row = appSource("com/m1racle/reader/ui/home/DocumentListRow.kt").readText()
+        val hero = appSource("com/m1racle/reader/ui/home/ContinueReadingCard.kt").readText()
+        assertTrue(home.contains("controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())"))
+        assertFalse(home.contains("glassMaterial"))
+        assertFalse(home.contains("GlassMaterialRole.Control"))
+        assertTrue(row.contains("GlassMaterialRole.Dock"))
+        assertTrue(row.contains("GlassCapability.SOLID_FALLBACK"))
+        assertFalse(row.contains(".glassMaterial("))
+        assertFalse(hero.contains("glassMaterial"))
+        assertFalse(home.contains("GlassBackdropSource("))
     }
 
     private fun source(name: String): String = appSource(

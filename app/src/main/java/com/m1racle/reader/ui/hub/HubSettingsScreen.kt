@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,8 +23,7 @@ import com.m1racle.reader.R
 import com.m1racle.reader.ui.home.HomeDesignTokens
 
 /**
- * H2.2 Settings 入口（最小静态页）：应用身份信息 + 阅读外观设置入口指引
- * （排版设置位于阅读器内菜单）。不承载任何新功能。
+ * Settings: app identity, reader appearance guidance and reader guidance.
  */
 @Composable
 fun HubSettingsScreen(
@@ -29,13 +31,14 @@ fun HubSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     HubGlassShell(
-        onSelect = onNavigateHub,
         modifier = modifier.fillMaxSize(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
                 .padding(horizontal = HomeDesignTokens.PageHorizontal),
         ) {
             Text(
@@ -70,7 +73,9 @@ fun HubSettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(20.dp))
+            com.m1racle.reader.ui.material.BlurComparisonPreview()
+            Spacer(Modifier.height(HomeDesignTokens.DockContentClearance))
         }
     }
 }

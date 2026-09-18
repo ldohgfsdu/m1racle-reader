@@ -9,7 +9,7 @@ import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 
 /**
- * The only ownership boundary for a captured glass backdrop source.
+ * The only ownership boundary for a captured document backdrop source.
  *
  * A capture source owns [backdrop], but its descendants must never sample that
  * same backdrop: doing so makes a RenderNode depend on an ancestor capture that
@@ -18,9 +18,17 @@ import com.kyant.backdrop.backdrops.layerBackdrop
  * captured content keep the shared recipe through the engine's soft-plate path.
  *
  * Sampling surfaces must be composed as siblings after this source, under the
- * outer [LocalGlassBackdropHost] provider. Reader chrome, Home FAB and Hub Dock
- * follow that sibling-overlay rule.
+ * outer [LocalGlassBackdropHost] provider. Reader chrome follows that
+ * sibling-overlay rule. Hub/Home pages do not capture a document backdrop.
  */
+
+/** Document-only capture. Chrome, menus and dialogs must stay outside [content]. */
+@Composable
+fun DocumentBackdropSource(
+    backdrop: LayerBackdrop,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) = GlassBackdropSource(backdrop, modifier, content)
 @Composable
 fun GlassBackdropSource(
     backdrop: LayerBackdrop,

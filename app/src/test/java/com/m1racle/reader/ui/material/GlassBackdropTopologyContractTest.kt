@@ -38,52 +38,42 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
-    fun `home dock is a sibling after captured content`() {
+    fun `home has no unused document backdrop capture`() {
         val home = appSource("ui/home/HomeScreen.kt").readText()
-        val sourceCall = trailingLambda(home, "GlassBackdropSource(")
-
-        assertFalse(sourceCall.body.contains("GlassDock("))
-        assertTrue(home.indexOf("GlassDock(", sourceCall.closeBrace) > sourceCall.closeBrace)
-        assertTrue(sourceCall.body.contains("RecentDocumentList("))
+        assertFalse(home.contains("GlassBackdropSource("))
+        assertFalse(home.contains("rememberLayerBackdrop("))
+        assertFalse(home.contains("GlassDock("))
+        assertTrue(home.contains("HomeContent("))
+        assertTrue(home.contains("RecentDocumentList("))
     }
 
     @Test
-    fun `dock capsule samples captured tab icons through the guarded source`() {
+    fun `dock is an L3 tab bar without a moving glass capsule`() {
         val dock = appSource("ui/hub/GlassDock.kt").readText()
-        assertTrue(dock.contains("extraBackdrop = tabsBackdrop"))
-        assertTrue(dock.contains("rememberLayerBackdrop()"))
-        assertTrue(dock.contains("GlassBackdropSource("))
-        assertTrue(dock.contains("DockCapsulePressedScale"))
-        assertTrue(dock.contains("dockCapsuleScales("))
-        assertFalse(dock.contains(".layerBackdrop("))
-        val tabCapture = dock.lastIndexOf("GlassBackdropSource(")
-        val dockGlass = dock.indexOf("GlassMaterialRole.Dock")
-        val visibleTabs = dock.indexOf("selectableGroup()")
-        assertTrue("tab capture must be composed before visible tabs", tabCapture in 0 until visibleTabs)
-        assertTrue(dockGlass in 0 until visibleTabs)
-        assertTrue(visibleTabs < dock.indexOf("extraBackdrop = tabsBackdrop"))
-        assertFalse(
-            "visible tabs must be siblings above the dock glass, not children of drawBackdrop",
-            dock.substring(dockGlass, visibleTabs).contains("{"),
-        )
-        assertTrue(dock.contains("filled = false"))
-        assertTrue(dock.contains("filled = true"))
+        assertTrue(dock.contains("GlassMaterialRole.Dock"))
+        assertTrue(dock.contains("dockSpec.surfaceColor"))
+        assertTrue(dock.contains("M1racleGlassUsage.Dock"))
+        assertTrue(dock.contains("selectableGroup()"))
+        assertFalse(dock.contains("GlassMaterialRole.DockSelection"))
+        assertFalse(dock.contains("glassMaterial("))
+        assertFalse(dock.contains("DockCapsulePressedScale"))
+        assertFalse(dock.contains("dockCapsuleScales("))
+        assertFalse(dock.contains("sourceBackdrop = selectionBackdrop"))
+        assertTrue(dock.contains("DockIndicatorWidth"))
+        assertTrue(dock.contains("alpha = contentAlpha"))
         val engine = appSource("ui/material/GlassMaterial.kt").readText()
-        assertTrue(engine.contains("extraBackdrop: Backdrop? = null"))
-        assertTrue(engine.contains("rememberCombinedBackdrop(baseBackdrop, extraBackdrop)"))
-        assertTrue(engine.contains("InnerShadow("))
-        assertTrue(engine.contains("chromaticAberration"))
-        assertTrue(engine.contains("vibrancy()"))
+        assertTrue(engine.contains("sourceBackdrop: Backdrop? = null"))
+        assertFalse("processed glass must not mix raw page detail back in", engine.contains("extraBackdrop"))
     }
 
     @Test
     fun `shared hub shell owns dock outside captured page content`() {
         val hub = appSource("ui/hub/GlassDock.kt").readText()
-        val sourceCall = trailingLambda(hub, "GlassBackdropSource(")
-
-        assertEquals("content()", sourceCall.body.trim())
-        assertFalse(sourceCall.body.contains("GlassDock("))
-        assertTrue(hub.indexOf("GlassDock(", sourceCall.closeBrace) > sourceCall.closeBrace)
+        assertFalse(hub.contains("rememberLayerBackdrop("))
+        assertFalse(hub.contains("GlassBackdropSource("))
+        val nav = appSource("ui/navigation/NavGraph.kt").readText()
+        assertTrue(nav.contains("GlassDock("))
+        assertTrue(nav.contains("HubDestination.isTopLevelRoute(currentEntry?.destination?.route)"))
 
         listOf("LibraryScreen.kt", "BookmarksScreen.kt", "HubSettingsScreen.kt").forEach { name ->
             val screen = appSource("ui/hub/$name").readText()
@@ -100,27 +90,36 @@ class GlassBackdropTopologyContractTest {
         assertEquals("content()", sourceCall.body.trim())
         assertFalse(sourceCall.body.contains("glassMaterial("))
         assertTrue(reader.indexOf("glassMaterial(", sourceCall.closeBrace) > sourceCall.closeBrace)
+        assertTrue(reader.indexOf("ReaderMoreHost(", sourceCall.closeBrace) > sourceCall.closeBrace)
+        val host = appSource("ui/pdf/ReaderMoreHost.kt").readText()
+        assertTrue(host.contains("glassMaterial("))
+        assertTrue(host.contains("GlassMaterialRole.Menu"))
     }
 
     @Test
-    fun `pdf capture includes opaque surround and a stable document material context`() {
+    fun `pdf capture includes opaque surround and shares the frost plate`() {
         val reader = appSource("ui/pdf/PdfViewerScreen.kt").readText()
         val normalized = reader.replace(Regex("\\s+"), " ")
         assertTrue(normalized.contains("remember(backdropBackground) { { drawRect(backdropBackground) drawContent() } }"))
         assertTrue(normalized.contains("rememberLayerBackdrop( onDraw = drawPdfBackdrop,"))
-        assertTrue(normalized.contains("menuExport = parentExportBackdrop, overDocument = true,"))
+        assertTrue(normalized.contains("GlassBackdropHost( root = rootBackdrop, menuExport = parentExportBackdrop, )"))
+        assertFalse(reader.contains("overDocument"))
         val material = appSource("ui/material/GlassMaterial.kt").readText()
         assertTrue(material.contains("contrast = idleSpec.contrast"))
-        assertTrue(material.contains("overDocument = overDocument"))
+        assertFalse(material.contains("overDocument"))
+        assertTrue(material.contains("vibrancy = true"))
     }
 
     @Test
     fun `dialog and menu retain isolated soft plate behavior`() {
         val dialog = appSource("ui/material/GlassAlertDialog.kt").readText()
-        val home = appSource("ui/home/HomeScreen.kt").readText()
+        val menu = appSource("ui/home/DocumentListRow.kt").readText()
 
         assertTrue(dialog.contains("sampleBackdrop = false"))
-        assertTrue(home.contains("sampleBackdrop = false"))
+        assertTrue(menu.contains("DropdownMenu("))
+        assertTrue(menu.contains("GlassMaterialRole.Dock"))
+        assertTrue(menu.contains("GlassCapability.SOLID_FALLBACK"))
+        assertFalse(menu.contains(".glassMaterial("))
     }
 
     private data class TrailingLambda(

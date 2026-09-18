@@ -47,6 +47,7 @@ fun GlassAlertDialog(
                     role = GlassMaterialRole.Dialog,
                     shape = GlassDialogShape,
                     sampleBackdrop = false,
+                    interaction = true,
                 )
                 .padding(24.dp),
         ) {

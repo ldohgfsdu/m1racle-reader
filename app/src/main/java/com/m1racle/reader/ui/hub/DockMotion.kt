@@ -1,9 +1,9 @@
 package com.m1racle.reader.ui.hub
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import com.m1racle.reader.ui.theme.M1racleMotion
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -57,36 +57,13 @@ internal fun HubDockMotionProvider(
     LaunchedEffect(selected) { preview.cancel() }
     val position = animateFloatAsState(
         targetValue = preview.position ?: selected.ordinal.toFloat(),
-        animationSpec = if (preview.position != null) tween(0) else spring(
-            dampingRatio = 0.78f,
-            stiffness = 420f,
-            visibilityThreshold = 0.001f,
-        ),
+        animationSpec = if (preview.position != null) tween(0) else M1racleMotion.normal,
         label = "hubDockSelection",
     )
     val motion = remember(selected, position, preview) { HubDockMotion(selected, position, preview) }
     CompositionLocalProvider(LocalHubDockMotion provides motion, content = content)
 }
 
-/** Official LiquidBottomTabs pressed capsule is 78dp on a 56dp idle slot. */
-internal const val DockCapsulePressedScale = 78f / 56f
-internal const val DockContentPressedScale = 1.2f
-
 /** Logical slot geometry is shared by rendering and touch handling, including RTL. */
 internal fun dockPhysicalPosition(logicalPosition: Float, rtl: Boolean): Float =
     if (rtl) HubDestination.entries.lastIndex - logicalPosition else logicalPosition
-
-/**
- * Velocity stretch from the official LiquidBottomTabs capsule layerBlock.
- * [velocity] is in tab-slots per second; positive is physical right.
- */
-internal fun dockCapsuleScales(
-    scaleX: Float,
-    scaleY: Float,
-    velocity: Float,
-): Pair<Float, Float> {
-    val unitVelocity = velocity / 10f
-    val xMorph = (unitVelocity * 0.75f).coerceIn(-0.2f, 0.2f)
-    val yMorph = (unitVelocity * 0.25f).coerceIn(-0.2f, 0.2f)
-    return (scaleX / (1f - xMorph)) to (scaleY * (1f - yMorph))
-}

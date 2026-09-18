@@ -11,6 +11,10 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.LayoutDirection
@@ -31,6 +35,23 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-normal-notlong-notround-any-420dpi-keyshidden-nonav")
 class GlassDockUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun `all icons retain full bounds with a real backdrop host`() {
+        rule.setContent {
+            M1racleReaderTheme {
+                HubDockMotionProvider(HubDestination.HOME) {
+                    GlassDock(onSelect = {})
+                }
+            }
+        }
+        HubDestination.entries.forEach { destination ->
+            rule.onNodeWithTag("dock-icon-${destination.name}", useUnmergedTree = true)
+                .assertIsDisplayed()
+                .assertWidthIsEqualTo(24.dp)
+                .assertHeightIsEqualTo(24.dp)
+        }
+    }
 
     @Test
     fun `visible tab labels stay displayed above the sampling overlay`() {

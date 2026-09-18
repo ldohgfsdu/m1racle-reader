@@ -1,6 +1,8 @@
 package com.m1racle.reader.ui.hub
 
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,26 +32,16 @@ class DockMotionTest {
     }
 
     @Test
-    fun `capsule press scale matches official 78 over 56 and stretches with velocity`() {
-        assertEquals(78f / 56f, DockCapsulePressedScale, 0f)
-        assertEquals(1.2f, DockContentPressedScale, 0f)
-        val rest = dockCapsuleScales(1f, 1f, 0f)
-        assertEquals(1f, rest.first, 0f)
-        assertEquals(1f, rest.second, 0f)
-        val pressed = dockCapsuleScales(DockCapsulePressedScale, DockCapsulePressedScale, 0f)
-        assertEquals(DockCapsulePressedScale, pressed.first, 1e-6f)
-        assertEquals(DockCapsulePressedScale, pressed.second, 1e-6f)
-        val right = dockCapsuleScales(1f, 1f, 10f)
-        assertTrue(right.first > 1f)
-        assertTrue(right.second < 1f)
-        val left = dockCapsuleScales(1f, 1f, -10f)
-        assertTrue(left.first < 1f)
-        assertTrue(left.second > 1f)
-        val clamped = dockCapsuleScales(1f, 1f, 1000f)
-        val expectedX = 1f / (1f - 0.2f)
-        val expectedY = 1f * (1f - 0.2f)
-        assertEquals(expectedX, clamped.first, 1e-6f)
-        assertEquals(expectedY, clamped.second, 1e-6f)
+    fun `selection uses motion token without bounce constants`() {
+        val motion = listOf(
+            File("app/src/main/java/com/m1racle/reader/ui/hub/DockMotion.kt"),
+            File("src/main/java/com/m1racle/reader/ui/hub/DockMotion.kt"),
+        ).first { it.isFile }.readText()
+        assertTrue(motion.contains("M1racleMotion.normal"))
+        assertFalse(motion.contains("spring("))
+        assertFalse(motion.contains("DockCapsulePressedScale"))
+        assertFalse(motion.contains("dockCapsuleScales"))
+        assertFalse(motion.contains("DockContentPressedScale"))
     }
 
     @Test

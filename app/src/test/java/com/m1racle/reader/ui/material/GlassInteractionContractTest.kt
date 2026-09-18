@@ -211,9 +211,12 @@ class GlassInteractionContractTest {
     @Test
     fun `material engine stays blind to the interaction layer`() {
         val material = norm(source("GlassMaterial.kt"))
-        assertFalse(material.contains("GlassInteraction"))
-        // 引擎公开面保持纯静态配方解析。
+        assertFalse(material.contains("GlassInteractionContext"))
+        assertTrue(material.contains("GlassInteractionState"))
         assertTrue(material.contains("fun resolve("))
+        val interaction = norm(source("GlassInteraction.kt"))
+        assertFalse(interaction.contains("GlassMaterialEngine"))
+        assertFalse(interaction.contains("GlassMaterialSpec"))
     }
 
     private fun source(name: String): String = appSource(

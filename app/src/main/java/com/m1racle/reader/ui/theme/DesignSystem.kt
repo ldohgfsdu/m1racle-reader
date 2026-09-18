@@ -32,6 +32,28 @@ object M1racleReaderTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalM1racleReaderExtraColors.current
+
+    val typography: M1racleTypography
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalM1racleTypography.current
+
+    val surface: M1racleSurface
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalM1racleSurface.current
+
+    val cornerRadius: M1racleCornerRadius
+        get() = M1racleCornerRadius
+
+    val elevation: M1racleElevation
+        get() = M1racleElevation
+
+    val glass: M1racleGlassPolicy
+        get() = M1racleGlassPolicy
+
+    val motion: M1racleMotion
+        get() = M1racleMotion
 }
 
 /**
