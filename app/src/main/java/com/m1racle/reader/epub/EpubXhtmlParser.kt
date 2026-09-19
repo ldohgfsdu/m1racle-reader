@@ -10,8 +10,52 @@ import org.w3c.dom.Node
 object EpubXhtmlParser {
     const val MAX_BLOCKS = 20_000
 
+    private val VOID_TAGS = setOf(
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    )
+
+    private val HTML_ENTITIES = mapOf(
+        "nbsp" to 160, "copy" to 169, "reg" to 174, "hellip" to 8230,
+        "mdash" to 8212, "ndash" to 8211, "ldquo" to 8220, "rdquo" to 8221,
+        "lsquo" to 8216, "rsquo" to 8217, "middot" to 183, "bull" to 8226,
+        "emsp" to 8195, "ensp" to 8194, "thinsp" to 8201, "dagger" to 8224,
+        "Dagger" to 8225, "laquo" to 171, "raquo" to 187, "sect" to 167,
+        "para" to 182, "times" to 215, "divide" to 247, "minus" to 8722,
+        "plusmn" to 177, "sup2" to 178, "sup3" to 179, "frac12" to 189,
+        "frac14" to 188, "trade" to 8482, "euro" to 8364, "pound" to 163,
+        "yen" to 165, "cent" to 162, "deg" to 176,
+    )
+
+    private val VoidPattern =
+        Regex("<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\\b((?:[^>\"']|\"[^\"]*\"|'[^']*')*)>")
+    private val EntityPattern =
+        Regex("&([A-Za-z][A-Za-z0-9]*);")
+
+    /**
+     * Real-world chapters are often HTML tag-soup (unclosed voids, HTML-only
+     * entities). Normalize the two common cases before strict XML parsing;
+     * anything else still fails loudly with the chapter href attached.
+     */
+    internal fun sanitizeTagSoup(raw: String): String {
+        val withEntities = EntityPattern.replace(raw) { match ->
+            val code = HTML_ENTITIES[match.groupValues[1]]
+            if (code != null) "&#$code;" else match.value
+        }
+        return VoidPattern.replace(withEntities) { match ->
+            val tag = match.groupValues[1].lowercase()
+            val attrs = match.groupValues[2]
+            if (tag in VOID_TAGS && !attrs.trimEnd().endsWith("/")) {
+                "<$tag$attrs/>"
+            } else {
+                match.value
+            }
+        }
+    }
+
     fun parse(bytes: ByteArray): Pair<List<EpubBlock>, Map<String, Int>> {
-        val doc = EpubPackageImporter.parseXml(bytes, "章节")
+        val text = sanitizeTagSoup(bytes.toString(Charsets.UTF_8))
+        val doc = EpubPackageImporter.parseXml(text.toByteArray(Charsets.UTF_8), "章节")
         val roots = doc.getElementsByTagNameNS("*", "body")
         val body = if (roots.length > 0) roots.item(0) as Element else doc.documentElement
         val out = mutableListOf<EpubBlock>()

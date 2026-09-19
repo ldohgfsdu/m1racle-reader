@@ -102,6 +102,72 @@ class EpubPackageImporterTest {
     }
 
     @Test
+    fun `tag soup voids and html entities are sanitized`() {
+        val soup = "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>" +
+            "<p>a&nbsp;b<br>第一行<br/>第二行</p><img src=\"x.png\"><hr>" +
+            "</body></html>"
+        val (blocks, _) = EpubXhtmlParser.parse(soup.toByteArray(Charsets.UTF_8))
+        val text = blocks.filterIsInstance<EpubBlock.Paragraph>()
+            .flatMap { it.inlines }.joinToString("") { it.text }
+        assertTrue(text.contains("a b"))
+        assertFalse(text.contains(" "))
+        assertTrue(blocks.any { it is EpubBlock.Image })
+        assertTrue(blocks.any { it is EpubBlock.Divider })
+    }
+
+    @Test
+    fun `broken chapter degrades to placeholder without shifting spine`() {
+        val dir = tmpDir()
+        val epub = File(dir, "bad-chapter.epub")
+        java.util.zip.ZipOutputStream(epub.outputStream()).use { zip ->
+            fun entry(name: String, data: String) {
+                zip.putNextEntry(java.util.zip.ZipEntry(name))
+                zip.write(data.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+            entry("mimetype", "application/epub+zip")
+            entry(
+                "META-INF/container.xml",
+                "<?xml version=\"1.0\"?><container version=\"1.0\" " +
+                    "xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\">" +
+                    "<rootfiles><rootfile full-path=\"content.opf\" " +
+                    "media-type=\"application/oebps-package+xml\"/></rootfiles></container>",
+            )
+            entry(
+                "content.opf",
+                "<?xml version=\"1.0\"?><package version=\"2.0\" " +
+                    "xmlns=\"http://www.idpf.org/2007/opf\" unique-identifier=\"b\">" +
+                    "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">" +
+                    "<dc:title>t</dc:title></metadata><manifest>" +
+                    "<item id=\"c1\" href=\"c1.xhtml\" media-type=\"application/xhtml+xml\"/>" +
+                    "<item id=\"c2\" href=\"c2.xhtml\" media-type=\"application/xhtml+xml\"/>" +
+                    "</manifest><spine><itemref idref=\"c1\"/><itemref idref=\"c2\"/></spine></package>",
+            )
+            entry(
+                "c1.xhtml",
+                "<?xml version=\"1.0\"?><html xmlns=\"http://www.w3.org/1999/xhtml\">" +
+                    "<body><p>好章节</p></body></html>",
+            )
+            entry(
+                "c2.xhtml",
+                "<?xml version=\"1.0\"?><html xmlns=\"http://www.w3.org/1999/xhtml\">" +
+                    "<body><p>坏章节</p></div></body></html>",
+            )
+        }
+        val book = EpubPackageImporter.open(epub, File(dir, "out"))
+        assertEquals(2, book.chapters.size)
+        assertTrue(
+            book.chapters[0].blocks.any {
+                it is EpubBlock.Paragraph && it.inlines.any { inline -> inline.text.contains("好章节") }
+            },
+        )
+        assertEquals(
+            listOf(EpubBlock.Unsupported("本章排版异常，已跳过")),
+            book.chapters[1].blocks,
+        )
+    }
+
+    @Test
     fun `xxe external entity is not resolved`() {
         // DOCTYPE is allowed (real books use it); the external file must not leak in.
         val doc = EpubPackageImporter.parseXml(

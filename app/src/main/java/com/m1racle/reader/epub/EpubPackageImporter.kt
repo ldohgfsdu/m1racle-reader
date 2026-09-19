@@ -107,14 +107,13 @@ object EpubPackageImporter {
             if (!file.canonicalFile.path.startsWith(rootCanon.path + File.separator) || !file.isFile) {
                 throw EpubException.Corrupt("缺章节文件")
             }
-            val parsed = try {
+            // A single unparseable chapter degrades to a placeholder block so the
+            // book still opens and spine indices (TOC/progress) stay aligned.
+            val (blocks, anchors) = try {
                 EpubXhtmlParser.parse(file.readBytes())
-            } catch (e: EpubException) {
-                throw e
             } catch (_: Exception) {
-                throw EpubException.Corrupt("章节解析失败：${item.href}")
+                listOf(EpubBlock.Unsupported("本章排版异常，已跳过")) to emptyMap<String, Int>()
             }
-            val (blocks, anchors) = parsed
             EpubChapter(index, item.href, tocTitleFor(toc, index), blocks, anchors)
         }
         return EpubBook(metadata, spine, toc, chapters)
@@ -143,7 +142,7 @@ object EpubPackageImporter {
             val type = el.getAttribute("media-type")
             if (type.isEmpty() || type == "application/oebps-package+xml") {
                 val path = el.getAttribute("full-path")
-                if (path.isNotEmpty()) return path
+                if (path.isNotEmpty()) return decodeHref(path)
             }
         }
         return null
@@ -153,6 +152,35 @@ object EpubPackageImporter {
         zip.getInputStream(entry).use { input ->
             return readBounded(input, cap)
         }
+    }
+
+    /** Percent-decode a package href (UTF-8). Unlike form decoding, '+' is kept literal. */
+    internal fun decodeHref(href: String): String {
+        val out = StringBuilder()
+        var i = 0
+        while (i < href.length) {
+            val c = href[i]
+            if (c == '%' && i + 2 < href.length) {
+                val hex = href.substring(i + 1, i + 3)
+                val v = hex.toIntOrNull(16)
+                if (v != null) {
+                    // Collect the full UTF-8 run for multibyte sequences.
+                    val bytes = mutableListOf<Byte>()
+                    var j = i
+                    while (j < href.length && href[j] == '%' && j + 2 < href.length) {
+                        val w = href.substring(j + 1, j + 3).toIntOrNull(16) ?: break
+                        bytes.add(w.toByte())
+                        j += 3
+                    }
+                    out.append(String(bytes.toByteArray(), Charsets.UTF_8))
+                    i = j
+                    continue
+                }
+            }
+            out.append(c)
+            i++
+        }
+        return out.toString()
     }
 
     internal fun readBounded(input: InputStream, cap: Long): ByteArray {
@@ -247,7 +275,7 @@ object EpubPackageImporter {
             val el = items.item(i) as? Element ?: continue
             val id = el.getAttribute("id")
             val href = el.getAttribute("href")
-            if (id.isNotEmpty() && href.isNotEmpty()) manifest[id] = href
+            if (id.isNotEmpty() && href.isNotEmpty()) manifest[id] = decodeHref(href)
             if (el.getAttribute("properties").split(" ").contains("nav")) navHref = href
         }
         val refs = mutableListOf<Pair<String, Boolean>>()
@@ -326,7 +354,7 @@ object EpubPackageImporter {
                 }
             }
             if (link == null) continue
-            val href = link.getAttribute("href")
+            val href = decodeHref(link.getAttribute("href"))
             if (href.isEmpty()) continue
             out.add(
                 EpubTocNode(
@@ -364,7 +392,7 @@ object EpubPackageImporter {
                         val texts = kid.getElementsByTagNameNS("*", "text")
                         if (texts.length > 0) title = texts.item(0).textContent?.trim()
                     }
-                    kid.tagName.endsWith("content") -> src = kid.getAttribute("src")
+                    kid.tagName.endsWith("content") -> src = decodeHref(kid.getAttribute("src"))
                     kid.tagName.endsWith("navPoint") -> sub.addAll(parseNavPoints(kid, hrefToSpine))
                 }
             }
