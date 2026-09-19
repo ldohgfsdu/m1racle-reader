@@ -68,6 +68,9 @@ data class DocumentEntity(
     val isPdf: Boolean
         get() = type == DocumentType.PDF
 
+    val isEpub: Boolean
+        get() = type == DocumentType.EPUB
+
     val isMarkdownPackage: Boolean
         get() = type == DocumentType.MARKDOWN_PACKAGE
 }

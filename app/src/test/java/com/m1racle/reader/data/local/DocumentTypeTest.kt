@@ -69,6 +69,36 @@ class DocumentTypeTest {
     }
 
     @Test
+    fun resolve_epubMimeAndExtension_isEpub() {
+        assertEquals(
+            DocumentType.EPUB,
+            DocumentType.resolve("application/epub+zip", "book.bin"),
+        )
+        assertEquals(
+            DocumentType.EPUB,
+            DocumentType.resolve("application/octet-stream", "book.EPUB"),
+        )
+        assertEquals(
+            DocumentType.EPUB,
+            DocumentType.resolve(null, "book.epub"),
+        )
+    }
+
+    @Test
+    fun isAllowedImport_acceptsEpub_rejectsOtherEbooks() {
+        assertTrue(DocumentType.isAllowedImport("application/epub+zip", "b.epub"))
+        assertTrue(DocumentType.isAllowedImport(null, "b.epub"))
+        assertFalse(DocumentType.isAllowedImport(null, "b.mobi"))
+        assertFalse(DocumentType.isAllowedImport(null, "b.azw3"))
+    }
+
+    @Test
+    fun fromStorage_roundTripsEpub() {
+        assertEquals(DocumentType.EPUB, DocumentType.fromStorage("EPUB"))
+        assertEquals(DocumentType.EPUB, DocumentType.fromStorage("epub"))
+    }
+
+    @Test
     fun fromStorage_defaultsToMarkdown() {
         assertEquals(DocumentType.MARKDOWN, DocumentType.fromStorage(null))
         assertEquals(DocumentType.MARKDOWN, DocumentType.fromStorage("MARKDOWN"))

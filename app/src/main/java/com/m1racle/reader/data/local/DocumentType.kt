@@ -11,15 +11,19 @@ enum class DocumentType {
     PDF,
     /** ZIP textbook package (entry Markdown under packages/). Navigates as Markdown. */
     MARKDOWN_PACKAGE,
+    /** Local reflowable EPUB (limited reading). Navigates to the EPUB reader. */
+    EPUB,
     ;
 
     companion object {
         const val MIME_PDF = "application/pdf"
+        const val MIME_EPUB = "application/epub+zip"
 
         fun fromStorage(value: String?): DocumentType {
             return when (value?.uppercase(Locale.ROOT)) {
                 PDF.name -> PDF
                 MARKDOWN_PACKAGE.name -> MARKDOWN_PACKAGE
+                EPUB.name -> EPUB
                 else -> MARKDOWN
             }
         }
@@ -33,8 +37,9 @@ enum class DocumentType {
          * Accepted content, in order:
          * 1. Markdown/text extension (.md/.markdown/.txt) on either name;
          * 2. ZIP package (extension on either name or zip mime);
-         * 3. PDF (pdf mime or .pdf extension via [resolve]);
-         * 4. Text-mime fallback ([isTextMimeFallback]): any provider mime in the
+         * 3. EPUB (epub mime or .epub extension via [resolve]);
+         * 4. PDF (pdf mime or .pdf extension via [resolve]);
+         * 5. Text-mime fallback ([isTextMimeFallback]): any provider mime in the
          *    text family with no obviously-non-document extension enters as
          *    readable text — extensionless names are normalized to ".txt"
          *    downstream by ExternalUriMetadata.ensureExtension.
@@ -50,6 +55,9 @@ enum class DocumentType {
                 return true
             }
             if (resolve(mimeType, displayName, pathSegment) == PDF) {
+                return true
+            }
+            if (resolve(mimeType, displayName, pathSegment) == EPUB) {
                 return true
             }
             return isTextMimeFallback(mimeType, displayName, pathSegment)
@@ -85,8 +93,8 @@ enum class DocumentType {
             "rar", "7z", "tar", "gz", "bz2", "xz", "iso", "dmg", "apk", "exe", "msi", "bin",
             // office suites
             "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
-            // third-party ebook containers
-            "epub", "mobi", "azw3",
+            // third-party ebook containers (EPUB is supported; the rest are rejected)
+            "mobi", "azw3",
         )
 
         fun hasNonDocumentExtension(name: String?): Boolean {
@@ -100,7 +108,8 @@ enum class DocumentType {
 
         /**
          * Resolve type from SAF mime and/or file name.
-         * PDF only when mime or extension clearly indicates PDF.
+         * PDF only when mime or extension clearly indicates PDF;
+         * EPUB only when mime or extension clearly indicates EPUB.
          * Non-PDF never becomes PDF by accident.
          */
         fun resolve(mimeType: String?, displayName: String?, pathSegment: String? = null): DocumentType {
@@ -108,10 +117,16 @@ enum class DocumentType {
             if (mime == MIME_PDF || mime == "application/x-pdf") {
                 return PDF
             }
+            if (mime == MIME_EPUB) {
+                return EPUB
+            }
             if (hasPdfExtension(displayName) || hasPdfExtension(pathSegment)) {
                 // Provider MIME is frequently generic or wrong. A concrete .pdf
                 // display/path name is stronger file identity than text/plain.
                 return PDF
+            }
+            if (isEpubFileName(displayName) || isEpubFileName(pathSegment)) {
+                return EPUB
             }
             return MARKDOWN
         }
@@ -139,6 +154,11 @@ enum class DocumentType {
         fun hasPdfExtension(name: String?): Boolean {
             if (name.isNullOrBlank()) return false
             return name.lowercase(Locale.ROOT).endsWith(".pdf")
+        }
+
+        fun isEpubFileName(name: String?): Boolean {
+            if (name.isNullOrBlank()) return false
+            return name.lowercase(Locale.ROOT).endsWith(".epub")
         }
     }
 }
