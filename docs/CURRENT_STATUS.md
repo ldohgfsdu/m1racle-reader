@@ -2,7 +2,18 @@
 
 更新：2026-09-18。此文件是当前工程与发布状态的唯一入口；阶段报告只描述当时证据。
 
-## 当前任务（唯一 active object：R36_2_DARK_OPTICAL_RECIPE）
+## 当前任务（唯一 active object：EPUB_REFLOWABLE_MVP）
+
+### 2026-09-19 EPUB 有限阅读 MVP（IMPLEMENTATION_DONE，DEVICE_VISUAL_NOT_RUN）
+
+- 范围：用户授权修订 AGENTS/PRD；reflowable 文字章节（路线 B：XHTML→EpubBlock→Compose，零新依赖）；DRM/fixed-layout/音视频/搜索/批注不做。
+- implemented：DocumentType.EPUB（TEXT 存储，无迁移）+ 导入门控/外部打开类型化导航（isPdf 保留派生）+ 安全解压（slip/bomb/XXE/加密拒绝）+ OPF/spine + nav/NCX + XHTML 子集 + `epub/{id}` 路由 + 阅读器（连续章节、目录抽屉、fragment 跳转、进度、设置复用）+ Home/Library/Manifest/strings。
+- 进度语义：复用 Markdown 约定（lastScrollIndex=行索引、lastScrollOffset=px、readingProgress=全书比例），打开精确恢复；spine 章序隐含在行号中，TOC fragment 直达已实现。
+- automated_verified：`testQaUnitTest` **1517 / 0 / 0 / 0**（+7 parser/+3 doctype/+1 外开路由）；`compileReleaseKotlin` PASS；`assembleRelease` BLOCKED_EXTERNAL_CONFIGURATION（无新包、无冒充）。
+- 体积：零新增依赖（平台 Zip/DOM），发布包增量待签名构建实测。
+- device_verified：NOT_RUN（单次 adb 为空）。R36 光学暂停（light frozen .86 / dark D0，harness 保留）。
+
+### 2026-09-18 R36.2 Dark Recipe（AUDIT_DONE，DEVICE_APPROVAL_PENDING）
 
 ### 2026-09-18 R36.2 Dark Recipe（AUDIT_DONE，DEVICE_APPROVAL_PENDING）
 

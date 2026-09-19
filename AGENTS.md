@@ -4,7 +4,7 @@ Android 本地优先文档阅读器：Markdown + PDF。
 
 ## Scope
 
-Follow `docs/PRD.md`（含 2026-09-07 用户授权的 PDF 正文编辑范围补充）：本地 Markdown + PDF 阅读及有限 PDF 正文编辑；Markdown 编辑、云同步、正文全文索引、EPUB 等明确不做。
+Follow `docs/PRD.md`（含 2026-09-07 用户授权的 PDF 正文编辑范围补充，2026-09-19 用户授权的 EPUB 有限阅读范围补充）：本地 Markdown + PDF + 有限 EPUB 阅读及有限 PDF 正文编辑；Markdown 编辑、云同步、正文全文索引等明确不做。
 
 - No INTERNET permission
 - No ads / analytics / accounts / cloud sync
