@@ -795,11 +795,12 @@ class DocumentRepository(
         val epubFile = uriToFile(entity.uri) ?: throw EpubException.Corrupt("找不到文件")
         val destDir = java.io.File(context.filesDir, "epubs/$id")
         val book = try {
-            if (!java.io.File(destDir, "META-INF/container.xml").isFile) {
-                destDir.deleteRecursively()
-                EpubPackageImporter.extract(epubFile, destDir)
-            }
-            EpubPackageImporter.parseExtracted(destDir)
+            openEpubCached(epubFile, destDir)
+        } catch (e: EpubException.Corrupt) {
+            // A partial extraction left by an older failed run poisons the cache
+            // marker check; wipe and retry exactly once before surfacing the error.
+            destDir.deleteRecursively()
+            openEpubCached(epubFile, destDir)
         } catch (e: EpubException) {
             throw e
         } catch (_: Exception) {
@@ -808,6 +809,14 @@ class DocumentRepository(
         touchLastOpenedAt(id)
         updateParseMetadata(id, book.metadata.title, book.toc.size)
         book
+    }
+
+    private fun openEpubCached(epubFile: java.io.File, destDir: java.io.File): EpubBook {
+        if (!java.io.File(destDir, "META-INF/container.xml").isFile) {
+            destDir.deleteRecursively()
+            EpubPackageImporter.extract(epubFile, destDir)
+        }
+        return EpubPackageImporter.parseExtracted(destDir)
     }
 
     private fun uriToFile(uriString: String): java.io.File? {

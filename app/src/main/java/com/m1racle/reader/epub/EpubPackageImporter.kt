@@ -224,8 +224,11 @@ object EpubPackageImporter {
             return factory.newDocumentBuilder().parse(bytes.inputStream())
         } catch (e: EpubException) {
             throw e
-        } catch (_: Exception) {
-            throw EpubException.Corrupt("$what 解析失败")
+        } catch (e: Exception) {
+            // Carry the parser cause (class + first line) so device reports are actionable.
+            val detail = (e.message ?: "").lineSequence().firstOrNull()?.take(120).orEmpty()
+            val cause = e.javaClass.simpleName + (if (detail.isEmpty()) "" else ": $detail")
+            throw EpubException.Corrupt("$what 解析失败($cause)")
         }
     }
 
