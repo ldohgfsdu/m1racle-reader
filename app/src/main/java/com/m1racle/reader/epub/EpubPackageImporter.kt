@@ -206,10 +206,21 @@ object EpubPackageImporter {
             factory.isExpandEntityReferences = false
             // Real-world books commonly ship DOCTYPE (OPF/NCX/chapters), so it
             // stays allowed; XXE is blocked by disabling external entities and
-            // capping entity expansion (billion-laughs guard).
-            factory.setFeature("http://xml.org/sax/features/external-general-entities", false)
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            // capping entity expansion (billion-laughs guard). Each feature is
+            // set defensively: Android's built-in parser does not know these
+            // Xerces names and throws UnsupportedOperationException for them;
+            // its expat core skips external entities by default, and the app
+            // holds no INTERNET permission as the backstop.
+            fun setFeatureQuietly(name: String, value: Boolean) {
+                try {
+                    factory.setFeature(name, value)
+                } catch (_: Exception) {
+                    // Unsupported on this runtime; ignore.
+                }
+            }
+            setFeatureQuietly("http://xml.org/sax/features/external-general-entities", false)
+            setFeatureQuietly("http://xml.org/sax/features/external-parameter-entities", false)
+            setFeatureQuietly("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
             try {
                 factory.setAttribute(
                     "http://www.oracle.com/xml/jaxp/properties/entityExpansionLimit", 10_000,
