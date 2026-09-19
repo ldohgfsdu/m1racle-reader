@@ -133,6 +133,7 @@ object ExternalUriMetadata {
     fun extensionForMime(mime: String?): String? =
         when (mime?.lowercase(Locale.ROOT)?.substringBefore(';')?.trim()) {
             "application/pdf", "application/x-pdf" -> "pdf"
+            "application/epub+zip" -> "epub"
             "application/zip", "application/x-zip-compressed", "application/x-zip" -> "zip"
             "text/markdown", "text/x-markdown" -> "md"
             "text/plain" -> "txt"

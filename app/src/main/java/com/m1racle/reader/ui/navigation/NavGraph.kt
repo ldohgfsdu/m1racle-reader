@@ -57,6 +57,7 @@ object Routes {
     const val HOME = "home"
     const val VIEWER = "viewer/{documentId}?anchor={anchor}"
     const val PDF_VIEWER = "pdf/{documentId}?anchor={anchor}"
+    const val EPUB_VIEWER = "epub/{documentId}"
     const val PDF_EDITOR = "pdf-edit/{documentId}?page={page}"
 
     // H2.2 Hub 顶层目的地（Dock 四入口；与 HubDestination.route 一一对应）。
@@ -71,6 +72,8 @@ object Routes {
     fun pdfViewer(documentId: String, anchor: DocumentAnchor? = null): String =
         routeWithAnchor("pdf/$documentId", anchor)
 
+    fun epubViewer(documentId: String): String = "epub/$documentId"
+
     fun decodeAnchor(raw: String?): DocumentAnchor? = AnchorCodec.decode(
         raw?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) },
     )
@@ -84,6 +87,7 @@ object Routes {
 /** 按文档类型选择既有阅读路由（Home/Library/书签跳转共用）。 */
 private fun viewerRouteFor(document: DocumentEntity, anchor: DocumentAnchor? = null): String = when (document.type) {
     DocumentType.PDF -> Routes.pdfViewer(document.id, anchor)
+    DocumentType.EPUB -> Routes.epubViewer(document.id)
     DocumentType.MARKDOWN,
     DocumentType.MARKDOWN_PACKAGE,
     -> Routes.viewer(document.id, anchor)
@@ -314,6 +318,39 @@ fun M1racleReaderNavGraph(
                 highlightController = highlightController,
                 noteController = noteController,
                 initialAnchor = initialAnchor,
+            )
+        }
+
+        composable(
+            route = Routes.EPUB_VIEWER,
+            arguments = listOf(
+                navArgument("documentId") {
+                    type = NavType.StringType
+                },
+            ),
+        ) { entry ->
+            val documentId = entry.arguments?.getString("documentId").orEmpty()
+            val sessionId = remember(documentId) { "epub-$documentId-${UUID.randomUUID()}" }
+            DisposableEffect(documentId, sessionId, coordinator) {
+                val c = coordinator
+                c?.onViewerOpened(documentId, sessionId)
+                c?.progressFlushHook = { _ ->
+                    // EPUB leave paths flush position; hook is an order barrier only.
+                }
+                onDispose {
+                    if (c != null && c.activeViewerSessionId.value == sessionId) {
+                        c.progressFlushHook = null
+                    }
+                    c?.onViewerClosed(documentId, sessionId)
+                }
+            }
+            com.m1racle.reader.ui.epub.EpubReaderScreen(
+                documentId = documentId,
+                repository = repository,
+                readerSettingsRepository = readerSettingsRepository,
+                onBack = {
+                    navController.popBackStack(Routes.HOME, inclusive = false)
+                },
             )
         }
 

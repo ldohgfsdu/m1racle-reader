@@ -104,7 +104,7 @@ fun HomeScreen(
         HomeContent(
             uiState = uiState,
             isImporting = isImporting,
-            onImport = { launcher.launch(arrayOf("text/*", "application/pdf", "application/zip",
+            onImport = { launcher.launch(arrayOf("text/*", "application/pdf", "application/epub+zip", "application/zip",
                 "application/x-zip-compressed", "application/octet-stream")) },
             onOpenSearch = onOpenSearch,
             onOpen = onOpenDocument,
@@ -256,6 +256,20 @@ internal fun resolveDocumentCardTitles(document: DocumentEntity): DocumentCardTi
         return DocumentCardTitles(
             displayTitle = if (fullFileName.endsWith(".pdf", ignoreCase = true)) fullFileName.dropLast(4).trimEnd() else fullFileName,
             typeLabel = "PDF",
+        )
+    }
+    if (document.isEpub) {
+        val displayTitle = DocumentListTitle.normalizeListDisplayTitle(
+            extractedTitle = document.title,
+            fileName = fullFileName,
+        )
+        return DocumentCardTitles(
+            displayTitle = if (fullFileName.endsWith(".epub", ignoreCase = true) && displayTitle == fullFileName) {
+                fullFileName.dropLast(5).trimEnd()
+            } else {
+                displayTitle
+            },
+            typeLabel = "EPUB",
         )
     }
     if (document.isMarkdownPackage) {

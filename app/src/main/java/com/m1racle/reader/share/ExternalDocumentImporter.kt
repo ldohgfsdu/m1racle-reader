@@ -140,7 +140,7 @@ open class ExternalDocumentImporter(
                 val document = committed.document
                 CommitOutcome.Success(
                     documentId = document.id,
-                    isPdf = document.isPdf,
+                    documentType = document.type,
                     displayName = document.displayName,
                     sizeBytes = document.fileSize ?: prepared.sizeBytes,
                     contentSha256 = requireNotNull(document.contentSha256),

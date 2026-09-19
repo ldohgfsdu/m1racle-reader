@@ -65,9 +65,11 @@ data class PendingExternalOpen(
 data class NavigationRequest(
     val requestId: String,
     val documentId: String,
-    val isPdf: Boolean,
+    val documentType: com.m1racle.reader.data.local.DocumentType,
     val bringToFrontOnly: Boolean = false,
-)
+) {
+    val isPdf: Boolean get() = documentType == com.m1racle.reader.data.local.DocumentType.PDF
+}
 
 sealed class ExternalOpenUiEffect {
     data class Toast(val message: String) : ExternalOpenUiEffect()
@@ -86,13 +88,15 @@ sealed class PrepareOutcome {
 sealed class CommitOutcome {
     data class Success(
         val documentId: String,
-        val isPdf: Boolean,
+        val documentType: com.m1racle.reader.data.local.DocumentType,
         val displayName: String,
         val sizeBytes: Long,
         val contentSha256: String,
         val reusedExisting: Boolean,
         val bringToFrontOnly: Boolean,
-    ) : CommitOutcome()
+    ) : CommitOutcome() {
+        val isPdf: Boolean get() = documentType == com.m1racle.reader.data.local.DocumentType.PDF
+    }
 
     data class Failed(val message: String) : CommitOutcome()
 }

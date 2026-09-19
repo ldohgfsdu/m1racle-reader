@@ -34,6 +34,7 @@
                 <data android:scheme="content" />
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="application/x-pdf" />
+                <data android:mimeType="application/epub+zip" />
                 <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/x-zip-compressed" />
@@ -52,6 +53,11 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/x-pdf" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/epub+zip" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

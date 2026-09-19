@@ -1,0 +1,141 @@
+package com.m1racle.reader.ui.epub
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.m1racle.reader.data.local.DocumentEntity
+import com.m1racle.reader.data.repository.DocumentRepository
+import com.m1racle.reader.data.settings.ContentPaddingLevel
+import com.m1racle.reader.data.settings.ReaderSettingsRepository
+import com.m1racle.reader.epub.EpubBook
+import com.m1racle.reader.epub.EpubException
+import com.m1racle.reader.ui.viewer.ReadingPositionSaver
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+sealed class EpubUiState {
+    data object Loading : EpubUiState()
+    data class Success(val document: DocumentEntity, val book: EpubBook) : EpubUiState()
+    data class Error(val displayName: String?, val message: String) : EpubUiState()
+}
+
+class EpubReaderViewModel(
+    private val documentId: String,
+    private val repository: DocumentRepository,
+    private val readerSettingsRepository: ReaderSettingsRepository,
+) : ViewModel() {
+    private val _uiState = MutableStateFlow<EpubUiState>(EpubUiState.Loading)
+    val uiState: StateFlow<EpubUiState> = _uiState.asStateFlow()
+
+    val readerSettings = readerSettingsRepository.settingsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5_000),
+        com.m1racle.reader.data.settings.ReaderSettings(),
+    )
+
+    init {
+        load()
+    }
+
+    fun setFontScale(scale: Float) {
+        viewModelScope.launch {
+            try {
+                readerSettingsRepository.updateFontScale(scale)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun setLineHeightScale(scale: Float) {
+        viewModelScope.launch {
+            try {
+                readerSettingsRepository.updateLineHeightScale(scale)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun setContentPaddingLevel(level: ContentPaddingLevel) {
+        viewModelScope.launch {
+            try {
+                readerSettingsRepository.updateContentPaddingLevel(level)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun resetReaderSettings() {
+        viewModelScope.launch {
+            try {
+                readerSettingsRepository.resetToDefaults()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private val positionSaver = ReadingPositionSaver(viewModelScope) { index, offset, progress ->
+        repository.updateReadingPosition(
+            id = documentId,
+            lastScrollIndex = index,
+            lastScrollOffset = offset,
+            readingProgress = progress,
+        )
+    }
+
+    fun saveReadingPosition(lastScrollIndex: Int, lastScrollOffset: Int, readingProgress: Float) {
+        positionSaver.save(lastScrollIndex, lastScrollOffset, readingProgress)
+    }
+
+    private fun load() {
+        viewModelScope.launch {
+            _uiState.value = EpubUiState.Loading
+            try {
+                val entity = repository.getDocumentById(documentId)
+                if (entity == null) {
+                    _uiState.value = EpubUiState.Error(null, "文档不存在")
+                    return@launch
+                }
+                val book = repository.openEpubBook(documentId)
+                _uiState.value = EpubUiState.Success(
+                    document = repository.getDocumentById(documentId) ?: entity,
+                    book = book,
+                )
+            } catch (e: EpubException) {
+                val entity = repository.getDocumentById(documentId)
+                _uiState.value = EpubUiState.Error(
+                    entity?.displayName,
+                    e.message ?: "打开失败",
+                )
+            } catch (_: Exception) {
+                val entity = repository.getDocumentById(documentId)
+                _uiState.value = EpubUiState.Error(entity?.displayName, "文件可能已损坏")
+            }
+        }
+    }
+
+    override fun onCleared() {
+        positionSaver.flushFinal()
+        super.onCleared()
+    }
+
+    class Factory(
+        private val documentId: String,
+        private val repository: DocumentRepository,
+        private val readerSettingsRepository: ReaderSettingsRepository,
+    ) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(EpubReaderViewModel::class.java)) {
+                return EpubReaderViewModel(
+                    documentId = documentId,
+                    repository = repository,
+                    readerSettingsRepository = readerSettingsRepository,
+                ) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
+        }
+    }
+}

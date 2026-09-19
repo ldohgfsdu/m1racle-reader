@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">M1racle Reader</string>
-    <string name="app_subtitle">本地 Markdown / PDF 阅读器</string>
+    <string name="app_subtitle">本地 Markdown / PDF / EPUB 阅读器</string>
     <string name="empty_title">还没有阅读记录</string>
-    <string name="empty_subtitle">导入 Markdown 或 PDF，从这里接着读。</string>
+    <string name="empty_subtitle">导入 Markdown、PDF 或 EPUB，从这里接着读。</string>
     <string name="import_file">导入文件</string>
     <string name="delete_record">删除记录</string>
     <string name="recent_reads">最近阅读</string>
-    <string name="error_unsupported_format">暂只支持 .md / .markdown / .txt / .pdf / .zip 文件</string>
+    <string name="error_unsupported_format">暂只支持 .md / .markdown / .txt / .pdf / .epub / .zip 文件</string>
     <string name="error_unsupported_format_detail">暂不支持此文件格式\n文件：%1$s\n类型：%2$s</string>
     <string name="error_send_multiple_not_supported">一次只能打开一个文档</string>
     <string name="error_send_text_requires_file">请分享 Markdown 文件，而不是仅分享文本内容</string>
@@ -210,6 +210,7 @@
     <string name="hub_filter_all">全部</string>
     <string name="hub_filter_pdf">PDF</string>
     <string name="hub_filter_markdown">Markdown</string>
+    <string name="hub_filter_epub">EPUB</string>
     <string name="hub_library_empty">还没有阅读记录。回首页导入后会出现在这里。</string>
     <string name="hub_bookmarks_title">书签</string>
     <string name="hub_bookmarks_empty">还没有书签。在阅读器中创建的书签会出现在这里。</string>

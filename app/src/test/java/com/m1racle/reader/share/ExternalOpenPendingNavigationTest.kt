@@ -91,6 +91,9 @@ class ExternalOpenPendingNavigationTest {
     private fun pdfContent(id: String, activeDocumentId: String? = null) =
         preparedContent(id, DocumentType.PDF, activeDocumentId)
 
+    private fun epubContent(id: String, activeDocumentId: String? = null) =
+        preparedContent(id, DocumentType.EPUB, activeDocumentId)
+
     private fun newContent(id: String, activeDocumentId: String? = null) =
         preparedContent(id, DocumentType.MARKDOWN, activeDocumentId)
 
@@ -99,8 +102,16 @@ class ExternalOpenPendingNavigationTest {
         type: DocumentType,
         activeDocumentId: String?,
     ): PreparedOpen {
-        val extension = if (type == DocumentType.PDF) "pdf" else "md"
-        val mime = if (type == DocumentType.PDF) "application/pdf" else "text/markdown"
+        val extension = when (type) {
+            DocumentType.PDF -> "pdf"
+            DocumentType.EPUB -> "epub"
+            else -> "md"
+        }
+        val mime = when (type) {
+            DocumentType.PDF -> "application/pdf"
+            DocumentType.EPUB -> "application/epub+zip"
+            else -> "text/markdown"
+        }
         val stage = File.createTempFile("stage-$id", ".$extension").apply {
             writeBytes(ByteArray(10))
         }
@@ -163,7 +174,7 @@ class ExternalOpenPendingNavigationTest {
         importer.prepareResult = PrepareOutcome.Success(pdfContent("pdf-1"))
         importer.commitResult = CommitOutcome.Success(
             documentId = "pdf-1",
-            isPdf = true,
+            documentType = DocumentType.PDF,
             displayName = "sample.pdf",
             sizeBytes = 10L,
             contentSha256 = "sha-pdf-1",
@@ -188,10 +199,33 @@ class ExternalOpenPendingNavigationTest {
     }
 
     @Test
-    fun commit_success_holds_request_even_with_no_subscriber() = runTest {
-        importer.prepareResult = PrepareOutcome.Success(newContent("doc-b"))
+    fun commit_epub_carries_document_type_for_epub_route() = runTest {
+        importer.prepareResult = PrepareOutcome.Success(epubContent("book-1"))
+        importer.commitResult = CommitOutcome.Success(
+            documentId = "book-1",
+            documentType = DocumentType.EPUB,
+            displayName = "book-1.epub",
+            sizeBytes = 10L,
+            contentSha256 = "sha-book-1",
+            reusedExisting = false,
+            bringToFrontOnly = false,
+        )
+
+        coordinator.onIncomingIntent(
+            viewIntent(uri = "content://provider/book-1.epub", mime = "application/epub+zip"),
+        )
+
+        val req = coordinator.pendingNavigation.value
+        assertNotNull(req)
+        assertEquals("book-1", req!!.documentId)
+        assertEquals(DocumentType.EPUB, req.documentType)
+        assertFalse(req.isPdf)
+    }
+
+    @Test
+    fun commit_success_holds_request_even_with_no_subscriber() = runTest {        importer.prepareResult = PrepareOutcome.Success(newContent("doc-b"))
         importer.commitResult =
-            CommitOutcome.Success("doc-b", false, "doc-b.md", 10L, "sha-doc-b", true, false)
+            CommitOutcome.Success("doc-b", DocumentType.MARKDOWN, "doc-b.md", 10L, "sha-doc-b", true, false)
 
         coordinator.onIncomingIntent(viewIntent())
 
@@ -211,7 +245,7 @@ class ExternalOpenPendingNavigationTest {
     fun ack_clears_matching_request_and_is_idempotent() = runTest {
         importer.prepareResult = PrepareOutcome.Success(newContent("doc-b"))
         importer.commitResult =
-            CommitOutcome.Success("doc-b", false, "doc-b.md", 10L, "sha-doc-b", true, false)
+            CommitOutcome.Success("doc-b", DocumentType.MARKDOWN, "doc-b.md", 10L, "sha-doc-b", true, false)
         coordinator.onIncomingIntent(viewIntent())
         val requestId = coordinator.pendingNavigation.value!!.requestId
 
@@ -226,7 +260,7 @@ class ExternalOpenPendingNavigationTest {
     fun stale_ack_does_not_clear_newer_request() = runTest {
         importer.prepareResult = PrepareOutcome.Success(newContent("doc-b"))
         importer.commitResult =
-            CommitOutcome.Success("doc-b", false, "doc-b.md", 10L, "sha-doc-b", true, false)
+            CommitOutcome.Success("doc-b", DocumentType.MARKDOWN, "doc-b.md", 10L, "sha-doc-b", true, false)
 
         // Delivery A: commit success -> request A pending.
         coordinator.onIncomingIntent(viewIntent(uri = "content://provider/a"))
@@ -259,7 +293,7 @@ class ExternalOpenPendingNavigationTest {
             DocumentIdentityCard("doc-a", "doc-a.md", 10L, sizeUnknownUntilOpen = false, isPdf = false)
         importer.prepareResult = PrepareOutcome.Success(newContent("doc-a", activeDocumentId = "doc-a"))
         importer.commitResult = CommitOutcome.Success(
-            "doc-a", false, "doc-a.md", 10L, "a".repeat(64), true, true,
+            "doc-a", DocumentType.MARKDOWN, "doc-a.md", 10L, "a".repeat(64), true, true,
         )
 
         coordinator.onIncomingIntent(viewIntent())
@@ -275,7 +309,7 @@ class ExternalOpenPendingNavigationTest {
     fun current_active_prepare_path_sets_request() = runTest {
         importer.prepareResult = PrepareOutcome.Success(newContent("doc-a", activeDocumentId = "doc-a"))
         importer.commitResult = CommitOutcome.Success(
-            "doc-a", false, "doc-a.md", 10L, "a".repeat(64), true, true,
+            "doc-a", DocumentType.MARKDOWN, "doc-a.md", 10L, "a".repeat(64), true, true,
         )
 
         coordinator.onIncomingIntent(viewIntent())
@@ -349,7 +383,7 @@ class ExternalOpenPendingNavigationTest {
         importer.prepareBlock = { gate.await() }
         importer.prepareResult = PrepareOutcome.Success(pdfContent("pdf-first"))
         importer.commitResult = CommitOutcome.Success(
-            "pdf-first", true, "first.pdf", 10L, "sha-first", false, false,
+            "pdf-first", DocumentType.PDF, "first.pdf", 10L, "sha-first", false, false,
         )
 
         val first = launch {
@@ -388,7 +422,7 @@ class ExternalOpenPendingNavigationTest {
     fun freshProcessRestore_handlesLaunchIntentWithReplayDisabled() = runTest {
         importer.prepareResult = PrepareOutcome.Success(newContent("restored-doc"))
         importer.commitResult = CommitOutcome.Success(
-            "restored-doc", false, "restored-doc.md", 10L, "sha-restored", true, false,
+            "restored-doc", DocumentType.MARKDOWN, "restored-doc.md", 10L, "sha-restored", true, false,
         )
 
         coordinator.onIncomingIntent(
@@ -404,7 +438,7 @@ class ExternalOpenPendingNavigationTest {
         val intent = viewIntent(uri = "content://provider/rotation")
         importer.prepareResult = PrepareOutcome.Success(newContent("rotation-doc"))
         importer.commitResult = CommitOutcome.Success(
-            "rotation-doc", false, "rotation-doc.md", 10L, "sha-rotation", true, false,
+            "rotation-doc", DocumentType.MARKDOWN, "rotation-doc.md", 10L, "sha-rotation", true, false,
         )
         coordinator.onIncomingIntent(intent)
         val requestId = coordinator.pendingNavigation.value!!.requestId

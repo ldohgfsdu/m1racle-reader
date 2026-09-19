@@ -20,6 +20,9 @@ import com.m1racle.reader.data.local.OutlineNodeSource
 import com.m1racle.reader.data.local.TextbookOutlineNodeDao
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.data.local.TextbookOutlineNodeType
+import com.m1racle.reader.epub.EpubBook
+import com.m1racle.reader.epub.EpubException
+import com.m1racle.reader.epub.EpubPackageImporter
 import com.m1racle.reader.packageimport.ZipPackageImporter
 import com.m1racle.reader.pdf.TextbookOutlineResolver
 import com.m1racle.reader.identity.ContentIdentityDecision
@@ -781,6 +784,44 @@ class DocumentRepository(
         }
     }
 
+    /**
+     * Open an EPUB document: resolve the managed .epub copy, extract to the
+     * app-private cache (epubs/{id}, reused while the container marker exists),
+     * parse, and persist OPF title + TOC size. Throws [EpubException].
+     */
+    suspend fun openEpubBook(id: String): EpubBook = withContext(Dispatchers.IO) {
+        val entity = documentDao.getById(id) ?: throw EpubException.Corrupt("文档不存在")
+        check(entity.isEpub) { "不是 EPUB 文档" }
+        val epubFile = uriToFile(entity.uri) ?: throw EpubException.Corrupt("找不到文件")
+        val destDir = java.io.File(context.filesDir, "epubs/$id")
+        val book = try {
+            if (!java.io.File(destDir, "META-INF/container.xml").isFile) {
+                destDir.deleteRecursively()
+                EpubPackageImporter.extract(epubFile, destDir)
+            }
+            EpubPackageImporter.parseExtracted(destDir)
+        } catch (e: EpubException) {
+            throw e
+        } catch (_: Exception) {
+            throw EpubException.Corrupt("文件可能已损坏")
+        }
+        touchLastOpenedAt(id)
+        updateParseMetadata(id, book.metadata.title, book.toc.size)
+        book
+    }
+
+    private fun uriToFile(uriString: String): java.io.File? {
+        return try {
+            val uri = android.net.Uri.parse(uriString)
+            if (uri.scheme == "file") {
+                uri.path?.let { java.io.File(it) }?.takeIf { it.isFile }
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
     /**
      * Persist LazyColumn scroll position and reading progress (0f–1f) for Markdown.
      */

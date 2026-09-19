@@ -71,13 +71,13 @@ class ExternalOpenCoordinator(
     private fun setPendingNavigation(
         requestId: String,
         documentId: String,
-        isPdf: Boolean,
+        documentType: com.m1racle.reader.data.local.DocumentType,
         bringToFrontOnly: Boolean,
     ) {
         _pendingNavigation.value = NavigationRequest(
             requestId = requestId,
             documentId = documentId,
-            isPdf = isPdf,
+            documentType = documentType,
             bringToFrontOnly = bringToFrontOnly,
         )
     }
@@ -309,7 +309,7 @@ class ExternalOpenCoordinator(
                             setPendingNavigation(
                                 requestId = pending.eventId.value,
                                 documentId = commit.documentId,
-                                isPdf = commit.isPdf,
+                                documentType = commit.documentType,
                                 bringToFrontOnly = commit.bringToFrontOnly,
                             )
                         }

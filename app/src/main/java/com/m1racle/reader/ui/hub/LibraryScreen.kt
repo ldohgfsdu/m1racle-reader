@@ -157,6 +157,11 @@ fun LibraryScreen(
                     selected = filter == LibraryFilter.MARKDOWN,
                     onClick = { viewModel.setFilter(LibraryFilter.MARKDOWN) },
                 )
+                LibraryFilterChip(
+                    labelRes = R.string.hub_filter_epub,
+                    selected = filter == LibraryFilter.EPUB,
+                    onClick = { viewModel.setFilter(LibraryFilter.EPUB) },
+                )
             }
             if (uiState.ready && uiState.documents.isEmpty()) {
                 EmptyLibraryHint(

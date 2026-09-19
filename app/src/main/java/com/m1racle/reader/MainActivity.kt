@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
                                     navigateReplaceViewer(
                                         navController = navController,
                                         documentId = req.documentId,
-                                        isPdf = req.isPdf,
+                                        documentType = req.documentType,
                                         bringToFrontOnly = req.bringToFrontOnly,
                                     )
                                 } finally {
@@ -226,14 +226,19 @@ class MainActivity : ComponentActivity() {
     private fun navigateReplaceViewer(
         navController: NavHostController,
         documentId: String,
-        isPdf: Boolean,
+        documentType: com.m1racle.reader.data.local.DocumentType,
         bringToFrontOnly: Boolean,
     ) {
-        val route = if (isPdf) Routes.pdfViewer(documentId) else Routes.viewer(documentId)
+        val route = when (documentType) {
+            com.m1racle.reader.data.local.DocumentType.PDF -> Routes.pdfViewer(documentId)
+            com.m1racle.reader.data.local.DocumentType.EPUB -> Routes.epubViewer(documentId)
+            else -> Routes.viewer(documentId)
+        }
         if (bringToFrontOnly) {
             val current = navController.currentBackStackEntry?.destination?.route
-            if (current == Routes.PDF_VIEWER || current == Routes.VIEWER ||
-                current?.startsWith("pdf/") == true || current?.startsWith("viewer/") == true
+            if (current == Routes.PDF_VIEWER || current == Routes.VIEWER || current == Routes.EPUB_VIEWER ||
+                current?.startsWith("pdf/") == true || current?.startsWith("viewer/") == true ||
+                current?.startsWith("epub/") == true
             ) {
                 // Already on a viewer; re-navigate with singleTop + same id restores foreground.
                 navController.navigate(route) {
