@@ -102,14 +102,13 @@ class EpubPackageImporterTest {
     }
 
     @Test
-    fun `xxe doctype is rejected`() {
-        try {
-            EpubPackageImporter.parseXml(
-                fixture("evil-xxe.opf").readBytes(), "OPF",
-            )
-            fail("expected Corrupt")
-        } catch (e: EpubException.Corrupt) {
-            // expected
-        }
+    fun `xxe external entity is not resolved`() {
+        // DOCTYPE is allowed (real books use it); the external file must not leak in.
+        val doc = EpubPackageImporter.parseXml(
+            fixture("evil-xxe.opf").readBytes(), "OPF",
+        )
+        val title = doc.getElementsByTagNameNS("http://purl.org/dc/elements/1.1/", "title")
+            .item(0).textContent.orEmpty()
+        assertFalse(title.contains("root:"))
     }
 }

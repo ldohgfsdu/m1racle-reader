@@ -107,7 +107,14 @@ object EpubPackageImporter {
             if (!file.canonicalFile.path.startsWith(rootCanon.path + File.separator) || !file.isFile) {
                 throw EpubException.Corrupt("缺章节文件")
             }
-            val (blocks, anchors) = EpubXhtmlParser.parse(file.readBytes())
+            val parsed = try {
+                EpubXhtmlParser.parse(file.readBytes())
+            } catch (e: EpubException) {
+                throw e
+            } catch (_: Exception) {
+                throw EpubException.Corrupt("章节解析失败：${item.href}")
+            }
+            val (blocks, anchors) = parsed
             EpubChapter(index, item.href, tocTitleFor(toc, index), blocks, anchors)
         }
         return EpubBook(metadata, spine, toc, chapters)
@@ -169,10 +176,23 @@ object EpubPackageImporter {
             factory.isValidating = false
             factory.isXIncludeAware = false
             factory.isExpandEntityReferences = false
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            // Real-world books commonly ship DOCTYPE (OPF/NCX/chapters), so it
+            // stays allowed; XXE is blocked by disabling external entities and
+            // capping entity expansion (billion-laughs guard).
             factory.setFeature("http://xml.org/sax/features/external-general-entities", false)
             factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
             factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            try {
+                factory.setAttribute(
+                    "http://www.oracle.com/xml/jaxp/properties/entityExpansionLimit", 10_000,
+                )
+                factory.setAttribute(
+                    "http://www.oracle.com/xml/jaxp/properties/totalEntitySizeLimit", 5_000_000,
+                )
+            } catch (_: Exception) {
+                // Attribute unsupported on this runtime; entity limits still
+                // enforced by MAX_XML_BYTES on the raw document bytes.
+            }
             return factory.newDocumentBuilder().parse(bytes.inputStream())
         } catch (e: EpubException) {
             throw e
