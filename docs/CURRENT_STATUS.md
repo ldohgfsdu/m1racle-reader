@@ -10,6 +10,7 @@
 - implemented：DocumentType.EPUB（TEXT 存储，无迁移）+ 导入门控/外部打开类型化导航（isPdf 保留派生）+ 安全解压（slip/bomb/XXE/加密拒绝）+ OPF/spine + nav/NCX + XHTML 子集 + `epub/{id}` 路由 + 阅读器（连续章节、目录抽屉、fragment 跳转、进度、设置复用）+ Home/Library/Manifest/strings。
 - 进度语义：复用 Markdown 约定（lastScrollIndex=行索引、lastScrollOffset=px、readingProgress=全书比例），打开精确恢复；spine 章序隐含在行号中，TOC fragment 直达已实现。
 - automated_verified：`testQaUnitTest` **1517 / 0 / 0 / 0**（+7 parser/+3 doctype/+1 外开路由）；`compileReleaseKotlin` PASS；`assembleRelease` BLOCKED_EXTERNAL_CONFIGURATION（无新包、无冒充）。
+- 本轮 Release（2026-09-19，正式签名）：**7,019,194 bytes**（EPUB 代码增量约 66KB，零新依赖），SHA-256 `91e8011e29faaf4b5b87891f2d7ca570c683dd7aaa19adba17e046181e019f8d`，signer `2d9daba0…`，1.0.0/23，无 INTERNET。已覆盖 Download。证据 `.external_outbox/epub-release.log`。
 - 体积：零新增依赖（平台 Zip/DOM），发布包增量待签名构建实测。
 - device_verified：NOT_RUN（单次 adb 为空）。R36 光学暂停（light frozen .86 / dark D0，harness 保留）。
 
