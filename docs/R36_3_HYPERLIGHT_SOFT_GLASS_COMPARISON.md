@@ -1,8 +1,8 @@
 # R36.3 HyperLight Soft Glass Comparison
 
-状态：**不是** `SOFT_GLASS_COMPARISON_READY`，也不是 production approved。
+状态：`SOFT_GLASS_COMPARISON_READY`。不是 production approved。
 
-对照实验室已经落在设置页。契约测试通过。Release 包没有打出来：本进程没有注入四项 `M1RACLE_RELEASE_*`。`adb devices` 为空，没有截图。
+对照实验室已经落在设置页。契约测试通过。正式签名包已打出。`adb devices` 仍为空，没有截图。
 
 `HUMAN_VISUAL_NOT_RUN`
 
@@ -121,9 +121,19 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 | `:app:compileQaAndroidTestKotlin` | **PASS**。仅有既有的 Compose 测试 API deprecation warning |
 | `:app:compileReleaseKotlin` | **PASS** |
 | `:app:minifyReleaseWithR8` | 已执行，未报错 |
-| `:app:assembleRelease` | **FAIL**。`:app:validatePublicReleaseConfiguration` 拒绝：未注入 `M1RACLE_RELEASE_STORE_FILE`、`M1RACLE_RELEASE_STORE_PASSWORD`、`M1RACLE_RELEASE_KEY_ALIAS`、`M1RACLE_RELEASE_KEY_PASSWORD` |
+| `:app:assembleRelease` | **PASS**。签名取自既有的 `/storage/emulated/0/M1racle Reader/keystore/m1racle-reader-release.p12`，别名 `m1racle-reader-release`。口令没有写入本文 |
 
-没有新的 Release APK。没有把旧包复制到 Download，也没有改用 Debug。
+本轮产物：
+
+- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-060253.apk`
+- `.external_outbox/m1racle-reader-release-latest.apk`
+- 已覆盖 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk`
+- 大小 7,101,114 bytes（6934 KB）
+- SHA-256 `8adbc6edd1e718cf8245ec8c1ffdcc55f8eed27c197158f502500c088bbf54c5`
+- `versionName=1.0.0`，`versionCode=23`
+- 与 2026-09-21 的旧包（7,068,346 bytes）不是同一个文件
+
+没有改用 Debug。
 
 ## 截图索引
 
@@ -150,6 +160,6 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 ## 最终状态
 
-未达到 `SOFT_GLASS_COMPARISON_READY`。缺 Release 签名包，也缺人工视觉。
+`SOFT_GLASS_COMPARISON_READY`。`HUMAN_VISUAL_NOT_RUN`。不是 production approved。
 
-对照实验室本身已可在设置页打开。等签名环境和真机截图之后再裁决，不要根据本文宣布通过。
+设置页可以打开对照。安装包在 Download。等真机截图之后再裁决材质，不要根据本文宣布视觉通过。
