@@ -26,6 +26,15 @@ enum class SoftGlassRole {
 }
 
 /**
+ * Preview-only production mapping. Not an H0/H1/H2 chip and not a production role.
+ * [SoftGlassCandidate.H0] remains the family baseline these numbers were tuned from.
+ */
+enum class SoftGlassMapping {
+    ControlCandidate,
+    PanelCandidate,
+}
+
+/**
  * Directional rim for the preview renderer. Not a uniform stroke, and not
  * part of the production highlight API.
  */
@@ -70,6 +79,8 @@ data class ResolvedSoftGlass(
     val shadowRadius: Dp,
     val foregroundAlpha: Float,
     val pressedScale: Float,
+    /** Non-null only for the production-mapping preview, never for raw H0/H1/H2. */
+    val mapping: SoftGlassMapping? = null,
 )
 
 object SoftGlassComparison {
@@ -102,6 +113,7 @@ object SoftGlassComparison {
     private val LightTintRgb = Color.White
     private val DarkTintRgb = Color(0xFF101418)
     private val RimWidth = 0.75.dp
+    private val MappingRimWidth = 0.5.dp
     private val ShadowRadius = 2.dp
 
     private data class Baseline(
@@ -164,6 +176,37 @@ object SoftGlassComparison {
         ),
     )
 
+    private val mappingLight = mapOf(
+        SoftGlassMapping.ControlCandidate to Baseline(
+            blurDp = 28f,
+            tintAlpha = 0.10f,
+            saturation = 1.20f,
+            brightness = 1.04f,
+            contrast = 0.96f,
+            softLight = 0.10f,
+            refractionPx = 0.5f,
+            highlightTopLeft = 0.22f,
+            highlightMid = 0.08f,
+            highlightBottomRight = 0.03f,
+            innerHighlight = 0.05f,
+            shadowAlpha = 0.04f,
+        ),
+        SoftGlassMapping.PanelCandidate to Baseline(
+            blurDp = 35f,
+            tintAlpha = 0.15f,
+            saturation = 1.12f,
+            brightness = 1.04f,
+            contrast = 0.94f,
+            softLight = 0.12f,
+            refractionPx = 0f,
+            highlightTopLeft = 0.18f,
+            highlightMid = 0.06f,
+            highlightBottomRight = 0.02f,
+            innerHighlight = 0.06f,
+            shadowAlpha = 0.05f,
+        ),
+    )
+
     fun resolve(
         candidate: SoftGlassCandidate,
         role: SoftGlassRole,
@@ -173,45 +216,70 @@ object SoftGlassComparison {
         val light = checkNotNull(lightPanel[candidate])
         val usesDarkRecipe = dark && candidate == SoftGlassCandidate.H0
         val panel = if (usesDarkRecipe) darkPanel(light) else light
-        val blurDp = panel.blurDp - if (role == SoftGlassRole.Control) RoleBlurDeltaDp else 0f
-        val tintAlpha = panel.tintAlpha - if (role == SoftGlassRole.Control) RoleTintDelta else 0f
-        require(tintAlpha <= TintCap) { "soft glass tint $tintAlpha exceeds $TintCap" }
-        require(tintAlpha >= 0f) { "soft glass tint $tintAlpha is negative" }
-        val tintRgb = if (usesDarkRecipe) DarkTintRgb else LightTintRgb
-        val topLeft = panel.highlightTopLeft + if (pressed) PressedHighlightBoost else 0f
-        val mid = panel.highlightMid + if (pressed) PressedHighlightBoost * 0.5f else 0f
-        return ResolvedSoftGlass(
+        val adjusted = panel.copy(
+            blurDp = panel.blurDp - if (role == SoftGlassRole.Control) RoleBlurDeltaDp else 0f,
+            tintAlpha = panel.tintAlpha - if (role == SoftGlassRole.Control) RoleTintDelta else 0f,
+        )
+        return materialize(
+            baseline = adjusted,
             candidate = candidate,
             role = role,
-            requestedDark = dark,
-            usesDarkRecipe = usesDarkRecipe,
+            dark = dark,
             pressed = pressed,
-            logicalBlur = blurDp.dp,
-            tint = tintRgb.copy(alpha = tintAlpha),
-            tintAlpha = tintAlpha,
-            designSaturation = panel.saturation,
-            designBrightness = panel.brightness,
-            designContrast = panel.contrast,
-            designSoftLight = panel.softLight,
-            rendererSaturation = panel.saturation,
-            rendererBrightness = panel.brightness - BrightnessIdentity,
-            rendererContrast = panel.contrast,
-            rendererSoftLightBrightness = panel.softLight * SoftLightToBrightness,
-            refractionAmountPx = panel.refractionPx,
-            refractionHeightPx = if (panel.refractionPx > 0f) EdgeRefractionBandPx else 0f,
-            centerRefractionPx = 0f,
-            highlight = DirectionalHighlightSpec(
-                topLeft = topLeft,
-                mid = mid,
-                bottomRight = panel.highlightBottomRight,
-                inner = panel.innerHighlight,
-                rimWidth = RimWidth,
-            ),
-            shadowAlpha = panel.shadowAlpha,
-            shadowRadius = ShadowRadius,
-            foregroundAlpha = ForegroundAlpha,
-            pressedScale = if (pressed) PressedScale else 1f,
+            usesDarkRecipe = usesDarkRecipe,
+            mapping = null,
+            rimWidth = RimWidth,
+            tintRgb = if (usesDarkRecipe) DarkTintRgb else LightTintRgb,
         )
+    }
+
+    /**
+     * Role mapping inside the H0 family. Control leans toward H1.
+     * Panel leans toward H0 but with less saturation and a slightly higher neutral tint.
+     * Dark reuses the H0 dark step (blur +3dp, neutral dark tint, brightness 0.91).
+     * It does not add another dark candidate.
+     */
+    fun resolveMapping(
+        mapping: SoftGlassMapping,
+        dark: Boolean,
+        pressed: Boolean = false,
+    ): ResolvedSoftGlass {
+        val light = checkNotNull(mappingLight[mapping])
+        val baseline = if (dark) darkenMapping(light, mapping) else light
+        return materialize(
+            baseline = baseline,
+            candidate = SoftGlassCandidate.H0,
+            role = if (mapping == SoftGlassMapping.ControlCandidate) {
+                SoftGlassRole.Control
+            } else {
+                SoftGlassRole.Panel
+            },
+            dark = dark,
+            pressed = pressed,
+            usesDarkRecipe = dark,
+            mapping = mapping,
+            rimWidth = MappingRimWidth,
+            tintRgb = if (dark) DarkTintRgb else LightTintRgb,
+        )
+    }
+
+    fun mappingSchemeLine(dark: Boolean, density: Float): String {
+        val control = resolveMapping(SoftGlassMapping.ControlCandidate, dark)
+        val panel = resolveMapping(SoftGlassMapping.PanelCandidate, dark)
+        val head = if (dark) "映射 Dark" else "映射"
+        return "$head · Control ${formatDp(control.logicalBlur.value)}dp tint ${formatAlpha(control.tintAlpha)} · " +
+            "Panel ${formatDp(panel.logicalBlur.value)}dp tint ${formatAlpha(panel.tintAlpha)}"
+    }
+
+    fun mappingSummary(dark: Boolean, density: Float): String {
+        val control = resolveMapping(SoftGlassMapping.ControlCandidate, dark)
+        val panel = resolveMapping(SoftGlassMapping.PanelCandidate, dark)
+        return buildString {
+            appendLine(mappingSchemeLine(dark, density))
+            appendLine(mappingDetail("ControlCandidate", control, density))
+            appendLine(mappingDetail("PanelCandidate", panel, density))
+            append("暗色沿 H0 Dark：blur +3dp，tint 改中性深色，brightness 0.91。不是新的暗色候选。")
+        }
     }
 
     /** Linear. Kyant blur radius px = logical dp × density. No extra gain. */
@@ -281,6 +349,84 @@ object SoftGlassComparison {
             }
         }.trimEnd()
     }
+
+    private fun darkenMapping(light: Baseline, mapping: SoftGlassMapping): Baseline {
+        val tintAlpha = when (mapping) {
+            SoftGlassMapping.ControlCandidate -> 0.14f
+            SoftGlassMapping.PanelCandidate -> 0.18f
+        }
+        val saturation = when (mapping) {
+            SoftGlassMapping.ControlCandidate -> 1.14f
+            SoftGlassMapping.PanelCandidate -> 1.10f
+        }
+        return light.copy(
+            blurDp = light.blurDp + DarkBlurExtraDp,
+            tintAlpha = tintAlpha,
+            saturation = saturation,
+            brightness = 0.91f,
+            contrast = light.contrast,
+            softLight = light.softLight * DarkSoftLightScale,
+        )
+    }
+
+    private fun materialize(
+        baseline: Baseline,
+        candidate: SoftGlassCandidate,
+        role: SoftGlassRole,
+        dark: Boolean,
+        pressed: Boolean,
+        usesDarkRecipe: Boolean,
+        mapping: SoftGlassMapping?,
+        rimWidth: Dp,
+        tintRgb: Color,
+    ): ResolvedSoftGlass {
+        require(baseline.tintAlpha <= TintCap) { "soft glass tint ${baseline.tintAlpha} exceeds $TintCap" }
+        require(baseline.tintAlpha >= 0f) { "soft glass tint ${baseline.tintAlpha} is negative" }
+        return ResolvedSoftGlass(
+            candidate = candidate,
+            role = role,
+            requestedDark = dark,
+            usesDarkRecipe = usesDarkRecipe,
+            pressed = pressed,
+            logicalBlur = baseline.blurDp.dp,
+            tint = tintRgb.copy(alpha = baseline.tintAlpha),
+            tintAlpha = baseline.tintAlpha,
+            designSaturation = baseline.saturation,
+            designBrightness = baseline.brightness,
+            designContrast = baseline.contrast,
+            designSoftLight = baseline.softLight,
+            rendererSaturation = baseline.saturation,
+            rendererBrightness = baseline.brightness - BrightnessIdentity,
+            rendererContrast = baseline.contrast,
+            rendererSoftLightBrightness = baseline.softLight * SoftLightToBrightness,
+            refractionAmountPx = baseline.refractionPx,
+            refractionHeightPx = if (baseline.refractionPx > 0f) EdgeRefractionBandPx else 0f,
+            centerRefractionPx = 0f,
+            highlight = DirectionalHighlightSpec(
+                topLeft = baseline.highlightTopLeft + if (pressed) PressedHighlightBoost else 0f,
+                mid = baseline.highlightMid + if (pressed) PressedHighlightBoost * 0.5f else 0f,
+                bottomRight = baseline.highlightBottomRight,
+                inner = baseline.innerHighlight,
+                rimWidth = rimWidth,
+            ),
+            shadowAlpha = baseline.shadowAlpha,
+            shadowRadius = ShadowRadius,
+            foregroundAlpha = ForegroundAlpha,
+            pressedScale = if (pressed) PressedScale else 1f,
+            mapping = mapping,
+        )
+    }
+
+    private fun mappingDetail(name: String, spec: ResolvedSoftGlass, density: Float): String =
+        "$name blur ${formatDp(spec.logicalBlur.value)}dp/" +
+            "${formatPx(rendererBlurPx(spec.logicalBlur, density))}px · " +
+            "tint ${formatAlpha(spec.tintAlpha)} · sat ${formatFactor(spec.designSaturation)} · " +
+            "bright ${formatFactor(spec.designBrightness)} · contrast ${formatFactor(spec.designContrast)} · " +
+            "soft ${formatFactor(spec.designSoftLight)} · " +
+            "highlight ${formatAlpha(spec.highlight.topLeft)}/${formatAlpha(spec.highlight.bottomRight)} · " +
+            "inner ${formatAlpha(spec.highlight.inner)} · " +
+            "refraction ${formatRefraction(spec.refractionAmountPx)}px · " +
+            "shadow ${formatAlpha(spec.shadowAlpha)} · foreground ${formatFactor(spec.foregroundAlpha)}"
 
     private fun darkPanel(light: Baseline): Baseline = light.copy(
         blurDp = light.blurDp + DarkBlurExtraDp,

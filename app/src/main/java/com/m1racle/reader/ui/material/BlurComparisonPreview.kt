@@ -61,7 +61,9 @@ import kotlinx.coroutines.isActive
 /** Local comparison only. Legacy plates stay on the production preview path. */
 @Composable
 fun BlurComparisonPreview() {
-    var selected by remember { mutableStateOf(ComparisonChoice.H0) }
+    var layer by remember { mutableStateOf(PreviewLayer.Mapping) }
+    var family by remember { mutableStateOf(SoftGlassCandidate.H0) }
+    var rejected by remember { mutableStateOf(RejectedPlate.Current) }
     var playing by remember { mutableStateOf(false) }
     var dark by remember { mutableStateOf(false) }
     var textBackground by remember { mutableStateOf(true) }
@@ -73,10 +75,14 @@ fun BlurComparisonPreview() {
     val density = LocalDensity.current.density
     val chipStride = with(LocalDensity.current) { 100.dp.roundToPx() }
     val foreground = if (dark) Color.White else Color.Black
-    LaunchedEffect(selected, chipStride) {
+    LaunchedEffect(layer, family, rejected, chipStride) {
         withFrameNanos { }
         withFrameNanos { }
-        val index = ComparisonChoice.entries.indexOf(selected)
+        val index = when (layer) {
+            PreviewLayer.Mapping -> 0
+            PreviewLayer.Family -> SoftGlassCandidate.entries.indexOf(family)
+            PreviewLayer.Rejected -> RejectedPlate.entries.indexOf(rejected)
+        }
         chipScroll.scrollTo((index * chipStride).coerceAtMost(chipScroll.maxValue))
     }
     LaunchedEffect(playing) {
@@ -114,52 +120,35 @@ fun BlurComparisonPreview() {
             ThemeChip("正文", selected = textBackground) { textBackground = true }
             ThemeChip("图案", selected = !textBackground) { textBackground = false }
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ThemeChip("生产映射", selected = layer == PreviewLayer.Mapping) { layer = PreviewLayer.Mapping }
+            ThemeChip("家族参照", selected = layer == PreviewLayer.Family) { layer = PreviewLayer.Family }
+            ThemeChip("已淘汰", selected = layer == PreviewLayer.Rejected) { layer = PreviewLayer.Rejected }
+        }
         Text(
-            "遗留参照保留当前配方、渐变、旧折射参考。柔光玻璃是 H0 Balanced、H1 Clear、H2 Frosted。横滑选择。仅预览，不改变阅读页。",
+            "生产映射是收口候选：Control 偏 H1，Panel 偏 H0。柔光玻璃家族参照保留 H0、H1、H2，H2 只作厚玻璃参考。当前配方和旧折射参考已淘汰，不回退。仅预览，不改变阅读页。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(chipScroll),
+            Modifier.fillMaxWidth().height(48.dp).horizontalScroll(chipScroll),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ComparisonChoice.entries.forEach { choice ->
-                Column(
-                    Modifier
-                        .width(96.dp)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .semantics { this.selected = selected == choice }
-                        .clickable(role = Role.Tab) { selected = choice }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        choice.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.Center,
-                        color = if (selected == choice) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Box(
-                        Modifier
-                            .width(18.dp)
-                            .height(2.dp)
-                            .background(
-                                if (selected == choice) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            ),
-                    )
+            when (layer) {
+                PreviewLayer.Mapping -> PreviewChip("Control + Panel", selected = true) {}
+                PreviewLayer.Family -> SoftGlassCandidate.entries.forEach { candidate ->
+                    val label = if (candidate == SoftGlassCandidate.H2) "H2 厚参考" else candidate.name
+                    PreviewChip(label, selected = family == candidate) { family = candidate }
+                }
+                PreviewLayer.Rejected -> RejectedPlate.entries.forEach { plate ->
+                    PreviewChip(plate.label, selected = rejected == plate) { rejected = plate }
                 }
             }
         }
         Box(Modifier.fillMaxWidth().height(64.dp), contentAlignment = Alignment.CenterStart) {
             Text(
-                schemeCaption(selected, dark, density),
+                schemeCaption(layer, family, rejected, dark, density),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
@@ -203,7 +192,7 @@ fun BlurComparisonPreview() {
                 LocalGlassEnvironment provides GlassEnvironment.reader(dark),
                 LocalReaderDarkTheme provides dark,
             ) {
-                if (selected == ComparisonChoice.Gradient) {
+                if (layer == PreviewLayer.Rejected && rejected == RejectedPlate.Gradient) {
                     Box(
                         Modifier
                             .align(Alignment.TopCenter)
@@ -232,7 +221,7 @@ fun BlurComparisonPreview() {
                                     Modifier
                                         .weight(1f)
                                         .height(52.dp)
-                                        .plate(backdrop, selected, SoftGlassRole.Control, RoundedCornerShape(50), dark),
+                                        .plate(backdrop, layer, SoftGlassRole.Control, RoundedCornerShape(50), dark, family, rejected),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(label, color = foreground, style = MaterialTheme.typography.labelLarge)
@@ -243,7 +232,7 @@ fun BlurComparisonPreview() {
                             Modifier
                                 .fillMaxWidth()
                                 .height(112.dp)
-                                .plate(backdrop, selected, SoftGlassRole.Panel, RoundedCornerShape(24.dp), dark),
+                                .plate(backdrop, layer, SoftGlassRole.Panel, RoundedCornerShape(24.dp), dark, family, rejected),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -258,7 +247,7 @@ fun BlurComparisonPreview() {
             }
         }
         Text(
-            parameterCaption(selected, dark, density),
+            parameterCaption(layer, family, rejected, dark, density),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -289,7 +278,9 @@ fun BlurComparisonPreview() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        } else if (Build.VERSION.SDK_INT < 33 && selected != ComparisonChoice.Current) {
+        } else if (Build.VERSION.SDK_INT < 33 &&
+            !(layer == PreviewLayer.Rejected && rejected == RejectedPlate.Current)
+        ) {
             Text(
                 "当前系统可预览模糊与色彩调节。渐变、折射和边缘透镜需要 Android 13 及以上。",
                 style = MaterialTheme.typography.bodySmall,
@@ -299,28 +290,16 @@ fun BlurComparisonPreview() {
     }
 }
 
-private enum class ComparisonChoice(val label: String) {
-    Current("当前配方"),
-    Gradient("渐变"),
-    Refraction("旧折射参考"),
-    H0("H0"),
-    H1("H1"),
-    H2("H2"),
-    ;
+private enum class PreviewLayer {
+    Mapping,
+    Family,
+    Rejected,
+}
 
-    fun legacyPreset(): GlassPreviewPreset? = when (this) {
-        Current -> GlassPreviewPreset.CurrentThick
-        Gradient -> GlassPreviewPreset.ProgressiveLegacy
-        Refraction -> GlassPreviewPreset.CapsuleReference
-        H0, H1, H2 -> null
-    }
-
-    fun softCandidate(): SoftGlassCandidate? = when (this) {
-        H0 -> SoftGlassCandidate.H0
-        H1 -> SoftGlassCandidate.H1
-        H2 -> SoftGlassCandidate.H2
-        Current, Gradient, Refraction -> null
-    }
+private enum class RejectedPlate(val label: String, val preset: GlassPreviewPreset) {
+    Current("当前配方", GlassPreviewPreset.CurrentThick),
+    Gradient("渐变", GlassPreviewPreset.ProgressiveLegacy),
+    Refraction("旧折射参考", GlassPreviewPreset.CapsuleReference),
 }
 
 private val VisualChecks = listOf(
@@ -330,6 +309,29 @@ private val VisualChecks = listOf(
     "边缘不是明显描边",
     "前景始终清晰",
 )
+
+@Composable
+private fun PreviewChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .width(96.dp)
+            .height(48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .semantics { this.selected = selected }
+            .clickable(role = Role.Tab, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 @Composable
 private fun ThemeChip(label: String, selected: Boolean, onClick: () -> Unit) {
@@ -381,24 +383,42 @@ private fun ColorStressField(page: Int) {
     }
 }
 
-private fun schemeCaption(choice: ComparisonChoice, dark: Boolean, density: Float): String {
-    val candidate = choice.softCandidate()
-    if (candidate != null) return SoftGlassComparison.schemeLine(candidate, dark, density)
-    return legacyCaption(choice.legacyPreset()!!, dark, density)
+private fun schemeCaption(
+    layer: PreviewLayer,
+    family: SoftGlassCandidate,
+    rejected: RejectedPlate,
+    dark: Boolean,
+    density: Float,
+): String = when (layer) {
+    PreviewLayer.Mapping -> SoftGlassComparison.mappingSchemeLine(dark, density)
+    PreviewLayer.Family -> SoftGlassComparison.schemeLine(family, dark, density)
+    PreviewLayer.Rejected -> rejectedCaption(legacyCaption(rejected.preset, dark, density), rejected)
 }
 
-private fun parameterCaption(choice: ComparisonChoice, dark: Boolean, density: Float): String {
-    val candidate = choice.softCandidate()
-    if (candidate != null) return SoftGlassComparison.parameterSummary(candidate, dark, density)
-    val preset = checkNotNull(choice.legacyPreset())
-    val spec = legacySpec(preset, dark)
-    val px = formatPx(SoftGlassComparison.rendererBlurPx(spec.blur, density))
-    return legacyCaption(preset, dark, density) + "\n" +
-        "logicalBlur ${formatDp(spec.blur.value)}dp / rendererBlur ${px}px（px = dp × density，线性）\n" +
-        "sat ${spec.saturation} · bright ${spec.brightness} · contrast ${spec.contrast} · " +
-        "highlight ${formatDp(spec.highlightWidth.value)}dp / ${spec.highlightColor.alpha} · " +
-        "refraction ${formatDp(spec.lensHeight.value)}/${formatDp(spec.lensAmount.value)}dp · " +
-        "foreground ${spec.foreground.contentAlpha}"
+private fun parameterCaption(
+    layer: PreviewLayer,
+    family: SoftGlassCandidate,
+    rejected: RejectedPlate,
+    dark: Boolean,
+    density: Float,
+): String = when (layer) {
+    PreviewLayer.Mapping -> SoftGlassComparison.mappingSummary(dark, density)
+    PreviewLayer.Family -> SoftGlassComparison.parameterSummary(family, dark, density)
+    PreviewLayer.Rejected -> {
+        val spec = legacySpec(rejected.preset, dark)
+        val px = formatPx(SoftGlassComparison.rendererBlurPx(spec.blur, density))
+        rejectedCaption(legacyCaption(rejected.preset, dark, density), rejected) + "\n" +
+            "logicalBlur ${formatDp(spec.blur.value)}dp / rendererBlur ${px}px（px = dp × density，线性）\n" +
+            "sat ${spec.saturation} · bright ${spec.brightness} · contrast ${spec.contrast} · " +
+            "highlight ${formatDp(spec.highlightWidth.value)}dp / ${spec.highlightColor.alpha} · " +
+            "refraction ${formatDp(spec.lensHeight.value)}/${formatDp(spec.lensAmount.value)}dp · " +
+            "foreground ${spec.foreground.contentAlpha}"
+    }
+}
+
+private fun rejectedCaption(caption: String, plate: RejectedPlate): String = when (plate) {
+    RejectedPlate.Current, RejectedPlate.Refraction -> "已淘汰 · $caption"
+    RejectedPlate.Gradient -> "旧遮罩 · $caption"
 }
 
 private fun legacyCaption(preset: GlassPreviewPreset, dark: Boolean, density: Float): String {
@@ -437,20 +457,27 @@ private fun legacySpec(preset: GlassPreviewPreset, dark: Boolean) = GlassMateria
 @Composable
 private fun Modifier.plate(
     backdrop: LayerBackdrop,
-    choice: ComparisonChoice,
+    layer: PreviewLayer,
     role: SoftGlassRole,
     shape: Shape,
     dark: Boolean,
-): Modifier {
-    val candidate = choice.softCandidate()
-    if (candidate != null) {
-        return softGlassPreview(
-            backdrop,
-            shape,
-            SoftGlassComparison.resolve(candidate, role, dark = dark),
-        )
+    family: SoftGlassCandidate,
+    rejected: RejectedPlate,
+): Modifier = when (layer) {
+    PreviewLayer.Mapping -> {
+        val mapping = if (role == SoftGlassRole.Control) {
+            SoftGlassMapping.ControlCandidate
+        } else {
+            SoftGlassMapping.PanelCandidate
+        }
+        softGlassPreview(backdrop, shape, SoftGlassComparison.resolveMapping(mapping, dark = dark))
     }
-    return legacyPlate(backdrop, checkNotNull(choice.legacyPreset()), shape)
+    PreviewLayer.Family -> softGlassPreview(
+        backdrop,
+        shape,
+        SoftGlassComparison.resolve(family, role, dark = dark),
+    )
+    PreviewLayer.Rejected -> legacyPlate(backdrop, rejected.preset, shape)
 }
 
 /** Preview uses the same engine and progressive renderer as document chrome. */

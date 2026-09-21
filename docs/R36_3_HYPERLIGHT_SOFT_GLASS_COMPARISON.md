@@ -1,12 +1,10 @@
 # R36.3 HyperLight Soft Glass Comparison
 
-状态：`SOFT_GLASS_COMPARISON_READY`。不是 production approved。
-
-对照实验室已经落在设置页。契约测试通过。正式签名包已打出。`adb devices` 仍为空，没有截图。
+状态：家族对照仍是 `SOFT_GLASS_COMPARISON_READY`。角色映射已落到预览，但本轮没有真机画面，所以**不标** `PRODUCTION_MAPPING_CANDIDATE_READY`。不是 production approved。
 
 `HUMAN_VISUAL_NOT_RUN`
 
-没有候选人被选为赢家，没有任何配方迁入 Reader / Home / Dock / Dialog。
+当前配方和旧折射参考已明确淘汰。H0 是家族基线。Control 映射偏 H1，Panel 映射偏 H0。H2 只留作厚玻璃参考。生产调用点没有替换。
 
 ## 为什么当前 .86 路线失败
 
@@ -31,13 +29,51 @@ HyperLight / HyperOS 控制中心只作为视觉参考。本轮没有使用 Hype
 
 ## 页面
 
-设置页原有的玻璃配方对照。第三行可以横滑：
+设置页对照分成三层，不再把原始候选和生产映射放在同一排：
 
-当前配方 · 渐变 · 旧折射参考 · H0 · H1 · H2
+- **生产映射**：默认页。两个小胶囊用 `ControlCandidate`，下面的大面板用 `PanelCandidate`。同一块 300dp 舞台。
+- **家族参照**：H0、H1、H2。H2 标成厚玻璃参考，不进入映射。
+- **已淘汰**：当前配方、旧折射参考。渐变只是旧的 Markdown 遮罩，放在这一层以免回到它。
 
-第二行是浅色 / 暗色，正文 / 图案。播放仍只滚动背景。H0 / H1 / H2 共用同一块 300dp 舞台、同一对 52dp Control 和同一块 112dp Panel，切换候选不改这组尺寸。
+浅色 / 暗色、正文 / 图案仍只改预览背景，不改配方。播放仍只滚动背景。舞台里的胶囊高 52dp，面板高 112dp。
 
-`GlassPreviewPreset` 里的旧 tint 阶梯和 Dark D1/D2/D3 还在引擎里，因为 R36.2 契约测试还钉着它们。对照页不再把它们当作本轮实验。
+`GlassPreviewPreset` 里的旧 tint 阶梯和 Dark D1/D2/D3 还在引擎里，因为 R36.2 契约测试还钉着它们。对照页不再把它们当作实验。
+
+## Role Mapping Decision
+
+裁决来自对照页，不是又一轮三选一。
+
+- **当前配方淘汰。** 18dp / tint .86 由 tint 主导，背景颜色进不去，看起来是白塑料。不再作为基线，预览里标成「已淘汰」。
+- **旧折射参考淘汰。** 4.32dp / tint .42 / lens 16dp·32dp 有特效感，白边重，blur 和折射不成比例。不回退，也不升入生产。
+- **H0 胜出，作为家族基线。** 它比 H1 稳，比 H2 轻，tint .13 已经离开白板。后面的角色映射都从这套光学家族往下改，不另起一套风格。
+- **Control 借 H1。** 小胶囊要更轻、更通透。H1 的方向（更低 tint、略少 blur、更高饱和）适合漂浮小件，但不能直接把 H1 的整套数字套上，否则和 Panel 仍然太像。
+- **Panel 借 H0，并压染色。** 大面板要能放字，所以留在 H0 的稳这一侧。H0 在彩色底上偏蓝、偏像亚克力，所以 Panel 的饱和度降到 1.12（低于 Control 的 1.20，也低于 H0 的 1.20），中性 tint 升到 .15，contrast 压到 0.94。不用高 alpha 白板去盖颜色。
+- **H2 不做主方案。** 40dp / tint .17 是厚玻璃参考。Control 如果走到这一档会失去轻盈。它留在家族参照里，不进生产映射。
+
+染色的处理顺序是：先降 Panel saturation，再略升中性 tint，再压 contrast。边界继续用方向高光，不用 uniform stroke。映射候选的描边宽从家族的 0.75dp 收到 0.5dp，右下 alpha 收到 .03 / .02。Control 保留 0.5px 的边缘折射，Panel 折射为 0，避免大面板上的字被拉扯。
+
+暗色不新增候选。沿 H0 Dark：blur +3dp，tint 换成 `#101418`，brightness 0.91。Panel 暗色 tint .18、饱和 1.10；Control 暗色 tint .14、饱和 1.14。角色差还在。
+
+映射数字见下表。它们只存在于 `SoftGlassComparison.resolveMapping`，生产 `GlassMaterialEngine` 不读它们。
+
+| | ControlCandidate | PanelCandidate |
+|---|---|---|
+| logical blur | 28dp | 35dp |
+| 暗色 blur | 31dp | 38dp |
+| tint | .10 白 | .15 白 |
+| 暗色 tint | .14 `#101418` | .18 `#101418` |
+| saturation | 1.20 | 1.12 |
+| 暗色 saturation | 1.14 | 1.10 |
+| brightness | 1.04 | 1.04 |
+| 暗色 brightness | 0.91 | 0.91 |
+| contrast | 0.96 | 0.94 |
+| soft-light | 0.10 | 0.12 |
+| highlight 左上 / 右下 | .22 / .03 | .18 / .02 |
+| inner | .05 | .06 |
+| refraction | 0.5px，带宽 8px，中心 0 | 0 |
+| shadow alpha | .04 | .05 |
+| rim | 0.5dp | 0.5dp |
+| foreground | 1 | 1 |
 
 「视觉检查」五项默认不勾，只能手点，不会自动通过。
 
@@ -117,7 +153,7 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 | 任务 | 结果 |
 |---|---|
-| `:app:testQaUnitTest` | **PASS**。1549 tests，0 failures，0 errors，0 skipped |
+| `:app:testQaUnitTest` | **PASS**。1550 tests，0 failures，0 errors，0 skipped |
 | `:app:compileQaAndroidTestKotlin` | **PASS**。仅有既有的 Compose 测试 API deprecation warning |
 | `:app:compileReleaseKotlin` | **PASS** |
 | `:app:minifyReleaseWithR8` | 已执行，未报错 |
@@ -125,11 +161,11 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 本轮产物：
 
-- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-060253.apk`
+- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-075240.apk`
 - `.external_outbox/m1racle-reader-release-latest.apk`
 - 已覆盖 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk`
 - 大小 7,101,114 bytes（6934 KB）
-- SHA-256 `8adbc6edd1e718cf8245ec8c1ffdcc55f8eed27c197158f502500c088bbf54c5`
+- SHA-256 `a2b086d096b0ea6f52b94bc7819ddf7b928023ce093bcbd840d0ea5cb90b2750`
 - `versionName=1.0.0`，`versionCode=23`
 - 与 2026-09-21 的旧包（7,068,346 bytes）不是同一个文件
 
@@ -137,7 +173,7 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 ## 截图索引
 
-`adb devices` 无设备。下面 7 张都没有生成。
+`adb devices` 无设备。家族对照 7 张和生产映射 4 张都没有生成。`lintVitalAnalyzeRelease` 仍会打出既有的 ASM `NegativeArraySizeException`，本轮构建没有因此失败。
 
 | # | 计划路径 | 状态 |
 |---|---|---|
@@ -148,6 +184,10 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 | 5 | `.external_outbox/r36-3-soft-glass/05-light-color-h2.png` | NOT_CAPTURED |
 | 6 | `.external_outbox/r36-3-soft-glass/06-dark-text-h0.png` | NOT_CAPTURED |
 | 7 | `.external_outbox/r36-3-soft-glass/07-dark-color-h0.png` | NOT_CAPTURED |
+| 8 | `.external_outbox/r36-3-soft-glass/08-mapping-light-text.png` | NOT_CAPTURED |
+| 9 | `.external_outbox/r36-3-soft-glass/09-mapping-light-color.png` | NOT_CAPTURED |
+| 10 | `.external_outbox/r36-3-soft-glass/10-mapping-dark-text.png` | NOT_CAPTURED |
+| 11 | `.external_outbox/r36-3-soft-glass/11-mapping-dark-color.png` | NOT_CAPTURED |
 
 ## 已知限制
 
@@ -160,6 +200,6 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 ## 最终状态
 
-`SOFT_GLASS_COMPARISON_READY`。`HUMAN_VISUAL_NOT_RUN`。不是 production approved。
+家族对照：`SOFT_GLASS_COMPARISON_READY`。角色映射：预览已接线，视觉未跑，因此不是 `PRODUCTION_MAPPING_CANDIDATE_READY`。`HUMAN_VISUAL_NOT_RUN`。不是 production approved。
 
-设置页可以打开对照。安装包在 Download。等真机截图之后再裁决材质，不要根据本文宣布视觉通过。
+设置页默认打开生产映射。等真机看过 TEXT/COLOR 和 LIGHT/DARK 之后再决定能不能收口。不要根据本文宣布 Panel 染色已经被中和。

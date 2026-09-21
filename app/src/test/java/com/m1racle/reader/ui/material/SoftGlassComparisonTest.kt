@@ -5,6 +5,8 @@ import androidx.compose.ui.unit.dp
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -274,6 +276,76 @@ class SoftGlassComparisonTest {
     }
 
     @Test
+    fun `production mapping keeps panel quieter than control inside the H0 family`() {
+        val control = SoftGlassComparison.resolveMapping(SoftGlassMapping.ControlCandidate, dark = false)
+        val panel = SoftGlassComparison.resolveMapping(SoftGlassMapping.PanelCandidate, dark = false)
+        val h0 = SoftGlassComparison.resolve(SoftGlassCandidate.H0, SoftGlassRole.Panel, dark = false)
+        val h2 = SoftGlassComparison.resolve(SoftGlassCandidate.H2, SoftGlassRole.Panel, dark = false)
+        assertEquals(28.dp, control.logicalBlur)
+        assertEquals(0.10f, control.tintAlpha, 0.0001f)
+        assertEquals(1.20f, control.designSaturation, 0f)
+        assertEquals(1.04f, control.designBrightness, 0f)
+        assertEquals(0.96f, control.designContrast, 0f)
+        assertEquals(0.10f, control.designSoftLight, 0f)
+        assertEquals(0.22f, control.highlight.topLeft, 0f)
+        assertEquals(0.03f, control.highlight.bottomRight, 0f)
+        assertEquals(0.05f, control.highlight.inner, 0f)
+        assertEquals(0.5f, control.refractionAmountPx, 0f)
+        assertEquals(0.04f, control.shadowAlpha, 0f)
+        assertEquals(0.5.dp, control.highlight.rimWidth)
+        assertEquals(SoftGlassMapping.ControlCandidate, control.mapping)
+        assertEquals(35.dp, panel.logicalBlur)
+        assertEquals(0.15f, panel.tintAlpha, 0.0001f)
+        assertEquals(1.12f, panel.designSaturation, 0f)
+        assertEquals(1.04f, panel.designBrightness, 0f)
+        assertEquals(0.94f, panel.designContrast, 0f)
+        assertEquals(0.12f, panel.designSoftLight, 0f)
+        assertEquals(0.18f, panel.highlight.topLeft, 0f)
+        assertEquals(0.02f, panel.highlight.bottomRight, 0f)
+        assertEquals(0.06f, panel.highlight.inner, 0f)
+        assertEquals(0f, panel.refractionAmountPx, 0f)
+        assertEquals(0f, panel.refractionHeightPx, 0f)
+        assertEquals(0.05f, panel.shadowAlpha, 0f)
+        assertEquals(SoftGlassMapping.PanelCandidate, panel.mapping)
+        assertTrue(panel.designSaturation < control.designSaturation)
+        assertTrue(panel.tintAlpha > control.tintAlpha)
+        assertTrue(panel.designSaturation < h0.designSaturation)
+        assertTrue(panel.designBrightness <= h0.designBrightness)
+        assertTrue(control.logicalBlur < h2.logicalBlur)
+        assertTrue(control.tintAlpha < h2.tintAlpha)
+        assertEquals(1f, control.foregroundAlpha, 0f)
+        assertEquals(1f, panel.foregroundAlpha, 0f)
+        assertNull(h0.mapping)
+        assertNotEquals(control, SoftGlassComparison.resolve(SoftGlassCandidate.H0, SoftGlassRole.Control, dark = false))
+        val lightAgain = SoftGlassComparison.resolveMapping(SoftGlassMapping.ControlCandidate, dark = false)
+        val darkControl = SoftGlassComparison.resolveMapping(SoftGlassMapping.ControlCandidate, dark = true)
+        val darkPanel = SoftGlassComparison.resolveMapping(SoftGlassMapping.PanelCandidate, dark = true)
+        assertEquals(control, lightAgain)
+        assertEquals(31.dp, darkControl.logicalBlur)
+        assertEquals(0.14f, darkControl.tintAlpha, 0.0001f)
+        assertEquals(1.14f, darkControl.designSaturation, 0f)
+        assertEquals(0.91f, darkControl.designBrightness, 0f)
+        assertEquals(38.dp, darkPanel.logicalBlur)
+        assertEquals(0.18f, darkPanel.tintAlpha, 0.0001f)
+        assertEquals(1.10f, darkPanel.designSaturation, 0f)
+        assertEquals(0.91f, darkPanel.designBrightness, 0f)
+        assertTrue(darkPanel.designSaturation < darkControl.designSaturation)
+        assertTrue(darkPanel.tintAlpha <= SoftGlassComparison.TintCap)
+        assertEquals(Color(0xFF101418), darkPanel.tint.copy(alpha = 1f))
+        assertEquals(
+            "映射 · Control 28dp tint .10 · Panel 35dp tint .15",
+            SoftGlassComparison.mappingSchemeLine(dark = false, density = 3f),
+        )
+        val pressed = SoftGlassComparison.resolveMapping(
+            SoftGlassMapping.ControlCandidate,
+            dark = false,
+            pressed = true,
+        )
+        assertEquals(control.tintAlpha, pressed.tintAlpha, 0f)
+        assertEquals(control.highlight.topLeft + SoftGlassComparison.PressedHighlightBoost, pressed.highlight.topLeft, 0.0001f)
+    }
+
+    @Test
     fun `preview renderer keeps blur ahead of tint and does not fake it`() {
         val renderer = source("ui/material/SoftGlassPreview.kt")
         val effects = renderer.substring(renderer.indexOf("effects = {"), renderer.indexOf("highlight = null"))
@@ -294,6 +366,16 @@ class SoftGlassComparisonTest {
         assertTrue(preview.contains("return readerGradient(backdrop)"))
         assertTrue(preview.contains("GlassPreviewPreset"))
         assertTrue(preview.contains("柔光玻璃"))
+        assertTrue(preview.contains("生产映射"))
+        assertTrue(preview.contains("已淘汰"))
+        assertTrue(preview.contains("旧折射参考"))
+        assertTrue(preview.contains("mutableStateOf(PreviewLayer.Mapping)"))
+        assertTrue(preview.contains("resolveMapping("))
+        val plate = preview.substring(
+            preview.indexOf("fun Modifier.plate("),
+            preview.indexOf("fun Modifier.legacyPlate("),
+        )
+        assertFalse(plate.contains("textBackground"))
         assertTrue(preview.contains("视觉检查"))
         assertTrue(preview.contains("背景文字不可辨认"))
         assertTrue(preview.contains("mutableStateOf(List(VisualChecks.size) { false })"))
