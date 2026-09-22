@@ -161,11 +161,11 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 本轮产物：
 
-- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-111818.apk`
+- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-113355.apk`
 - `.external_outbox/m1racle-reader-release-latest.apk`
 - 已覆盖 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk`
 - 大小 7,101,114 bytes（6934 KB）
-- SHA-256 `0076222a78b4bbc15df7d8166669e253403d8650daaddeec7f438f47258371ed`
+- SHA-256 `08ae777c1cc973149c15414d0370564bb4e8505de5fc28df7ff05cc2a68d4aa4`
 - `versionName=1.0.0`，`versionCode=23`
 - 与 2026-09-21 的旧包（7,068,346 bytes）不是同一个文件
 
@@ -202,7 +202,7 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 TEXT 横移闪烁不是 tint 或 blur 数值。滚动用的是 `placeRelativeWithLayer`：文字条自己就是一块 graphics layer。后来改成 `graphicsLayer.translationX` 还是同一类层。`LayerBackdrop` 录制时画的是这块层已经画好的纹理，录到的是上一帧。层每帧更新，采样就空一帧或跳一帧，看起来就是闪。
 
-现在平移发生在 backdrop 自己的 `drawWithContent` 里，用 `translate`，不再套 graphics layer，也不再用 `clipToBounds`（它本身也是 graphics layer）。采样框尺寸仍不跟位移变。`StressMotionTest` 锁住预览源码里不能再出现 `graphicsLayer`。
+平移仍然在同一次 `drawWithContent` 里。另外，图层录制默认清成透明黑。模糊核采到这块黑，在浅底上几乎看不出，在黑底或深色图案上就会暗闪一下。预览舞台不再用 `Modifier.clip`（那是另一层 graphics layer）。采样层比舞台四周各大 48dp，并且每帧先铺满不透明底色，模糊核碰不到被清掉的黑。
 
 折射在预览渲染器里关掉（`PreviewTemporalIsolation.refractionEnabled = false`），用来把透镜从这条链上拿掉。H0/H1/H2 和映射配方里的数字没有改。
 

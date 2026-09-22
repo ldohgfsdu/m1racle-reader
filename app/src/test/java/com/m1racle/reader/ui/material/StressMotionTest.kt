@@ -45,7 +45,10 @@ class StressMotionTest {
     @Test
     fun `preview moves the stress strip with a graphics layer and one backdrop`() {
         val preview = source("ui/material/BlurComparisonPreview.kt")
-        assertTrue(preview.contains("translate(left = StressMotion.translationX(travel.value))"))
+        assertTrue(preview.contains("StressMotion.translationX(travel.value)"))
+        assertTrue(preview.contains("drawRect(underpaint)"))
+        assertTrue(preview.contains("CaptureOverscanDp"))
+        assertFalse(preview.contains(".clip(RoundedCornerShape(20.dp))"))
         assertFalse(preview.contains("graphicsLayer"))
         assertFalse(preview.contains("clipToBounds()"))
         assertFalse(preview.contains("placeRelativeWithLayer"))

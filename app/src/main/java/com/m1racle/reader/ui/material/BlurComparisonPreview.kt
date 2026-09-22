@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -38,7 +39,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
@@ -199,27 +204,45 @@ fun BlurComparisonPreview() {
             Modifier
                 .fillMaxWidth()
                 .height(300.dp)
-                .clip(RoundedCornerShape(20.dp)),
+                .onSizeChanged { viewportWidthPx = it.width }
+                .drawWithContent {
+                    val radius = 20.dp.toPx()
+                    val round = Path().apply {
+                        addRoundRect(
+                            RoundRect(
+                                rect = Rect(Offset.Zero, size),
+                                cornerRadius = CornerRadius(radius, radius),
+                            ),
+                        )
+                    }
+                    clipPath(round) { this@drawWithContent.drawContent() }
+                },
         ) {
+            val overscan = StressMotion.CaptureOverscanDp.dp
             GlassBackdropSource(
                 backdrop,
-                Modifier.fillMaxSize().onSizeChanged { viewportWidthPx = it.width },
+                Modifier
+                    .offset(x = -overscan, y = -overscan)
+                    .width(with(density) { viewportWidthPx.toDp() } + overscan * 2)
+                    .height(300.dp + overscan * 2),
             ) {
+                val underpaint = stressBackdropColor(textBackground, dark)
                 Box(
-                    Modifier
-                        .fillMaxSize()
-                        .drawWithContent {
-                            clipRect {
-                                translate(left = StressMotion.translationX(travel.value)) {
-                                    this@drawWithContent.drawContent()
-                                }
-                            }
-                        },
+                    Modifier.fillMaxSize().drawWithContent {
+                        drawRect(underpaint)
+                        val overscanPx = overscan.toPx()
+                        translate(
+                            left = overscanPx + StressMotion.translationX(travel.value),
+                            top = overscanPx,
+                        ) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
                 ) {
                 Row(
                     Modifier
                         .width((StressMotion.PageWidthDp * StressMotion.PageCount).dp)
-                        .fillMaxHeight(),
+                        .height(300.dp),
                 ) {
                     repeat(StressMotion.PageCount) { index ->
                         Box(

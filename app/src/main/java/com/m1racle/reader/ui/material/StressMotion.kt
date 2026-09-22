@@ -17,6 +17,12 @@ object StressMotion {
     const val PageCount = 3
     const val PageWidthDp = 320f
 
+    /**
+     * Extra painted pixels around the stage. Larger than any preview blur
+     * (H2 is 40dp) so the blur kernel never reads the layer's cleared black.
+     */
+    const val CaptureOverscanDp = 48f
+
     fun captureSizePx(viewportWidthPx: Int, viewportHeightPx: Int): Pair<Int, Int> =
         viewportWidthPx to viewportHeightPx
 
