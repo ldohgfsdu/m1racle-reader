@@ -5,14 +5,13 @@ import kotlin.math.roundToInt
 /**
  * Motion contract for the settings stress backdrop.
  *
- * Compose [androidx.compose.foundation.ScrollState] stores an Int. The scroll
- * layout then places the child at that integer every frame, so a 0.25px step
- * alternately stalls and jumps. LayerBackdrop also writes new layout coordinates
- * on each of those placements. Blur of high-contrast text turns that jump into
- * a brightness flash.
+ * Compose scroll places the child with placeRelativeWithLayer, so the moving
+ * strip is its own graphics layer. A graphicsLayer translation is the same kind
+ * of layer. LayerBackdrop records that layer by drawing it; the recorded copy
+ * is the previous frame's texture, which flashes as the strip moves.
  *
- * The preview keeps the source box size fixed and moves the strip with a float
- * graphics-layer translation. Capture size does not depend on the translation.
+ * The preview therefore translates inside the backdrop's own draw, with no
+ * extra graphics layer. Capture size does not depend on the translation.
  */
 object StressMotion {
     const val PageCount = 3

@@ -37,8 +37,9 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -159,7 +160,7 @@ fun BlurComparisonPreview() {
         }
         if (!PreviewTemporalIsolation.refractionEnabled) {
             Text(
-                "折射已关闭，用来隔离闪烁，不是新的材质。背景用图形层平移，采样区域尺寸不变。",
+                "折射已关闭，只为把透镜从闪烁里拿开，不是新材质。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -202,13 +203,23 @@ fun BlurComparisonPreview() {
         ) {
             GlassBackdropSource(
                 backdrop,
-                Modifier.fillMaxSize().clipToBounds().onSizeChanged { viewportWidthPx = it.width },
+                Modifier.fillMaxSize().onSizeChanged { viewportWidthPx = it.width },
             ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .drawWithContent {
+                            clipRect {
+                                translate(left = StressMotion.translationX(travel.value)) {
+                                    this@drawWithContent.drawContent()
+                                }
+                            }
+                        },
+                ) {
                 Row(
                     Modifier
                         .width((StressMotion.PageWidthDp * StressMotion.PageCount).dp)
-                        .fillMaxHeight()
-                        .graphicsLayer { translationX = StressMotion.translationX(travel.value) },
+                        .fillMaxHeight(),
                 ) {
                     repeat(StressMotion.PageCount) { index ->
                         Box(
@@ -232,6 +243,7 @@ fun BlurComparisonPreview() {
                             }
                         }
                     }
+                }
                 }
             }
             CompositionLocalProvider(

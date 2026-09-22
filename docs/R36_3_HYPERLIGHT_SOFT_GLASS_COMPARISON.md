@@ -161,11 +161,11 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 本轮产物：
 
-- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-104857.apk`
+- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-111818.apk`
 - `.external_outbox/m1racle-reader-release-latest.apk`
 - 已覆盖 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk`
 - 大小 7,101,114 bytes（6934 KB）
-- SHA-256 `5babd8caed3ece46bf1cec7e80343fd7eaf2f68657549943a131029e9ca25267`
+- SHA-256 `0076222a78b4bbc15df7d8166669e253403d8650daaddeec7f438f47258371ed`
 - `versionName=1.0.0`，`versionCode=23`
 - 与 2026-09-21 的旧包（7,068,346 bytes）不是同一个文件
 
@@ -200,13 +200,9 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 ## Temporal stability
 
-TEXT 横移闪烁的代码根因是滚动实现，不是 tint 或 blur 数值。
+TEXT 横移闪烁不是 tint 或 blur 数值。滚动用的是 `placeRelativeWithLayer`：文字条自己就是一块 graphics layer。后来改成 `graphicsLayer.translationX` 还是同一类层。`LayerBackdrop` 录制时画的是这块层已经画好的纹理，录到的是上一帧。层每帧更新，采样就空一帧或跳一帧，看起来就是闪。
 
-`BlurComparisonPreview` 以前把文字条放在 `horizontalScroll` 里。Compose `ScrollState.value` 是 **Int**，`ScrollingLayoutNode` 每帧用这个整数重新 `place` 子节点。0.25px 的动画步长会先停住再跳 1px。`LayerBackdropNode.onGloballyPositioned` 每次布局都把新的 `LayoutCoordinates` 写进同一个 backdrop。高对比文字经过大 blur 后，这种相位跳变看起来就是闪一下。
-
-`LayerBackdrop` 只有一块 `GraphicsLayer`，没有 0/1 交替的第二块源缓冲。`DrawBackdropNode` 各自再持有自己的效果层，采样的是那一块源。
-
-现在文字条的布局尺寸固定，只用 `graphicsLayer.translationX` 做浮点平移，外层 `clipToBounds`。采样框不跟位移变。`StressMotionTest` 用 180 帧、每帧 0.25px 检查 capture 宽高、blur、source/effect identity 不变，平移严格差 0.25px。
+现在平移发生在 backdrop 自己的 `drawWithContent` 里，用 `translate`，不再套 graphics layer，也不再用 `clipToBounds`（它本身也是 graphics layer）。采样框尺寸仍不跟位移变。`StressMotionTest` 锁住预览源码里不能再出现 `graphicsLayer`。
 
 折射在预览渲染器里关掉（`PreviewTemporalIsolation.refractionEnabled = false`），用来把透镜从这条链上拿掉。H0/H1/H2 和映射配方里的数字没有改。
 
