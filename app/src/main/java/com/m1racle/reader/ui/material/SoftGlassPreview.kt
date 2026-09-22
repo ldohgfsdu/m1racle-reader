@@ -22,6 +22,28 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
 
+/** Isolation stages for the stress backdrop. Not a material candidate. */
+enum class GlassStressStage {
+    RawText,
+    GlassNoBlur,
+    BlurOnly,
+    Full,
+}
+
+enum class GlassStressTarget {
+    ControlOnly,
+    PanelOnly,
+    Both,
+}
+
+/**
+ * Refraction stays off until the moving-text flash is confirmed gone on device.
+ * This is an isolation switch, not a new optical recipe.
+ */
+object PreviewTemporalIsolation {
+    const val refractionEnabled = false
+}
+
 /**
  * Preview-only backdrop chain. Not used by Reader, Home, Dock, or Dialog.
  *
@@ -35,11 +57,21 @@ fun Modifier.softGlassPreview(
     backdrop: Backdrop,
     shape: Shape,
     material: ResolvedSoftGlass,
+    stage: GlassStressStage = GlassStressStage.Full,
 ): Modifier {
     val density = LocalDensity.current.density
-    val blurPx = SoftGlassComparison.rendererBlurPx(material.logicalBlur, density)
+    val recipeBlurPx = SoftGlassComparison.rendererBlurPx(material.logicalBlur, density)
+    val blurPx = if (stage == GlassStressStage.BlurOnly || stage == GlassStressStage.Full) {
+        recipeBlurPx
+    } else {
+        0f
+    }
+    val applyColor = stage == GlassStressStage.Full
+    val applySurface = stage == GlassStressStage.Full
     val rimPx = SoftGlassComparison.dpToPx(material.highlight.rimWidth, density)
-    val lensOn = material.refractionAmountPx > 0f &&
+    val lensOn = PreviewTemporalIsolation.refractionEnabled &&
+        stage == GlassStressStage.Full &&
+        material.refractionAmountPx > 0f &&
         material.refractionHeightPx > 0f &&
         supportsGlassLens(shape) &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
@@ -50,6 +82,8 @@ fun Modifier.softGlassPreview(
         blurPx,
         rimPx,
         lensOn,
+        applyColor,
+        applySurface,
     ) {
         val scale = if (material.pressedScale == 1f) {
             Modifier
@@ -71,13 +105,15 @@ fun Modifier.softGlassPreview(
             shape = { shape },
             effects = {
                 blur(blurPx)
-                colorControls(
-                    brightness = material.rendererBrightness,
-                    contrast = material.rendererContrast,
-                    saturation = material.rendererSaturation,
-                )
-                if (material.rendererSoftLightBrightness != 0f) {
-                    colorControls(brightness = material.rendererSoftLightBrightness)
+                if (applyColor) {
+                    colorControls(
+                        brightness = material.rendererBrightness,
+                        contrast = material.rendererContrast,
+                        saturation = material.rendererSaturation,
+                    )
+                    if (material.rendererSoftLightBrightness != 0f) {
+                        colorControls(brightness = material.rendererSoftLightBrightness)
+                    }
                 }
                 if (lensOn) {
                     lens(
@@ -100,6 +136,7 @@ fun Modifier.softGlassPreview(
                 }
             },
             onDrawSurface = {
+                if (applySurface) {
                 drawRect(material.tint)
                 drawRect(
                     brush = Brush.linearGradient(
@@ -126,6 +163,7 @@ fun Modifier.softGlassPreview(
                     ),
                     style = Stroke(width = rimPx),
                 )
+                }
             },
         )
     }

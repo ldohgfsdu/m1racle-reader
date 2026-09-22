@@ -1,6 +1,7 @@
 package com.m1racle.reader.ui.material
 
 import android.os.Build
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -28,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,6 +37,9 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -69,11 +74,17 @@ fun BlurComparisonPreview() {
     var textBackground by remember { mutableStateOf(true) }
     var checksOpen by remember { mutableStateOf(false) }
     var checks by remember { mutableStateOf(List(VisualChecks.size) { false }) }
-    val backdropScroll = rememberScrollState()
+    var stressStage by remember { mutableStateOf(GlassStressStage.Full) }
+    var stressTarget by remember { mutableStateOf(GlassStressTarget.Both) }
+    var viewportWidthPx by remember { mutableIntStateOf(0) }
     val chipScroll = rememberScrollState()
     val backdrop = rememberLayerBackdrop()
-    val density = LocalDensity.current.density
-    val chipStride = with(LocalDensity.current) { 100.dp.roundToPx() }
+    val travel = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    val densityScale = density.density
+    val chipStride = with(density) { 100.dp.roundToPx() }
+    val contentWidthPx = with(density) { (StressMotion.PageWidthDp * StressMotion.PageCount).dp.toPx() }
+    val maxTravelPx = StressMotion.maxTravelPx(contentWidthPx, viewportWidthPx.toFloat())
     val foreground = if (dark) Color.White else Color.Black
     LaunchedEffect(layer, family, rejected, chipStride) {
         withFrameNanos { }
@@ -85,16 +96,12 @@ fun BlurComparisonPreview() {
         }
         chipScroll.scrollTo((index * chipStride).coerceAtMost(chipScroll.maxValue))
     }
-    LaunchedEffect(playing) {
-        if (!playing) return@LaunchedEffect
+    LaunchedEffect(playing, maxTravelPx) {
+        if (!playing || maxTravelPx <= 0f) return@LaunchedEffect
         while (isActive) {
-            val end = if (backdropScroll.value < backdropScroll.maxValue / 2) backdropScroll.maxValue else 0
-            if (backdropScroll.maxValue == 0) {
-                withFrameNanos { }
-                continue
-            }
+            val end = if (travel.value < maxTravelPx / 2f) maxTravelPx else 0f
             try {
-                backdropScroll.animateScrollTo(end, tween(5500, easing = LinearEasing))
+                travel.animateTo(end, tween(5500, easing = LinearEasing))
             } catch (e: CancellationException) {
                 coroutineContext.ensureActive()
                 playing = false
@@ -125,6 +132,38 @@ fun BlurComparisonPreview() {
             ThemeChip("家族参照", selected = layer == PreviewLayer.Family) { layer = PreviewLayer.Family }
             ThemeChip("已淘汰", selected = layer == PreviewLayer.Rejected) { layer = PreviewLayer.Rejected }
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ThemeChip("原始", selected = stressStage == GlassStressStage.RawText) {
+                stressStage = GlassStressStage.RawText
+            }
+            ThemeChip("无模糊", selected = stressStage == GlassStressStage.GlassNoBlur) {
+                stressStage = GlassStressStage.GlassNoBlur
+            }
+            ThemeChip("仅模糊", selected = stressStage == GlassStressStage.BlurOnly) {
+                stressStage = GlassStressStage.BlurOnly
+            }
+            ThemeChip("完整", selected = stressStage == GlassStressStage.Full) {
+                stressStage = GlassStressStage.Full
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ThemeChip("两者", selected = stressTarget == GlassStressTarget.Both) {
+                stressTarget = GlassStressTarget.Both
+            }
+            ThemeChip("只胶囊", selected = stressTarget == GlassStressTarget.ControlOnly) {
+                stressTarget = GlassStressTarget.ControlOnly
+            }
+            ThemeChip("只面板", selected = stressTarget == GlassStressTarget.PanelOnly) {
+                stressTarget = GlassStressTarget.PanelOnly
+            }
+        }
+        if (!PreviewTemporalIsolation.refractionEnabled) {
+            Text(
+                "折射已关闭，用来隔离闪烁，不是新的材质。背景用图形层平移，采样区域尺寸不变。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(
             "生产映射是收口候选：Control 偏 H1，Panel 偏 H0。柔光玻璃家族参照保留 H0、H1、H2，H2 只作厚玻璃参考。当前配方和旧折射参考已淘汰，不回退。仅预览，不改变阅读页。",
             style = MaterialTheme.typography.bodySmall,
@@ -148,7 +187,7 @@ fun BlurComparisonPreview() {
         }
         Box(Modifier.fillMaxWidth().height(64.dp), contentAlignment = Alignment.CenterStart) {
             Text(
-                schemeCaption(layer, family, rejected, dark, density),
+                schemeCaption(layer, family, rejected, dark, densityScale),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
@@ -161,9 +200,17 @@ fun BlurComparisonPreview() {
                 .height(300.dp)
                 .clip(RoundedCornerShape(20.dp)),
         ) {
-            GlassBackdropSource(backdrop, Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxSize().horizontalScroll(backdropScroll)) {
-                    repeat(3) { index ->
+            GlassBackdropSource(
+                backdrop,
+                Modifier.fillMaxSize().clipToBounds().onSizeChanged { viewportWidthPx = it.width },
+            ) {
+                Row(
+                    Modifier
+                        .width((StressMotion.PageWidthDp * StressMotion.PageCount).dp)
+                        .fillMaxHeight()
+                        .graphicsLayer { translationX = StressMotion.translationX(travel.value) },
+                ) {
+                    repeat(StressMotion.PageCount) { index ->
                         Box(
                             Modifier
                                 .width(320.dp)
@@ -192,7 +239,10 @@ fun BlurComparisonPreview() {
                 LocalGlassEnvironment provides GlassEnvironment.reader(dark),
                 LocalReaderDarkTheme provides dark,
             ) {
-                if (layer == PreviewLayer.Rejected && rejected == RejectedPlate.Gradient) {
+                if (stressStage != GlassStressStage.RawText &&
+                    layer == PreviewLayer.Rejected &&
+                    rejected == RejectedPlate.Gradient
+                ) {
                     Box(
                         Modifier
                             .align(Alignment.TopCenter)
@@ -208,46 +258,68 @@ fun BlurComparisonPreview() {
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
-                } else {
+                } else if (stressStage != GlassStressStage.RawText) {
                     Column(
                         Modifier
                             .align(Alignment.Center)
                             .padding(horizontal = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            listOf("‹ 返回", "第 12 页 · 书名").forEach { label ->
-                                Box(
-                                    Modifier
-                                        .weight(1f)
-                                        .height(52.dp)
-                                        .plate(backdrop, layer, SoftGlassRole.Control, RoundedCornerShape(50), dark, family, rejected),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(label, color = foreground, style = MaterialTheme.typography.labelLarge)
+                        if (stressTarget != GlassStressTarget.PanelOnly) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                listOf("‹ 返回", "第 12 页 · 书名").forEach { label ->
+                                    Box(
+                                        Modifier
+                                            .weight(1f)
+                                            .height(52.dp)
+                                            .plate(
+                                                backdrop,
+                                                layer,
+                                                SoftGlassRole.Control,
+                                                RoundedCornerShape(50),
+                                                dark,
+                                                family,
+                                                rejected,
+                                                stressStage,
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(label, color = foreground, style = MaterialTheme.typography.labelLarge)
+                                    }
                                 }
                             }
                         }
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(112.dp)
-                                .plate(backdrop, layer, SoftGlassRole.Panel, RoundedCornerShape(24.dp), dark, family, rejected),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                "目录     阅读设置\n\n书签     搜索正文",
-                                color = foreground,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Center,
-                            )
+                        if (stressTarget != GlassStressTarget.ControlOnly) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(112.dp)
+                                    .plate(
+                                        backdrop,
+                                        layer,
+                                        SoftGlassRole.Panel,
+                                        RoundedCornerShape(24.dp),
+                                        dark,
+                                        family,
+                                        rejected,
+                                        stressStage,
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "目录     阅读设置\n\n书签     搜索正文",
+                                    color = foreground,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
         Text(
-            parameterCaption(layer, family, rejected, dark, density),
+            parameterCaption(layer, family, rejected, dark, densityScale),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -463,6 +535,7 @@ private fun Modifier.plate(
     dark: Boolean,
     family: SoftGlassCandidate,
     rejected: RejectedPlate,
+    stage: GlassStressStage,
 ): Modifier = when (layer) {
     PreviewLayer.Mapping -> {
         val mapping = if (role == SoftGlassRole.Control) {
@@ -470,12 +543,18 @@ private fun Modifier.plate(
         } else {
             SoftGlassMapping.PanelCandidate
         }
-        softGlassPreview(backdrop, shape, SoftGlassComparison.resolveMapping(mapping, dark = dark))
+        softGlassPreview(
+            backdrop,
+            shape,
+            SoftGlassComparison.resolveMapping(mapping, dark = dark),
+            stage,
+        )
     }
     PreviewLayer.Family -> softGlassPreview(
         backdrop,
         shape,
         SoftGlassComparison.resolve(family, role, dark = dark),
+        stage,
     )
     PreviewLayer.Rejected -> legacyPlate(backdrop, rejected.preset, shape)
 }

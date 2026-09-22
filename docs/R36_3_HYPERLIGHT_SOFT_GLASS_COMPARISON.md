@@ -1,6 +1,6 @@
 # R36.3 HyperLight Soft Glass Comparison
 
-状态：家族对照仍是 `SOFT_GLASS_COMPARISON_READY`。角色映射已落到预览，但本轮没有真机画面，所以**不标** `PRODUCTION_MAPPING_CANDIDATE_READY`。不是 production approved。
+状态：闪烁修复已落到预览，等真机视频。`TEMPORAL_STABILITY_FIX_READY_FOR_HUMAN`。不是 `TEMPORAL_STABILITY_PASS`，也不是 production approved。角色映射仍不标 `PRODUCTION_MAPPING_CANDIDATE_READY`。
 
 `HUMAN_VISUAL_NOT_RUN`
 
@@ -153,7 +153,7 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 | 任务 | 结果 |
 |---|---|
-| `:app:testQaUnitTest` | **PASS**。1550 tests，0 failures，0 errors，0 skipped |
+| `:app:testQaUnitTest` | **PASS**。1553 tests，0 failures，0 errors，0 skipped |
 | `:app:compileQaAndroidTestKotlin` | **PASS**。仅有既有的 Compose 测试 API deprecation warning |
 | `:app:compileReleaseKotlin` | **PASS** |
 | `:app:minifyReleaseWithR8` | 已执行，未报错 |
@@ -161,11 +161,11 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 本轮产物：
 
-- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-075240.apk`
+- `.external_outbox/m1racle-reader-release-v1.0.0-20260922-104857.apk`
 - `.external_outbox/m1racle-reader-release-latest.apk`
 - 已覆盖 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk`
 - 大小 7,101,114 bytes（6934 KB）
-- SHA-256 `a2b086d096b0ea6f52b94bc7819ddf7b928023ce093bcbd840d0ea5cb90b2750`
+- SHA-256 `5babd8caed3ece46bf1cec7e80343fd7eaf2f68657549943a131029e9ca25267`
 - `versionName=1.0.0`，`versionCode=23`
 - 与 2026-09-21 的旧包（7,068,346 bytes）不是同一个文件
 
@@ -197,6 +197,24 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 - H1 / H2 没有暗色配方。
 - saturation、brightness、contrast 在 Kyant 里是一个矩阵，不是三次独立 pass。
 - 旧 tint 阶梯和 Dark D1/D2/D3 仍留在 `GlassPreviewPreset`，只是对照页不再列出。
+
+## Temporal stability
+
+TEXT 横移闪烁的代码根因是滚动实现，不是 tint 或 blur 数值。
+
+`BlurComparisonPreview` 以前把文字条放在 `horizontalScroll` 里。Compose `ScrollState.value` 是 **Int**，`ScrollingLayoutNode` 每帧用这个整数重新 `place` 子节点。0.25px 的动画步长会先停住再跳 1px。`LayerBackdropNode.onGloballyPositioned` 每次布局都把新的 `LayoutCoordinates` 写进同一个 backdrop。高对比文字经过大 blur 后，这种相位跳变看起来就是闪一下。
+
+`LayerBackdrop` 只有一块 `GraphicsLayer`，没有 0/1 交替的第二块源缓冲。`DrawBackdropNode` 各自再持有自己的效果层，采样的是那一块源。
+
+现在文字条的布局尺寸固定，只用 `graphicsLayer.translationX` 做浮点平移，外层 `clipToBounds`。采样框不跟位移变。`StressMotionTest` 用 180 帧、每帧 0.25px 检查 capture 宽高、blur、source/effect identity 不变，平移严格差 0.25px。
+
+折射在预览渲染器里关掉（`PreviewTemporalIsolation.refractionEnabled = false`），用来把透镜从这条链上拿掉。H0/H1/H2 和映射配方里的数字没有改。
+
+预览增加了四级隔离：原始、无模糊、仅模糊、完整。也可以只画胶囊或只画面板。这四档还没有在真机上跑过，所以不能把闪烁第一次出现的层级写成已经观察到的事实。代码能证明的是：旧路径会改布局坐标并量化到整数；新路径不会。
+
+没有设备，没有 TEXT / COLOR 视频。
+
+状态：`TEMPORAL_STABILITY_FIX_READY_FOR_HUMAN`。不是 `TEMPORAL_STABILITY_PASS`。
 
 ## 最终状态
 
