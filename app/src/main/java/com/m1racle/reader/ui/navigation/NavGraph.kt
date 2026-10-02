@@ -154,346 +154,346 @@ fun M1racleReaderNavGraph(
     val hubBackdropHost = remember(hubBackdrop, hubMenuExport) { GlassBackdropHost(hubBackdrop, hubMenuExport) }
     val showDock = HubDestination.isTopLevelRoute(currentEntry?.destination?.route)
     HubDockMotionProvider(selected = selectedHub) {
-    Box(modifier = modifier.fillMaxSize()) {
-    GlassBackdropSource(hubBackdrop, Modifier.fillMaxSize(), enabled = showDock) {
-    NavHost(
-        navController = navController,
-        startDestination = Routes.HOME,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        composable(Routes.HOME, enterTransition = hubEnter, exitTransition = hubExit) {
-            val homeViewModel: HomeViewModel = viewModel(
-                factory = HomeViewModel.Factory(repository),
-            )
-            HomeScreen(
-                viewModel = homeViewModel,
-                onOpenDocument = { document ->
-                    openDocument(navController, document)
-                },
-                onNavigateHub = { destination ->
-                    navController.navigateToHub(destination)
-                },
-                onOpenSearch = { navController.navigate(Routes.SEARCH) },
-            )
-        }
+        Box(modifier = modifier.fillMaxSize()) {
+            GlassBackdropSource(hubBackdrop, Modifier.fillMaxSize(), enabled = showDock) {
+                NavHost(
+                    navController = navController,
+                    startDestination = Routes.HOME,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    composable(Routes.HOME, enterTransition = hubEnter, exitTransition = hubExit) {
+                        val homeViewModel: HomeViewModel = viewModel(
+                            factory = HomeViewModel.Factory(repository),
+                        )
+                        HomeScreen(
+                            viewModel = homeViewModel,
+                            onOpenDocument = { document ->
+                                openDocument(navController, document)
+                            },
+                            onNavigateHub = { destination ->
+                                navController.navigateToHub(destination)
+                            },
+                            onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                        )
+                    }
 
-        composable(Routes.LIBRARY, enterTransition = hubEnter, exitTransition = hubExit) {
-            val libraryViewModel: LibraryViewModel = viewModel(
-                factory = LibraryViewModel.Factory(repository),
-            )
-            LibraryScreen(
-                viewModel = libraryViewModel,
-                onOpenDocument = { document ->
-                    openDocument(navController, document)
-                },
-                onNavigateHub = { destination ->
-                    navController.navigateToHub(destination)
-                },
-                onOpenSearch = { navController.navigate(Routes.SEARCH) },
-            )
-        }
+                    composable(Routes.LIBRARY, enterTransition = hubEnter, exitTransition = hubExit) {
+                        val libraryViewModel: LibraryViewModel = viewModel(
+                            factory = LibraryViewModel.Factory(repository),
+                        )
+                        LibraryScreen(
+                            viewModel = libraryViewModel,
+                            onOpenDocument = { document ->
+                                openDocument(navController, document)
+                            },
+                            onNavigateHub = { destination ->
+                                navController.navigateToHub(destination)
+                            },
+                            onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                        )
+                    }
 
-        composable(Routes.SEARCH) {
-            val repositoryForSearch = requireNotNull(searchRepo) {
-                "SearchRepository unavailable for SearchScreen"
-            }
-            val searchViewModel: SearchViewModel = viewModel(
-                factory = SearchViewModel.Factory(repositoryForSearch),
-            )
-            val scope = rememberCoroutineScope()
-            SearchScreen(
-                viewModel = searchViewModel,
-                onBack = { navController.popBackStack() },
-                onOpenResult = { result ->
-                    scope.launch {
-                        repository.getDocumentById(result.documentId)?.let { document ->
-                            openDocument(navController, document, result.anchor)
+                    composable(Routes.SEARCH) {
+                        val repositoryForSearch = requireNotNull(searchRepo) {
+                            "SearchRepository unavailable for SearchScreen"
                         }
-                    }
-                },
-            )
-        }
-
-        composable(Routes.BOOKMARKS, enterTransition = hubEnter, exitTransition = hubExit) {
-            val bookmarksViewModel: BookmarksViewModel = viewModel(
-                factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-                    @Suppress("UNCHECKED_CAST")
-                    override fun <T : androidx.lifecycle.ViewModel> create(
-                        modelClass: Class<T>,
-                    ): T {
-                        if (modelClass.isAssignableFrom(BookmarksViewModel::class.java)) {
-                            val repo = readingRepository
-                                ?: (application as? com.m1racle.reader.M1racleReaderApplication)?.readingRepository
-                                ?: error("ReadingRepository unavailable for BookmarksScreen")
-                            return BookmarksViewModel(repo) as T
-                        }
-                        throw IllegalArgumentException("Unknown ViewModel")
-                    }
-                },
-            )
-            val scope = rememberCoroutineScope()
-            BookmarksScreen(
-                viewModel = bookmarksViewModel,
-                onOpenDocument = { documentId ->
-                    scope.launch {
-                        repository.getDocumentById(documentId)?.let { document ->
-                            openDocument(navController, document)
-                        }
-                    }
-                },
-                onNavigateHub = { destination ->
-                    navController.navigateToHub(destination)
-                },
-            )
-        }
-
-        composable(Routes.SETTINGS, enterTransition = hubEnter, exitTransition = hubExit) {
-            HubSettingsScreen(
-                onNavigateHub = { destination ->
-                    navController.navigateToHub(destination)
-                },
-            )
-        }
-
-        composable(
-            route = Routes.VIEWER,
-            arguments = listOf(
-                navArgument("documentId") {
-                    type = NavType.StringType
-                },
-                navArgument("anchor") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                },
-            ),
-        ) { entry ->
-            val documentId = entry.arguments?.getString("documentId").orEmpty()
-            val initialAnchor = Routes.decodeAnchor(entry.arguments?.getString("anchor"))
-            val sessionId = remember(documentId) { "md-$documentId-${UUID.randomUUID()}" }
-            // R23 书签中介：Markdown 使用 SCROLL_POSITION 坐标系。
-            val bookmarkController = remember(documentId) {
-                readingRepo?.let {
-                    com.m1racle.reader.ui.reader.ReaderBookmarkController(
-                        readingRepository = it,
-                        documentId = documentId,
-                        locationKind = com.m1racle.reader.data.local.BookmarkLocationKind.SCROLL_POSITION,
-                    )
-                }
-            }
-            // P0-1 标注中介：复用与 PDF 同一 Controller → Repository → Anchor 链。
-            val highlightController = remember(documentId) {
-                readingRepo?.let {
-                    com.m1racle.reader.ui.reader.ReaderHighlightController(
-                        readingRepository = it,
-                        documentId = documentId,
-                    )
-                }
-            }
-            val noteController = remember(documentId) {
-                readingRepo?.let {
-                    com.m1racle.reader.ui.reader.ReaderNoteController(
-                        readingRepository = it,
-                        documentId = documentId,
-                    )
-                }
-            }
-            val viewerViewModel: ViewerViewModel = viewModel(
-                factory = ViewerViewModel.Factory(
-                    documentId = documentId,
-                    repository = repository,
-                    readerSettingsRepository = readerSettingsRepository,
-                ),
-            )
-            // Single active session: register open/close for external replace bookkeeping.
-            DisposableEffect(documentId, sessionId, viewerViewModel) {
-                val c = coordinator
-                c?.onViewerOpened(documentId, sessionId)
-                c?.progressFlushHook = { _ ->
-                    // Markdown leave paths flush position; hook is an order barrier only.
-                }
-                onDispose {
-                    if (c != null && c.activeViewerSessionId.value == sessionId) {
-                        c.progressFlushHook = null
-                    }
-                    c?.onViewerClosed(documentId, sessionId)
-                }
-            }
-            ViewerScreen(
-                viewModel = viewerViewModel,
-                onBack = {
-                    navController.popBackStack(Routes.HOME, inclusive = false)
-                },
-                bookmarkController = bookmarkController,
-                highlightController = highlightController,
-                noteController = noteController,
-                initialAnchor = initialAnchor,
-            )
-        }
-
-        composable(
-            route = Routes.EPUB_VIEWER,
-            arguments = listOf(
-                navArgument("documentId") {
-                    type = NavType.StringType
-                },
-            ),
-        ) { entry ->
-            val documentId = entry.arguments?.getString("documentId").orEmpty()
-            val sessionId = remember(documentId) { "epub-$documentId-${UUID.randomUUID()}" }
-            DisposableEffect(documentId, sessionId, coordinator) {
-                val c = coordinator
-                c?.onViewerOpened(documentId, sessionId)
-                c?.progressFlushHook = { _ ->
-                    // EPUB leave paths flush position; hook is an order barrier only.
-                }
-                onDispose {
-                    if (c != null && c.activeViewerSessionId.value == sessionId) {
-                        c.progressFlushHook = null
-                    }
-                    c?.onViewerClosed(documentId, sessionId)
-                }
-            }
-            com.m1racle.reader.ui.epub.EpubReaderScreen(
-                documentId = documentId,
-                repository = repository,
-                readerSettingsRepository = readerSettingsRepository,
-                onBack = {
-                    navController.popBackStack(Routes.HOME, inclusive = false)
-                },
-            )
-        }
-
-        composable(
-            route = Routes.PDF_EDITOR,
-            arguments = listOf(navArgument("documentId") { type = NavType.StringType }, navArgument("page") { type = NavType.IntType; defaultValue = 0 }),
-        ) { entry ->
-            val editor: com.m1racle.reader.ui.pdf.edit.PdfBodyEditorViewModel = viewModel(
-                factory = com.m1racle.reader.ui.pdf.edit.PdfBodyEditorViewModel.Factory(application, repository,
-                    entry.arguments?.getString("documentId").orEmpty(), entry.arguments?.getInt("page") ?: 0),
-            )
-            com.m1racle.reader.ui.pdf.edit.PdfBodyEditorScreen(editor,
-                onBack = {
-                    navController.navigate(Routes.pdfViewer(entry.arguments?.getString("documentId").orEmpty(),
-                        DocumentAnchor.PdfPage(editor.state.value.page?.index ?: 0))) {
-                        popUpTo(Routes.PDF_EDITOR) { inclusive=true }
-                    }
-                },
-                onSaved = { id ->
-                    navController.popBackStack(Routes.HOME, inclusive = false)
-                    navController.navigate(Routes.pdfViewer(id, DocumentAnchor.PdfPage(editor.state.value.page?.index ?: 0)))
-                },
-            )
-        }
-
-        composable(
-            route = Routes.PDF_VIEWER,
-            arguments = listOf(
-                navArgument("documentId") {
-                    type = NavType.StringType
-                },
-                navArgument("anchor") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                },
-            ),
-        ) { entry ->
-            val documentId = entry.arguments?.getString("documentId").orEmpty()
-            val initialAnchor = Routes.decodeAnchor(entry.arguments?.getString("anchor"))
-            val sessionId = remember(documentId) { "pdf-$documentId-${UUID.randomUUID()}" }
-            val m1racleReaderApp = application as? com.m1racle.reader.M1racleReaderApplication
-            // R26.1 高亮控制器（Selection → Flow → Repository → Overlay）。
-            val highlightController = remember(documentId) {
-                readingRepo?.let {
-                    com.m1racle.reader.ui.reader.ReaderHighlightController(
-                        readingRepository = it,
-                        documentId = documentId,
-                    )
-                }
-            }
-            val noteController = remember(documentId) {
-                readingRepo?.let {
-                    com.m1racle.reader.ui.reader.ReaderNoteController(
-                        readingRepository = it,
-                        documentId = documentId,
-                    )
-                }
-            }
-            // R23 书签中介：PDF 使用 PAGE_INDEX 坐标系。
-            val bookmarkController = remember(documentId) {
-                readingRepo?.let {
-                    com.m1racle.reader.ui.reader.ReaderBookmarkController(
-                        readingRepository = it,
-                        documentId = documentId,
-                        locationKind = com.m1racle.reader.data.local.BookmarkLocationKind.PAGE_INDEX,
-                    )
-                }
-            }
-            val pdfViewModel: PdfViewerViewModel = viewModel(
-                factory = PdfViewerViewModel.Factory(
-                    application = application,
-                    documentId = documentId,
-                    repository = repository,
-                    applicationScope = m1racleReaderApp?.applicationScope
-                        ?: kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
-                ),
-            )
-            // Single active PDF session: open/close + final progress flush before external switch.
-            DisposableEffect(documentId, sessionId, pdfViewModel) {
-                val c = coordinator
-                c?.onViewerOpened(documentId, sessionId)
-                c?.progressFlushHook = { id ->
-                    if (id == documentId) {
-                        pdfViewModel.flushProgress()
-                    }
-                }
-                onDispose {
-                    if (c != null && c.activeViewerSessionId.value == sessionId) {
-                        c.progressFlushHook = null
-                    }
-                    c?.onViewerClosed(documentId, sessionId)
-                }
-            }
-            val editorLaunchScope = rememberCoroutineScope()
-            var openingEditor by remember { mutableStateOf(false) }
-            PdfViewerScreen(
-                viewModel = pdfViewModel,
-                onEditBody = { page ->
-                    if (!openingEditor) {
-                        openingEditor=true
-                        editorLaunchScope.launch {
-                            try {
-                                pdfViewModel.releaseForEditing()
-                                navController.navigate("pdf-edit/$documentId?page=$page") {
-                                    popUpTo(Routes.PDF_VIEWER) { inclusive=true }
+                        val searchViewModel: SearchViewModel = viewModel(
+                            factory = SearchViewModel.Factory(repositoryForSearch),
+                        )
+                        val scope = rememberCoroutineScope()
+                        SearchScreen(
+                            viewModel = searchViewModel,
+                            onBack = { navController.popBackStack() },
+                            onOpenResult = { result ->
+                                scope.launch {
+                                    repository.getDocumentById(result.documentId)?.let { document ->
+                                        openDocument(navController, document, result.anchor)
+                                    }
                                 }
-                            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                            catch (_: Exception) {
-                                navController.popBackStack(Routes.HOME,inclusive=false)
-                                android.widget.Toast.makeText(application,"暂时无法进入编辑，请重新打开文档",android.widget.Toast.LENGTH_LONG).show()
+                            },
+                        )
+                    }
+
+                    composable(Routes.BOOKMARKS, enterTransition = hubEnter, exitTransition = hubExit) {
+                        val bookmarksViewModel: BookmarksViewModel = viewModel(
+                            factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                                @Suppress("UNCHECKED_CAST")
+                                override fun <T : androidx.lifecycle.ViewModel> create(
+                                    modelClass: Class<T>,
+                                ): T {
+                                    if (modelClass.isAssignableFrom(BookmarksViewModel::class.java)) {
+                                        val repo = readingRepository
+                                            ?: (application as? com.m1racle.reader.M1racleReaderApplication)?.readingRepository
+                                            ?: error("ReadingRepository unavailable for BookmarksScreen")
+                                        return BookmarksViewModel(repo) as T
+                                    }
+                                    throw IllegalArgumentException("Unknown ViewModel")
+                                }
+                            },
+                        )
+                        val scope = rememberCoroutineScope()
+                        BookmarksScreen(
+                            viewModel = bookmarksViewModel,
+                            onOpenDocument = { documentId ->
+                                scope.launch {
+                                    repository.getDocumentById(documentId)?.let { document ->
+                                        openDocument(navController, document)
+                                    }
+                                }
+                            },
+                            onNavigateHub = { destination ->
+                                navController.navigateToHub(destination)
+                            },
+                        )
+                    }
+
+                    composable(Routes.SETTINGS, enterTransition = hubEnter, exitTransition = hubExit) {
+                        HubSettingsScreen(
+                            onNavigateHub = { destination ->
+                                navController.navigateToHub(destination)
+                            },
+                        )
+                    }
+
+                    composable(
+                        route = Routes.VIEWER,
+                        arguments = listOf(
+                            navArgument("documentId") {
+                                type = NavType.StringType
+                            },
+                            navArgument("anchor") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) { entry ->
+                        val documentId = entry.arguments?.getString("documentId").orEmpty()
+                        val initialAnchor = Routes.decodeAnchor(entry.arguments?.getString("anchor"))
+                        val sessionId = remember(documentId) { "md-$documentId-${UUID.randomUUID()}" }
+                        // R23 书签中介：Markdown 使用 SCROLL_POSITION 坐标系。
+                        val bookmarkController = remember(documentId) {
+                            readingRepo?.let {
+                                com.m1racle.reader.ui.reader.ReaderBookmarkController(
+                                    readingRepository = it,
+                                    documentId = documentId,
+                                    locationKind = com.m1racle.reader.data.local.BookmarkLocationKind.SCROLL_POSITION,
+                                )
                             }
                         }
+                        // P0-1 标注中介：复用与 PDF 同一 Controller → Repository → Anchor 链。
+                        val highlightController = remember(documentId) {
+                            readingRepo?.let {
+                                com.m1racle.reader.ui.reader.ReaderHighlightController(
+                                    readingRepository = it,
+                                    documentId = documentId,
+                                )
+                            }
+                        }
+                        val noteController = remember(documentId) {
+                            readingRepo?.let {
+                                com.m1racle.reader.ui.reader.ReaderNoteController(
+                                    readingRepository = it,
+                                    documentId = documentId,
+                                )
+                            }
+                        }
+                        val viewerViewModel: ViewerViewModel = viewModel(
+                            factory = ViewerViewModel.Factory(
+                                documentId = documentId,
+                                repository = repository,
+                                readerSettingsRepository = readerSettingsRepository,
+                            ),
+                        )
+                        // Single active session: register open/close for external replace bookkeeping.
+                        DisposableEffect(documentId, sessionId, viewerViewModel) {
+                            val c = coordinator
+                            c?.onViewerOpened(documentId, sessionId)
+                            c?.progressFlushHook = { _ ->
+                                // Markdown leave paths flush position; hook is an order barrier only.
+                            }
+                            onDispose {
+                                if (c != null && c.activeViewerSessionId.value == sessionId) {
+                                    c.progressFlushHook = null
+                                }
+                                c?.onViewerClosed(documentId, sessionId)
+                            }
+                        }
+                        ViewerScreen(
+                            viewModel = viewerViewModel,
+                            onBack = {
+                                navController.popBackStack(Routes.HOME, inclusive = false)
+                            },
+                            bookmarkController = bookmarkController,
+                            highlightController = highlightController,
+                            noteController = noteController,
+                            initialAnchor = initialAnchor,
+                        )
                     }
-                },
-                onBack = {
-                    navController.popBackStack(Routes.HOME, inclusive = false)
-                },
-                bookmarkController = bookmarkController,
-                highlightController = highlightController,
-                noteController = noteController,
-                initialAnchor = initialAnchor,
-            )
+
+                    composable(
+                        route = Routes.EPUB_VIEWER,
+                        arguments = listOf(
+                            navArgument("documentId") {
+                                type = NavType.StringType
+                            },
+                        ),
+                    ) { entry ->
+                        val documentId = entry.arguments?.getString("documentId").orEmpty()
+                        val sessionId = remember(documentId) { "epub-$documentId-${UUID.randomUUID()}" }
+                        DisposableEffect(documentId, sessionId, coordinator) {
+                            val c = coordinator
+                            c?.onViewerOpened(documentId, sessionId)
+                            c?.progressFlushHook = { _ ->
+                                // EPUB leave paths flush position; hook is an order barrier only.
+                            }
+                            onDispose {
+                                if (c != null && c.activeViewerSessionId.value == sessionId) {
+                                    c.progressFlushHook = null
+                                }
+                                c?.onViewerClosed(documentId, sessionId)
+                            }
+                        }
+                        com.m1racle.reader.ui.epub.EpubReaderScreen(
+                            documentId = documentId,
+                            repository = repository,
+                            readerSettingsRepository = readerSettingsRepository,
+                            onBack = {
+                                navController.popBackStack(Routes.HOME, inclusive = false)
+                            },
+                        )
+                    }
+
+                    composable(
+                        route = Routes.PDF_EDITOR,
+                        arguments = listOf(navArgument("documentId") { type = NavType.StringType }, navArgument("page") { type = NavType.IntType; defaultValue = 0 }),
+                    ) { entry ->
+                        val editor: com.m1racle.reader.ui.pdf.edit.PdfBodyEditorViewModel = viewModel(
+                            factory = com.m1racle.reader.ui.pdf.edit.PdfBodyEditorViewModel.Factory(application, repository,
+                                entry.arguments?.getString("documentId").orEmpty(), entry.arguments?.getInt("page") ?: 0),
+                        )
+                        com.m1racle.reader.ui.pdf.edit.PdfBodyEditorScreen(editor,
+                            onBack = {
+                                navController.navigate(Routes.pdfViewer(entry.arguments?.getString("documentId").orEmpty(),
+                                    DocumentAnchor.PdfPage(editor.state.value.page?.index ?: 0))) {
+                                    popUpTo(Routes.PDF_EDITOR) { inclusive=true }
+                                }
+                            },
+                            onSaved = { id ->
+                                navController.popBackStack(Routes.HOME, inclusive = false)
+                                navController.navigate(Routes.pdfViewer(id, DocumentAnchor.PdfPage(editor.state.value.page?.index ?: 0)))
+                            },
+                        )
+                    }
+
+                    composable(
+                        route = Routes.PDF_VIEWER,
+                        arguments = listOf(
+                            navArgument("documentId") {
+                                type = NavType.StringType
+                            },
+                            navArgument("anchor") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) { entry ->
+                        val documentId = entry.arguments?.getString("documentId").orEmpty()
+                        val initialAnchor = Routes.decodeAnchor(entry.arguments?.getString("anchor"))
+                        val sessionId = remember(documentId) { "pdf-$documentId-${UUID.randomUUID()}" }
+                        val m1racleReaderApp = application as? com.m1racle.reader.M1racleReaderApplication
+                        // R26.1 高亮控制器（Selection → Flow → Repository → Overlay）。
+                        val highlightController = remember(documentId) {
+                            readingRepo?.let {
+                                com.m1racle.reader.ui.reader.ReaderHighlightController(
+                                    readingRepository = it,
+                                    documentId = documentId,
+                                )
+                            }
+                        }
+                        val noteController = remember(documentId) {
+                            readingRepo?.let {
+                                com.m1racle.reader.ui.reader.ReaderNoteController(
+                                    readingRepository = it,
+                                    documentId = documentId,
+                                )
+                            }
+                        }
+                        // R23 书签中介：PDF 使用 PAGE_INDEX 坐标系。
+                        val bookmarkController = remember(documentId) {
+                            readingRepo?.let {
+                                com.m1racle.reader.ui.reader.ReaderBookmarkController(
+                                    readingRepository = it,
+                                    documentId = documentId,
+                                    locationKind = com.m1racle.reader.data.local.BookmarkLocationKind.PAGE_INDEX,
+                                )
+                            }
+                        }
+                        val pdfViewModel: PdfViewerViewModel = viewModel(
+                            factory = PdfViewerViewModel.Factory(
+                                application = application,
+                                documentId = documentId,
+                                repository = repository,
+                                applicationScope = m1racleReaderApp?.applicationScope
+                                    ?: kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
+                            ),
+                        )
+                        // Single active PDF session: open/close + final progress flush before external switch.
+                        DisposableEffect(documentId, sessionId, pdfViewModel) {
+                            val c = coordinator
+                            c?.onViewerOpened(documentId, sessionId)
+                            c?.progressFlushHook = { id ->
+                                if (id == documentId) {
+                                    pdfViewModel.flushProgress()
+                                }
+                            }
+                            onDispose {
+                                if (c != null && c.activeViewerSessionId.value == sessionId) {
+                                    c.progressFlushHook = null
+                                }
+                                c?.onViewerClosed(documentId, sessionId)
+                            }
+                        }
+                        val editorLaunchScope = rememberCoroutineScope()
+                        var openingEditor by remember { mutableStateOf(false) }
+                        PdfViewerScreen(
+                            viewModel = pdfViewModel,
+                            onEditBody = { page ->
+                                if (!openingEditor) {
+                                    openingEditor=true
+                                    editorLaunchScope.launch {
+                                        try {
+                                            pdfViewModel.releaseForEditing()
+                                            navController.navigate("pdf-edit/$documentId?page=$page") {
+                                                popUpTo(Routes.PDF_VIEWER) { inclusive=true }
+                                            }
+                                        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                                        catch (_: Exception) {
+                                            navController.popBackStack(Routes.HOME,inclusive=false)
+                                            android.widget.Toast.makeText(application,"暂时无法进入编辑，请重新打开文档",android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            },
+                            onBack = {
+                                navController.popBackStack(Routes.HOME, inclusive = false)
+                            },
+                            bookmarkController = bookmarkController,
+                            highlightController = highlightController,
+                            noteController = noteController,
+                            initialAnchor = initialAnchor,
+                        )
+                    }
+                }
+            } // Captured navigation content; dock is a sibling.
+            if (showDock) {
+                CompositionLocalProvider(LocalGlassBackdropHost provides hubBackdropHost) {
+                    GlassDock(
+                        onSelect = { destination -> navController.navigateToHub(destination) },
+                    )
+                }
+            }
         }
     }
-    } // Captured navigation content; dock is a sibling.
-    if (showDock) {
-        CompositionLocalProvider(LocalGlassBackdropHost provides hubBackdropHost) {
-        GlassDock(
-            onSelect = { destination -> navController.navigateToHub(destination) },
-        )
-    }
-    }
-    }
-    } // HubDockMotionProvider
 }
