@@ -69,9 +69,16 @@
   两个失败是 `ReadingRepositoryTransactionTest` 的真实 Room 事务测试，被
   `Robolectric SQLiteLibraryLoader: Architecture 'aarch64' is not supported` 阻塞——主机架构限制，
   与 09-23 记录一致；这两项要绿色需在 x86_64 上跑同一份字节码。本轮不声称 ARM 全量零失败。
-- Release：**未出包**。正式签名环境四项 `M1RACLE_RELEASE_*` 未注入，`validatePublicReleaseConfiguration`
-  会拒绝出包；不退回 Debug、不临时签名、不把 09-27 的旧包当成本轮产物。
-  当前已交付产物仍是 6,917,909 bytes / `8c856905…`，它**早于**本轮全部改动。
+- Release：**已出包并交付**。用户指出签名在内部存储 `M1racle Reader/keystore` 后，先用
+  `keytool -list -v` 核对证书 SHA-256 = `2d9daba0…`（与文档记录的生产身份一致），
+  再注入四项 `M1RACLE_RELEASE_*` 执行 `:app:assembleRelease`：**BUILD SUCCESSFUL**，
+  `PUBLIC_RELEASE_IDENTITY versionCode=23 versionName=1.0.0`，minify + shrinkResources。
+  产物 **6,917,909 bytes / 6.60 MiB**，SHA-256 `b4b5258fb60e40a89d7ccd9a5eedf35286af6e02241230e3cd6a0ade747927b3`，
+  APK Signature Scheme v2 单签名者验签通过，证书 `CN=M1racle Reader` / RSA 4096。
+  完整性：ZIP 233 条目无坏块，manifest/resources.arsc/classes.dex 非空，manifest 无 `INTERNET`。
+  产物来自本次源码：`classes.dex` 摘要与 09-27 包不同（4,618,172 B vs 4,615,256 B）。
+  构建输出 / outbox / Download 三份摘要一致，已覆盖固定安装路径。
+  口令只在构建进程的环境变量里使用，未写入仓库、未打印到日志。
 - device_verified：NOT_RUN，`adb devices` 为空（本轮探测一次）。EPUB 翻页与目录落点、图片比例、
   进度恢复、PDF/Markdown 打开与标注、玻璃采样稳定性，全部待真机。
 - 回归反证：三个红灯的旧行为均先复现为失败，再修到通过；未删改任何断言以制造「通过」，

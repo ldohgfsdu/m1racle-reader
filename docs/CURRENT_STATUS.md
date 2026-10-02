@@ -39,14 +39,19 @@
 |---|---|
 | 文件 | `.external_outbox/m1racle-reader-release-latest.apk` |
 | 大小 | **6,917,909 bytes / 6.60 MiB** |
-| SHA-256 | `8c8569057b4fbfc6a76b4db34a8ea8261d5ae9020e0ba55cece7a545b75d8691` |
-| 签名证书 SHA-256 | `2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1`（CN=M1racle Reader） |
-| 构建时间 | 2026-09-27 22:33 |
+| SHA-256 | `b4b5258fb60e40a89d7ccd9a5eedf35286af6e02241230e3cd6a0ade747927b3` |
+| 签名证书 SHA-256 | `2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1`（CN=M1racle Reader，RSA 4096） |
+| 签名方案 | APK Signature Scheme **v2**，单签名者，验签通过 |
+| 身份 | `com.m1racle.reader` · 1.0.0 / versionCode 23 · minSdk 31 / targetSdk 35 / compileSdk 37 |
+| 构建 | `PUBLIC_RELEASE_IDENTITY versionCode=23 versionName=1.0.0`，正式签名注入，minify + shrinkResources |
+| 构建时间 | 2026-10-02 11:35 |
+| 源码 | `master` `f007211` 及本轮 5 个提交（`checkpoint/pre-audit-2026-10-02` … `audit-2026-10-02`） |
 | 设备副本 | `/storage/emulated/0/Download/m1racle-reader-release-latest.apk`（同名覆盖） |
 
-**该产物早于本次审查修复**（`d666d80`、`8f2a9ea` 及 EPUB 排版改动），因此不是当前源码的构建。
-当前源码尚未产出新的签名 Release：正式签名环境四项 `M1RACLE_RELEASE_*` 尚未注入，
-`validatePublicReleaseConfiguration` 会拒绝出包，不得退回 Debug 或临时签名。
+完整性校验：ZIP 233 条目、`testzip()` 无坏块；`AndroidManifest.xml` / `resources.arsc` / `classes.dex` 均非空；
+构建输出 / outbox / Download 三份摘要一致；manifest 无 `INTERNET`（仅 Android 自动注入的包级动态接收权限）。
+产物确实来自本次源码：`classes.dex`（4,618,172 B）与 09-27 包的 `classes.dex`（4,615,256 B）摘要不同。
+**注意**：R8 会混淆内部类名，因此不能用 DEX 里的符号名判断产物新旧，只能用编译输入摘要与 dex 摘要。
 
 ## 设备验收
 
