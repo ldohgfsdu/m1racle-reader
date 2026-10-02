@@ -12,6 +12,6 @@ report: docs/PROJECT_AUDIT_FIXES_20260930.md
 index: docs/PROJECT_INDEX.md
 previous: PDF_MENU_ELASTIC_HIGHLIGHT_20260927; implemented_device_pending
 blocked:
-  ASSEMBLE_RELEASE: BLOCKED_EXTERNAL_CONFIGURATION (no injected M1RACLE_RELEASE_* signer)
   DEVICE_ACCEPTANCE: NOT_RUN (no adb device)
+release: 1.0.0/23 signed 2026-10-02, SHA-256 b4b5258f...e927b3, signer 2d9daba0...
 updated: 2026-10-02
