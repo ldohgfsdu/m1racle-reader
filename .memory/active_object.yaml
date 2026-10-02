@@ -1,6 +1,17 @@
 id: PROJECT_AUDIT_FIXES_20260930
-status: in_progress
-scope: User authorized fixing the seven findings from the project audit. Bound EPUB parsing and ZIP extraction, preserve EPUB text and anchors, move pagination off the UI thread with bounded retained layouts, reconcile current candidate documentation, validate and deliver Release. Preserve existing workspace changes.
+status: implemented_automated_verified_device_pending
+scope: >-
+  Findings from the 2026-10-02 project audit. Land the 2026-09-30 EPUB hardening
+  (bounded parsing, ZIP accounting, preserved text and anchors); give EPUB pagination
+  a bounded main-thread slice and a bounded resident layout cache instead of retaining
+  one layout per row; restore the three red contracts and consolidate the nine copies of
+  the production-source test lookup; reconcile the candidate documentation. Release
+  delivery still needs the injected production signer and a device.
 project_state: docs/CURRENT_STATUS.md
+report: docs/PROJECT_AUDIT_FIXES_20260930.md
+index: docs/PROJECT_INDEX.md
 previous: PDF_MENU_ELASTIC_HIGHLIGHT_20260927; implemented_device_pending
-updated: 2026-09-30
+blocked:
+  ASSEMBLE_RELEASE: BLOCKED_EXTERNAL_CONFIGURATION (no injected M1RACLE_RELEASE_* signer)
+  DEVICE_ACCEPTANCE: NOT_RUN (no adb device)
+updated: 2026-10-02

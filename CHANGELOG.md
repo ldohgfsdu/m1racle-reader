@@ -2,14 +2,20 @@
 
 ## Unreleased — v1.0.0 public candidate (versionCode 23)
 
-- Product identity：产品/品牌迁移为 `M1racle Reader / M1racle`；Android `applicationId` 与 Kotlin
+- EPUB 有限阅读：本地 reflowable 章节、分页、目录、图片与阅读位置；不支持 DRM、固定版式、音视频、搜索与批注。
+- EPUB 导入加固：解析深度/块数上限、XML 有界读取、ZIP 忽略条目同限计量、正文行内空白与 `pre` 原文保留、
+  目录锚点与相对路径解析、包内图片沙箱解析。
+- EPUB 排版成本：主线程按 8ms 分片让帧、常驻布局有界（锚点窗口 + 滚动 LRU，淘汰行按需重测）、
+  图片尺寸探针移到 IO、目录页码每次布局只解析一次。
+- 产品身份：产品/品牌迁移为 `M1racle Reader / M1racle`；Android `applicationId` 与 Kotlin
   namespace 迁移为 `com.m1racle.reader`，仓库标识迁移为 `m1racle-reader`。R32 及更早报告中的
   MarkLeaf 名称与 `com.markleaf.app` 仅作为迁移前历史证据保留。
 - 阅读资产：收藏、书签、PDF 高亮、轻量笔记及统一管理闭环。
 - 本地搜索：文档标题、高亮摘录与笔记索引、Home/Library 入口和 canonical anchor 原文跳转。
 - 架构与发布收口：Repository/Room 权威边界审计、R8 release 日志剔除、outbox 有界保留。
 - Release hardening：正式 release 禁止 debug 签名 fallback，签名材料仅通过环境安全注入；
-  版本 identity 统一为 `app/version.properties`；Room v12 定义为首个公开数据库基线。
+  版本 identity 统一为 `app/version.properties`；Room v14 为当前数据库版本（公开基线自 v12 起）。
+- 运动语言：底栏按压与选中两个弹簧提升为 `M1racleMotion` 令牌，特征代码不再自带运动常量。
 - 本节仍为未发布候选；真实生产 signer、最终 tag 与公开发布批准尚未完成。
 
 ## v0.1.0 (versionCode 22) — 2026-08-24

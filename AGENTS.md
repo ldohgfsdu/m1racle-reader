@@ -79,7 +79,12 @@ Before implementing, read in order:
 
 1. `.memory/active_object.yaml` — current active object (id, priority, status, scope)
 2. `.memory/CURRENT_STATE.md` — project state, APK, last build, git notes
-3. If active object is PDF viewer stability: **`docs/PDF_VIEWER_HANDOFF.md`** (executable technical handoff)
-4. For install/test on device: **`docs/DEVICE_INSTALL_AND_ADB_TEST.md`**
+3. **`docs/PROJECT_INDEX.md`** — doc routing; `docs/` holds 200+ files and most are one-off stage reports, not current state
+4. If active object is PDF viewer stability: **`docs/PDF_VIEWER_HANDOFF.md`** (executable technical handoff)
+5. For install/test on device: **`docs/DEVICE_INSTALL_AND_ADB_TEST.md`**
+
+`docs/CURRENT_STATUS.md` holds only current state (version, verification baseline, the one delivered artifact,
+device status, open items). Never append a dated work log to it; per-session evidence belongs in that session's report,
+and superseded state goes to `docs/history/`.
 
 Do not expand beyond the active object scope. Do not migrate PDFium unless explicitly tasked.
