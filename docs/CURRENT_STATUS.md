@@ -63,10 +63,18 @@ R32.4 记录的 native crash 闭环只覆盖 2026-08-27 的 APK，不覆盖当�
 
 ## 仓库与交付风险
 
-- **远端未备份**：仓库只有一个分支 `master`（原开发线 `feat/risediary-inspired-dock` 已并入并删除），
-  **没有任何 upstream**，`origin/master` 停在 2026-08-17（`bd0b344`），比本线落后 100+ commits，
-  且 `origin` 指向的 `ldohgfsdu/markleaf` 并不是当前产品身份的仓库。当前所有成果只存在这台设备上。
-  用户已决定本轮只在本地提交并打 tag，不推送。
+- **远端未备份**：仓库只有一个分支 `master`，**没有任何 upstream**，`origin/master` 停在
+  2026-08-17（`bd0b344`），且 `origin` 指向的 `ldohgfsdu/markleaf` 并不是当前产品身份的仓库。
+  用户已决定本轮不推送。**离线备份已于 2026-10-02 落到内部存储 `Download/`**：
+  - `m1racle-reader-git-bundle-1.0.0-20261002.bundle` — 85,015,143 bytes，
+    SHA-256 `c2fbf2e5538e42343c5cef017bb9d9ac21ab3a0ece82db08796c588b7202fc6d`。
+    162 个提交、全部 tag；已实测 `git clone` 还原，HEAD = `e175051`，工作树干净。
+  - `m1racle-reader-source-1.0.0-20261002.zip` — 2,521,850 bytes，
+    SHA-256 `fd873c4c8f8328518d479be95161eb5f93f2f366be669a3125455a7d36e932a1`。纯源码快照。
+  - `M1racleReader-备份还原说明.txt` — 校验、还原、推远端与构建前置的步骤。
+  - **注意**：`git bundle` 只携带 ref 本身，不携带 reflog。2026-09-05 的 5 个恢复用 stash
+    原本仅靠 `refs/stash` 的 reflog 可达，第一次打 bundle 时只保住了 1 个；已为 5 个各打
+    `archive/stash-*` tag 并重打，复验 5 个提交与 5 个历史分支 tip 全部可从 bundle 取回。
 - **历史分支已归档**：删除前的 8 个分支各有一个未合入提交，因此在删除分支前先打了
   `archive/*` annotated tag 保底（版本身份 1.0.1 候选、R41 RC、R38/R40/r33 文档线、R58/R60 的
   Room v13 落点、旧 master）。`release-1.0.1-canonical`（versionCode 24）按用户决定作废，
