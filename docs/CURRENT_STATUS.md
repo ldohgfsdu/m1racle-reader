@@ -72,6 +72,11 @@ R32.4 记录的 native crash 闭环只覆盖 2026-08-27 的 APK，不覆盖当�
   - `m1racle-reader-source-1.0.0-20261002.zip` — 2,521,850 bytes，
     SHA-256 `fd873c4c8f8328518d479be95161eb5f93f2f366be669a3125455a7d36e932a1`。纯源码快照。
   - `M1racleReader-备份还原说明.txt` — 校验、还原、推远端与构建前置的步骤。
+  - `m1racle-reader-signing-1.0.0-20261002.zip` — 8,905 bytes，
+    SHA-256 `4123ff2ec91a4e1413c06409b20e1fb59b5108833edea4a3902f41929aaa04a7`。正式签名私钥 `.p12` + 口令 + 签名 README；已实测解包后证书指纹
+    仍为 `2d9daba0…`。**含私钥明文**，不得进 Git、公开网盘或代码托管；
+    建议再转存一份到电脑或密码管理器的加密附件。泄露无法无损轮换：
+    换证书等于换应用身份，已有安装必须卸载重装并丢失全部阅读数据。
   - **注意**：`git bundle` 只携带 ref 本身，不携带 reflog。2026-09-05 的 5 个恢复用 stash
     原本仅靠 `refs/stash` 的 reflog 可达，第一次打 bundle 时只保住了 1 个；已为 5 个各打
     `archive/stash-*` tag 并重打，复验 5 个提交与 5 个历史分支 tip 全部可从 bundle 取回。
@@ -80,8 +85,11 @@ R32.4 记录的 native crash 闭环只覆盖 2026-08-27 的 APK，不覆盖当�
   Room v13 落点、旧 master）。`release-1.0.1-canonical`（versionCode 24）按用户决定作废，
   其提交由 `archive/version-1.0.1-candidate-identity-2026-10-02` 保底。10 个 worktree 缩到 1 个。
   另有 5 个 `workspace-cleanup-20260905` 的 stash 作为历史恢复网保留，未清理。
-- **签名私钥位置**：正式 keystore 存放在设备内部存储 `M1racle Reader/keystore`，
-  未写入仓库、未提交备份。`RELEASE_CHECKLIST.md` 中"生产密钥已在仓库外安全备份"一项仍未勾选。
+- **签名私钥备份状态（2026-10-02 更新）**：原 keystore 位于设备内部存储
+  `M1racle Reader/keystore/`，未写入仓库（`.gitignore` 覆盖 `*.p12` 等）。
+  现已离线备份到内部存储 `Download/m1racle-reader-signing-1.0.0-20261002.zip`，
+  但**仍只存在这一台设备上**，且为明文。`RELEASE_CHECKLIST.md` 中
+  「生产密钥已在仓库外安全备份」一项仍不能勾选——真正的备份必须在另一台设备上。
 - **无 CI**：仓库没有 `.github/`，全量测试只能在这台设备上手动触发；aarch64 上的 2 项 Room
   事务测试因此长期无法在此环境转绿。
 
