@@ -293,6 +293,7 @@ private fun ViewerSuccessScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val hasToc = state.toc.isNotEmpty()
     val readerSettings by viewModel.readerSettings.collectAsStateWithLifecycle()
     val searchState by viewModel.searchState.collectAsStateWithLifecycle()
@@ -390,13 +391,13 @@ private fun ViewerSuccessScreen(
                 com.m1racle.reader.ui.reader.ReaderBookmarkController.ToggleResult.Added -> {
                     bookmarkedIndexes = bookmarkedIndexes + index
                     snackbarHostState.showSnackbar(
-                        context.getString(R.string.reader_bookmark_added),
+                        resources.getString(R.string.reader_bookmark_added),
                     )
                 }
                 com.m1racle.reader.ui.reader.ReaderBookmarkController.ToggleResult.Removed -> {
                     bookmarkedIndexes = bookmarkedIndexes - index
                     snackbarHostState.showSnackbar(
-                        context.getString(R.string.reader_bookmark_removed),
+                        resources.getString(R.string.reader_bookmark_removed),
                     )
                 }
             }
@@ -473,12 +474,12 @@ private fun ViewerSuccessScreen(
                     is com.m1racle.reader.ui.reader.ReaderHighlightController.CommitResult.Success -> {
                         annotationVersion++
                         snackbarHostState.showSnackbar(
-                            context.getString(R.string.reader_highlight_added),
+                            resources.getString(R.string.reader_highlight_added),
                         )
                     }
                     is com.m1racle.reader.ui.reader.ReaderHighlightController.CommitResult.Failure -> {
                         snackbarHostState.showSnackbar(
-                            context.getString(R.string.reader_highlight_failed),
+                            resources.getString(R.string.reader_highlight_failed),
                         )
                     }
                 }
@@ -780,7 +781,7 @@ private fun ViewerSuccessScreen(
                         highlightController?.deleteHighlight(highlight.id)
                         annotationVersion++
                         snackbarHostState.showSnackbar(
-                            context.getString(R.string.reader_annotation_deleted),
+                            resources.getString(R.string.reader_annotation_deleted),
                         )
                     }
                 },
@@ -813,7 +814,7 @@ private fun ViewerSuccessScreen(
                         noteController?.delete(note.id)
                         annotationVersion++
                         snackbarHostState.showSnackbar(
-                            context.getString(R.string.reader_note_deleted),
+                            resources.getString(R.string.reader_note_deleted),
                         )
                     }
                 },
@@ -825,7 +826,7 @@ private fun ViewerSuccessScreen(
             if (notes != null) {
                 val blockLine = stringResource(
                     R.string.reader_note_editor_title,
-                    context.getString(
+                    resources.getString(
                         R.string.reader_note_block_line,
                         (target.anchor as? DocumentAnchor.MarkdownBlock)?.blockIndex?.plus(1) ?: 1,
                     ),
@@ -848,7 +849,7 @@ private fun ViewerSuccessScreen(
                             annotationVersion++
                             closeEditor()
                             snackbarHostState.showSnackbar(
-                                context.getString(R.string.reader_note_saved),
+                                resources.getString(R.string.reader_note_saved),
                             )
                         }
                     },
@@ -859,7 +860,7 @@ private fun ViewerSuccessScreen(
                                 annotationVersion++
                                 closeEditor()
                                 snackbarHostState.showSnackbar(
-                                    context.getString(R.string.reader_note_deleted),
+                                    resources.getString(R.string.reader_note_deleted),
                                 )
                             }
                         }

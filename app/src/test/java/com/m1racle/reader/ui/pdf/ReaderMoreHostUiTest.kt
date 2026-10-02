@@ -27,6 +27,11 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.geometry.Offset
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import androidx.compose.ui.unit.dp
 import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import org.junit.Rule
@@ -100,6 +105,9 @@ class ReaderMoreHostUiTest {
         initial: ReaderMoreState = ReaderMoreState.MAIN,
         fontScale: Float = 1f,
         height: Dp? = null,
+        includeEditBody: Boolean = false,
+        reverseTasks: Boolean = false,
+        viewportBottomRoot: Float = 1800f,
     ) {
         composeRule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
@@ -107,40 +115,30 @@ class ReaderMoreHostUiTest {
                 var state by remember { mutableStateOf(initial) }
                 var childClosing by remember { mutableStateOf(false) }
                 lastState = state
-                val items = listOf(
+                val taskItems = listOf(
                     PdfChromeMenuItem(
                         Icons.Outlined.Tag,
                         "设置教材页码",
-                        onClick = {
-                            state = ReaderMoreStateMachine.onOpenChild(state, ReaderMoreState.CHILD_PAGE_MAPPING)
-                        },
-                        closeOnClick = false,
+                        childState = ReaderMoreState.CHILD_PAGE_MAPPING,
                     ),
                     PdfChromeMenuItem(
                         Icons.AutoMirrored.Outlined.MenuBook,
                         "教材目录",
-                        onClick = {
-                            state = ReaderMoreStateMachine.onOpenChild(state, ReaderMoreState.CHILD_TOC)
-                        },
-                        closeOnClick = false,
+                        childState = ReaderMoreState.CHILD_TOC,
                     ),
                     PdfChromeMenuItem(
                         Icons.Outlined.GridView,
                         "页面缩略图",
-                        onClick = {
-                            state = ReaderMoreStateMachine.onOpenChild(state, ReaderMoreState.CHILD_THUMBNAILS)
-                        },
-                        closeOnClick = false,
+                        childState = ReaderMoreState.CHILD_THUMBNAILS,
                     ),
                     PdfChromeMenuItem(
                         Icons.Outlined.IosShare,
                         "导出章节",
-                        onClick = {
-                            state = ReaderMoreStateMachine.onOpenChild(state, ReaderMoreState.CHILD_EXPORT)
-                        },
-                        closeOnClick = false,
+                        childState = ReaderMoreState.CHILD_EXPORT,
                     ),
                 )
+                val items = (if (includeEditBody) listOf(PdfChromeMenuItem(Icons.Outlined.Tag, "编辑正文")) else emptyList()) +
+                    (if (reverseTasks) taskItems.reversed() else taskItems)
                 ReaderMoreHost(
                     state = state,
                     closing = false,
@@ -152,6 +150,7 @@ class ReaderMoreHostUiTest {
                         childClosing = false
                         state = ReaderMoreState.MAIN
                     },
+                    onOpenChild = { target -> state = ReaderMoreStateMachine.onOpenChild(state, target) },
                     onSectionToggle = { section ->
                         state = ReaderMoreStateMachine.onSectionToggle(state, section)
                     },
@@ -161,7 +160,7 @@ class ReaderMoreHostUiTest {
                     topBarModeOptions = topBarModeOptions,
                     nestedData = advancedData(),
                     nestedMaxHeightDp = 520.dp,
-                    viewportBottomRoot = 1800f,
+                    viewportBottomRoot = viewportBottomRoot,
                     onPreparingLayoutReady = { state = it },
                     modifier = height?.let { Modifier.height(it) } ?: Modifier,
                 )
@@ -173,6 +172,35 @@ class ReaderMoreHostUiTest {
     private fun assertAllLevel1Present() {
         listOf("阅读方式", "阅读界面", "设置教材页码", "教材目录", "页面缩略图", "导出章节")
             .forEach { composeRule.onAllNodesWithText(it).onFirst().assertExists() }
+    }
+
+    @Test
+    fun `long press follows the finger inside a bound without activating a row then nested entry still opens`() {
+        launchContent(ReaderMoreState.MAIN)
+        val row = composeRule.onNodeWithText("阅读方式")
+        val initial = row.getUnclippedBoundsInRoot()
+        row.performTouchInput { down(center) }
+        composeRule.mainClock.advanceTimeBy(700)
+        row.performTouchInput {
+            advanceEventTime(700)
+            moveBy(Offset(-65f, 40f))
+        }
+        composeRule.waitForIdle()
+        val moved = row.getUnclippedBoundsInRoot()
+        val followedLeft = initial.left - moved.left
+        val followedDown = moved.top - initial.top
+        assertTrue("row should follow the finger left, dx=$followedLeft", followedLeft > 2.dp)
+        assertTrue("row should follow the finger down, dy=$followedDown", followedDown > 2.dp)
+        assertTrue("left follow stays inside the finger travel, dx=$followedLeft", followedLeft < 40.dp)
+        assertTrue("down follow stays inside the finger travel, dy=$followedDown", followedDown < 28.dp)
+        assertEquals(ReaderMoreState.MAIN, lastState)
+        row.performTouchInput { up() }
+        composeRule.waitForIdle()
+        assertEquals(initial, row.getUnclippedBoundsInRoot())
+        assertEquals(ReaderMoreState.MAIN, lastState)
+        composeRule.onNodeWithText("教材目录").performClick()
+        composeRule.waitForIdle()
+        assertEquals(ReaderMoreState.CHILD_TOC, lastState)
     }
 
     @Test
@@ -244,6 +272,46 @@ class ReaderMoreHostUiTest {
         composeRule.waitForIdle()
         org.junit.Assert.assertEquals(ReaderMoreState.MAIN, lastState)
         assertAllLevel1Present()
+    }
+
+    private fun assertChildOrigin(label: String, reverseTasks: Boolean = false, includeEditBody: Boolean = true) {
+        launchContent(includeEditBody = includeEditBody, reverseTasks = reverseTasks, viewportBottomRoot = 2300f)
+        val rowTop = composeRule.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.top
+        composeRule.onNodeWithText(label).performClick()
+        composeRule.waitForIdle()
+        val header = composeRule.onAllNodesWithText(label).fetchSemanticsNodes().last()
+        org.junit.Assert.assertEquals("$label must expand at its clicked row", rowTop, header.boundsInRoot.top, 1f)
+    }
+
+    @Test fun `TOC originates from its own row with edit body preceding`() = assertChildOrigin("教材目录")
+    @Test fun `page mapping originates from its own row with edit body preceding`() = assertChildOrigin("设置教材页码")
+    @Test fun `thumbnails originate from their own row with edit body preceding`() = assertChildOrigin("页面缩略图")
+    @Test fun `export originates from its own row with edit body preceding`() = assertChildOrigin("导出章节")
+
+    @Test fun `TOC origin follows reordered entries`() = assertChildOrigin("教材目录", reverseTasks = true)
+    @Test fun `page mapping origin follows reordered entries`() = assertChildOrigin("设置教材页码", reverseTasks = true)
+    @Test fun `thumbnails origin follows reordered entries`() = assertChildOrigin("页面缩略图", reverseTasks = true)
+    @Test fun `export origin follows reordered entries`() = assertChildOrigin("导出章节", reverseTasks = true)
+    @Test fun `TOC origin remains correct without edit action`() = assertChildOrigin("教材目录", includeEditBody = false)
+
+    @Test
+    fun `opening reveals stationary full size menu text`() {
+        composeRule.mainClock.autoAdvance = false
+        launchContent()
+        composeRule.mainClock.advanceTimeBy(160)
+        val first = composeRule.onNodeWithText("阅读方式", useUnmergedTree = true).fetchSemanticsNode()
+        val position = first.positionInRoot
+        val size = first.size
+        composeRule.mainClock.advanceTimeBy(96)
+        val middle = composeRule.onNodeWithText("阅读方式", useUnmergedTree = true).fetchSemanticsNode()
+        org.junit.Assert.assertEquals(position.x, middle.positionInRoot.x, 1f)
+        org.junit.Assert.assertEquals(position.y, middle.positionInRoot.y, 1f)
+        org.junit.Assert.assertEquals(size, middle.size)
+        composeRule.mainClock.advanceTimeBy(1000)
+        val end = composeRule.onNodeWithText("阅读方式", useUnmergedTree = true).fetchSemanticsNode()
+        org.junit.Assert.assertEquals(position.x, end.positionInRoot.x, 1f)
+        org.junit.Assert.assertEquals(position.y, end.positionInRoot.y, 1f)
+        org.junit.Assert.assertEquals(size, end.size)
     }
 
     @Test

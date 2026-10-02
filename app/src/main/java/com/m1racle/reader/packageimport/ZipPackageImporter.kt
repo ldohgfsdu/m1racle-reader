@@ -2,6 +2,7 @@ package com.m1racle.reader.packageimport
 
 import java.io.File
 import java.io.InputStream
+import java.io.OutputStream
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
@@ -49,14 +50,18 @@ object ZipPackageImporter {
             var entry = zis.nextEntry
             while (entry != null) {
                 val name = entry.name.replace('\\', '/')
-                if (name.startsWith("__MACOSX/") || name.endsWith(".DS_Store")) {
-                    zis.closeEntry()
-                    entry = zis.nextEntry
-                    continue
-                }
                 entryCount++
                 if (entryCount > MAX_ENTRY_COUNT) {
                     throw SecurityException("ZIP entry count exceeds limit ($MAX_ENTRY_COUNT)")
+                }
+                val remaining = minOf(MAX_SINGLE_ENTRY_BYTES, MAX_TOTAL_UNCOMPRESSED_BYTES - totalBytes)
+                if (name.startsWith("__MACOSX/") || name.endsWith(".DS_Store")) {
+                    // closeEntry drains/inflates data too. Consume it through the
+                    // same limits as stored files before advancing the stream.
+                    totalBytes += copyEntry(zis, null, remaining)
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                    continue
                 }
                 val cleaned = name.trimStart('/')
                 if (cleaned.isEmpty() || cleaned.contains("..")) {
@@ -68,15 +73,10 @@ object ZipPackageImporter {
                 }
                 if (entry.isDirectory) {
                     outFile.mkdirs()
+                    totalBytes += copyEntry(zis, null, remaining)
                 } else {
                     outFile.parentFile?.mkdirs()
-                    val written = copyWithLimit(zis, outFile, MAX_SINGLE_ENTRY_BYTES)
-                    totalBytes += written
-                    if (totalBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
-                        throw SecurityException(
-                            "ZIP total uncompressed size exceeds limit ($MAX_TOTAL_UNCOMPRESSED_BYTES)",
-                        )
-                    }
+                    totalBytes += copyWithLimit(zis, outFile, remaining)
                 }
                 zis.closeEntry()
                 entry = zis.nextEntry
@@ -93,19 +93,20 @@ object ZipPackageImporter {
      * Copy stream to [outFile] aborting if more than [maxBytes] are written.
      * @return bytes written
      */
-    internal fun copyWithLimit(input: InputStream, outFile: File, maxBytes: Long): Long {
+    internal fun copyWithLimit(input: InputStream, outFile: File, maxBytes: Long): Long =
+        outFile.outputStream().use { copyEntry(input, it, maxBytes) }
+
+    private fun copyEntry(input: InputStream, output: OutputStream?, maxBytes: Long): Long {
         var written = 0L
         val buf = ByteArray(DEFAULT_BUFFER_SIZE)
-        outFile.outputStream().use { out ->
-            while (true) {
-                val n = input.read(buf)
-                if (n < 0) break
-                written += n
-                if (written > maxBytes) {
-                    throw SecurityException("ZIP entry exceeds size limit ($maxBytes)")
-                }
-                out.write(buf, 0, n)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            written += n
+            if (written > maxBytes) {
+                throw SecurityException("ZIP entry or total exceeds size limit ($maxBytes)")
             }
+            output?.write(buf, 0, n)
         }
         return written
     }

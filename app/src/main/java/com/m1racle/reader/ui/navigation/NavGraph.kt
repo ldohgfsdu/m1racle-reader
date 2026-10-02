@@ -5,6 +5,11 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.m1racle.reader.ui.material.GlassBackdropSource
+import com.m1racle.reader.ui.material.GlassBackdropHost
+import com.m1racle.reader.ui.material.LocalGlassBackdropHost
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -144,8 +149,13 @@ fun M1racleReaderNavGraph(
     val hubExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> androidx.compose.animation.ExitTransition? = {
         HubTabTransitions.exit(initialState.destination.route, targetState.destination.route)
     }
+    val hubBackdrop = rememberLayerBackdrop()
+    val hubMenuExport = rememberLayerBackdrop()
+    val hubBackdropHost = remember(hubBackdrop, hubMenuExport) { GlassBackdropHost(hubBackdrop, hubMenuExport) }
+    val showDock = HubDestination.isTopLevelRoute(currentEntry?.destination?.route)
     HubDockMotionProvider(selected = selectedHub) {
     Box(modifier = modifier.fillMaxSize()) {
+    GlassBackdropSource(hubBackdrop, Modifier.fillMaxSize(), enabled = showDock) {
     NavHost(
         navController = navController,
         startDestination = Routes.HOME,
@@ -476,10 +486,13 @@ fun M1racleReaderNavGraph(
             )
         }
     }
-    if (HubDestination.isTopLevelRoute(currentEntry?.destination?.route)) {
+    } // Captured navigation content; dock is a sibling.
+    if (showDock) {
+        CompositionLocalProvider(LocalGlassBackdropHost provides hubBackdropHost) {
         GlassDock(
             onSelect = { destination -> navController.navigateToHub(destination) },
         )
+    }
     }
     }
     } // HubDockMotionProvider

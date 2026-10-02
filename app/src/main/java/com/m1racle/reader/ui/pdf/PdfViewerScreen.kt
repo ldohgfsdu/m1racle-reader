@@ -301,6 +301,7 @@ fun PdfViewerScreen(
     // Reader Chrome is never pushed away and the PDF viewport never changes.
     // The manifest default (ADJUST_RESIZE) is restored when the reader leaves.
     val readerWindowContext = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     DisposableEffect(readerWindowContext) {
         val activity = readerWindowContext as? android.app.Activity
         val previousMode = activity?.window?.attributes?.softInputMode
@@ -745,12 +746,12 @@ fun PdfViewerScreen(
                                     is ReaderHighlightController.CommitResult.Success -> {
                                         highlightVersion++
                                         snackbarHostState.showSnackbar(
-                                            readerWindowContext.getString(R.string.reader_highlight_added),
+                                            resources.getString(R.string.reader_highlight_added),
                                         )
                                     }
                                     is ReaderHighlightController.CommitResult.Failure -> {
                                         snackbarHostState.showSnackbar(
-                                            readerWindowContext.getString(R.string.reader_highlight_failed),
+                                            resources.getString(R.string.reader_highlight_failed),
                                         )
                                     }
                                 }
@@ -761,7 +762,7 @@ fun PdfViewerScreen(
                                 highlightController.deleteHighlight(itemId)
                                 highlightVersion++
                                 snackbarHostState.showSnackbar(
-                                    readerWindowContext.getString(R.string.reader_annotation_deleted),
+                                    resources.getString(R.string.reader_annotation_deleted),
                                 )
                             }
                         },
@@ -820,6 +821,7 @@ fun PdfViewerScreen(
                 onMenuToggle = openPdfMenu,
                 onMenuDismiss = requestClosePdfMenu,
                 onSubmenuChange = switchPdfMenuSubmenu,
+                onOpenChild = { target -> moreState = ReaderMoreStateMachine.onOpenChild(moreState, target) },
                 childClosing = childClosing,
                 onChildCollapsed = onChildCollapsed,
                 onPreparingLayoutReady = { target ->
@@ -924,57 +926,36 @@ fun PdfViewerScreen(
                     },
                     // Four advanced entries — each opens nested child from its own row.
                     PdfChromeMenuItem(
+                        childState = ReaderMoreState.CHILD_PAGE_MAPPING,
                         icon = Icons.Outlined.Tag,
                         label = stringResource(R.string.pdf_set_print_page),
-                        closeOnClick = false,
-                        onClick = {
-                            moreState = ReaderMoreStateMachine.onOpenChild(
-                                moreState,
-                                ReaderMoreState.CHILD_PAGE_MAPPING,
-                            )
-                        },
                     ),
                     PdfChromeMenuItem(
+                        childState = ReaderMoreState.CHILD_TOC,
                         icon = Icons.AutoMirrored.Outlined.MenuBook,
                         label = stringResource(R.string.pdf_outline_open),
-                        closeOnClick = false,
-                        onClick = {
-                            moreState = ReaderMoreStateMachine.onOpenChild(
-                                moreState,
-                                ReaderMoreState.CHILD_TOC,
-                            )
-                        },
                     ),
                     PdfChromeMenuItem(
+                        childState = ReaderMoreState.CHILD_THUMBNAILS,
                         icon = Icons.Outlined.GridView,
                         label = stringResource(R.string.pdf_thumbs_open),
-                        closeOnClick = false,
                         onClick = {
                             thumbRangePick = false
                             viewModel.prepareThumbnails()
-                            moreState = ReaderMoreStateMachine.onOpenChild(
-                                moreState,
-                                ReaderMoreState.CHILD_THUMBNAILS,
-                            )
                         },
                     ),
                     PdfChromeMenuItem(
+                        childState = ReaderMoreState.CHILD_EXPORT,
                         icon = Icons.Outlined.IosShare,
                         label = stringResource(R.string.pdf_export_entry),
-                        closeOnClick = false,
                         onClick = {
                             viewModel.beginExportCurrent()
-                            moreState = ReaderMoreStateMachine.onOpenChild(
-                                moreState,
-                                ReaderMoreState.CHILD_EXPORT,
-                            )
                         },
                     ),
                     if (highlightController != null) {
                         PdfChromeMenuItem(
                             icon = Icons.Outlined.Notes,
                             label = stringResource(R.string.reader_annotations_open),
-                            closeOnClick = true,
                             onClick = { annotationManagementVisible = true },
                         )
                     } else {
@@ -994,7 +975,6 @@ fun PdfViewerScreen(
                                     R.string.reader_bookmark_add
                                 },
                             ),
-                            closeOnClick = true,
                             onClick = {
                                 val page = state.pageIndex
                                 scope.launch {
@@ -1002,13 +982,13 @@ fun PdfViewerScreen(
                                         ReaderBookmarkController.ToggleResult.Added -> {
                                             bookmarkedPages = bookmarkedPages + page
                                             snackbarHostState.showSnackbar(
-                                                readerWindowContext.getString(R.string.reader_bookmark_added),
+                                                resources.getString(R.string.reader_bookmark_added),
                                             )
                                         }
                                         ReaderBookmarkController.ToggleResult.Removed -> {
                                             bookmarkedPages = bookmarkedPages - page
                                             snackbarHostState.showSnackbar(
-                                                readerWindowContext.getString(R.string.reader_bookmark_removed),
+                                                resources.getString(R.string.reader_bookmark_removed),
                                             )
                                         }
                                     }
@@ -1219,7 +1199,7 @@ fun PdfViewerScreen(
                             highlightController?.deleteHighlight(highlight.id)
                             highlightVersion++
                             snackbarHostState.showSnackbar(
-                                readerWindowContext.getString(R.string.reader_annotation_deleted),
+                                resources.getString(R.string.reader_annotation_deleted),
                             )
                         }
                     },
@@ -1252,7 +1232,7 @@ fun PdfViewerScreen(
                             noteController?.delete(note.id)
                             noteVersion++
                             snackbarHostState.showSnackbar(
-                                readerWindowContext.getString(R.string.reader_note_deleted),
+                                resources.getString(R.string.reader_note_deleted),
                             )
                         }
                     },
@@ -1283,7 +1263,7 @@ fun PdfViewerScreen(
                             noteVersion++
                             closeEditor()
                             snackbarHostState.showSnackbar(
-                                readerWindowContext.getString(R.string.reader_note_saved),
+                                resources.getString(R.string.reader_note_saved),
                             )
                         }
                     },
@@ -1294,7 +1274,7 @@ fun PdfViewerScreen(
                                 noteVersion++
                                 closeEditor()
                                 snackbarHostState.showSnackbar(
-                                    readerWindowContext.getString(R.string.reader_note_deleted),
+                                    resources.getString(R.string.reader_note_deleted),
                                 )
                             }
                         }
@@ -1439,6 +1419,7 @@ private fun PdfChrome(
     onMenuToggle: () -> Unit = {},
     onMenuDismiss: () -> Unit = {},
     onSubmenuChange: (ReaderMoreState) -> Unit = {},
+    onOpenChild: (ReaderMoreState) -> Unit = {},
     /** Advanced reverse-morph phase: the state STAYS ADVANCED_* while the
      *  Foreground Advanced Card collapses back to its own source row; the
      *  host fires [onChildCollapsed] when the morph completes. */
@@ -1630,6 +1611,7 @@ private fun PdfChrome(
                     onCloseRequest = onMenuDismiss,
                     onChildCollapsed = onChildCollapsed,
                     onSectionToggle = onSubmenuChange,
+                    onOpenChild = onOpenChild,
                     submenuEntries = submenuEntries,
                     plainMenuItems = plainMenuItems,
                     readingModeOptions = readingModeOptions,
@@ -1707,14 +1689,21 @@ private fun FloatingChromeButton(
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     Box(
         modifier = Modifier
             .size(44.dp)
             .glassMaterial(
                 role = GlassMaterialRole.Control,
                 shape = CircleShape,
+                pressed = pressed,
             )
-            .clickable(onClick = onClick),
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

@@ -53,8 +53,6 @@ enum class GlassMaterialRole {
     Dialog,
     /** Markdown top chrome. Legacy 16dp + 0.62 plate; optical rewrite deferred. */
     ProgressiveChrome,
-    /** Settings comparison only (HyperChanger capsule reference). */
-    PreviewCapsule,
 }
 
 internal enum class GlassBackdropLayer {
@@ -141,7 +139,7 @@ private data class GlassRecipe(
 /**
  * The sole recipe registry for M1racleReader glass.
  *
- * Floating surfaces share the approved thick frost. Settings cards sample
+ * Floating surfaces share the production liquid recipe. Settings cards sample
  * above their parent menu. Optical families share physical direction; roles
  * retain their own density and geometry-independent endpoints.
  * Dialogs use the same family but render as a soft plate because they live in
@@ -160,9 +158,8 @@ object GlassMaterialEngine {
         visibilityThreshold = 0.001f,
     )
 
-    // Shared thick frost. Frozen baseline (R36.1 visual equivalence): 18dp.
-    // R36.2 Batch 1/2 working values (26dp blur, .45 light tint) were NOT
-    // approved and live only in previewPreset candidates, never here.
+    // Base for the non-floating gradient and cross-window plate.
+    // Floating consumers derive their material from liquidGlassStyle below.
     private val regularFrost = GlassRecipe(
         family = GlassOpticalFamily.CONTENT,
         lightTint = Color(0xFFF5F5F5),
@@ -183,43 +180,26 @@ object GlassMaterialEngine {
         lensEnabled = false,
     )
 
-    // Controls over document pages use the frozen light authority (.86) until
-    // a device/human-approved promotion changes it. Candidates (.45/.55/.65/
-    // .75 at 26dp) exist only as previewPreset harness entries.
-    private val readerOverlayFrost = regularFrost.copy(
-        lightSurfaceAlpha = 0.86f,
-        darkSurfaceAlpha = 0.80f,
-    )
-
-    // Large reader panels stay denser than compact overlay chrome.
-    private val panelFrost = regularFrost.copy(
-        family = GlassOpticalFamily.PANEL,
-        lightSurfaceAlpha = 0.90f,
-        darkSurfaceAlpha = 0.86f,
-        blur = 18.dp,
-    )
-
-    // Production Dock is the hub L3 plate (opaque paper/ink + 2.dp elevation).
-    private val appOverlayPlate = GlassRecipe(
-        family = GlassOpticalFamily.FALLBACK,
-        lightTint = Color(0xFFFFFFFF),
-        darkTint = Color(0xFF171717),
-        lightShadowAlpha = 0.10f,
-        darkShadowAlpha = 0.20f,
-        lightSurfaceAlpha = 0.98f,
-        darkSurfaceAlpha = 0.98f,
-        blur = 0.dp,
-        lensHeight = 0.dp,
-        lensAmount = 0.dp,
-        shadow = 2.dp,
-        highlightWidth = 0.dp,
-        lightHighlightAlpha = 0f,
-        darkHighlightAlpha = 0f,
-        depthEffect = false,
-        pressedScale = 1f,
-        vibrancy = false,
-        lensEnabled = false,
-    )
+    private fun liquidRecipe(role: GlassMaterialRole): GlassRecipe {
+        val light = liquidGlassStyle(role, false)
+        val dark = liquidGlassStyle(role, true)
+        return regularFrost.copy(
+            lightTint = light.tint.copy(alpha = 1f),
+            darkTint = dark.tint.copy(alpha = 1f),
+            lightSurfaceAlpha = light.tint.alpha,
+            darkSurfaceAlpha = dark.tint.alpha,
+            blur = light.blur,
+            lensHeight = light.lensHeight,
+            lensAmount = light.lensAmount,
+            lensEnabled = light.lensAmount > 0.dp,
+            shadow = light.shadow,
+            lightShadowAlpha = light.shadowAlpha,
+            darkShadowAlpha = dark.shadowAlpha,
+            highlightWidth = light.highlightWidth,
+            lightHighlightAlpha = light.highlightAlpha,
+            darkHighlightAlpha = dark.highlightAlpha,
+        )
+    }
 
     // Markdown top chrome legacy equivalent. R36.x OPTICAL_REFINEMENT_PENDING.
     private val progressiveLegacy = regularFrost.copy(
@@ -228,25 +208,6 @@ object GlassMaterialEngine {
         blur = 16.dp,
         shadow = 0.dp,
         vibrancy = false,
-    )
-
-    private val previewCapsule = GlassRecipe(
-        family = GlassOpticalFamily.INTERACTIVE,
-        lightTint = Color(0xFFF5F5F5),
-        darkTint = Color.Black,
-        lightSurfaceAlpha = 0.42f,
-        darkSurfaceAlpha = 0.30f,
-        blur = 4.32.dp,
-        lensHeight = 16.dp,
-        lensAmount = 32.dp,
-        shadow = 6.dp,
-        highlightWidth = 0.5.dp,
-        lightHighlightAlpha = 0.96f,
-        darkHighlightAlpha = 0.78f,
-        depthEffect = true,
-        vibrancy = true,
-        lensEnabled = true,
-        chromaticAberration = false,
     )
 
     private val fallbackPlate = GlassRecipe(
@@ -269,34 +230,26 @@ object GlassMaterialEngine {
     )
 
     private val recipes = mapOf(
-        GlassMaterialRole.Dock to appOverlayPlate,
-        GlassMaterialRole.Control to readerOverlayFrost.copy(
+        GlassMaterialRole.Dock to liquidRecipe(GlassMaterialRole.Dock).copy(pressedScale = 1f),
+        GlassMaterialRole.Control to liquidRecipe(GlassMaterialRole.Control).copy(
             family = GlassOpticalFamily.INTERACTIVE,
         ),
-        GlassMaterialRole.Capsule to readerOverlayFrost,
-        GlassMaterialRole.Menu to readerOverlayFrost.copy(
+        GlassMaterialRole.Capsule to liquidRecipe(GlassMaterialRole.Capsule),
+        GlassMaterialRole.Menu to liquidRecipe(GlassMaterialRole.Menu).copy(
             exportsForSettingsCard = true,
         ),
-        GlassMaterialRole.ExpandedMenu to panelFrost.copy(
+        GlassMaterialRole.ExpandedMenu to liquidRecipe(GlassMaterialRole.ExpandedMenu).copy(
             family = GlassOpticalFamily.CONTENT,
             exportsForSettingsCard = true,
         ),
-        GlassMaterialRole.SettingsCard to panelFrost.copy(
+        GlassMaterialRole.SettingsCard to liquidRecipe(GlassMaterialRole.SettingsCard).copy(
             backdropLayer = GlassBackdropLayer.RootAndMenu,
         ),
         GlassMaterialRole.Dialog to fallbackPlate.copy(family = GlassOpticalFamily.PANEL),
         GlassMaterialRole.ProgressiveChrome to progressiveLegacy,
-        GlassMaterialRole.PreviewCapsule to previewCapsule,
     )
 
     fun rolesWithConsumers(): Set<GlassMaterialRole> = recipes.keys
-
-    fun previewRole(preset: GlassPreviewPreset): GlassMaterialRole = when (preset) {
-        GlassPreviewPreset.CurrentThick -> GlassMaterialRole.Control
-        GlassPreviewPreset.ProgressiveLegacy -> GlassMaterialRole.ProgressiveChrome
-        GlassPreviewPreset.CapsuleReference -> GlassMaterialRole.PreviewCapsule
-        else -> GlassMaterialRole.Capsule
-    }
 
     fun resolve(
         role: GlassMaterialRole,
@@ -319,45 +272,8 @@ object GlassMaterialEngine {
         environment: GlassEnvironment,
         capability: GlassCapability = GlassCapability.FULL_OPTICAL,
         interaction: GlassInteractionState = GlassInteractionState.IDLE,
-        previewPreset: GlassPreviewPreset? = null,
     ): GlassMaterialSpec {
-        val baseRecipe = checkNotNull(recipes[role]) { "Missing glass recipe for $role" }
-        // Explicit settings-only candidates; production callers leave this null.
-        val tint = when (previewPreset) {
-            GlassPreviewPreset.Tint86 -> .86f
-            GlassPreviewPreset.Tint80 -> .80f
-            GlassPreviewPreset.Tint75 -> .75f
-            GlassPreviewPreset.Tint70 -> .70f
-            GlassPreviewPreset.Tint65 -> .65f
-            GlassPreviewPreset.Tint60 -> .60f
-            GlassPreviewPreset.Tint55 -> .55f
-            GlassPreviewPreset.Tint50 -> .50f
-            GlassPreviewPreset.Tint45, GlassPreviewPreset.Blur32, GlassPreviewPreset.Blur40 -> .45f
-            GlassPreviewPreset.Tint35 -> .35f
-            else -> null
-        }
-        val roleRecipe = if (tint == null) {
-            // R36.2 dark families: uniform delta on dark alpha only. Light alpha,
-            // blur and every other channel stay at the role's frozen values, so the
-            // +.06 panel-over-control delta survives the experiment.
-            val darkDelta = when (previewPreset) {
-                GlassPreviewPreset.DarkD1 -> -0.06f
-                GlassPreviewPreset.DarkD2 -> -0.12f
-                GlassPreviewPreset.DarkD3 -> 0.06f
-                else -> null
-            }
-            if (darkDelta == null) baseRecipe else baseRecipe.copy(
-                darkSurfaceAlpha = (baseRecipe.darkSurfaceAlpha + darkDelta).coerceIn(0f, 1f),
-            )
-        } else baseRecipe.copy(
-            blur = when (previewPreset) {
-                GlassPreviewPreset.Blur32 -> 32.dp
-                GlassPreviewPreset.Blur40 -> 40.dp
-                else -> 26.dp
-            },
-            lightSurfaceAlpha = tint,
-            darkSurfaceAlpha = tint,
-        )
+        val roleRecipe = checkNotNull(recipes[role]) { "Missing glass recipe for $role" }
         val recipe = if (capability == GlassCapability.SOLID_FALLBACK &&
             roleRecipe.family != GlassOpticalFamily.FALLBACK
         ) {
@@ -495,7 +411,6 @@ fun Modifier.glassMaterial(
     sourceBackdrop: Backdrop? = null,
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
     surfaceExport: LayerBackdrop? = null,
-    previewPreset: GlassPreviewPreset? = null,
 ): Modifier {
     val environment = LocalGlassEnvironment.current
     val host = LocalGlassBackdropHost.current
@@ -512,22 +427,20 @@ fun Modifier.glassMaterial(
     }
     // Stable endpoint specs prevent unrelated parent recompositions from
     // replacing the renderer's effect lambdas and invalidating its draw cache.
-    val idleSpec = remember(role, environment, capability, interactionState, previewPreset) {
+    val idleSpec = remember(role, environment, capability, interactionState) {
         GlassMaterialEngine.resolve(
             role = role,
             environment = environment,
             capability = capability,
             interaction = interactionState,
-            previewPreset = previewPreset,
         )
     }
-    val pressedSpec = remember(role, environment, capability, previewPreset) {
+    val pressedSpec = remember(role, environment, capability) {
         GlassMaterialEngine.resolve(
             role = role,
             environment = environment,
             capability = capability,
             interaction = GlassInteractionState.PRESSED,
-            previewPreset = previewPreset,
         )
     }
     val pressProgress = animateFloatAsState(
@@ -727,7 +640,7 @@ private fun drawGlassMaterial(
             },
             highlight = if (idleSpec.highlightWidth > 0.dp) ({
                 val progress = pressProgress.value.coerceIn(0f, 1f)
-                Highlight.Plain.copy(
+                Highlight.Default.copy(
                     width = idleSpec.highlightWidth,
                     alpha = idleSpec.highlightColor.alpha +
                         (pressedSpec.highlightColor.alpha - idleSpec.highlightColor.alpha) * progress,

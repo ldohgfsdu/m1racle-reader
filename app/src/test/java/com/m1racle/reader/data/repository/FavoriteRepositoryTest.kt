@@ -76,6 +76,7 @@ class FavoriteRepositoryTest {
             highlightDao = NoHighlights(),
             noteDao = NoNotes(),
             searchRepository = com.m1racle.reader.testing.testSearchRepository(),
+            transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
         ) to dao
 
     @Test

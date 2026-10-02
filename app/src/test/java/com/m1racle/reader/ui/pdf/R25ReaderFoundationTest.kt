@@ -17,13 +17,13 @@ class R25ReaderFoundationTest {
     @Test
     fun `reader roles form one translucent material hierarchy`() {
         val control = GlassMaterialEngine.resolve(GlassMaterialRole.Control, dark = false)
-        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.ExpandedMenu, dark = false)
+        val menu = GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark = false)
         val child = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
-        assertTrue(menu.surfaceColor.alpha > control.surfaceColor.alpha)
+        assertEquals(control.surfaceColor.alpha, menu.surfaceColor.alpha, 0f)
         assertEquals(menu.surfaceColor.alpha, child.surfaceColor.alpha, 0f)
         assertEquals(control.blur, menu.blur)
         assertEquals(menu.shadow, child.shadow)
-        assertEquals(0f, menu.highlightWidth.value, 0.001f)
+        assertEquals(0.75f, menu.highlightWidth.value, 0.001f)
     }
 
     @Test
@@ -43,13 +43,13 @@ class R25ReaderFoundationTest {
     }
 
     @Test
-    fun `four advanced states map to distinct source rows`() {
-        assertEquals(2, childRowIndex(ReaderMoreState.CHILD_PAGE_MAPPING))
-        assertEquals(3, childRowIndex(ReaderMoreState.CHILD_TOC))
-        assertEquals(4, childRowIndex(ReaderMoreState.CHILD_THUMBNAILS))
-        assertEquals(5, childRowIndex(ReaderMoreState.CHILD_EXPORT))
-        val rows = listOf(2, 3, 4, 5)
-        assertEquals(4, rows.toSet().size)
+    fun `nested rows report identity rather than a fixed ordinal`() {
+        val host = hostSource()
+        assertTrue(host.contains("onRowBoundsRoot(child, coords.boundsInRoot())"))
+        assertTrue(host.contains("canonicalMainBounds[target] ?: rowRectsRoot[target]"))
+        assertTrue(host.contains("state == child || state.preparingTarget() == child"))
+        assertFalse(host.contains("childRowIndex"))
+        assertFalse(host.contains("val rowIndex = 2 + i"))
     }
 
     @Test

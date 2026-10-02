@@ -3,40 +3,29 @@
 #
 # The override is configured repo-relative ("android.aapt2FromMavenOverride=tools/aapt2"
 # in gradle.properties) so a fresh clone builds on any host without local edits.
-# This script resolves the real aapt2 from, in priority order:
-#   1. $AAPT2_REAL environment variable
-#   2. $ANDROID_HOME/build-tools/<version>/aapt2
-#   3. sdk.dir from local.properties (repo root), any build-tools version
-# Fails with a clear message instead of a cryptic exec error.
-
+# Resolve the project's declared Build Tools version, never the first installed SDK.
+# AAPT2 34 rejects AGP 9 optimize flags while AGP can still report success.
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)"
 
 resolve_aapt2() {
-    if [ -n "$AAPT2_REAL" ] && [ -x "$AAPT2_REAL" ]; then
-        echo "$AAPT2_REAL"
+    if [ -n "$AAPT2_REAL" ]; then
+        [ -x "$AAPT2_REAL" ] && echo "$AAPT2_REAL"
         return
     fi
-    if [ -n "$ANDROID_HOME" ]; then
-        for bt in "$ANDROID_HOME"/build-tools/*/aapt2; do
-            [ -x "$bt" ] && echo "$bt" && return
-        done
+    build_tools_version="$(sed -n 's/^[[:space:]]*buildToolsVersion = "\([^"]*\)".*/\1/p' "$PROJECT_DIR/app/build.gradle.kts")"
+    [ -n "$build_tools_version" ] || return
+    sdk_dir="$ANDROID_HOME"
+    if [ -z "$sdk_dir" ] && [ -f "$PROJECT_DIR/local.properties" ]; then
+        sdk_dir="$(sed -n 's/^[[:space:]]*sdk\.dir[[:space:]]*=[[:space:]]*//p' "$PROJECT_DIR/local.properties" | head -n1)"
     fi
-    for base in "$SCRIPT_DIR" "$SCRIPT_DIR/.."; do
-        if [ -f "$base/local.properties" ]; then
-            sdk_dir="$(sed -n 's/^[[:space:]]*sdk\.dir[[:space:]]*=[[:space:]]*//p' "$base/local.properties" | head -n1 | tr -d '[:space:]')"
-            if [ -n "$sdk_dir" ]; then
-                for bt in "$sdk_dir"/build-tools/*/aapt2; do
-                    [ -x "$bt" ] && echo "$bt" && return
-                done
-            fi
-        fi
-    done
-    echo ""
+    candidate="$sdk_dir/build-tools/$build_tools_version/aapt2"
+    [ -x "$candidate" ] && echo "$candidate"
 }
 
 AAPT2_BIN="$(resolve_aapt2)"
 if [ -z "$AAPT2_BIN" ]; then
-    echo "ERROR: cannot locate SDK aapt2." >&2
+    echo "ERROR: cannot locate aapt2 for the project Build Tools version." >&2
     echo "  Set AAPT2_REAL or ANDROID_HOME, or add sdk.dir to local.properties." >&2
     exit 1
 fi

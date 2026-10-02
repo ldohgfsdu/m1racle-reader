@@ -93,7 +93,7 @@ class AnnotationOverlayContractTest {
     fun `overlay source filters by kind and location and restores anchors`() = runTest {
         val highlights = FakeHighlightDao()
         val notes = FakeNoteDao()
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlights, notes, com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlights, notes, com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         // 页 9：一个高亮；页 10 与 MD 块：不应出现在页 9 查询里。
         repo.addHighlight(
             "pdf-1",
@@ -132,7 +132,7 @@ class AnnotationOverlayContractTest {
 
     @Test
     fun `note overlay items expose null pdf rect safely`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         repo.addNote("d", DocumentAnchor.PdfPage(page = 3), content = "n", createdAt = 1L)
         val item = RepositoryAnnotationOverlaySource(repo)
             .itemsFor("d", "PAGE_INDEX", 3)

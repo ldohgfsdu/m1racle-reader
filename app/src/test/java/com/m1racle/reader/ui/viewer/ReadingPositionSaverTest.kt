@@ -125,4 +125,51 @@ class ReadingPositionSaverTest {
         dispatcher.scheduler.advanceUntilIdle()
         assertTrue(h.writes.isEmpty())
     }
+
+    @Test
+    fun failedSave_isRetriedOnFinalFlush() = runTest {
+        var attempts = 0
+        val saved = mutableListOf<Int>()
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val saver = ReadingPositionSaver(scope) { index, _, _ ->
+            if (++attempts == 1) throw java.io.IOException("disk temporarily unavailable")
+            saved += index
+        }
+        saver.save(7, 0, 0.7f)
+        advanceUntilIdle()
+        saver.flushFinal(scope)
+        advanceUntilIdle()
+        assertEquals(listOf(7), saved)
+        assertEquals(2, attempts)
+    }
+
+    @Test
+    fun simultaneousLifecycleFlushes_commitOnlyOnce() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val h = Harness(dispatcher)
+        h.saver.save(3, 7, 0.4f)
+        h.scope.cancel()
+        val flushScope = CoroutineScope(dispatcher)
+        repeat(3) { h.saver.flushFinal(flushScope) }
+        advanceUntilIdle()
+        assertEquals(listOf(Triple(3, 7, 0.4f)), h.writes)
+    }
+
+    @Test
+    fun backgroundFlush_cannotOverwritePositionAfterResume() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val writes = mutableListOf<Int>()
+        val saver = ReadingPositionSaver(CoroutineScope(dispatcher)) { index, _, _ ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                delay(if (index == 1) 500 else 10)
+                writes += index
+            }
+        }
+        saver.save(1, 0, 0.1f)
+        testScheduler.advanceTimeBy(1)
+        saver.flushFinal(CoroutineScope(dispatcher))
+        saver.save(2, 0, 0.2f)
+        advanceUntilIdle()
+        assertEquals(listOf(1, 2), writes)
+    }
 }

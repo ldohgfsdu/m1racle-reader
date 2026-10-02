@@ -14,6 +14,8 @@ object EpubPackageImporter {
     const val MAX_TOTAL_BYTES = 400L * 1024 * 1024
     const val MAX_ENTRY_BYTES = 32L * 1024 * 1024
     const val MAX_XML_BYTES = 8L * 1024 * 1024
+    private const val MAX_XML_DEPTH = 128
+    private const val MAX_XML_NODES = 200_000
     const val EXTRACTOR_VERSION = 1
 
     private const val CONTAINER_PATH = "META-INF/container.xml"
@@ -83,14 +85,14 @@ object EpubPackageImporter {
         }
         val containerFile = File(rootCanon, CONTAINER_PATH)
         if (!containerFile.isFile) throw EpubException.Corrupt("缺少 container")
-        val opfRel = findOpfPath(parseXml(containerFile.readBytes(), "container")) ?:
+        val opfRel = findOpfPath(parseXml(readXmlBytes(containerFile), "container")) ?:
             throw EpubException.Corrupt("缺少 OPF")
         val opfFile = File(rootCanon, opfRel)
         if (!opfFile.canonicalFile.path.startsWith(rootCanon.path + File.separator)) {
             throw EpubException.UnsafeEntry("非法 OPF 路径")
         }
         if (!opfFile.isFile) throw EpubException.Corrupt("缺少 OPF 文件")
-        val opfBytes = opfFile.readBytes()
+        val opfBytes = readXmlBytes(opfFile)
         val metadata = parseOpfMetadata(opfBytes, opfRel)
         if (metadata.hasEncryption) throw EpubException.Protected("本书受保护，无法打开")
         if (metadata.isFixedLayout) throw EpubException.FixedLayout("暂不支持固定版式")
@@ -101,7 +103,7 @@ object EpubPackageImporter {
             EpubSpineItem(idref, href, linear, index)
         }
         if (spine.isEmpty()) throw EpubException.Corrupt("空 spine")
-        val toc = parseToc(opfDir, manifest, spine, navHref)
+        val toc = parseToc(rootCanon, opfDir, manifest, spine, navHref)
         val chapters = spine.mapIndexed { index, item ->
             val file = File(opfDir, item.href)
             if (!file.canonicalFile.path.startsWith(rootCanon.path + File.separator) || !file.isFile) {
@@ -110,7 +112,8 @@ object EpubPackageImporter {
             // A single unparseable chapter degrades to a placeholder block so the
             // book still opens and spine indices (TOC/progress) stay aligned.
             val (blocks, anchors) = try {
-                EpubXhtmlParser.parse(file.readBytes())
+                val parsed = EpubXhtmlParser.parse(readXmlBytes(file))
+                resolveChapterImages(parsed.first, file.parentFile ?: opfDir, rootCanon) to parsed.second
             } catch (_: Exception) {
                 listOf(EpubBlock.Unsupported("本章排版异常，已跳过")) to emptyMap<String, Int>()
             }
@@ -152,6 +155,45 @@ object EpubPackageImporter {
         zip.getInputStream(entry).use { input ->
             return readBounded(input, cap)
         }
+    }
+
+    internal fun resolveChapterImages(
+        blocks: List<EpubBlock>,
+        baseDir: File,
+        root: File,
+    ): List<EpubBlock> = blocks.map { block ->
+        when (block) {
+            is EpubBlock.Image -> block.copy(
+                resolvedPath = resolvePackagedFile(baseDir, block.src, root)?.canonicalPath,
+            )
+            is EpubBlock.Quote -> block.copy(blocks = resolveChapterImages(block.blocks, baseDir, root))
+            else -> block
+        }
+    }
+
+    /**
+     * Resolve a chapter-relative resource inside the extracted tree.
+     * Remote URLs and paths that escape [root] are rejected.
+     */
+    internal fun resolvePackagedFile(baseDir: File, href: String?, root: File): File? {
+        if (href.isNullOrBlank()) return null
+        val raw = decodeHref(href.substringBefore('#')).trim()
+        if (raw.isEmpty()) return null
+        return packagedPath(baseDir, raw, root)?.takeIf { it.isFile }
+    }
+
+    private fun packagedPath(baseDir: File, decodedPath: String, root: File): File? {
+        if (decodedPath.startsWith("/") || decodedPath.startsWith("\\") ||
+            Regex("^[A-Za-z][A-Za-z0-9+.-]*:").containsMatchIn(decodedPath)) return null
+        val raw = decodedPath
+        val rootCanon = root.canonicalFile
+        val target = File(baseDir, raw).canonicalFile
+        if (target.path != rootCanon.path &&
+            !target.path.startsWith(rootCanon.path + File.separator)
+        ) {
+            return null
+        }
+        return target
     }
 
     /** Percent-decode a package href (UTF-8). Unlike form decoding, '+' is kept literal. */
@@ -197,12 +239,16 @@ object EpubPackageImporter {
         return out.toByteArray()
     }
 
+    private fun readXmlBytes(file: File): ByteArray = file.inputStream().use { readBounded(it, MAX_XML_BYTES) }
+
     internal fun parseXml(bytes: ByteArray, what: String): org.w3c.dom.Document {
+        if (bytes.size > MAX_XML_BYTES) throw EpubException.TooLarge("XML 过大")
         try {
             val factory = DocumentBuilderFactory.newInstance()
             factory.isNamespaceAware = true
             factory.isValidating = false
-            factory.isXIncludeAware = false
+            // XInclude defaults to false. Android's factory does not support
+            // setXIncludeAware, even when disabling it; leave the default intact.
             factory.isExpandEntityReferences = false
             // Real-world books commonly ship DOCTYPE (OPF/NCX/chapters), so it
             // stays allowed; XXE is blocked by disabling external entities and
@@ -232,7 +278,30 @@ object EpubPackageImporter {
                 // Attribute unsupported on this runtime; entity limits still
                 // enforced by MAX_XML_BYTES on the raw document bytes.
             }
-            return factory.newDocumentBuilder().parse(bytes.inputStream())
+            val document = factory.newDocumentBuilder().parse(bytes.inputStream())
+            // Validate iteratively before any recursive DOM lookup/textContent or
+            // XHTML/TOC traversal. A small XML file can still have extreme depth.
+            var node: Node = document
+            var depth = 0
+            var count = 0
+            while (true) {
+                if (++count > MAX_XML_NODES || depth > MAX_XML_DEPTH) {
+                    throw EpubException.TooLarge("$what 结构过于复杂")
+                }
+                val child = node.firstChild
+                if (child != null) {
+                    node = child
+                    depth++
+                } else {
+                    while (node !== document && node.nextSibling == null) {
+                        node = node.parentNode
+                        depth--
+                    }
+                    if (node === document) break
+                    node = node.nextSibling
+                }
+            }
+            return document
         } catch (e: EpubException) {
             throw e
         } catch (e: Exception) {
@@ -303,17 +372,29 @@ object EpubPackageImporter {
     }
 
     private fun parseToc(
+        root: File,
         opfDir: File,
         manifest: Map<String, String>,
         spine: List<EpubSpineItem>,
         navHref: String?,
     ): List<EpubTocNode> {
-        val hrefToSpine = spine.mapIndexed { index, s -> s.href to index }.toMap()
+        val hrefToSpine = spine.mapIndexed { index, s ->
+            packagedPath(opfDir, s.href, root)?.path to index
+        }.toMap()
+        fun spineFor(base: File): (String) -> Int? = { href ->
+            packagedPath(base, href.substringBefore('#'), root)?.path?.let(hrefToSpine::get)
+        }
+        fun tocFile(href: String): File {
+            val file = packagedPath(opfDir, href, root)
+                ?: throw EpubException.UnsafeEntry("非法目录路径")
+            if (!file.isFile) throw EpubException.Corrupt("缺目录文件")
+            return file
+        }
         // EPUB3 nav via OPF properties="nav".
         if (navHref != null) {
-            val navFile = File(opfDir, navHref)
+            val navFile = tocFile(decodeHref(navHref))
             if (navFile.isFile) {
-                val nodes = parseNavToc(navFile, hrefToSpine)
+                val nodes = parseNavToc(navFile, spineFor(checkNotNull(navFile.parentFile)))
                 if (nodes.isNotEmpty()) return nodes
             }
         }
@@ -322,8 +403,8 @@ object EpubPackageImporter {
             href.endsWith(".ncx", true)
         }?.value
         if (ncxHref != null) {
-            val ncxFile = File(opfDir, ncxHref)
-            if (ncxFile.isFile) return parseNcxToc(ncxFile.readBytes(), hrefToSpine)
+            val ncxFile = tocFile(ncxHref)
+            if (ncxFile.isFile) return parseNcxToc(readXmlBytes(ncxFile), spineFor(checkNotNull(ncxFile.parentFile)))
         }
         // Last resort: flat spine list.
         return spine.mapIndexed { index, s ->
@@ -331,15 +412,15 @@ object EpubPackageImporter {
         }
     }
 
-    private fun parseNavToc(navFile: File, hrefToSpine: Map<String, Int>): List<EpubTocNode> {
-        val doc = parseXml(navFile.readBytes(), "nav")
+    private fun parseNavToc(navFile: File, spineFor: (String) -> Int?): List<EpubTocNode> {
+        val doc = parseXml(readXmlBytes(navFile), "nav")
         val navs = doc.getElementsByTagNameNS("*", "nav")
         for (i in 0 until navs.length) {
             val nav = navs.item(i) as? Element ?: continue
             if (!navHasTocType(nav)) continue
             val lists = nav.getElementsByTagNameNS("*", "ol")
             if (lists.length == 0) continue
-            return parseOl(lists.item(0) as Element, hrefToSpine)
+            return parseOl(lists.item(0) as Element, spineFor)
         }
         return emptyList()
     }
@@ -351,7 +432,7 @@ object EpubPackageImporter {
         return nav.getAttribute("epub:type").isEmpty()
     }
 
-    private fun parseOl(ol: Element, hrefToSpine: Map<String, Int>): List<EpubTocNode> {
+    private fun parseOl(ol: Element, spineFor: (String) -> Int?): List<EpubTocNode> {
         val out = mutableListOf<EpubTocNode>()
         val children = ol.childNodes
         for (i in 0 until children.length) {
@@ -374,22 +455,22 @@ object EpubPackageImporter {
                 EpubTocNode(
                     title = link.textContent?.trim()?.ifEmpty { href } ?: href,
                     href = href,
-                    spineIndex = hrefToSpine[href.substringBefore("#")],
-                    children = if (nested != null) parseOl(nested, hrefToSpine) else emptyList(),
+                    spineIndex = spineFor(href),
+                    children = if (nested != null) parseOl(nested, spineFor) else emptyList(),
                 ),
             )
         }
         return out
     }
 
-    private fun parseNcxToc(ncxBytes: ByteArray, hrefToSpine: Map<String, Int>): List<EpubTocNode> {
+    private fun parseNcxToc(ncxBytes: ByteArray, spineFor: (String) -> Int?): List<EpubTocNode> {
         val doc = parseXml(ncxBytes, "NCX")
         val maps = doc.getElementsByTagNameNS("*", "navMap")
         if (maps.length == 0) return emptyList()
-        return parseNavPoints(maps.item(0) as Element, hrefToSpine)
+        return parseNavPoints(maps.item(0) as Element, spineFor)
     }
 
-    private fun parseNavPoints(parent: Element, hrefToSpine: Map<String, Int>): List<EpubTocNode> {
+    private fun parseNavPoints(parent: Element, spineFor: (String) -> Int?): List<EpubTocNode> {
         val out = mutableListOf<EpubTocNode>()
         val kids = parent.childNodes
         for (i in 0 until kids.length) {
@@ -397,7 +478,7 @@ object EpubPackageImporter {
             if (!np.tagName.endsWith("navPoint")) continue
             var title: String? = null
             var src: String? = null
-            val sub = mutableListOf<EpubTocNode>()
+            val sub = parseNavPoints(np, spineFor)
             val npKids = np.childNodes
             for (j in 0 until npKids.length) {
                 val kid = npKids.item(j) as? Element ?: continue
@@ -407,7 +488,6 @@ object EpubPackageImporter {
                         if (texts.length > 0) title = texts.item(0).textContent?.trim()
                     }
                     kid.tagName.endsWith("content") -> src = decodeHref(kid.getAttribute("src"))
-                    kid.tagName.endsWith("navPoint") -> sub.addAll(parseNavPoints(kid, hrefToSpine))
                 }
             }
             // Nested navPoints may also appear grouped after content; collect recursively.
@@ -416,7 +496,7 @@ object EpubPackageImporter {
                 EpubTocNode(
                     title = title?.ifEmpty { src } ?: src,
                     href = src,
-                    spineIndex = hrefToSpine[src.substringBefore("#")],
+                    spineIndex = spineFor(src),
                     children = sub,
                 ),
             )

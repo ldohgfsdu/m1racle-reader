@@ -56,8 +56,18 @@ fun PdfBodyEditorScreen(viewModel: PdfBodyEditorViewModel, onBack: () -> Unit, o
     }
     val overwrite = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) result.data?.data?.let { uri ->
-            val flags = result.data!!.flags and (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            runCatching { context.contentResolver.takePersistableUriPermission(uri,flags) }
+            val grantedFlags = result.data!!.flags
+            val readGranted = grantedFlags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+            val writeGranted = grantedFlags and android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0
+            val persistFlags = when {
+                readGranted && writeGranted -> android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                readGranted -> android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                writeGranted -> android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                else -> 0
+            }
+            if (persistFlags != 0) {
+                runCatching { context.contentResolver.takePersistableUriPermission(uri, persistFlags) }
+            }
             pendingOverwrite=uri.toString()
         }
     }

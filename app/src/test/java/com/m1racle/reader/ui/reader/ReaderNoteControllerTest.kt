@@ -115,7 +115,7 @@ class ReaderNoteControllerTest {
     private class Harness {
         val highlightDao = FakeHighlightDao()
         val noteDao = FakeNoteDao()
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, noteDao, com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, noteDao, com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
 
         /** 种子高亮：模拟 R26.1 已创建的高亮（含 anchor 列）。 */
         suspend fun seedHighlight(
@@ -142,7 +142,7 @@ class ReaderNoteControllerTest {
 
         /** 模拟阅读器重开：重建 Repository/Controller，但复用持久化 DAO。 */
         fun reopenedNoteController(documentId: String) = ReaderNoteController(
-            ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, noteDao, com.m1racle.reader.testing.testSearchRepository()),
+            ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, noteDao, com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner()),
             documentId,
         )
     }
@@ -255,7 +255,7 @@ class ReaderNoteControllerTest {
         assertNotEquals(null, restored.anchor)
         assertEquals(ReaderNoteController.anchorKey(anchor), ReaderNoteController.anchorKeyOf(restored))
         val restoredHighlights = ReaderHighlightController(
-            ReadingRepository(NoBookmarks(), NoFavorites(), h.highlightDao, h.noteDao, com.m1racle.reader.testing.testSearchRepository()),
+            ReadingRepository(NoBookmarks(), NoFavorites(), h.highlightDao, h.noteDao, com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner()),
             "pdf-1",
         ).itemsForPage(6)
         assertEquals(1, restoredHighlights.size)

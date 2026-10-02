@@ -8,9 +8,8 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 
 /**
- * Host policy for package extract trees: after document delete, `packages/{id}`
- * must be wipeable. Mirrors [DocumentRepository.deleteById] filesystem cleanup
- * without Room/Android.
+ * Exercises the production cleanup used by [DocumentRepository.deleteById]
+ * for both Markdown and EPUB extract trees, without Room/Android.
  */
 class PackageDirCleanupPolicyTest {
 
@@ -29,11 +28,8 @@ class PackageDirCleanupPolicyTest {
         assertTrue(packageDir.isDirectory)
         assertTrue(File(packageDir, "index.md").isFile)
 
-        // Same path construction as DocumentRepository.deleteById
         val target = File(filesDir, "packages/$id")
-        if (target.exists()) {
-            target.deleteRecursively()
-        }
+        deleteDocumentExtracts(filesDir, id)
         assertFalse(target.exists())
         assertFalse(File(packageDir, "index.md").exists())
     }
@@ -42,7 +38,20 @@ class PackageDirCleanupPolicyTest {
     fun missingPackageDir_isNoop() {
         val filesDir = tmp.newFolder("files2")
         val target = File(filesDir, "packages/never-created")
-        if (target.exists()) target.deleteRecursively()
+        deleteDocumentExtracts(filesDir, "never-created")
         assertFalse(target.exists())
+    }
+
+    @Test
+    fun deletedEpubResourcesAreRemovedWithoutTouchingOtherBooksOrSource() {
+        val filesDir = tmp.newFolder("epub-files")
+        val extract = File(filesDir, "epubs/book").apply { mkdirs() }
+        File(extract, "chapter.xhtml").writeText("chapter")
+        val other = File(filesDir, "epubs/other").apply { mkdirs() }
+        val source = tmp.newFile("user.epub")
+        deleteDocumentExtracts(filesDir, "book")
+        assertFalse(extract.exists())
+        assertTrue(other.exists())
+        assertTrue(source.exists())
     }
 }

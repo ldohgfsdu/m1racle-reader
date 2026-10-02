@@ -6,8 +6,56 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import javax.xml.parsers.DocumentBuilderFactory
 
 class EpubPackageImporterTest {
+    companion object {
+        private val platformFactoryName = DocumentBuilderFactory.newInstance().javaClass.name
+    }
+
+    @Test
+    fun `epub opens when parser does not implement XInclude configuration`() {
+        val property = "javax.xml.parsers.DocumentBuilderFactory"
+        val previous = System.getProperty(property)
+        System.setProperty(property, NoXIncludeFactory::class.java.name)
+        try {
+            for (name in listOf("sample-epub2.epub", "sample-epub3.epub")) {
+                val dir = tmpDir()
+                try {
+                    val book = EpubPackageImporter.open(fixture(name), dir)
+                    assertEquals(2, book.chapters.size)
+                    assertTrue(book.toc.isNotEmpty())
+                    assertTrue(book.chapters.first().blocks.any { it is EpubBlock.Heading })
+                } finally {
+                    dir.deleteRecursively()
+                }
+            }
+        } finally {
+            if (previous == null) System.clearProperty(property) else System.setProperty(property, previous)
+        }
+    }
+
+    /** Models Android's unsupported setter, including attempts to set false. */
+    class NoXIncludeFactory : DocumentBuilderFactory() {
+        private val delegate = DocumentBuilderFactory.newInstance(platformFactoryName, javaClass.classLoader)
+
+        override fun setXIncludeAware(state: Boolean) {
+            throw UnsupportedOperationException("This parser does not support specification \"Unknown\" version \"0.0\"")
+        }
+
+        override fun newDocumentBuilder(): javax.xml.parsers.DocumentBuilder {
+            delegate.isNamespaceAware = isNamespaceAware
+            delegate.isValidating = isValidating
+            delegate.isExpandEntityReferences = isExpandEntityReferences
+            return delegate.newDocumentBuilder()
+        }
+
+        override fun setAttribute(name: String, value: Any) = delegate.setAttribute(name, value)
+        override fun getAttribute(name: String): Any = delegate.getAttribute(name)
+        override fun setFeature(name: String, value: Boolean) = delegate.setFeature(name, value)
+        override fun getFeature(name: String): Boolean = delegate.getFeature(name)
+    }
+
     private fun fixture(name: String): File {
         val direct = File("src/test/resources/fixtures/epub", name)
         if (direct.isFile) return direct
@@ -49,8 +97,9 @@ class EpubPackageImporterTest {
     }
 
     @Test
-    fun `epub3 prefers nav toc and degrades image to placeholder`() {
-        val book = EpubPackageImporter.open(fixture("sample-epub3.epub"), tmpDir())
+    fun `epub3 prefers nav toc and resolves local image`() {
+        val dir = tmpDir()
+        val book = EpubPackageImporter.open(fixture("sample-epub3.epub"), dir)
         assertEquals("测试书 EPUB3", book.metadata.title)
         assertEquals("3.0", book.metadata.version)
         assertEquals(2, book.toc.size)
@@ -58,7 +107,11 @@ class EpubPackageImporterTest {
         assertEquals(1, book.toc[1].children.size)
         assertEquals("尾段", book.toc[1].children[0].title)
         val ch2 = book.chapters[1]
-        assertTrue(ch2.blocks.any { it is EpubBlock.Image })
+        val image = ch2.blocks.filterIsInstance<EpubBlock.Image>().single()
+        assertEquals("示例图", image.alt)
+        assertEquals("img.png", image.src)
+        assertTrue(image.resolvedPath!!.endsWith("img.png"))
+        assertTrue(java.io.File(image.resolvedPath!!).isFile)
         assertTrue(ch2.blocks.any { it is EpubBlock.Quote })
         assertTrue(ch2.blocks.any { it is EpubBlock.Divider })
     }
@@ -111,8 +164,49 @@ class EpubPackageImporterTest {
             .flatMap { it.inlines }.joinToString("") { it.text }
         assertTrue(text.contains("a b"))
         assertFalse(text.contains(" "))
-        assertTrue(blocks.any { it is EpubBlock.Image })
+        val image = blocks.filterIsInstance<EpubBlock.Image>().single()
+        assertEquals("x.png", image.src)
         assertTrue(blocks.any { it is EpubBlock.Divider })
+    }
+
+    @Test
+    fun `svg cover image and table rows become readable blocks`() {
+        val html = """
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:xlink="http://www.w3.org/1999/xlink">
+            <body>
+            <div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+            <image width="10" height="10" xlink:href="cover.jpeg"/>
+            </svg></div>
+            <table><tr><th>问题</th><th>去哪看</th></tr>
+            <tr><td>几乎不花钱</td><td>第一章</td></tr></table>
+            </body></html>
+        """.trimIndent()
+        val (blocks, _) = EpubXhtmlParser.parse(html.toByteArray(Charsets.UTF_8))
+        val image = blocks.filterIsInstance<EpubBlock.Image>().single()
+        assertEquals("cover.jpeg", image.src)
+        val tableText = blocks.filterIsInstance<EpubBlock.Paragraph>()
+            .flatMap { it.inlines }.joinToString("|") { it.text }
+        assertTrue(tableText, tableText.contains("问题") && tableText.contains("几乎不花钱"))
+        assertFalse(blocks.any { it is EpubBlock.Unsupported && it.label == "表格" })
+    }
+
+    @Test
+    fun `relative image stays in extract root and escapes are rejected`() {
+        val root = tmpDir()
+        val chapterDir = File(root, "OEBPS/text").apply { mkdirs() }
+        val image = File(root, "OEBPS/images/pic.png").apply {
+            parentFile?.mkdirs()
+            writeBytes(byteArrayOf(1, 2, 3))
+        }
+        val outside = File(root.parentFile, "epub-outside-${root.name}.bin").apply { writeBytes(byteArrayOf(9)) }
+        try {
+            val ok = EpubPackageImporter.resolvePackagedFile(chapterDir, "../images/pic.png", root)
+            assertEquals(image.canonicalPath, ok?.canonicalPath)
+            assertEquals(null, EpubPackageImporter.resolvePackagedFile(chapterDir, "../../../${outside.name}", root))
+            assertEquals(null, EpubPackageImporter.resolvePackagedFile(chapterDir, "https://example.com/x.png", root))
+        } finally {
+            outside.delete()
+        }
     }
 
     @Test

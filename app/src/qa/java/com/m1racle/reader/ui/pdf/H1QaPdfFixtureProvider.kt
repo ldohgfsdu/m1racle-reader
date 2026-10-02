@@ -58,7 +58,7 @@ class H1QaPdfFixtureProvider : ContentProvider() {
                 ),
             ).apply {
                 addRow(
-                    arrayOf(
+                    arrayOf<Any>(
                         snapshot.gestureFrames,
                         snapshot.tileRequestsBeforeRelease,
                         snapshot.tileReadyBeforeRelease,
@@ -86,7 +86,7 @@ class H1QaPdfFixtureProvider : ContentProvider() {
         }
         val file = ensureFixture()
         return MatrixCursor(arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)).apply {
-            addRow(arrayOf(FIXTURE_NAME, file.length()))
+            addRow(arrayOf<Any>(FIXTURE_NAME, file.length()))
         }
     }
 

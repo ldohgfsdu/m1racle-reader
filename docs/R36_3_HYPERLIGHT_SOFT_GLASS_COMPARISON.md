@@ -200,6 +200,8 @@ JDK 17。本机默认 `java` 是 25.0.3，Gradle 8.11.1 无法用它编译 Kotli
 
 ## Temporal stability
 
+> 2026-09-24 更正：下方“录到上一帧”的描述是当时未经设备验证的假设，不是已证实的 GPU 原因。新回归确认了模糊采样边距和实际布局尺寸缺陷，见 [柔光采样修复](SOFT_GLASS_SAMPLING_20260924.md)。
+
 TEXT 横移闪烁不是 tint 或 blur 数值。滚动用的是 `placeRelativeWithLayer`：文字条自己就是一块 graphics layer。后来改成 `graphicsLayer.translationX` 还是同一类层。`LayerBackdrop` 录制时画的是这块层已经画好的纹理，录到的是上一帧。层每帧更新，采样就空一帧或跳一帧，看起来就是闪。
 
 平移仍然在同一次 `drawWithContent` 里。另外，图层录制默认清成透明黑。模糊核采到这块黑，在浅底上几乎看不出，在黑底或深色图案上就会暗闪一下。预览舞台不再用 `Modifier.clip`（那是另一层 graphics layer）。采样层比舞台四周各大 48dp，并且每帧先铺满不透明底色，模糊核碰不到被清掉的黑。

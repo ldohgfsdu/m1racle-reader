@@ -7,6 +7,7 @@ import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.settings.ContentPaddingLevel
 import com.m1racle.reader.data.settings.ReaderSettingsRepository
+import com.m1racle.reader.data.settings.ReaderSettings
 import com.m1racle.reader.epub.EpubBook
 import com.m1racle.reader.epub.EpubException
 import com.m1racle.reader.ui.viewer.ReadingPositionSaver
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 sealed class EpubUiState {
@@ -31,9 +33,9 @@ class EpubReaderViewModel(
     private val _uiState = MutableStateFlow<EpubUiState>(EpubUiState.Loading)
     val uiState: StateFlow<EpubUiState> = _uiState.asStateFlow()
 
-    val readerSettings = readerSettingsRepository.settingsFlow.stateIn(
+    val readerSettings = readerSettingsRepository.settingsFlow.map<ReaderSettings, ReaderSettings?> { it }.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5_000),
-        com.m1racle.reader.data.settings.ReaderSettings(),
+        null,
     )
 
     init {
@@ -88,6 +90,8 @@ class EpubReaderViewModel(
     fun saveReadingPosition(lastScrollIndex: Int, lastScrollOffset: Int, readingProgress: Float) {
         positionSaver.save(lastScrollIndex, lastScrollOffset, readingProgress)
     }
+
+    fun flushReadingPosition() = positionSaver.flushFinal()
 
     private fun load() {
         viewModelScope.launch {

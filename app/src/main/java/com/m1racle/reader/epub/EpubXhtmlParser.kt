@@ -10,6 +10,16 @@ import org.w3c.dom.Node
 object EpubXhtmlParser {
     const val MAX_BLOCKS = 20_000
 
+    private class BlockBudget(var count: Int = 0)
+
+    /** Both the chapter and nested quotes spend the same output budget. */
+    private class Blocks(val budget: BlockBudget) : ArrayList<EpubBlock>() {
+        override fun add(element: EpubBlock): Boolean {
+            if (++budget.count > MAX_BLOCKS) throw EpubException.TooLarge("章节段落过多")
+            return super.add(element)
+        }
+    }
+
     private val VOID_TAGS = setOf(
         "area", "base", "br", "col", "embed", "hr", "img", "input",
         "link", "meta", "param", "source", "track", "wbr",
@@ -54,22 +64,22 @@ object EpubXhtmlParser {
     }
 
     fun parse(bytes: ByteArray): Pair<List<EpubBlock>, Map<String, Int>> {
+        if (bytes.size > EpubPackageImporter.MAX_XML_BYTES) throw EpubException.TooLarge("章节过大")
         val text = sanitizeTagSoup(bytes.toString(Charsets.UTF_8))
         val doc = EpubPackageImporter.parseXml(text.toByteArray(Charsets.UTF_8), "章节")
         val roots = doc.getElementsByTagNameNS("*", "body")
         val body = if (roots.length > 0) roots.item(0) as Element else doc.documentElement
-        val out = mutableListOf<EpubBlock>()
+        val out = Blocks(BlockBudget())
         val anchors = mutableMapOf<String, Int>()
         val kids = body.childNodes
         for (i in 0 until kids.length) {
             blockFor(kids.item(i), out, anchors)
-            if (out.size > MAX_BLOCKS) break
         }
         if (out.isEmpty()) out.add(EpubBlock.Unsupported("空章节"))
         return out to anchors
     }
 
-    private fun blockFor(node: Node, out: MutableList<EpubBlock>, anchors: MutableMap<String, Int>) {
+    private fun blockFor(node: Node, out: Blocks, anchors: MutableMap<String, Int>) {
         when (node.nodeType) {
             Node.TEXT_NODE -> {
                 val text = clean(node.textContent)
@@ -96,36 +106,44 @@ object EpubXhtmlParser {
                         paragraphKids(el, out, anchors)
                     }
                     "ul", "ol" -> {
+                        registerInlineAnchors(el, out.size, anchors)
                         val items = mutableListOf<List<EpubInline>>()
                         eachElement(el) { li, ltag ->
                             if (ltag == "li") {
-                                val inlines = inlineKids(li)
+                                val inlines = normalizeInlines(inlineKids(li))
                                 if (inlines.isNotEmpty()) items.add(inlines)
                             }
                         }
                         if (items.isNotEmpty()) out.add(EpubBlock.ListBlock(tag == "ol", items))
                     }
                     "blockquote" -> {
-                        val inner = mutableListOf<EpubBlock>()
-                        eachElement(el) { kid, _ -> blockFor(kid, inner, anchors) }
+                        val inner = Blocks(out.budget)
+                        val innerAnchors = mutableMapOf<String, Int>()
+                        eachElement(el) { kid, _ -> blockFor(kid, inner, innerAnchors) }
+                        innerAnchors.keys.forEach { anchors.putIfAbsent(it, out.size) }
                         if (inner.isNotEmpty()) out.add(EpubBlock.Quote(inner))
                     }
-                    "pre" -> out.add(EpubBlock.Code(clean(el.textContent).take(8000)))
+                    "pre" -> {
+                        registerInlineAnchors(el, out.size, anchors)
+                        out.add(EpubBlock.Code(el.textContent.orEmpty()))
+                    }
                     "hr" -> out.add(EpubBlock.Divider)
                     "br" -> Unit // line break inside paragraphs is whitespace
-                    "img" -> {
-                        val src = el.getAttribute("src")
-                        if (src.startsWith("http:", true) || src.startsWith("https:", true)) {
-                            out.add(EpubBlock.Unsupported("在线图片已忽略"))
-                        } else {
-                            out.add(EpubBlock.Image(el.getAttribute("alt").ifEmpty { null }))
+                    "img", "image" -> addImage(el, out)
+                    "svg" -> addSvgImages(el, out)
+                    "figure", "aside" -> paragraphKids(el, out, anchors)
+                    "table" -> {
+                        val lines = tableLines(el)
+                        if (lines.isEmpty()) out.add(EpubBlock.Unsupported("表格"))
+                        else lines.forEach { line ->
+                            out.add(EpubBlock.Paragraph(listOf(EpubInline(line))))
                         }
                     }
-                    "table" -> out.add(EpubBlock.Unsupported("表格"))
-                    "audio", "video", "canvas", "svg", "object", "embed", "iframe" ->
+                    "audio", "video", "canvas", "object", "embed", "iframe" ->
                         out.add(EpubBlock.Unsupported("不支持的媒体"))
                     "a", "span", "b", "strong", "i", "em", "code", "small", "sub", "sup", "u", "s", "q", "cite" -> {
-                        val inlines = inlineKids(el)
+                        registerInlineAnchors(el, out.size, anchors)
+                        val inlines = normalizeInlines(inlineKids(el))
                         if (inlines.isNotEmpty()) out.add(EpubBlock.Paragraph(inlines))
                     }
                     else -> {
@@ -146,33 +164,33 @@ object EpubXhtmlParser {
     }
 
     /** Flow children of p/div-like elements: split nested blocks, keep inline runs. */
-    private fun paragraphKids(el: Element, out: MutableList<EpubBlock>, anchors: MutableMap<String, Int>) {
+    private fun paragraphKids(el: Element, out: Blocks, anchors: MutableMap<String, Int>) {
         val pending = mutableListOf<EpubInline>()
         fun flush() {
-            if (pending.isNotEmpty()) {
-                out.add(EpubBlock.Paragraph(pending.toList()))
-                pending.clear()
-            }
+            val normalized = normalizeInlines(pending)
+            if (normalized.isNotEmpty()) out.add(EpubBlock.Paragraph(normalized))
+            pending.clear()
         }
         val kids = el.childNodes
         for (i in 0 until kids.length) {
             val kid = kids.item(i)
             when (kid.nodeType) {
                 Node.TEXT_NODE -> {
-                    val text = clean(kid.textContent)
+                    val text = kid.textContent.orEmpty()
                     if (text.isNotEmpty()) pending.add(EpubInline(text))
                 }
                 Node.ELEMENT_NODE -> {
                     val tag = (kid as Element).tagName.substringAfter(":").lowercase()
                     if (tag == "br") {
                         pending.add(EpubInline(" "))
-                    } else if (tag == "img") {
+                    } else if (tag == "img" || tag == "image" || tag == "svg") {
                         flush()
                         blockFor(kid, out, anchors)
                     } else if (tag in BLOCK_TAGS) {
                         flush()
                         blockFor(kid, out, anchors)
                     } else {
+                        registerInlineAnchors(kid, out.size, anchors)
                         pending.addAll(inlineKids(kid))
                     }
                 }
@@ -182,10 +200,97 @@ object EpubXhtmlParser {
         flush()
     }
 
+    private fun registerInlineAnchors(el: Element, block: Int, anchors: MutableMap<String, Int>) {
+        val id = el.getAttribute("id")
+        if (id.isNotEmpty()) anchors.putIfAbsent(id, block)
+        eachElement(el) { child, _ -> registerInlineAnchors(child, block, anchors) }
+    }
+
+    /** Collapse whitespace across styled runs, trimming only the whole block. */
+    private fun normalizeInlines(runs: List<EpubInline>): List<EpubInline> {
+        val result = mutableListOf<EpubInline>()
+        var space: EpubInline? = null
+        var hasText = false
+        runs.forEach { run ->
+            val text = StringBuilder()
+            fun flush() {
+                if (text.isNotEmpty()) {
+                    result.add(run.copy(text = text.toString()))
+                    text.clear()
+                }
+            }
+            for (ch in run.text) {
+                if (ch.isWhitespace() || ch == '\u00a0' || ch == '\u2060') {
+                    flush()
+                    space = run
+                } else {
+                    if (space != null && hasText) {
+                        result.add(space!!.copy(text = " "))
+                    }
+                    space = null
+                    hasText = true
+                    text.append(ch)
+                }
+            }
+            flush()
+        }
+        return result
+    }
+
     private val BLOCK_TAGS = setOf(
         "h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "ul", "ol",
         "blockquote", "pre", "hr", "table", "section", "article",
+        "svg", "figure", "aside",
     )
+
+    private fun addSvgImages(el: Element, out: MutableList<EpubBlock>) {
+        val before = out.size
+        val images = el.getElementsByTagNameNS("*", "image")
+        for (i in 0 until images.length) {
+            addImage(images.item(i) as Element, out)
+        }
+        if (out.size == before) out.add(EpubBlock.Unsupported("不支持的媒体"))
+    }
+
+    private fun addImage(el: Element, out: MutableList<EpubBlock>) {
+        val src = imageHref(el)
+        if (src.startsWith("http:", true) || src.startsWith("https:", true)) {
+            out.add(EpubBlock.Unsupported("在线图片已忽略"))
+        } else {
+            val alt = el.getAttribute("alt").ifEmpty { null }
+            out.add(EpubBlock.Image(alt = alt, src = src.ifEmpty { null }))
+        }
+    }
+
+    private fun imageHref(el: Element): String {
+        val src = el.getAttribute("src")
+        if (src.isNotEmpty()) return src
+        val xlink = el.getAttributeNS("http://www.w3.org/1999/xlink", "href")
+        if (xlink.isNotEmpty()) return xlink
+        val prefixed = el.getAttribute("xlink:href")
+        if (prefixed.isNotEmpty()) return prefixed
+        return el.getAttribute("href")
+    }
+
+    private fun tableLines(table: Element): List<String> {
+        val lines = mutableListOf<String>()
+        val rows = table.getElementsByTagNameNS("*", "tr")
+        for (i in 0 until rows.length) {
+            val tr = rows.item(i) as? Element ?: continue
+            val cells = mutableListOf<String>()
+            val kids = tr.childNodes
+            for (j in 0 until kids.length) {
+                val cell = kids.item(j) as? Element ?: continue
+                val tag = cell.tagName.substringAfter(":").lowercase()
+                if (tag == "td" || tag == "th") {
+                    val text = clean(cell.textContent)
+                    if (text.isNotEmpty()) cells.add(text)
+                }
+            }
+            if (cells.isNotEmpty()) lines.add(cells.joinToString("  ·  "))
+        }
+        return lines
+    }
 
     private fun inlineKids(el: Element): List<EpubInline> {
         val out = mutableListOf<EpubInline>()
@@ -196,7 +301,7 @@ object EpubXhtmlParser {
     private fun collectInline(node: Node, out: MutableList<EpubInline>, bold: Boolean, italic: Boolean, code: Boolean) {
         when (node.nodeType) {
             Node.TEXT_NODE -> {
-                val text = clean(node.textContent)
+                val text = node.textContent.orEmpty()
                 if (text.isNotEmpty()) out.add(EpubInline(text, bold, italic, code))
             }
             Node.ELEMENT_NODE -> {

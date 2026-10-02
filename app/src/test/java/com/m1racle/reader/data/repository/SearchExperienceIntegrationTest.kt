@@ -45,6 +45,7 @@ class SearchExperienceIntegrationTest {
             highlightDao = highlights,
             noteDao = notes,
             searchRepository = search,
+            transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
         )
     }
 

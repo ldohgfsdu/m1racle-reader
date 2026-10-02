@@ -1,6 +1,6 @@
 # M1racle Reader
 
-**一句话：** 面向 Android 的本地优先、无账号、无广告、无联网依赖的**本地文档阅读器**，当前支持 **Markdown** 与 **PDF**。
+**一句话：** 面向 Android 的本地优先、无账号、无广告、无联网依赖的**本地文档阅读器**，当前支持 **Markdown、PDF 与有限 EPUB 阅读**。
 
 当前候选与发布状态见 [项目状态](docs/CURRENT_STATUS.md)。
 
@@ -15,13 +15,13 @@
 - **不申请 `INTERNET` 权限**，不发起网络请求
 - **无账号、无广告、无统计 SDK、无云同步**
 - 文件仅在你主动通过系统选择器或系统「打开方式 / 分享」授权后可读
-- 删除「最近阅读」记录**永不删除你的源文件**；仅当记录对应的是 App 自管的私有副本（外部打开暂存的 `files/library`、`.zip` 包解压的 `files/packages`）且无其他记录引用时，才会一并清理该副本
+- 删除「最近阅读」记录**永不删除你的源文件**；仅当记录对应的是 App 自管的私有副本（外部打开暂存的 `files/library`、`.zip` 包解压的 `files/packages`、EPUB 解压的 `files/epubs`）且无其他记录引用时，才会一并清理该副本
 
 ## 当前已支持
 
 | 能力 | 说明 |
 |------|------|
-| 本地导入 | SAF 选择 `.md` / `.markdown` / `.txt` / `.pdf` / `.zip`，持久读权限 |
+| 本地导入 | SAF 选择 `.md` / `.markdown` / `.txt` / `.pdf` / `.epub` / `.zip`，持久读权限 |
 | 外部打开 | 系统「打开方式」与「分享」直接进入阅读（含旋转/进程恢复后的导航恢复） |
 | 最近阅读 | 文件名、时间、大小、进度；可删历史 |
 | Markdown 基础渲染 | 标题 H1–H6、段落、引用、列表、分割线 |
@@ -34,6 +34,7 @@
 | 阅读位置 | 保存/恢复滚动位置与进度 |
 | 阅读显示 | 字号 / 行高 / 边距（DataStore 持久化） |
 | PDF 阅读 | 连续/单页模式、双指缩放平移、页面缩略图、教材目录大纲、章节导出（ZIP 包 / 标注 PDF） |
+| EPUB 阅读 | 本地 reflowable 章节、分页、目录、图片及阅读位置；不支持 DRM、固定版式、音视频、搜索与批注 |
 | Markdown 包 | 导入 `.zip` 打包的 Markdown + 相对图片（防 Zip-Slip / 炸弹条目） |
 | 阅读资产 | 收藏、书签、Markdown / PDF 高亮与轻量笔记；按文档和 canonical anchor 恢复 |
 | 本地搜索 | 跨文档搜索文档标题、高亮摘录与笔记，并跳回原文页/段 |
@@ -85,13 +86,13 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 
 ### arm64 本机构建说明
 
-若 aarch64 主机上 AGP 自带 aapt2 不可用，可用仓库内 `tools/aapt2`。
-`gradle.properties` 中 `android.aapt2FromMavenOverride` 需为本机绝对路径；x86_64 / 常规 Android Studio 可删除该行。
+构建使用 JDK 17、Gradle 9.5.0、AGP 9.1.1、Android SDK Platform 37.0 与 Build Tools 36.0.0。
+仓库 `tools/aapt2` 使用 `app/build.gradle.kts` 声明的 Build Tools 版本（缺失则报错），在 ARM 主机通过 qemu 运行；`gradle.properties` 使用相对路径，无需提交本机路径。
 
 ## 如何导入文档
 
 1. 打开 App → 点右下角 **导入** FAB；或从系统文件管理器 / 分享面板选择「M1racle Reader」打开。
-2. 选择 `.md` / `.markdown` / `.txt` / `.pdf` / `.zip` 文件。
+2. 选择 `.md` / `.markdown` / `.txt` / `.pdf` / `.epub` / `.zip` 文件。
 3. 导入成功后直接进入阅读页；返回主页可见「最近阅读」。
 
 ## 测试样例

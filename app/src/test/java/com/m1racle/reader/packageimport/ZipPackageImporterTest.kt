@@ -160,4 +160,36 @@ class ZipPackageImporterTest {
         }
         return baos.toByteArray()
     }
+
+    @Test fun ignoredEntriesStillCountTowardsLimit() {
+        val bytes = ByteArrayOutputStream()
+        ZipOutputStream(bytes).use { zip ->
+            repeat(ZipPackageImporter.MAX_ENTRY_COUNT + 1) { index ->
+                zip.putNextEntry(ZipEntry("__MACOSX/$index"))
+                zip.closeEntry()
+            }
+            zip.putNextEntry(ZipEntry("index.md"))
+            zip.write("# book".toByteArray())
+            zip.closeEntry()
+        }
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            ZipPackageImporter.extract(bytes.toByteArray().inputStream(), tmp.newFolder())
+        }
+    }
+
+    @Test fun ignoredEntryStillHasAnUncompressedByteLimit() {
+        val bytes = ByteArrayOutputStream()
+        ZipOutputStream(bytes).use { zip ->
+            zip.putNextEntry(ZipEntry("__MACOSX/bomb"))
+            val chunk = ByteArray(1024 * 1024)
+            repeat((ZipPackageImporter.MAX_SINGLE_ENTRY_BYTES / chunk.size).toInt() + 1) { zip.write(chunk) }
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry("index.md"))
+            zip.write("# book".toByteArray())
+            zip.closeEntry()
+        }
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            ZipPackageImporter.extract(bytes.toByteArray().inputStream(), tmp.newFolder())
+        }
+    }
 }

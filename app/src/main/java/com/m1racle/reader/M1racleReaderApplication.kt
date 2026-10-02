@@ -88,6 +88,7 @@ class M1racleReaderApplication : Application() {
             highlightDao = database.highlightDao(),
             noteDao = database.noteDao(),
             searchRepository = searchRepository,
+            transactionRunner = com.m1racle.reader.data.repository.RoomRepositoryTransactionRunner(database),
         )
     }
 

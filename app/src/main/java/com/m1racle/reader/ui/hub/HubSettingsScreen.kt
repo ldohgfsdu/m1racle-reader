@@ -73,8 +73,6 @@ fun HubSettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(20.dp))
-            com.m1racle.reader.ui.material.BlurComparisonPreview()
             Spacer(Modifier.height(HomeDesignTokens.DockContentClearance))
         }
     }

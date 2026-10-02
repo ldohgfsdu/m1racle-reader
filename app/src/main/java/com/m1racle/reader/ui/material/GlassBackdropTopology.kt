@@ -19,7 +19,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
  *
  * Sampling surfaces must be composed as siblings after this source, under the
  * outer [LocalGlassBackdropHost] provider. Reader chrome follows that
- * sibling-overlay rule. Hub/Home pages do not capture a document backdrop.
+ * sibling-overlay rule. Hub navigation captures only page content for the dock.
  */
 
 /** Document-only capture. Chrome, menus and dialogs must stay outside [content]. */
@@ -28,16 +28,17 @@ fun DocumentBackdropSource(
     backdrop: LayerBackdrop,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
-) = GlassBackdropSource(backdrop, modifier, content)
+) = GlassBackdropSource(backdrop, modifier, content = content)
 @Composable
 fun GlassBackdropSource(
     backdrop: LayerBackdrop,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
     CompositionLocalProvider(LocalGlassBackdropHost provides null) {
         Box(
-            modifier = modifier.layerBackdrop(backdrop),
+            modifier = if (enabled) modifier.layerBackdrop(backdrop) else modifier,
             content = content,
         )
     }

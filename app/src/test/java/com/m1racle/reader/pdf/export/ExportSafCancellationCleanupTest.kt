@@ -78,7 +78,7 @@ class ExportSafCancellationCleanupTest {
                     DocumentsContract.Root.COLUMN_FLAGS,
                 ),
             ).apply {
-                addRow(arrayOf("root", SOURCE_DOCUMENT_ID, "C2.2 stub", 0))
+                addRow(arrayOf<Any>("root", SOURCE_DOCUMENT_ID, "C2.2 stub", 0))
             }
 
         override fun queryDocument(
@@ -94,7 +94,7 @@ class ExportSafCancellationCleanupTest {
             ),
         ).apply {
             addRow(
-                arrayOf(
+                arrayOf<Any>(
                     documentId,
                     documentId,
                     if (documentId == SOURCE_DOCUMENT_ID) "application/pdf" else "application/zip",

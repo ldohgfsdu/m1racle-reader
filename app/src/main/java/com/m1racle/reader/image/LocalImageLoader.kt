@@ -171,6 +171,22 @@ object LocalImageLoader {
         }
     }
 
+    suspend fun loadFile(file: File): LocalImageState =
+        withContext(Dispatchers.IO) { decodeFile(file) }
+
+    fun probeBounds(file: File): Pair<Int, Int>? {
+        val canonical = try {
+            file.canonicalFile
+        } catch (_: Exception) {
+            return null
+        }
+        if (!canonical.isFile || !canonical.canRead() || canonical.length() <= 0L) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(canonical.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        return bounds.outWidth to bounds.outHeight
+    }
+
     /**
      * Decode App-private real files via absolute path (not InputStream adapters).
      * content:// still uses [decodeFromStreamFactory].

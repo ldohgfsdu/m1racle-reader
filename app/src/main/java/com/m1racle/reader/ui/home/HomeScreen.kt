@@ -73,7 +73,7 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isImporting by viewModel.isImporting.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val view = LocalView.current
     LaunchedEffect(Unit) {
         val activity = view.context as? android.app.Activity ?: return@LaunchedEffect
@@ -84,18 +84,18 @@ fun HomeScreen(
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.onImportDocument(uri)
     }
-    LaunchedEffect(viewModel) {
+    LaunchedEffect(viewModel, resources) {
         viewModel.events.collect { event ->
             val message = when (event) {
                 is HomeEvent.OpenDocument -> {
                     onOpenDocument(event.document)
                     return@collect
                 }
-                HomeEvent.UnsupportedFormat -> context.getString(R.string.error_unsupported_format)
-                HomeEvent.SourceTooLarge -> context.getString(R.string.home_import_too_large,
+                HomeEvent.UnsupportedFormat -> resources.getString(R.string.error_unsupported_format)
+                HomeEvent.SourceTooLarge -> resources.getString(R.string.home_import_too_large,
                     com.m1racle.reader.share.ExternalDocumentImporter.MAX_BYTES / (1024L * 1024L))
-                HomeEvent.DeleteFailed -> context.getString(R.string.home_delete_failed)
-                HomeEvent.ReadFailed -> context.getString(R.string.error_read_failed)
+                HomeEvent.DeleteFailed -> resources.getString(R.string.home_delete_failed)
+                HomeEvent.ReadFailed -> resources.getString(R.string.error_read_failed)
             }
             snackbarHostState.showSnackbar(message)
         }

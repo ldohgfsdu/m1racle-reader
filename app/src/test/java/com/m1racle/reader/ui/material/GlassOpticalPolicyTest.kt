@@ -7,86 +7,14 @@ import org.junit.Test
 
 class GlassOpticalPolicyTest {
     @Test
-    fun `comparison candidates stay local and respect unavailable sampling`() {
-        val role = GlassMaterialRole.Capsule
-        val original = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
-        for (preset in GlassPreviewPreset.entries) {
-            for (env in GlassEnvironment.entries) {
-                val plate = GlassMaterialEngine.resolve(role, env,
-                    GlassCapability.SOLID_FALLBACK, previewPreset = preset)
-                assertEquals(0.dp, plate.blur)
-                assertTrue(plate.surfaceColor.alpha >= .96f)
-                assertFalse(plate.lensEnabled)
-            }
-        }
-        val stronger = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT,
-            previewPreset = GlassPreviewPreset.Blur40)
-        assertEquals(40.dp, stronger.blur)
-        assertEquals(.45f, stronger.surfaceColor.alpha, .005f)
-        assertEquals(1f, stronger.foreground.contentAlpha, 0f)
-        val after = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
-        assertEquals(original.surfaceColor, after.surfaceColor)
-        assertEquals(original.blur, after.blur)
-        assertEquals(original.foreground, after.foreground)
-        assertEquals(original.lensEnabled, after.lensEnabled)
-    }
-
-    @Test
-    fun `light tint candidates vary only tint at frozen blur`() {
-        // R36.2 LIGHT TINT batch: comparison may move light tint alpha and nothing else.
-        val role = GlassMaterialRole.Capsule
-        val production = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
-        val candidates = mapOf(
-            GlassPreviewPreset.Tint86 to .86f,
-            GlassPreviewPreset.Tint80 to .80f,
-            GlassPreviewPreset.Tint75 to .75f,
-            GlassPreviewPreset.Tint70 to .70f,
-            GlassPreviewPreset.Tint65 to .65f,
-            GlassPreviewPreset.Tint60 to .60f,
-            GlassPreviewPreset.Tint55 to .55f,
-            GlassPreviewPreset.Tint50 to .50f,
-            GlassPreviewPreset.Tint45 to .45f,
-            GlassPreviewPreset.Tint35 to .35f,
-        )
-        for ((preset, tint) in candidates) {
-            val spec = GlassMaterialEngine.resolve(
-                role, GlassEnvironment.READER_LIGHT, previewPreset = preset)
-            assertEquals("blur frozen for $preset", 26.dp, spec.blur)
-            assertEquals("tint for $preset", tint, spec.surfaceColor.alpha, .005f)
-            assertEquals("tint rgb for $preset",
-                production.surfaceColor.copy(alpha = 1f), spec.surfaceColor.copy(alpha = 1f))
-            assertEquals(production.shadow, spec.shadow)
-            assertEquals(production.shadowColor, spec.shadowColor)
-            assertEquals(production.highlightWidth, spec.highlightWidth)
-            assertEquals(production.highlightColor, spec.highlightColor)
-            assertEquals(production.vibrancy, spec.vibrancy)
-            assertEquals(production.lensEnabled, spec.lensEnabled)
-            assertEquals(production.lensHeight, spec.lensHeight)
-            assertEquals(production.lensAmount, spec.lensAmount)
-            assertEquals(production.family, spec.family)
-            assertEquals(production.foreground, spec.foreground)
-            assertEquals(production.chromaticAberration, spec.chromaticAberration)
-            assertEquals(production.brightness, spec.brightness, 0f)
-            assertEquals(production.saturation, spec.saturation, 0f)
-        }
-        // Production path (no preset) is unaffected by candidate evaluation.
-        val productionAgain =
-            GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
-        assertEquals(production.surfaceColor, productionAgain.surfaceColor)
-        assertEquals(production.blur, productionAgain.blur)
-    }
-
-    @Test
-    fun `production light recipe uses frozen authority`() {
-        // LIGHT_TINT_PRODUCTION_AUTHORITY = FROZEN_086. Change these numbers
-        // only as an explicit authority promotion after device/human approval
-        // of a candidate (.45/.55/.65/.75 stay preview-only until then).
+    fun `production uses promoted liquid authority`() {
+        // User requested promotion of the settings liquid material on 2026-09-25.
         val expectedLight = mapOf(
-            GlassMaterialRole.Control to 0.86f,
-            GlassMaterialRole.Capsule to 0.86f,
-            GlassMaterialRole.Menu to 0.86f,
+            GlassMaterialRole.Control to 0.60f,
+            GlassMaterialRole.Capsule to 0.60f,
+            GlassMaterialRole.Menu to 0.60f,
             GlassMaterialRole.ExpandedMenu to 0.90f,
-            GlassMaterialRole.SettingsCard to 0.90f,
+            GlassMaterialRole.SettingsCard to 0.60f,
             GlassMaterialRole.Dialog to 0.97f,
             GlassMaterialRole.ProgressiveChrome to 0.62f,
         )
@@ -94,13 +22,13 @@ class GlassOpticalPolicyTest {
             val spec = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
             assertEquals("production light $role", alpha, spec.surfaceColor.alpha, 0.004f)
         }
-        // Current frozen dark authority (DARK batch audits from here, changes nothing yet).
+        // Shared liquid role colors also apply in dark mode.
         val expectedDark = mapOf(
-            GlassMaterialRole.Control to 0.80f,
-            GlassMaterialRole.Capsule to 0.80f,
-            GlassMaterialRole.Menu to 0.80f,
-            GlassMaterialRole.ExpandedMenu to 0.86f,
-            GlassMaterialRole.SettingsCard to 0.86f,
+            GlassMaterialRole.Control to 0.64f,
+            GlassMaterialRole.Capsule to 0.64f,
+            GlassMaterialRole.Menu to 0.64f,
+            GlassMaterialRole.ExpandedMenu to 0.90f,
+            GlassMaterialRole.SettingsCard to 0.64f,
             GlassMaterialRole.Dialog to 0.97f,
             GlassMaterialRole.ProgressiveChrome to 0.62f,
         )
@@ -108,7 +36,7 @@ class GlassOpticalPolicyTest {
             val spec = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_DARK)
             assertEquals("production dark $role", alpha, spec.surfaceColor.alpha, 0.004f)
         }
-        // Frozen production blur (18dp) for the reader overlay family.
+        // Controls and readable panels retain distinct liquid blur radii.
         for (role in listOf(
             GlassMaterialRole.Control,
             GlassMaterialRole.Capsule,
@@ -116,69 +44,8 @@ class GlassOpticalPolicyTest {
             GlassMaterialRole.ExpandedMenu,
             GlassMaterialRole.SettingsCard,
         )) {
-            assertEquals("production blur $role", 18.dp,
+            assertEquals("production blur $role", if (role in listOf(GlassMaterialRole.ExpandedMenu)) 24.dp else 4.dp,
                 GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT).blur)
-        }
-    }
-
-    @Test
-    fun `dark candidates keep foreground policy and frozen channels`() {
-        // R36.2 dark families: uniform delta on dark alpha only. Role delta
-        // (+.06 panel over control) must survive; frozen blur untouched.
-        val deltas = mapOf(
-            GlassPreviewPreset.DarkD1 to -0.06f,
-            GlassPreviewPreset.DarkD2 to -0.12f,
-            GlassPreviewPreset.DarkD3 to 0.06f,
-        )
-        val roles = listOf(
-            GlassMaterialRole.Control,
-            GlassMaterialRole.Capsule,
-            GlassMaterialRole.Menu,
-            GlassMaterialRole.ExpandedMenu,
-            GlassMaterialRole.SettingsCard,
-            GlassMaterialRole.Dialog,
-            GlassMaterialRole.Dock,
-            GlassMaterialRole.ProgressiveChrome,
-            GlassMaterialRole.PreviewCapsule,
-        )
-        for ((preset, delta) in deltas) {
-            for (role in roles) {
-                val production = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_DARK)
-                val spec = GlassMaterialEngine.resolve(
-                    role, GlassEnvironment.READER_DARK, previewPreset = preset)
-                val expectedDark =
-                    (production.surfaceColor.alpha + delta).coerceIn(0f, 0.98f)
-                assertEquals("dark tint $preset/$role", expectedDark, spec.surfaceColor.alpha, .005f)
-                assertEquals("dark tint rgb $preset/$role",
-                    production.surfaceColor.copy(alpha = 1f), spec.surfaceColor.copy(alpha = 1f))
-                assertEquals(production.blur, spec.blur)
-                assertEquals(production.shadow, spec.shadow)
-                assertEquals(production.shadowColor, spec.shadowColor)
-                assertEquals(production.highlightWidth, spec.highlightWidth)
-                assertEquals(production.highlightColor, spec.highlightColor)
-                assertEquals(production.vibrancy, spec.vibrancy)
-                assertEquals(production.lensEnabled, spec.lensEnabled)
-                assertEquals(production.lensHeight, spec.lensHeight)
-                assertEquals(production.lensAmount, spec.lensAmount)
-                assertEquals(production.family, spec.family)
-                assertEquals(production.foreground, spec.foreground)
-                assertEquals(production.chromaticAberration, spec.chromaticAberration)
-                assertEquals(production.brightness, spec.brightness, 0f)
-                assertEquals(production.saturation, spec.saturation, 0f)
-                // Light side completely untouched by dark candidates.
-                val lightProd = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
-                val lightSpec = GlassMaterialEngine.resolve(
-                    role, GlassEnvironment.READER_LIGHT, previewPreset = preset)
-                assertEquals("light untouched $preset/$role", lightProd.surfaceColor, lightSpec.surfaceColor)
-                assertEquals(lightProd.blur, lightSpec.blur)
-            }
-            // Role hierarchy delta survives every family.
-            val control = GlassMaterialEngine.resolve(
-                GlassMaterialRole.Control, GlassEnvironment.READER_DARK, previewPreset = preset)
-            val panel = GlassMaterialEngine.resolve(
-                GlassMaterialRole.SettingsCard, GlassEnvironment.READER_DARK, previewPreset = preset)
-            assertEquals("role delta $preset", 0.06f,
-                panel.surfaceColor.alpha - control.surfaceColor.alpha, 0.006f)
         }
     }
 
@@ -195,9 +62,6 @@ class GlassOpticalPolicyTest {
         val gradient = File(root, "viewer/ReaderGradient.kt").readText()
         assertTrue(gradient.contains("GlassCapability.SOLID_FALLBACK) Modifier"))
         assertTrue(gradient.contains("if (spec.vibrancy) vibrancy()"))
-        val preview = File(root, "material/BlurComparisonPreview.kt").readText()
-        assertTrue(preview.contains("return readerGradient(backdrop)"))
-        assertFalse(preview.contains("runtimeShaderEffect"))
     }
 
     @Test
@@ -242,9 +106,9 @@ class GlassOpticalPolicyTest {
             GlassMaterialRole.Capsule to GlassOpticalFamily.CONTENT,
             GlassMaterialRole.Menu to GlassOpticalFamily.CONTENT,
             GlassMaterialRole.ExpandedMenu to GlassOpticalFamily.CONTENT,
-            GlassMaterialRole.SettingsCard to GlassOpticalFamily.PANEL,
+            GlassMaterialRole.SettingsCard to GlassOpticalFamily.CONTENT,
             GlassMaterialRole.Dialog to GlassOpticalFamily.PANEL,
-            GlassMaterialRole.Dock to GlassOpticalFamily.FALLBACK,
+            GlassMaterialRole.Dock to GlassOpticalFamily.CONTENT,
             GlassMaterialRole.ProgressiveChrome to GlassOpticalFamily.CONTENT,
         )
         for ((role, family) in expected) for (env in GlassEnvironment.entries) {

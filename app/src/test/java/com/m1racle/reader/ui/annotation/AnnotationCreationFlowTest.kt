@@ -112,6 +112,7 @@ class AnnotationCreationFlowTest {
             highlightDao = highlights,
             noteDao = notes,
             searchRepository = com.m1racle.reader.testing.testSearchRepository(),
+            transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
         ),
         documentId = documentId,
     )
@@ -146,6 +147,7 @@ class AnnotationCreationFlowTest {
             highlightDao = highlights,
             noteDao = notes,
             searchRepository = com.m1racle.reader.testing.testSearchRepository(),
+            transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
         )
         assertEquals(selection.toAnchor(), repo.resolveHighlightAnchor("doc-1", committed.id))
     }

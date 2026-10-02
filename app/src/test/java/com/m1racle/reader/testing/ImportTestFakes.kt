@@ -3,7 +3,7 @@ package com.m1racle.reader.testing
 import android.database.sqlite.SQLiteConstraintException
 import com.m1racle.reader.data.local.DocumentAliasDao
 import com.m1racle.reader.data.local.DocumentAliasEntity
-import com.m1racle.reader.data.repository.ImportTransactionRunner
+import com.m1racle.reader.data.repository.RepositoryTransactionRunner
 
 class TestDocumentAliasDao(
     initialAliases: Iterable<DocumentAliasEntity> = emptyList(),
@@ -43,6 +43,6 @@ class TestDocumentAliasDao(
     fun allAliases(): List<DocumentAliasEntity> = aliases.values.toList()
 }
 
-internal class ImmediateImportTransactionRunner : ImportTransactionRunner {
+internal class ImmediateRepositoryTransactionRunner : RepositoryTransactionRunner {
     override suspend fun <T> run(block: suspend () -> T): T = block()
 }

@@ -27,7 +27,7 @@ import com.m1racle.reader.share.CommitOutcome
 import com.m1racle.reader.share.ExternalDocumentImporter
 import com.m1racle.reader.share.ExternalIntentUri
 import com.m1racle.reader.share.PrepareOutcome
-import com.m1racle.reader.testing.ImmediateImportTransactionRunner
+import com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner
 import com.m1racle.reader.testing.TestDocumentAliasDao
 import com.m1racle.reader.testing.TestSearchIndexDao
 import com.m1racle.reader.testing.testSearchRepository
@@ -333,7 +333,7 @@ class ContentIdentityImportWiringTest {
             documentAliasDao = aliasDao,
             contentIdentityResolver = resolver,
             sidecarIdentityMigration = sidecarMigration,
-            importTransactionRunner = ImmediateImportTransactionRunner(),
+            importTransactionRunner = ImmediateRepositoryTransactionRunner(),
         )
         private val externalImporter = ExternalDocumentImporter(
             context = context,

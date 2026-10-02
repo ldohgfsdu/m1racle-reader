@@ -104,7 +104,7 @@ class AnnotationAnchorRepositoryTest {
 
     @Test
     fun `pdf highlight stores projected columns and restores equivalent anchor`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val anchor = DocumentAnchor.PdfPage(
             page = 12,
             rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect(0.2f, 0.3f, 0.4f, 0.1f)),
@@ -116,7 +116,7 @@ class AnnotationAnchorRepositoryTest {
 
     @Test
     fun `markdown note stores block projection and restores anchor with char range`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val anchor = DocumentAnchor.MarkdownBlock(blockIndex = 96, charStart = 2, charEnd = 18)
         val id = repo.addNote(
             documentId = "md-1",
@@ -134,7 +134,7 @@ class AnnotationAnchorRepositoryTest {
     fun `legacy null-anchor rows restore via kind location synthesis`() = runTest {
         val highlightDao = FakeHighlightDao()
         val noteDao = FakeNoteDao()
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, noteDao, com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, noteDao, com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         // 模拟 v10 历史行：无 anchor 列内容。
         highlightDao.rows[1] = HighlightEntity(
             id = 1,

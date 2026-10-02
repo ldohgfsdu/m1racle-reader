@@ -32,7 +32,7 @@ class PdfBodyEditorTest {
                 out.beginText(); out.setFont(PDType1Font.HELVETICA, 16f)
                 out.newLineAtOffset(50f, 700f); out.setLeading(25f)
                 out.setCharacterSpacing(0.8f); out.setWordSpacing(2f); out.setHorizontalScaling(85f)
-                if (adjusted) out.showTextWithPositioning(arrayOf("Original", -120f, " text"))
+                if (adjusted) out.showTextWithPositioning(arrayOf<Any>("Original", -120f, " text"))
                 else out.showText("Original text")
                 out.showText(" FOLLOWING")
                 out.newLine(); out.showText("Next line")

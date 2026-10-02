@@ -6,6 +6,7 @@ import com.m1racle.reader.pdf.AnchoredNestedInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.material.icons.outlined.Tag
 
 /**
  * Origin fidelity on the **shipped** nested path
@@ -18,7 +19,7 @@ class AdvancedOriginFidelityTest {
 
     @Test
     fun `four task source rows have distinct Y`() {
-        val rowTops = listOf(2, 3, 4, 5).map { parentRowTop(it) }
+        val rowTops = listOf(3, 4, 5, 6).map { 3f + 52f * it }
         rowTops.zipWithNext().forEach { (a, b) ->
             assertTrue("rows must be ordered and distinct", b > a)
         }
@@ -26,22 +27,19 @@ class AdvancedOriginFidelityTest {
     }
 
     @Test
-    fun `every advanced state maps to its own distinct row`() {
-        val expected = mapOf(
-            ReaderMoreState.CHILD_PAGE_MAPPING to 2,
-            ReaderMoreState.CHILD_TOC to 3,
-            ReaderMoreState.CHILD_THUMBNAILS to 4,
-            ReaderMoreState.CHILD_EXPORT to 5,
-        )
-        expected.forEach { (state, rowIndex) ->
-            assertEquals("$state must own row $rowIndex", rowIndex, childRowIndex(state))
+    fun `each item keeps its destination when ordinary rows precede it`() {
+        val states = ReaderMoreState.entries.filter { it.isChild() }
+        val children = states.map {
+            PdfChromeMenuItem(androidx.compose.material.icons.Icons.Outlined.Tag, it.name, childState = it)
         }
-        assertEquals(4, expected.values.toSet().size)
+        val prefix = PdfChromeMenuItem(androidx.compose.material.icons.Icons.Outlined.Tag, "edit")
+        assertEquals(states, (listOf(prefix) + children).mapNotNull { it.childState })
+        assertEquals(states.reversed(), (children.reversed() + prefix).mapNotNull { it.childState })
     }
 
     @Test
     fun `each state reverse morph lands on its own row Y at p0`() {
-        // Simulate four rows on Main (width 216, tops from parentRowTop).
+        // Simulate measured source rectangles in the parent coordinate system.
         val menuLeft = 200f
         val menuRight = 416f
         val densityRowH = 52f

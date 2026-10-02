@@ -111,7 +111,8 @@ class BookmarkScreenTest {
                 highlightDao = NoHighlights(),
                 noteDao = NoNotes(),
                 searchRepository = com.m1racle.reader.testing.testSearchRepository(),
-            )
+            transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
+        )
             val vm = BookmarksViewModel(repo)
 
             assertEquals(false, vm.uiState.value.ready)

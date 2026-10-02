@@ -132,7 +132,7 @@ class ZipExternalOpenContractTest {
             textbookOutlineNodeDao = ZbUnusedTextbookOutlineNodeDao(),
             searchRepository = com.m1racle.reader.testing.testSearchRepository(),
             documentAliasDao = com.m1racle.reader.testing.TestDocumentAliasDao(),
-            importTransactionRunner = com.m1racle.reader.testing.ImmediateImportTransactionRunner(),
+            importTransactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
         )
         return repo to dao
     }

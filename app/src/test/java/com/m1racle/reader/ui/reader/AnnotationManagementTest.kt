@@ -94,7 +94,7 @@ class AnnotationManagementTest {
 
     @Test
     fun `list query sorts by page then creation time`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo, "doc-1")
         controller.commitHighlight(captureRect(9), nowMs = 100L)
         controller.commitHighlight(captureRect(3), nowMs = 200L)
@@ -107,7 +107,7 @@ class AnnotationManagementTest {
 
     @Test
     fun `row location is the jump target and anchor restores to same page`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo, "pdf-7")
         controller.commitHighlight(captureRect(41), nowMs = 10L)
 
@@ -121,7 +121,7 @@ class AnnotationManagementTest {
 
     @Test
     fun `delete removes from list and overlay`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo, "doc-1")
         val committed = controller.commitHighlight(captureRect(4)) as ReaderHighlightController.CommitResult.Success
 
@@ -137,7 +137,7 @@ class AnnotationManagementTest {
     @Test
     fun `cross page highlights restore independently and survive new source instances`() = runTest {
         val highlightDao = FakeHighlightDao()
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo, "doc")
         controller.commitHighlight(captureRect(2))
         controller.commitHighlight(captureRect(7))

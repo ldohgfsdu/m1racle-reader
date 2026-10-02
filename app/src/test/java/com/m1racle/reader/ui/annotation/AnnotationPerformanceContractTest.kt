@@ -152,7 +152,7 @@ class AnnotationPerformanceContractTest {
     }
 
     private fun repository(highlights: HighlightDao, notes: NoteDao) =
-        ReadingRepository(NoBookmarks(), NoFavorites(), highlights, notes, com.m1racle.reader.testing.testSearchRepository())
+        ReadingRepository(NoBookmarks(), NoFavorites(), highlights, notes, com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
 
     private fun highlight(id: Long, documentId: String, page: Int): HighlightEntity {
         val anchor = DocumentAnchor.PdfPage(page, listOf(NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f)))

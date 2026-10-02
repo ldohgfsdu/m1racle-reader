@@ -29,6 +29,7 @@ class ReadingRepository(
     private val highlightDao: HighlightDao,
     private val noteDao: NoteDao,
     private val searchRepository: SearchRepository,
+    private val transactionRunner: RepositoryTransactionRunner,
 ) {
 
     // ── Bookmarks ──────────────────────────────────────────────────────────
@@ -92,9 +93,11 @@ class ReadingRepository(
             excerpt = excerpt,
             createdAt = createdAt,
         )
-        val id = highlightDao.insert(row)
-        searchRepository.index(row.copy(id = id), indexedAt = createdAt)
-        return id
+        return transactionRunner.run {
+            val id = highlightDao.insert(row)
+            searchRepository.index(row.copy(id = id), indexedAt = createdAt)
+            id
+        }
     }
 
     /** 恢复单条高亮的抽象锚点（历史行按 kind/location 合成）。 */
@@ -105,8 +108,10 @@ class ReadingRepository(
     }
 
     suspend fun removeHighlight(documentId: String, id: Long) {
-        highlightDao.delete(documentId, id)
-        searchRepository.delete(documentId, SearchContentType.HIGHLIGHT, id.toString())
+        transactionRunner.run {
+            highlightDao.delete(documentId, id)
+            searchRepository.delete(documentId, SearchContentType.HIGHLIGHT, id.toString())
+        }
     }
 
     suspend fun highlightsForDocument(documentId: String): List<HighlightEntity> =
@@ -136,9 +141,11 @@ class ReadingRepository(
             createdAt = createdAt,
             updatedAt = updatedAt,
         )
-        val id = noteDao.insert(row)
-        searchRepository.index(row.copy(id = id), indexedAt = updatedAt)
-        return id
+        return transactionRunner.run {
+            val id = noteDao.insert(row)
+            searchRepository.index(row.copy(id = id), indexedAt = updatedAt)
+            id
+        }
     }
 
     /** 恢复单条批注的抽象锚点。 */
@@ -154,13 +161,17 @@ class ReadingRepository(
         content: String,
         updatedAt: Long,
     ) {
-        noteDao.updateContent(documentId, id, content, updatedAt)
-        noteDao.getById(documentId, id)?.let { searchRepository.index(it, indexedAt = updatedAt) }
+        transactionRunner.run {
+            noteDao.updateContent(documentId, id, content, updatedAt)
+            noteDao.getById(documentId, id)?.let { searchRepository.index(it, indexedAt = updatedAt) }
+        }
     }
 
     suspend fun removeNote(documentId: String, id: Long) {
-        noteDao.delete(documentId, id)
-        searchRepository.delete(documentId, SearchContentType.NOTE, id.toString())
+        transactionRunner.run {
+            noteDao.delete(documentId, id)
+            searchRepository.delete(documentId, SearchContentType.NOTE, id.toString())
+        }
     }
 
     suspend fun notesForDocument(documentId: String): List<NoteEntity> =

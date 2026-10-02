@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.material.icons.outlined.Tag
 
 /**
  * r26.1 exclusive state machine + Basic→Advanced two-phase PREPARING.
@@ -102,9 +103,9 @@ class ReaderMoreStateMachineTest {
         }
     }
 
-    @Test
-    fun `every advanced owns distinct source row`() {
-        assertEquals(listOf(2, 3, 4, 5), listOf(pageMapping, toc, thumbs, export).map { childRowIndex(it) })
+    @Test(expected = IllegalArgumentException::class)
+    fun `inline states cannot be used as nested row identities`() {
+        PdfChromeMenuItem(androidx.compose.material.icons.Icons.Outlined.Tag, "invalid", childState = readingMode)
     }
 
     @Test

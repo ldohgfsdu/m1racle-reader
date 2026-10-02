@@ -185,7 +185,6 @@ internal fun AnchoredNestedPopover(
     } else {
         ((p - 0.30f) / 0.50f).coerceIn(0f, 1f)
     }
-    val bodySlidePx = with(density) { 6.dp.toPx() }
     val bodyMaxH = AdvancedChildLayoutSpec.bodyMaxHeightDp(heightDp.value).dp.coerceAtLeast(48.dp)
 
     Box(
@@ -231,7 +230,6 @@ internal fun AnchoredNestedPopover(
                     .graphicsLayer {
                         clip = true
                         alpha = bodyAlpha
-                        translationY = (1f - bodyAlpha) * bodySlidePx
                     },
             ) {
                 HorizontalDivider(

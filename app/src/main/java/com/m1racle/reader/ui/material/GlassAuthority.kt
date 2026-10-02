@@ -43,18 +43,6 @@ enum class GlassOpticalFamily {
     FALLBACK,
 }
 
-/** Settings comparison presets. Values live in [GlassMaterialEngine], not in the preview UI. */
-enum class GlassPreviewPreset {
-    CurrentThick,
-    ProgressiveLegacy,
-    CapsuleReference,
-    Tint86, Tint80, Tint75, Tint70, Tint65, Tint60, Tint55, Tint50, Tint45,
-    Blur32, Blur40, Tint35,
-    /** R36.2 dark families: uniform delta on dark alpha, frozen blur. */
-    DarkD1, DarkD2, DarkD3,
-
-}
-
 /**
  * Content glyphs are not a function of [GlassMaterialSpec.surfaceColor] alpha.
  * Whole-control hide/show uses a separate visibility alpha at the animation layer.

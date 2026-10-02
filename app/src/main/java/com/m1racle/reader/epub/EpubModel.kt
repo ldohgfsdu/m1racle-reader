@@ -39,7 +39,7 @@ sealed interface EpubBlock {
     data class ListBlock(val ordered: Boolean, val items: List<List<EpubInline>>) : EpubBlock
     data class Quote(val blocks: List<EpubBlock>) : EpubBlock
     data class Code(val text: String) : EpubBlock
-    data class Image(val alt: String?) : EpubBlock
+    data class Image(val alt: String?, val src: String? = null, val resolvedPath: String? = null) : EpubBlock
     data object Divider : EpubBlock
     data class Unsupported(val label: String) : EpubBlock
 }

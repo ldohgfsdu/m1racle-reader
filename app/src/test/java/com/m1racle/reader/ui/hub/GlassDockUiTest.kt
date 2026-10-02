@@ -180,6 +180,27 @@ class GlassDockUiTest {
     }
 
     @Test
+    fun `selection lens grows while held and returns after cancellation`() {
+        rule.setContent {
+            M1racleReaderTheme {
+                HubDockMotionProvider(HubDestination.HOME) { GlassDock(onSelect = {}) }
+            }
+        }
+        val lens = rule.onNodeWithTag("dock-selection", useUnmergedTree = true)
+        val resting = lens.fetchSemanticsNode().boundsInRoot
+        val tab = rule.onAllNodes(isSelectable())[0]
+        tab.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(800)
+        val held = lens.fetchSemanticsNode().boundsInRoot
+        assertTrue("held=$held resting=$resting", held.width > resting.width)
+        assertTrue("held=$held resting=$resting", held.height > resting.height)
+        tab.performTouchInput { cancel() }
+        rule.mainClock.advanceTimeBy(1200)
+        assertEquals(resting, lens.fetchSemanticsNode().boundsInRoot)
+        rule.onAllNodes(isSelectable())[0].assertIsSelected()
+    }
+
+    @Test
     fun `rtl drag selects the destination under the finger`() {
         val selected = mutableStateOf(HubDestination.HOME)
         rule.setContent {

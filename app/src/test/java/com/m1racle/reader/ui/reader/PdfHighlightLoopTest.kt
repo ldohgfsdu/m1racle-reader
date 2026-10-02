@@ -104,7 +104,7 @@ class PdfHighlightLoopTest {
     @Test
     fun `full loop - selection to flow to repository to overlay items`() = runTest {
         val highlights = FakeHighlightDao()
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlights, FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlights, FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo, "pdf-1")
 
         // 用户在页 9 拖出矩形（捕获时刻页面渲染 1000×1414）。
@@ -128,7 +128,7 @@ class PdfHighlightLoopTest {
 
     @Test
     fun `same anchor restores consistently across different page render sizes`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo, "pdf-1")
         // 在小尺寸页面捕获。
         val selection = capture(3, 40f, 60f, 240f, 180f, 595f, 842f)
@@ -154,7 +154,7 @@ class PdfHighlightLoopTest {
 
     @Test
     fun `delete highlight removes overlay item`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo, "pdf-1")
         val selection = capture(2, 10f, 10f, 200f, 120f, 800f, 600f)
         val committed = controller.commitHighlight(selection) as ReaderHighlightController.CommitResult.Success
@@ -166,7 +166,7 @@ class PdfHighlightLoopTest {
 
     @Test
     fun `multiline highlight restores and deletes as one item`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo,"pdf-1")
         val rects = listOf(
             com.m1racle.reader.data.anchor.NormalizedRect(.2f,.2f,.3f,.02f),
@@ -183,7 +183,7 @@ class PdfHighlightLoopTest {
 
     @Test
     fun `blank text selection is rejected before persistence`() = runTest {
-        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository())
+        val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo, "pdf-1")
         val result = controller.commitHighlight(com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(1, emptyList()))
         assertTrue(result is ReaderHighlightController.CommitResult.Failure)

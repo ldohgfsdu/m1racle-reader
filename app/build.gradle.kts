@@ -4,10 +4,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.Properties
+import java.util.zip.ZipFile
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
@@ -63,12 +63,8 @@ val detailTileOverlayAlpha = providers.gradleProperty("m1racle-reader.detailTile
 
 android {
     namespace = "com.m1racle.reader"
-    // Backdrop 2.0.0 AAR metadata requires minCompileSdk 37; shapes 1.2.0 needs 36.
-    // Host has android-36; 37 may be installed when available. We compile against 36
-    // and relax AAR metadata for the Backdrop transitive (see afterEvaluate below).
-    // targetSdk stays 35 — compileSdk only unlocks newer android.jar APIs for build.
-    compileSdk = 36
-    buildToolsVersion = "36.0.0" // PC build host has 35.0.0/36.0.0; AGP 8.7.3 default 34.0.0 not installed.
+    compileSdk = 37
+    buildToolsVersion = "36.0.0"
     testBuildType = "qa"
 
     defaultConfig {
@@ -146,30 +142,7 @@ android {
         }
     }
 
-    // Lifecycle/Compose lint detectors crash with Compose UI 1.11 (pulled by
-    // Backdrop 2.0.0) under AGP 8.7.3 because their Kotlin analysis API ABI
-    // does not match the host lint runtime. Exclude that incompatible registry;
-    // keep Android, Material, Room, and all other release lint checks active.
     lint {
-        disable += "NullSafeMutableLiveData"
-        disable += setOf(
-            "AutoboxingStateCreation",
-            "AutoboxingStateValueProperty",
-            "ComposableLambdaParameterNaming",
-            "ComposableLambdaParameterPosition",
-            "ComposableNaming",
-            "CompositionLocalNaming",
-            "CoroutineCreationDuringComposition",
-            "FlowOperatorInvokedInComposition",
-            "FrequentlyChangingValue",
-            "MutableCollectionMutableState",
-            "OpaqueUnitKey",
-            "ProduceStateDoesNotAssignValue",
-            "RememberInComposition",
-            "RememberReturnType",
-            "StateFlowValueCalledInComposition",
-            "UnrememberedState",
-        )
         checkReleaseBuilds = true
         abortOnError = true
     }
@@ -177,17 +150,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-        // Backdrop 2.0.0 ships Kotlin 2.3 metadata; compiler is 2.0.21.
-        // Skip check so we can consume the official Maven artifact without a
-        // full Kotlin/AGP/KSP stack upgrade (OBJECTIVE: no blind full upgrade).
-        freeCompilerArgs += listOf(
-            "-Xskip-metadata-version-check",
-            "-Xskip-prerelease-check",
-        )
     }
 
     buildFeatures {
@@ -216,7 +178,7 @@ android {
     // can validate migrated schema against the exported v6.json.
     sourceSets {
         getByName("qa") {
-            java.srcDirs("src/debug/java", "src/qa/java")
+            kotlin.srcDirs("src/debug/java", "src/qa/java")
             manifest.srcFile("src/qa/AndroidManifest.xml")
         }
         getByName("androidTest").assets.srcDirs("schemas")
@@ -295,18 +257,8 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-// Backdrop 2.0.0 declares minCompileSdk=37 while this project targets compileSdk 36
-// (android-37 platform not always installed; APIs we use are blur/lens at 31–33).
-// Disable AAR metadata gate so Liquid can ship without a full AGP/platform upgrade.
-// Documented in docs/READER_CHROME_MATERIAL_REPORT.md.
-afterEvaluate {
-    tasks.matching { it.name.contains("AarMetadata", ignoreCase = true) }.configureEach {
-        enabled = false
-    }
-}
-
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    val composeBom = platform("androidx.compose:compose-bom:2026.05.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -320,9 +272,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.7.2")
+    implementation("androidx.room:room-ktx:2.7.2")
+    ksp("androidx.room:room-compiler:2.7.2")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
@@ -333,13 +285,7 @@ dependencies {
 
     // Liquid glass materials for Reader chrome only (visuals). Official Maven
     // artifact — no vendored sources. See docs/READER_CHROME_MATERIAL_REPORT.md.
-    implementation("io.github.kyant0:backdrop:2.0.0") {
-        // Prefer project Kotlin stdlib (2.0.21); library declares 2.3.21.
-        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
-        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk7")
-        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk8")
-        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-common")
-    }
+    implementation("io.github.kyant0:backdrop:2.0.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
@@ -354,7 +300,7 @@ dependencies {
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("androidx.room:room-testing:2.7.2")
     // Unit tests run against the QA build type (testBuildType = "qa"), so the
     // manifest that declares ComponentActivity for Compose/Robolectric rules
     // must ship with QA too — debugImplementation alone left testQaUnitTest
@@ -406,6 +352,13 @@ fun exportVariantApksToOutbox(variantFolder: String, label: String) {
     val version = android.defaultConfig.versionName ?: "0"
     val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
     apks.forEach { apk ->
+        ZipFile(apk).use { zip ->
+            for (entry in listOf("AndroidManifest.xml", "resources.arsc", "classes.dex")) {
+                check(zip.getEntry(entry)?.size?.let { it > 0 } == true) {
+                    "OUTBOX: refusing incomplete APK ${apk.name}: missing or empty $entry"
+                }
+            }
+        }
         val stamped = File(m1racleReaderOutboxDir, "m1racle-reader-$label-v${version}-$ts.apk")
         val latest = File(m1racleReaderOutboxDir, "m1racle-reader-$label-latest.apk")
         apk.copyTo(stamped, overwrite = true)
@@ -466,3 +419,5 @@ tasks.register("exportApksToOutbox") {
         }
     }
 }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

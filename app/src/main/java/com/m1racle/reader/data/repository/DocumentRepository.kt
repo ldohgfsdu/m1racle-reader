@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
+import androidx.room.RoomDatabase
 import com.m1racle.reader.data.local.AppDatabase
 import com.m1racle.reader.data.local.DocumentAliasDao
 import com.m1racle.reader.data.local.DocumentAliasEntity
@@ -39,7 +40,6 @@ import com.m1racle.reader.share.ExternalDocumentImporter
 import com.m1racle.reader.share.ExternalUriMetadata
 import com.m1racle.reader.share.ProviderMetadata
 import com.m1racle.reader.share.ProviderMetadataSource
-import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -82,8 +82,8 @@ class DocumentRepository(
                 aliasDao = documentAliasDao,
             ),
         ),
-    private val importTransactionRunner: ImportTransactionRunner =
-        RoomImportTransactionRunner(db),
+    private val importTransactionRunner: RepositoryTransactionRunner =
+        RoomRepositoryTransactionRunner(db),
 ) {
 
     private val identityCommitMutex = Mutex()
@@ -574,13 +574,10 @@ class DocumentRepository(
                 searchRepository.clearDocument(id)
                 documentDao.deleteById(id)
             }
-            // Markdown-package extract tree (ZIP textbooks). Orphan dirs accumulate if
+            // Markdown and EPUB extract trees. Orphan dirs accumulate if
             // only Room rows are deleted — wipe best-effort after successful commit.
             try {
-                val packageDir = java.io.File(context.filesDir, "packages/$id")
-                if (packageDir.exists()) {
-                    packageDir.deleteRecursively()
-                }
+                deleteDocumentExtracts(context.filesDir, id)
             } catch (_: Exception) {
             }
             // External VIEW/SEND intake owns copies under files/library. Once the
@@ -1131,17 +1128,6 @@ private data class MaterializedImportPayload(
     fun deleteOperationOwnedFiles() {
         operationOwnedPath?.deleteRecursively()
     }
-}
-
-interface ImportTransactionRunner {
-    suspend fun <T> run(block: suspend () -> T): T
-}
-
-private class RoomImportTransactionRunner(
-    private val db: RoomDatabase,
-) : ImportTransactionRunner {
-    override suspend fun <T> run(block: suspend () -> T): T =
-        db.withTransaction { block() }
 }
 
 internal fun readUtf8TextFully(

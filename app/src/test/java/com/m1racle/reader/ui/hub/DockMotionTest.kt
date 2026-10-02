@@ -1,6 +1,8 @@
 package com.m1racle.reader.ui.hub
 
-import java.io.File
+import androidx.compose.animation.core.TargetBasedAnimation
+import androidx.compose.animation.core.VectorConverter
+import com.m1racle.reader.ui.theme.M1racleMotion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -32,16 +34,13 @@ class DockMotionTest {
     }
 
     @Test
-    fun `selection uses motion token without bounce constants`() {
-        val motion = listOf(
-            File("app/src/main/java/com/m1racle/reader/ui/hub/DockMotion.kt"),
-            File("src/main/java/com/m1racle/reader/ui/hub/DockMotion.kt"),
-        ).first { it.isFile }.readText()
-        assertTrue(motion.contains("M1racleMotion.normal"))
-        assertFalse(motion.contains("spring("))
-        assertFalse(motion.contains("DockCapsulePressedScale"))
-        assertFalse(motion.contains("dockCapsuleScales"))
-        assertFalse(motion.contains("DockContentPressedScale"))
+    fun `selection spring settles at destination without an abrupt first frame`() {
+        val animation = TargetBasedAnimation(M1racleMotion.dockSelection, Float.VectorConverter, 0f, 3f)
+        assertEquals(0f, animation.getValueFromNanos(0), 0f)
+        val firstFrame = animation.getValueFromNanos(16_000_000)
+        assertTrue(firstFrame > 0f && firstFrame < 0.3f)
+        assertTrue(animation.durationNanos < 1_000_000_000)
+        assertEquals(3f, animation.getValueFromNanos(animation.durationNanos), 0.001f)
     }
 
     @Test

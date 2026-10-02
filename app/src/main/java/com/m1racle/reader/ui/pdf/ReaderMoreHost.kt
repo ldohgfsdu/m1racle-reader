@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -53,6 +55,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -85,7 +88,7 @@ import kotlinx.coroutines.launch
 /**
  * Single exclusive menu state (r26.1). Never BasicExpanded + AdvancedOpen together.
  *
- * Preparing* = collapse Basic → wait for Main six-row geometry → then AdvancedOpen.
+ * Preparing* = collapse Basic → wait for Main geometry with inline sections collapsed → then AdvancedOpen.
  */
 enum class ReaderMoreState {
     CLOSED,
@@ -94,7 +97,7 @@ enum class ReaderMoreState {
     INLINE_READING_MODE,
     /** Basic: 阅读界面 */
     INLINE_READING_UI,
-    /** Phase-1: collapse Basic, restore Main six-row before Child morph. */
+    /** Phase-1: collapse Basic, restore Main collapsed-inline before Child morph. */
     PREPARING_CHILD_PAGE_MAPPING,
     PREPARING_CHILD_TOC,
     PREPARING_CHILD_THUMBNAILS,
@@ -234,16 +237,18 @@ internal val MoreMorphSpring = SpringSpec<Float>(
 private const val InlineProgressMs = 175
 
 /**
- * One entry of the morphing "more" card (level-1 row). [closeOnClick] gates
- * the generic close-after-tap: task entries keep the card alive and grow the
- * Advanced Card instead.
+ * One menu entry. A childState identifies its nested destination and origin;
+ * ordinary actions close the menu after onClick, nested actions keep it open.
  */
 data class PdfChromeMenuItem(
     val icon: ImageVector,
     val label: String,
-    val onClick: () -> Unit,
-    val closeOnClick: Boolean = true,
-)
+    val onClick: () -> Unit = {},
+    /** Stable nested destination; also owns this row's measured origin. */
+    val childState: ReaderMoreState? = null,
+) {
+    init { require(childState == null || childState.isChild()) }
+}
 
 /** Check-marked option inside an inline-expandable group. */
 data class PdfChromeMenuOption(
@@ -258,21 +263,6 @@ data class PdfChromeSubmenuEntry(
     val icon: ImageVector,
     val label: String,
 )
-
-/** Row index inside the parent content (vertical pad + index × row height). */
-internal fun parentRowTop(rowIndex: Int): Dp = MenuVerticalPad + MenuRowHeight * rowIndex
-
-/**
- * The four task entries live at parent rows 2..5 (阅读方式/阅读界面 are 0/1).
- * Each CHILD_* state owns EXACTLY ONE row — reverse morph returns there only.
- */
-internal fun childRowIndex(state: ReaderMoreState): Int = when (state) {
-    ReaderMoreState.CHILD_PAGE_MAPPING -> 2
-    ReaderMoreState.CHILD_TOC -> 3
-    ReaderMoreState.CHILD_THUMBNAILS -> 4
-    ReaderMoreState.CHILD_EXPORT -> 5
-    else -> -1
-}
 
 /**
  * R25.2 pure geometry: the parent card's real content height under a single
@@ -306,6 +296,7 @@ internal fun ReaderMoreHost(
     onCloseRequest: () -> Unit,
     onChildCollapsed: () -> Unit,
     onSectionToggle: (ReaderMoreState) -> Unit,
+    onOpenChild: (ReaderMoreState) -> Unit,
     submenuEntries: List<PdfChromeSubmenuEntry>,
     plainMenuItems: List<PdfChromeMenuItem>,
     readingModeOptions: List<PdfChromeMenuOption>,
@@ -315,7 +306,7 @@ internal fun ReaderMoreHost(
     /** Root-space safe viewport bottom. */
     viewportBottomRoot: Float = Float.POSITIVE_INFINITY,
     /**
-     * Called when PREPARING_* has a stable Main six-row source bounds and can
+     * Called when PREPARING_* has a stable Main source bounds with inline sections collapsed and can
      * promote to CHILD_* (r26.1 two-phase Basic→Advanced).
      */
     onPreparingLayoutReady: (ReaderMoreState) -> Unit = {},
@@ -333,9 +324,9 @@ internal fun ReaderMoreHost(
     // ── Unique coordinate system: ALL rects via boundsInRoot() ──────────────
     var hostOriginRoot by remember { mutableStateOf(Rect.Zero) }
     var mainCardRectRoot by remember { mutableStateOf(Rect.Zero) }
-    var rowRectsRoot by remember { mutableStateOf<Map<Int, Rect>>(emptyMap()) }
-    /** Canonical Main six-row bounds — only updated when layout is Main (no Basic expand). */
-    var canonicalMainBounds by remember { mutableStateOf<Map<Int, Rect>>(emptyMap()) }
+    var rowRectsRoot by remember { mutableStateOf<Map<ReaderMoreState, Rect>>(emptyMap()) }
+    /** Canonical Main bounds with inline sections collapsed — only updated when layout is Main (no Basic expand). */
+    var canonicalMainBounds by remember { mutableStateOf<Map<ReaderMoreState, Rect>>(emptyMap()) }
     var frozenSourceRoot by remember { mutableStateOf<Rect?>(null) }
     var frozenParentRoot by remember { mutableStateOf<Rect?>(null) }
     var frozenChildState by remember { mutableStateOf<ReaderMoreState?>(null) }
@@ -352,17 +343,18 @@ internal fun ReaderMoreHost(
     val topBarProgress = remember { Animatable(0f) }
     var readingModeExpandedHeightPx by remember { mutableFloatStateOf(0f) }
     var topBarExpandedHeightPx by remember { mutableFloatStateOf(0f) }
+    val childTargets = plainMenuItems.mapNotNull { it.childState }
     val totalRowCount = submenuEntries.size + plainMenuItems.size
     val mainRowHeight = scaledMenuRowHeight(MenuRowHeight)
     val baseHeightPx = with(density) {
         (MenuVerticalPad * 2 + mainRowHeight * totalRowCount).toPx()
     }
-    val sixRowLayout =
+    val collapsedInlineLayout =
         readingModeProgress.value == 0f &&
             topBarProgress.value == 0f &&
             !state.isInline()
 
-    // Preparing / Child: force Basic collapsed so Parent is standard six-row.
+    // Preparing / Child: force Basic collapsed so Parent has only its entry rows.
     LaunchedEffect(state) {
         if (state.isPreparing() || state.isChild()) {
             readingModeProgress.snapTo(0f)
@@ -370,20 +362,20 @@ internal fun ReaderMoreHost(
         }
     }
 
-    // Update canonical Main bounds only when truly Main six-row (not Basic/Preparing/Child).
-    LaunchedEffect(state, rowRectsRoot, mainCardRectRoot, sixRowLayout) {
-        if (state == ReaderMoreState.MAIN && sixRowLayout && mainCardRectRoot.width > 0f) {
-            val next = mutableMapOf<Int, Rect>()
-            for (i in 2..5) {
-                rowRectsRoot[i]?.let { next[i] = it }
+    // Update canonical Main bounds only when Main with inline sections collapsed (not Preparing/Child).
+    LaunchedEffect(state, rowRectsRoot, mainCardRectRoot, collapsedInlineLayout, childTargets) {
+        if (state == ReaderMoreState.MAIN && collapsedInlineLayout && mainCardRectRoot.width > 0f) {
+            val next = mutableMapOf<ReaderMoreState, Rect>()
+            for (target in childTargets) {
+                rowRectsRoot[target]?.let { next[target] = it }
             }
-            if (next.size == 4) {
+            if (next.size == childTargets.size) {
                 canonicalMainBounds = next
             }
         }
     }
 
-    // Two-phase: PREPARING → wait for six-row layout → freeze canonical bounds → CHILD.
+    // Two-phase: PREPARING → wait for inline sections to collapse → freeze canonical bounds → CHILD.
     LaunchedEffect(
         state, childClosing, closing, rowRectsRoot, mainCardRectRoot,
         readingModeProgress.value, topBarProgress.value, canonicalMainBounds,
@@ -395,17 +387,16 @@ internal fun ReaderMoreHost(
                 frozenParentRoot = null
                 frozenChildState = null
             }
-            state.isPreparing() && sixRowLayout -> {
+            state.isPreparing() && collapsedInlineLayout -> {
                 val target = state.preparingTarget() ?: return@LaunchedEffect
-                val rowIdx = childRowIndex(target)
-                // Prefer canonical Main bounds; fall back to current six-row measure.
-                val row = canonicalMainBounds[rowIdx] ?: rowRectsRoot[rowIdx]
+                // Prefer canonical Main bounds; fall back to current measurement with inline sections collapsed.
+                val row = canonicalMainBounds[target] ?: rowRectsRoot[target]
                 if (row != null && mainCardRectRoot.width > 0f &&
                     kotlin.math.abs(cardHeight.value - baseHeightPx) < 8f
                 ) {
                     // Wait one frame so Compose finishes measure after collapse.
                     kotlinx.coroutines.delay(1)
-                    val row2 = canonicalMainBounds[rowIdx] ?: rowRectsRoot[rowIdx] ?: row
+                    val row2 = canonicalMainBounds[target] ?: rowRectsRoot[target] ?: row
                     frozenSourceRoot = row2
                     frozenParentRoot = mainCardRectRoot
                     frozenChildState = target
@@ -414,8 +405,7 @@ internal fun ReaderMoreHost(
             }
             state.isChild() -> {
                 if (frozenChildState != state || frozenSourceRoot == null) {
-                    val rowIdx = childRowIndex(state)
-                    val row = canonicalMainBounds[rowIdx] ?: rowRectsRoot[rowIdx]
+                    val row = canonicalMainBounds[state] ?: rowRectsRoot[state]
                     if (row != null && mainCardRectRoot.width > 0f) {
                         frozenSourceRoot = row
                         frozenParentRoot = mainCardRectRoot
@@ -487,7 +477,7 @@ internal fun ReaderMoreHost(
         if (closing) {
             cardHeight.animateTo(circlePx, tween(MorphCollapseMs, easing = MoreMorphEasing))
         } else if (active) {
-            // Preparing/Child: lock Parent to standard six-row height.
+            // Preparing/Child: lock Parent to the height of its entry rows.
             val target = if (state.isChild() || state.isPreparing() || nestedActive) {
                 baseHeightPx
             } else {
@@ -518,21 +508,15 @@ internal fun ReaderMoreHost(
         }
     }
 
-    // ── R22.2 single-clock spatial morph ─────────────────────────────────────
-    // One expandFraction (derived from the spring-driven card width) owns the
-    // corner radius, content fade-in, icon fade-out and the content's slight
-    // scale from the top-right anchor. No independent alpha clocks: opening
-    // reads as "the button grows into the card", closing as the exact reverse,
-    // with the anchor (top-right) invariant throughout.
+    // The container owns the morph. Menu labels keep their final width and
+    // position; the changing glass outline reveals them without text transforms.
     val expandFraction = ((cardWidth.value - circlePx) / (menuWidthPx - circlePx))
         .coerceIn(0f, 1f)
     val shape = RoundedCornerShape(
         MoreMenuCornerClosed + (MoreMenuCorner - MoreMenuCornerClosed) * expandFraction,
     )
 
-    val contentAlpha = (expandFraction * 1.6f).coerceAtMost(1f)
     val iconAlpha = (1f - expandFraction * 2.5f).coerceAtLeast(0f)
-    val contentScale = 0.94f + 0.06f * expandFraction
 
     var lastTop by remember { mutableFloatStateOf(Float.NaN) }
     var lastRight by remember { mutableFloatStateOf(Float.NaN) }
@@ -579,38 +563,39 @@ internal fun ReaderMoreHost(
         } else {
             // ── MAIN — never de-emphasized, never moved under nested popover ─
             if (showMainSurface) {
-                Box(
+                PdfMenuElasticPress(
+                    enabled = !closing && !nestedActive && !state.isPreparing() && !state.isChild(),
                     modifier = Modifier
                         .size(
                             width = with(density) { cardWidth.value.toDp() },
                             height = with(density) { cardHeight.value.toDp() },
                         )
                         .align(Alignment.TopEnd)
-                        .glassMaterial(
-                            role = GlassMaterialRole.Menu,
-                            shape = shape,
-                            interaction = true,
-                        )
                         .onGloballyPositioned { coords ->
                             mainCardRectRoot = coords.boundsInRoot()
                             logBounds(stateTag, coords)
                         },
+                ) { transform, settled ->
+                Box(
+                    Modifier.fillMaxSize()
+                        .glassMaterial(
+                            role = GlassMaterialRole.Menu,
+                            shape = shape,
+                            interaction = true,
+                            layerBlock = transform,
+                        )
+                        .testTag("pdf-more-elastic-surface"),
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(MoreMenuWidth)
                             .align(Alignment.TopEnd)
-                            .graphicsLayer {
-                                alpha = contentAlpha
-                                scaleX = contentScale
-                                scaleY = contentScale
-                                // Grow from / shrink into the More button anchor.
-                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
-                            },
+                            .wrapContentWidth(Alignment.End, unbounded = true)
+                            .width(MoreMenuWidth),
                     ) {
                         MainMenuContent(
                             state = state,
                             onSectionToggle = onSectionToggle,
+                            onOpenChild = onOpenChild,
                             onCloseRequest = onCloseRequest,
                             submenuEntries = submenuEntries,
                             plainMenuItems = plainMenuItems,
@@ -622,8 +607,9 @@ internal fun ReaderMoreHost(
                             topBarExpandedHeightPx = topBarExpandedHeightPx,
                             onReadingModeHeightChanged = { readingModeExpandedHeightPx = it },
                             onTopBarHeightChanged = { topBarExpandedHeightPx = it },
-                            onRowBoundsRoot = { rowIndex, rect ->
-                                rowRectsRoot = rowRectsRoot + (rowIndex to rect)
+                            onRowBoundsRoot = { child, rect ->
+                                // Nested morphs must use resting geometry, never a dragged row.
+                                if (settled) rowRectsRoot = rowRectsRoot + (child to rect)
                             },
                         )
                         Box(
@@ -651,6 +637,7 @@ internal fun ReaderMoreHost(
                                 },
                         )
                     }
+                }
                 }
             }
 
@@ -725,6 +712,7 @@ private fun MoreCircleButton(
 private fun MainMenuContent(
     state: ReaderMoreState,
     onSectionToggle: (ReaderMoreState) -> Unit,
+    onOpenChild: (ReaderMoreState) -> Unit,
     onCloseRequest: () -> Unit,
     submenuEntries: List<PdfChromeSubmenuEntry>,
     plainMenuItems: List<PdfChromeMenuItem>,
@@ -736,7 +724,7 @@ private fun MainMenuContent(
     topBarExpandedHeightPx: Float,
     onReadingModeHeightChanged: (Float) -> Unit,
     onTopBarHeightChanged: (Float) -> Unit,
-    onRowBoundsRoot: (rowIndex: Int, bounds: Rect) -> Unit,
+    onRowBoundsRoot: (child: ReaderMoreState, bounds: Rect) -> Unit,
 ) {
     val readingEntry = submenuEntries.firstOrNull { it.kind == ReaderMoreState.INLINE_READING_MODE }
     val topBarEntry = submenuEntries.firstOrNull { it.kind == ReaderMoreState.INLINE_READING_UI }
@@ -821,20 +809,9 @@ private fun MainMenuContent(
         // r26 §6 single-instance: while THIS row's child is open, the row keeps
         // its layout placeholder but icon/title alpha → 0 (child header owns
         // the only visible instance).
-        plainMenuItems.forEachIndexed { i, item ->
-            val rowIndex = 2 + i
-            val childStateForRow = when (rowIndex) {
-                2 -> ReaderMoreState.CHILD_PAGE_MAPPING
-                3 -> ReaderMoreState.CHILD_TOC
-                4 -> ReaderMoreState.CHILD_THUMBNAILS
-                5 -> ReaderMoreState.CHILD_EXPORT
-                else -> null
-            }
-            val owns = childStateForRow != null && (
-                state == childStateForRow ||
-                    state.preparingTarget() == childStateForRow ||
-                    (state.isChild() && childRowIndex(state) == rowIndex)
-                )
+        plainMenuItems.forEach { item ->
+            val child = item.childState
+            val owns = child != null && (state == child || state.preparingTarget() == child)
             PdfChromeMenuRow(
                 icon = item.icon,
                 label = item.label,
@@ -843,10 +820,11 @@ private fun MainMenuContent(
                 contentAlpha = if (owns) 0f else 1f,
                 onClick = {
                     item.onClick()
-                    if (item.closeOnClick) onCloseRequest()
+                    if (child != null) onOpenChild(child)
+                    else onCloseRequest()
                 },
                 modifier = Modifier.onGloballyPositioned { coords ->
-                    onRowBoundsRoot(rowIndex, coords.boundsInRoot())
+                    if (child != null) onRowBoundsRoot(child, coords.boundsInRoot())
                 },
             )
         }
@@ -912,7 +890,7 @@ internal fun Modifier.reportNaturalHeight(onNaturalHeight: (Int) -> Unit): Modif
  * One compact row: 52dp level-1 / 48dp option rows, 22dp icon + 12dp gap,
  * level-1 label 14sp Normal / level-2 13sp Normal, optional chevron
  * (rotates `>` → `⌄` while expanded) / small check. Row-local restrained
- * highlight only — no Material ripple, no selected background.
+ * highlight follows the held pointer across rows; checked options keep their checkmark.
  *
  * @param chevronRotation explicit rotation angle (degrees) for the chevron,
  *   driven by the caller's progress p (R25.2). When null, falls back to the
@@ -945,12 +923,21 @@ internal fun PdfChromeMenuRow(
     val rotation = chevronRotation ?: animatedRotation
     val rowInteraction = remember { MutableInteractionSource() }
     val rowPressed by rowInteraction.collectIsPressedAsState()
-    val pressedOverlay = glassPressedContentOverlayAlpha(GlassMaterialRole.Menu)
-    val rowHighlight by animateFloatAsState(
-        targetValue = if (rowPressed) pressedOverlay else 0f,
-        animationSpec = GlassMaterialEngine.PressSpring,
+    val heldPointer = LocalPdfMenuHeldPointer.current?.value
+    var rowBounds by remember { mutableStateOf(Rect.Zero) }
+    // A consumed long press cancels clickable's PressInteraction. The parent
+    // pointer is authoritative during that gesture, including movement to another row.
+    val highlighted = if (heldPointer != null) rowBounds.contains(heldPointer) else rowPressed
+    val pressedOverlay = maxOf(0.10f, glassPressedContentOverlayAlpha(GlassMaterialRole.Menu))
+    val highlightTarget = if (highlighted) pressedOverlay else 0f
+    // A held finger paints the row under it immediately. PressSpring stays for
+    // an ordinary tap, whose press is not fighting a moving pointer.
+    val rowHighlightAnim by animateFloatAsState(
+        targetValue = highlightTarget,
+        animationSpec = if (heldPointer != null) snap() else GlassMaterialEngine.PressSpring,
         label = "menuRowPress",
     )
+    val rowHighlight = if (heldPointer != null) highlightTarget else rowHighlightAnim
     val muted = glassMutedContentAlpha(GlassMaterialRole.Menu)
     val expandedDescription = stringResource(
         if (chevronExpanded) R.string.pdf_control_expanded else R.string.pdf_control_collapsed,
@@ -975,6 +962,7 @@ internal fun PdfChromeMenuRow(
         modifier = modifier
             .fillMaxWidth()
             .height(scaledMenuRowHeight(rowHeight))
+            .onGloballyPositioned { rowBounds = it.boundsInRoot() }
             .background(
                 scheme.onSurface.copy(alpha = rowHighlight),
                 RoundedCornerShape(10.dp),
