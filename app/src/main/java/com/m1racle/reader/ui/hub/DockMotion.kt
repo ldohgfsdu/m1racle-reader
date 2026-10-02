@@ -3,7 +3,6 @@ package com.m1racle.reader.ui.hub
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
-import com.m1racle.reader.ui.theme.M1racleMotion
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -13,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.m1racle.reader.ui.theme.M1racleMotion
 import kotlin.math.roundToInt
 
 /** Transient pointer preview only. The navigation stack owns selection. */
@@ -57,7 +57,7 @@ internal fun HubDockMotionProvider(
     LaunchedEffect(selected) { preview.cancel() }
     val position = animateFloatAsState(
         targetValue = preview.position ?: selected.ordinal.toFloat(),
-        animationSpec = if (preview.position != null) tween(0) else M1racleMotion.normal,
+        animationSpec = if (preview.position != null) tween(0) else M1racleMotion.dockSelection,
         label = "hubDockSelection",
     )
     val motion = remember(selected, position, preview) { HubDockMotion(selected, position, preview) }

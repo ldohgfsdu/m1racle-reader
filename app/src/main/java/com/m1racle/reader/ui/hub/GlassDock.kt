@@ -39,8 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -55,16 +54,17 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.m1racle.reader.R
 import com.m1racle.reader.ui.home.HomeDesignTokens
-import com.m1racle.reader.ui.material.GlassMaterialEngine
 import com.m1racle.reader.ui.material.GlassMaterialRole
-import com.m1racle.reader.ui.material.GlassCapability
-import com.m1racle.reader.ui.material.LocalGlassEnvironment
+import com.m1racle.reader.ui.material.glassMaterial
+import com.m1racle.reader.ui.material.LocalGlassBackdropHost
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.m1racle.reader.ui.theme.M1racleGlassPolicy
+import com.m1racle.reader.ui.theme.M1racleMotion
 import com.m1racle.reader.ui.theme.M1racleGlassUsage
 
 /**
- * Hub page frame. No document backdrop capture: hub pages have no glass
- * consumers, so an unused LayerBackdrop would only add a graphics layer.
+ * Hub page frame. The navigation owner captures the page for its sibling dock.
  */
 @Composable
 fun HubGlassShell(
@@ -90,12 +90,10 @@ private val dockEntries = listOf(
     DockEntry(HubDestination.SETTINGS, Icons.Outlined.Settings, Icons.Filled.Settings, R.string.hub_nav_settings),
 )
 
-private val DockBarCorner = 16.dp
-private val DockIndicatorWidth = 16.dp
-private val DockIndicatorHeight = 3.dp
+private val DockBarCorner = 32.dp
 private val DockTabIconSize = 24.dp
 
-/** Route-owned selection with a light L3 tab bar and a small sliding indicator. */
+/** Floating capsule above the page's soft scroll edge. Navigation owns selection. */
 @Composable
 fun GlassDock(
     onSelect: (HubDestination) -> Unit,
@@ -104,15 +102,33 @@ fun GlassDock(
     check(M1racleGlassPolicy.allows(M1racleGlassUsage.Dock))
     val motion = LocalHubDockMotion.current
     val scheme = MaterialTheme.colorScheme
-    val dockSpec = GlassMaterialEngine.resolve(
-        role = GlassMaterialRole.Dock,
-        environment = LocalGlassEnvironment.current,
-        capability = GlassCapability.SOLID_FALLBACK,
-    )
     val barShape = RoundedCornerShape(DockBarCorner)
     val interactions = remember { List(dockEntries.size) { MutableInteractionSource() } }
+    val pressedTabs = interactions.map { it.collectIsPressedAsState().value }
+    val engaged = motion.preview.position != null || pressedTabs.any { it }
+    val pickup = animateFloatAsState(
+        targetValue = if (engaged) 1f else 0f,
+        animationSpec = M1racleMotion.dockPickup,
+        label = "dockLensPickup",
+    )
+    val barTransform: GraphicsLayerScope.() -> Unit = remember(pickup) {
+        {
+            scaleX = 1f + 0.015f * pickup.value
+            scaleY = 1f + 0.04f * pickup.value
+        }
+    }
+    val lensTransform: GraphicsLayerScope.() -> Unit = remember(pickup) {
+        {
+            scaleX = 1f + 0.10f * pickup.value
+            scaleY = 1f + 0.16f * pickup.value
+        }
+    }
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val edgeBackdrop = rememberLayerBackdrop()
+    val host = LocalGlassBackdropHost.current
+    val dockBackdrop = host?.let { rememberCombinedBackdrop(it.root, edgeBackdrop) }
     Box(modifier = modifier.fillMaxSize()) {
+        SoftScrollEdge(edgeBackdrop, Modifier.align(Alignment.BottomCenter))
         BoxWithConstraints(
             contentAlignment = AbsoluteAlignment.TopLeft,
             modifier = Modifier
@@ -146,12 +162,28 @@ fun GlassDock(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .shadow(
-                        elevation = dockSpec.shadow,
-                        shape = barShape,
+                    .glassMaterial(
+                        GlassMaterialRole.Dock, barShape, sourceBackdrop = dockBackdrop,
+                        layerBlock = barTransform,
+                    ),
+            )
+            Box(
+                Modifier
+                    .padding(HomeDesignTokens.DockContentPadding)
+                    .width(slotWidth)
+                    .height(HomeDesignTokens.DockHeight - HomeDesignTokens.DockContentPadding * 2)
+                    .graphicsLayer {
+                        translationX = dockPhysicalPosition(motion.position.value, rtl) * slotWidthPx
+                    }
+                    .padding(horizontal = 2.dp)
+                    .glassMaterial(
+                        GlassMaterialRole.Capsule,
+                        RoundedCornerShape(50),
+                        sourceBackdrop = dockBackdrop,
+                        layerBlock = lensTransform,
                     )
-                    .clip(barShape)
-                    .background(dockSpec.surfaceColor),
+                    .background(scheme.primary.copy(alpha = 0.08f))
+                    .testTag("dock-selection"),
             )
             Row(
                 modifier = Modifier
@@ -164,10 +196,10 @@ fun GlassDock(
             ) {
                 dockEntries.forEachIndexed { index, entry ->
                     val selected = entry.destination == motion.selected
-                    val pressed by interactions[index].collectIsPressedAsState()
+                    val pressed = pressedTabs[index]
                     val contentAlpha by animateFloatAsState(
                         targetValue = if (pressed) 0.7f else 1f,
-                        animationSpec = com.m1racle.reader.ui.theme.M1racleMotion.fast,
+                        animationSpec = M1racleMotion.fast,
                         label = "dockTabPressAlpha",
                     )
                     Column(
@@ -191,24 +223,6 @@ fun GlassDock(
                         )
                     }
                 }
-            }
-            Box(
-                modifier = Modifier
-                    .padding(HomeDesignTokens.DockContentPadding)
-                    .width(slotWidth)
-                    .height(HomeDesignTokens.DockHeight - HomeDesignTokens.DockContentPadding * 2)
-                    .graphicsLayer {
-                        translationX = dockPhysicalPosition(motion.position.value, rtl) * slotWidthPx
-                    },
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(bottom = 5.dp)
-                        .size(width = DockIndicatorWidth, height = DockIndicatorHeight)
-                        .clip(RoundedCornerShape(50))
-                        .background(scheme.primary),
-                )
             }
         }
     }

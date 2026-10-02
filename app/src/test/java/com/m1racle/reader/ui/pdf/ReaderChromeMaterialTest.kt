@@ -4,17 +4,35 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.m1racle.reader.testing.ProductionSource
 import com.m1racle.reader.ui.material.GlassMaterialEngine
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.supportsGlassLens
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /** Unified material, geometry and glass-on-glass contracts for Reader chrome. */
 class ReaderChromeMaterialTest {
+
+    @Test
+    fun `nested cards share parent menu optics and preserve layered sampling`() {
+        for (dark in listOf(false, true)) {
+            val menu = GlassMaterialEngine.resolve(GlassMaterialRole.Menu, dark)
+            val nested = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark)
+            assertEquals(menu.surfaceColor, nested.surfaceColor)
+            assertEquals(menu.blur, nested.blur)
+            assertTrue(nested.lensEnabled)
+            assertEquals(menu.lensHeight, nested.lensHeight)
+            assertEquals(menu.lensAmount, nested.lensAmount)
+            assertEquals(menu.highlightWidth, nested.highlightWidth)
+            assertEquals(menu.highlightColor, nested.highlightColor)
+            assertEquals(menu.shadowColor, nested.shadowColor)
+            assertEquals("RootAndMenu", nested.backdropLayer.name)
+        }
+    }
 
     @Test
     fun `parent geometry stays compact and independent from material`() {
@@ -31,23 +49,24 @@ class ReaderChromeMaterialTest {
         val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
         val dialog = GlassMaterialEngine.resolve(GlassMaterialRole.Dialog, dark = false)
 
-        assertEquals(0.86f, control.surfaceColor.alpha, 0.01f)
-        assertEquals(0.86f, capsule.surfaceColor.alpha, 0.01f)
+        assertEquals(0.60f, control.surfaceColor.alpha, 0.01f)
+        assertEquals(0.60f, capsule.surfaceColor.alpha, 0.01f)
         assertEquals(0.90f, menu.surfaceColor.alpha, 0.01f)
-        assertEquals(0.90f, settings.surfaceColor.alpha, 0.01f)
+        assertEquals(0.60f, settings.surfaceColor.alpha, 0.01f)
         assertEquals(0.97f, dialog.surfaceColor.alpha, 0.01f)
-        assertEquals(0.14f, control.shadowColor.alpha, 0.01f)
-        assertEquals(control.blur, menu.blur)
+        assertEquals(0.12f, control.shadowColor.alpha, 0.01f)
+        assertEquals(4.dp, control.blur)
+        assertEquals(24.dp, menu.blur)
         assertEquals(menu.shadow, settings.shadow)
     }
 
     @Test
     fun `night frost remains translucent and uses one palette`() {
         val expected = mapOf(
-            GlassMaterialRole.Control to (0.80f to 0f),
-            GlassMaterialRole.Capsule to (0.80f to 0f),
-            GlassMaterialRole.ExpandedMenu to (0.86f to 0f),
-            GlassMaterialRole.SettingsCard to (0.86f to 0f),
+            GlassMaterialRole.Control to (0.64f to 0.60f),
+            GlassMaterialRole.Capsule to (0.64f to 0.60f),
+            GlassMaterialRole.ExpandedMenu to (0.90f to 0.60f),
+            GlassMaterialRole.SettingsCard to (0.64f to 0.60f),
             GlassMaterialRole.Dialog to (0.97f to 0.38f),
         )
         expected.forEach { (role, values) ->
@@ -56,7 +75,11 @@ class ReaderChromeMaterialTest {
             assertEquals(0f, spec.brightness, 0.001f)
             assertEquals(1f, spec.saturation, 0.001f)
             assertEquals(values.second, spec.highlightColor.alpha, 0.01f)
-            assertEquals(if (role == GlassMaterialRole.Dialog) Color(0xFF121212) else Color.Black, spec.surfaceColor.copy(alpha = 1f))
+            assertEquals(when (role) {
+                GlassMaterialRole.Dialog -> Color(0xFF121212)
+                GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.SettingsCard -> Color(0xFF242424)
+                else -> Color(0xFF202020)
+            }, spec.surfaceColor.copy(alpha = 1f))
         }
     }
 
@@ -160,9 +183,5 @@ class ReaderChromeMaterialTest {
         "com/m1racle/reader/ui/material/GlassMaterial.kt",
     ).readText()
 
-    private fun appSource(relative: String): File = listOf(
-        File("src/main/java/$relative"),
-        File("app/src/main/java/$relative"),
-        File("/root/code/m1racle-reader/app/src/main/java/$relative"),
-    ).first { it.isFile }
+    private fun appSource(relative: String): File = ProductionSource.file(relative)
 }

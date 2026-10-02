@@ -1,6 +1,7 @@
 package com.m1racle.reader.ui.theme
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,12 +25,26 @@ class M1racleMotionContractTest {
     fun `dock indicator and press opacity use tokens without scale bounce`() {
         val dock = source("ui/hub/GlassDock.kt")
         val motion = source("ui/hub/DockMotion.kt")
+        val shared = source("ui/theme/M1racleMotion.kt")
         assertTrue(dock.contains("M1racleMotion.fast"))
-        assertTrue(motion.contains("M1racleMotion.normal"))
+        // The dock is the one surface that moves a real object under the finger, so
+        // its two springs live in the shared motion language. Feature code must
+        // reference them, never declare its own.
+        assertTrue(dock.contains("M1racleMotion.dockPickup"))
+        assertTrue(motion.contains("M1racleMotion.dockSelection"))
+        assertFalse(dock.contains("spring("))
         assertFalse(motion.contains("spring("))
-        assertFalse(dock.contains("scaleX"))
-        assertFalse(dock.contains("scaleY"))
+        assertEquals(2, Regex("= spring\\(").findAll(shared).count())
         assertTrue(dock.contains("alpha = contentAlpha"))
+        // Press feedback may scale the capsule, but only as a bounded lift driven by
+        // the shared pickup state. Unbounded or spring-driven scaling is a bounce.
+        assertTrue(dock.contains("pickup.value"))
+        for (match in Regex("scale[XY]\\s*=\\s*1f\\s*\\+\\s*([0-9.]+)f").findAll(dock)) {
+            assertTrue(
+                "dock press scale ${match.groupValues[1]} exceeds the bounded lift",
+                match.groupValues[1].toDouble() <= 0.25,
+            )
+        }
     }
 
     @Test
@@ -61,16 +76,18 @@ class M1racleMotionContractTest {
         val host = source("ui/pdf/ReaderMoreHost.kt")
         val pop = source("ui/pdf/AnchoredNestedPopover.kt")
         assertTrue(host.contains("MoreMorphSpring"))
-        assertTrue(host.contains("scaleX = contentScale"))
         assertTrue(host.contains("glassMaterial("))
         assertTrue(host.contains("dampingRatio = 0.8f"))
         assertTrue(host.contains("stiffness = 450f"))
+        // The card outline morphs; the text does not scale independently. Independent
+        // content scaling was rejected as cheap-looking motion, so it must not return.
+        assertFalse(host.contains("scaleX"))
+        assertFalse(host.contains("scaleY"))
+        assertFalse(host.contains("contentScale"))
         assertTrue(pop.contains("M1racleMotion.slow"))
         assertTrue(pop.contains("M1racleMotion.normalIn"))
     }
 
-    private fun source(relative: String): String = listOf(
-        File("app/src/main/java/com/m1racle/reader/$relative"),
-        File("src/main/java/com/m1racle/reader/$relative"),
-    ).first { it.isFile }.readText()
+    private fun source(relative: String): String =
+        ProductionSource.text("com/m1racle/reader/$relative")
 }

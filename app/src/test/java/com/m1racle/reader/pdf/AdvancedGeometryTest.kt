@@ -1,5 +1,6 @@
 package com.m1racle.reader.pdf
 
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,11 +26,7 @@ class AdvancedGeometryTest {
 
     @Test
     fun `thumbnail card wires LazyGrid to current page item index`() {
-        val card = listOf(
-            java.io.File("app/src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-            java.io.File("src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-            java.io.File("/root/code/m1racle-reader/app/src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-        ).first { it.isFile }.readText()
+        val card = ProductionSource.text("com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt")
         assertTrue(card.contains("thumbnailInitialItemIndex("))
         assertTrue(card.contains("GridCells.Fixed(ThumbnailGridColumns)"))
         assertTrue(card.contains("ContentScale.Crop"))
@@ -53,11 +50,7 @@ class AdvancedGeometryTest {
 
     @Test
     fun `outline card is a complete catalog with current chapter at open`() {
-        val card = listOf(
-            java.io.File("app/src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-            java.io.File("src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-            java.io.File("/root/code/m1racle-reader/app/src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-        ).first { it.isFile }.readText()
+        val card = ProductionSource.text("com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt")
         assertFalse(card.contains("stickyHeader"))
         assertFalse(card.contains("outlineViewport"))
         assertFalse(card.contains("NestedOutlineSectionList"))

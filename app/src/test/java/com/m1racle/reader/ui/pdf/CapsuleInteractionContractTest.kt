@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.pdf
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -179,15 +179,8 @@ class CapsuleInteractionContractTest {
 
     private fun readyDerivation(): String = norm(source("PdfViewerScreen.kt"))
 
-    private fun source(name: String): String = appSource(
-        "com/m1racle/reader/ui/pdf/$name",
-    ).readText()
-
-    private fun appSource(relative: String): File = listOf(
-        File("src/main/java/$relative"),
-        File("app/src/main/java/$relative"),
-        File("/root/code/m1racle-reader/app/src/main/java/$relative"),
-    ).first { it.isFile }
+    private fun source(name: String): String =
+        ProductionSource.text("com/m1racle/reader/ui/pdf/$name")
 
     private fun norm(s: String): String = s.replace(Regex("\\s+"), " ")
 }

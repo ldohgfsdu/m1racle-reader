@@ -1,11 +1,12 @@
 package com.m1racle.reader
 
-import java.io.File
-import java.util.Properties
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.util.Properties
 
 /** R32 public-release identity, signing and Room-baseline contracts. */
 class R32ReleaseHardeningContractTest {
@@ -86,12 +87,10 @@ class R32ReleaseHardeningContractTest {
         ).forEach { assertTrue("missing checklist section $it", checklist.contains("## $it")) }
     }
 
-    private fun projectRoot(): File = listOf(File("."), File(".."), File("/root/code/m1racle-reader"))
-        .first { File(it, "app/src/main/java/com/m1racle/reader").isDirectory }
-        .canonicalFile
+    private fun projectRoot(): File = ProductionSource.repositoryRoot()
 
-    private fun buildScript(): String = File(projectRoot(), "app/build.gradle.kts").readText()
+    private fun buildScript(): String = ProductionSource.projectText("app/build.gradle.kts")
 
     private fun source(relative: String): String =
-        File(projectRoot(), "app/src/main/java/com/m1racle/reader/$relative").readText()
+        ProductionSource.text("com/m1racle/reader/$relative")
 }

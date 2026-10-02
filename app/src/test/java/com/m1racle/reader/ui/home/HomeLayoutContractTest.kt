@@ -1,13 +1,14 @@
 package com.m1racle.reader.ui.home
 
 import com.m1racle.reader.data.local.DocumentEntity
+import com.m1racle.reader.testing.ProductionSource
 import com.m1racle.reader.ui.theme.M1racleGlassPolicy
 import com.m1racle.reader.ui.theme.M1racleGlassUsage
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /** Home is a reading entry: L2 hero + light list. Glass only on Dock / FAB / Menu. */
 class HomeLayoutContractTest {
@@ -173,9 +174,6 @@ class HomeLayoutContractTest {
     private fun librarySource(): String = source("ui/hub/LibraryScreen.kt")
     private fun homeSourceVm(): String = source("ui/home/HomeViewModel.kt")
 
-    private fun source(relative: String): String = listOf(
-        File("app/src/main/java/com/m1racle/reader/$relative"),
-        File("src/main/java/com/m1racle/reader/$relative"),
-        File("/root/code/m1racle-reader/app/src/main/java/com/m1racle/reader/$relative"),
-    ).first { it.isFile }.readText()
+    private fun source(relative: String): String =
+        ProductionSource.text("com/m1racle/reader/$relative")
 }

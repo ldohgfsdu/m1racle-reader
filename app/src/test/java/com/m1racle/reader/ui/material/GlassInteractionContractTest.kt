@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.material
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -219,15 +219,8 @@ class GlassInteractionContractTest {
         assertFalse(interaction.contains("GlassMaterialSpec"))
     }
 
-    private fun source(name: String): String = appSource(
-        "com/m1racle/reader/ui/material/$name",
-    ).readText()
-
-    private fun appSource(relative: String): File = listOf(
-        File("src/main/java/$relative"),
-        File("app/src/main/java/$relative"),
-        File("/root/code/m1racle-reader/app/src/main/java/$relative"),
-    ).first { it.isFile }
+    private fun source(name: String): String =
+        ProductionSource.text("com/m1racle/reader/ui/material/$name")
 
     private fun norm(s: String): String = s.replace(Regex("\\s+"), " ")
 }

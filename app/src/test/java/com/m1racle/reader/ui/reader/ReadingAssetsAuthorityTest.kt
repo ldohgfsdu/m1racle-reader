@@ -1,9 +1,10 @@
 package com.m1racle.reader.ui.reader
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * R23 仓库权威钉：阅读器书签写入的唯一路径是
@@ -45,22 +46,13 @@ class ReadingAssetsAuthorityTest {
         assertFalse(controller.contains("Dao"))
     }
 
-    private fun source(repoRelative: String): File =
-        listOf(
-            File(repoRelative),
-            File(repoRelative.removePrefix("app/")),
-            File("../$repoRelative"),
-            File("/root/code/m1racle-reader/$repoRelative"),
-        ).first { it.isFile }
+    private fun source(repoRelative: String): File = ProductionSource.projectFile(repoRelative)
 
-    private fun readerSource(name: String): String = listOf(
-        File("src/main/java/com/m1racle/reader/ui/pdf/$name"),
-        File("app/src/main/java/com/m1racle/reader/ui/pdf/$name"),
-        File("/root/code/m1racle-reader/app/src/main/java/com/m1racle/reader/ui/pdf/$name"),
-        File("src/main/java/com/m1racle/reader/ui/viewer/$name"),
-        File("app/src/main/java/com/m1racle/reader/ui/viewer/$name"),
-        File("/root/code/m1racle-reader/app/src/main/java/com/m1racle/reader/ui/viewer/$name"),
-    ).firstOrNull { it.isFile }?.readText() ?: error("missing $name")
+    /** The reader surface moved from `ui/pdf` to `ui/viewer`; either home is valid. */
+    private fun readerSource(name: String): String =
+        listOf("ui/pdf/$name", "ui/viewer/$name")
+            .map { ProductionSource.javaRoot().resolve("com/m1racle/reader/$it") }
+            .firstOrNull { it.isFile }?.readText() ?: error("missing reader source $name")
 
     private fun norm(s: String): String = s.replace(Regex("\\s+"), " ")
 }

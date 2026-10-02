@@ -5,17 +5,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Glass Material Engine 回归：配方跟随用户确认的材质，层级与交互约束保持稳定。
  *
  * 锁定三类不变量：
- *  1. 同一套厚雾采样；叠在正文上的阅读控件比底栏更实，Dialog 最实；
+ *  1. 小控件低模糊/折射，面板高可读性/无折射，Dialog 保持窗口隔离；
  *  2. Dark/Light 一致性：Dark 表面亮度低于 Light，同时两侧都保留 highlight 与
  *     edge separation（描边宽度 + 阴影）；
  *  3. NORMAL/PRESSED 连续性：按压只改受控通道且经 PressSpring 插值，
@@ -29,16 +30,17 @@ class GlassMaterialRegressionTest {
         GlassMaterialEngine.resolve(role, dark = dark, pressed = pressed)
 
     @Test
-    fun `reader chrome uses the same frost sampling as dock`() {
+    fun `reader controls and dock share liquid sampling`() {
         for (dark in listOf(false, true)) {
             val dock = spec(GlassMaterialRole.Dock, dark)
             val overlay = spec(GlassMaterialRole.Control, dark)
-            assertEquals(0.dp, dock.blur)
-            assertTrue("hub dock is the opaque L3 plate", dock.surfaceColor.alpha > overlay.surfaceColor.alpha)
+            assertEquals(4.dp, dock.blur)
+            assertEquals(overlay.surfaceColor, dock.surfaceColor)
             for (role in listOf(
                 GlassMaterialRole.Control,
                 GlassMaterialRole.Capsule,
                 GlassMaterialRole.Menu,
+                GlassMaterialRole.SettingsCard,
             )) {
                 val plate = spec(role, dark)
                 assertEquals("$role/$dark alpha", overlay.surfaceColor.alpha, plate.surfaceColor.alpha, 0f)
@@ -47,8 +49,8 @@ class GlassMaterialRegressionTest {
                 assertEquals("$role/$dark brightness", 0f, plate.brightness, 0f)
                 assertEquals("$role/$dark saturation", 1f, plate.saturation, 0f)
                 assertTrue("$role/$dark vibrancy", plate.vibrancy)
-                assertEquals("$role/$dark no lens height", 0.dp, plate.lensHeight)
-                assertEquals("$role/$dark no lens amount", 0.dp, plate.lensAmount)
+                assertEquals("$role/$dark lens height", 8.dp, plate.lensHeight)
+                assertEquals("$role/$dark lens amount", 24.dp, plate.lensAmount)
                 assertEquals(overlay.highlightColor, plate.highlightColor)
                 assertEquals("$role/$dark shadow radius", overlay.shadow, plate.shadow)
             }
@@ -56,18 +58,18 @@ class GlassMaterialRegressionTest {
     }
 
     @Test
-    fun `expanded reader panels thicken the backdrop with the shared thick blur`() {
+    fun `reader panels use readable liquid surfaces without refraction`() {
         for (dark in listOf(false, true)) {
             val control = spec(GlassMaterialRole.Control, dark)
-            assertEquals(if (dark) 0.80f else 0.86f, control.surfaceColor.alpha, 0.004f)
-            assertEquals(18.dp, control.blur)
-            for (role in listOf(GlassMaterialRole.ExpandedMenu, GlassMaterialRole.SettingsCard)) {
+            assertEquals(if (dark) 0.64f else 0.60f, control.surfaceColor.alpha, 0.004f)
+            assertEquals(4.dp, control.blur)
+            for (role in listOf(GlassMaterialRole.ExpandedMenu)) {
                 val panel = spec(role, dark)
-                assertEquals(if (dark) 0.86f else 0.90f, panel.surfaceColor.alpha, 0.004f)
+                assertEquals(0.90f, panel.surfaceColor.alpha, 0.004f)
                 assertTrue(panel.surfaceColor.alpha > control.surfaceColor.alpha)
-                assertEquals(18.dp, panel.blur)
-                assertEquals(control.lensHeight, panel.lensHeight)
-                assertEquals(control.lensAmount, panel.lensAmount)
+                assertEquals(24.dp, panel.blur)
+                assertEquals(0.dp, panel.lensHeight)
+                assertEquals(0.dp, panel.lensAmount)
                 assertEquals(control.highlightColor, panel.highlightColor)
                 assertFalse(panel.chromaticAberration)
             }
@@ -77,7 +79,7 @@ class GlassMaterialRegressionTest {
     // ── 1. 材质层级 ────────────────────────────────────────────────────────
 
     @Test
-    fun `in-app frost plates share one recipe and dialog stays denser`() {
+    fun `liquid surfaces preserve role hierarchy and dialog stays denser`() {
         for (dark in listOf(false, true)) {
             val control = spec(GlassMaterialRole.Control, dark)
             val capsule = spec(GlassMaterialRole.Capsule, dark)
@@ -87,44 +89,42 @@ class GlassMaterialRegressionTest {
             val dialog = spec(GlassMaterialRole.Dialog, dark)
             assertEquals(control.surfaceColor.alpha, capsule.surfaceColor.alpha, 0f)
             assertEquals(control.surfaceColor.alpha, menu.surfaceColor.alpha, 0f)
-            assertTrue(card.surfaceColor.alpha > control.surfaceColor.alpha)
-            assertTrue(dock.surfaceColor.alpha > control.surfaceColor.alpha)
+            assertEquals(control.surfaceColor.alpha, card.surfaceColor.alpha, 0f)
+            assertEquals(control.surfaceColor.alpha, dock.surfaceColor.alpha, 0f)
             assertEquals(control.blur, capsule.blur)
             assertEquals(control.blur, menu.blur)
-            assertEquals(control.blur, card.blur)
-            assertEquals(0.dp, dock.blur)
+            assertEquals(4.dp, card.blur)
+            assertEquals(4.dp, dock.blur)
             assertEquals(control.shadow, capsule.shadow)
             assertEquals(control.shadow, menu.shadow)
             assertEquals(control.shadow, card.shadow)
             assertTrue(dialog.surfaceColor.alpha > card.surfaceColor.alpha)
-            assertTrue(dialog.blur >= card.blur)
+            assertEquals(18.dp, dialog.blur)
             assertTrue(dialog.shadow >= card.shadow)
         }
     }
 
     @Test
-    fun `surface alpha values stay at frozen recipe numbers`() {
+    fun `surface alpha values stay at promoted liquid recipe numbers`() {
         val expectedLight = mapOf(
-            GlassMaterialRole.Dock to 0.98f,
-            GlassMaterialRole.Control to 0.86f,
-            GlassMaterialRole.Capsule to 0.86f,
-            GlassMaterialRole.Menu to 0.86f,
+            GlassMaterialRole.Dock to 0.60f,
+            GlassMaterialRole.Control to 0.60f,
+            GlassMaterialRole.Capsule to 0.60f,
+            GlassMaterialRole.Menu to 0.60f,
             GlassMaterialRole.ExpandedMenu to 0.90f,
-            GlassMaterialRole.SettingsCard to 0.90f,
+            GlassMaterialRole.SettingsCard to 0.60f,
             GlassMaterialRole.Dialog to 0.97f,
             GlassMaterialRole.ProgressiveChrome to 0.62f,
-            GlassMaterialRole.PreviewCapsule to 0.42f,
         )
         val expectedDark = mapOf(
-            GlassMaterialRole.Dock to 0.98f,
-            GlassMaterialRole.Control to 0.80f,
-            GlassMaterialRole.Capsule to 0.80f,
-            GlassMaterialRole.Menu to 0.80f,
-            GlassMaterialRole.ExpandedMenu to 0.86f,
-            GlassMaterialRole.SettingsCard to 0.86f,
+            GlassMaterialRole.Dock to 0.64f,
+            GlassMaterialRole.Control to 0.64f,
+            GlassMaterialRole.Capsule to 0.64f,
+            GlassMaterialRole.Menu to 0.64f,
+            GlassMaterialRole.ExpandedMenu to 0.90f,
+            GlassMaterialRole.SettingsCard to 0.64f,
             GlassMaterialRole.Dialog to 0.97f,
             GlassMaterialRole.ProgressiveChrome to 0.62f,
-            GlassMaterialRole.PreviewCapsule to 0.30f,
         )
         expectedLight.forEach { (role, alpha) ->
             // Color 分量经打包存在半精度量化（≈1/255 步进），比较必须带容差。
@@ -138,7 +138,7 @@ class GlassMaterialRegressionTest {
     // ── 2. Dark/Light 一致性 ───────────────────────────────────────────────
 
     @Test
-    fun `dark surfaces are darker while only dialogs keep a rim`() {
+    fun `dark surfaces stay darker and floating glass keeps a highlight`() {
         for (role in roles) {
             val light = spec(role, dark = false)
             val dark = spec(role, dark = true)
@@ -151,20 +151,23 @@ class GlassMaterialRegressionTest {
             assertEquals("$role dark brightness", 0f, dark.brightness, 0f)
             // highlight 双侧保留：宽度恒定、alpha 为正。
             val expectedWidth = when (role) {
-                GlassMaterialRole.Dialog, GlassMaterialRole.PreviewCapsule -> 0.5.dp
-                else -> 0.dp
+                GlassMaterialRole.Dialog -> 0.5.dp
+                GlassMaterialRole.ProgressiveChrome -> 0.dp
+                else -> 0.75.dp
             }
             assertEquals("$role highlight width", expectedWidth, light.highlightWidth)
             assertEquals("$role highlight width dark", light.highlightWidth, dark.highlightWidth)
             val expectedLightHl = when (role) {
                 GlassMaterialRole.Dialog -> 0.30f
-                GlassMaterialRole.PreviewCapsule -> 0.96f
-                else -> 0f
+
+                GlassMaterialRole.ProgressiveChrome -> 0f
+                else -> 0.60f
             }
             val expectedDarkHl = when (role) {
                 GlassMaterialRole.Dialog -> 0.38f
-                GlassMaterialRole.PreviewCapsule -> 0.78f
-                else -> 0f
+
+                GlassMaterialRole.ProgressiveChrome -> 0f
+                else -> 0.60f
             }
             assertEquals(expectedLightHl, light.highlightColor.alpha, 0.004f)
             assertEquals(expectedDarkHl, dark.highlightColor.alpha, 0.004f)
@@ -187,9 +190,7 @@ class GlassMaterialRegressionTest {
             assertEquals("$role shadow", light.shadow, dark.shadow)
             assertEquals("$role divider", light.contentDividerAlpha, dark.contentDividerAlpha, 0f)
             assertEquals("$role saturation", light.saturation, dark.saturation, 0f)
-            if (role != GlassMaterialRole.PreviewCapsule) {
-                assertFalse("$role depthEffect", light.depthEffect || dark.depthEffect)
-            }
+            assertFalse("$role depthEffect", light.depthEffect || dark.depthEffect)
             // 夜间次级内容反而更实（muted 更高），保证暗色可读性方向不被反转。
             assertTrue("$role muted", dark.contentMutedAlpha > light.contentMutedAlpha)
             assertEquals(1f, light.saturation, 0f)
@@ -197,14 +198,16 @@ class GlassMaterialRegressionTest {
     }
 
     @Test
-    fun `dark palette keeps the single frozen tint`() {
+    fun `dark palette follows liquid role colors`() {
         roles.forEach { role ->
             assertEquals(
                 "dark tint $role",
                 if (role == GlassMaterialRole.Dialog) {
                     Color(0xFF121212)
-                } else if (role == GlassMaterialRole.Dock) {
-                    Color(0xFF171717)
+                } else if (role in listOf(GlassMaterialRole.Dock, GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard)) {
+                    Color(0xFF242424)
+                } else if (role in listOf(GlassMaterialRole.ExpandedMenu)) {
+                    Color(0xFF202020)
                 } else {
                     Color.Black
                 },
@@ -218,8 +221,7 @@ class GlassMaterialRegressionTest {
     @Test
     fun `pressed state shifts only the press channels`() {
         val frozenRoles = roles.filter {
-            it != GlassMaterialRole.Dock &&
-                it != GlassMaterialRole.PreviewCapsule
+            it != GlassMaterialRole.Dock
         }
         for (role in frozenRoles) {
             for (dark in listOf(false, true)) {
@@ -238,7 +240,7 @@ class GlassMaterialRegressionTest {
                 )
                 assertEquals(
                     "$role/$dark highlight boost",
-                    if (role == GlassMaterialRole.Dialog) 0.10f else 0f,
+                    if (idle.highlightWidth > 0.dp) 0.10f else 0f,
                     pressed.highlightColor.alpha - idle.highlightColor.alpha,
                     0.006f,
                 )
@@ -262,12 +264,12 @@ class GlassMaterialRegressionTest {
     }
 
     @Test
-    fun `dock plate has no refraction or press scale`() {
+    fun `dock refracts without scaling the entire navigation bar`() {
         val dock = spec(GlassMaterialRole.Dock)
         val dockPressed = spec(GlassMaterialRole.Dock, pressed = true)
-        assertFalse(dock.vibrancy)
-        assertEquals(0.dp, dock.lensHeight)
-        assertEquals(0.dp, dock.lensAmount)
+        assertTrue(dock.vibrancy)
+        assertEquals(8.dp, dock.lensHeight)
+        assertEquals(24.dp, dock.lensAmount)
         assertEquals(1f, dock.scale, 0f)
         assertEquals(1f, dockPressed.scale, 0f)
         assertEquals(dock.lensHeight, dockPressed.lensHeight)
@@ -279,11 +281,11 @@ class GlassMaterialRegressionTest {
             for (pressed in listOf(false, true)) for (expanded in listOf(false, true)) {
                 val material = GlassMaterialEngine.resolve(role, dark, pressed, expanded)
                 assertFalse("$role dark=$dark pressed=$pressed expanded=$expanded", material.chromaticAberration)
-                if (role != GlassMaterialRole.Dialog && role != GlassMaterialRole.PreviewCapsule) {
+                if (role == GlassMaterialRole.ProgressiveChrome) {
                     assertEquals(0f, material.highlightColor.alpha, 0f)
                     assertEquals(0.dp, material.highlightWidth)
                 }
-                if (role != GlassMaterialRole.PreviewCapsule) {
+                if (role in listOf(GlassMaterialRole.Dialog, GlassMaterialRole.ProgressiveChrome, GlassMaterialRole.ExpandedMenu)) {
                     assertTrue("no strong edge lens in any state", material.lensHeight == 0.dp)
                     assertTrue("no strong refraction in any state", material.lensAmount == 0.dp)
                 }
@@ -299,8 +301,7 @@ class GlassMaterialRegressionTest {
         assertEquals(0.001f, GlassMaterialEngine.PressSpring.visibilityThreshold!!, 1e-9f)
 
         val frozenRoles = roles.filter {
-            it != GlassMaterialRole.Dock &&
-                it != GlassMaterialRole.PreviewCapsule
+            it != GlassMaterialRole.Dock
         }
         for (role in frozenRoles) {
             val idle = spec(role)
@@ -347,9 +348,5 @@ class GlassMaterialRegressionTest {
         "com/m1racle/reader/ui/material/GlassMaterial.kt",
     ).readText()
 
-    private fun appSource(relative: String): File = listOf(
-        File("src/main/java/$relative"),
-        File("app/src/main/java/$relative"),
-        File("/root/code/m1racle-reader/app/src/main/java/$relative"),
-    ).first { it.isFile }
+    private fun appSource(relative: String): File = ProductionSource.file(relative)
 }

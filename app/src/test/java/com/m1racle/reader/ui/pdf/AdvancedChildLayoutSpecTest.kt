@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.pdf
 
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -33,16 +34,8 @@ class AdvancedChildLayoutSpecTest {
 
     @Test
     fun `toc and thumbs lists own remaining body height`() {
-        val card = listOf(
-            java.io.File("app/src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-            java.io.File("src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-            java.io.File("/root/code/m1racle-reader/app/src/main/java/com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt"),
-        ).first { it.isFile }.readText()
-        val pop = listOf(
-            java.io.File("app/src/main/java/com/m1racle/reader/ui/pdf/AnchoredNestedPopover.kt"),
-            java.io.File("src/main/java/com/m1racle/reader/ui/pdf/AnchoredNestedPopover.kt"),
-            java.io.File("/root/code/m1racle-reader/app/src/main/java/com/m1racle/reader/ui/pdf/AnchoredNestedPopover.kt"),
-        ).first { it.isFile }.readText()
+        val card = ProductionSource.text("com/m1racle/reader/ui/pdf/ReaderAdvancedCard.kt")
+        val pop = ProductionSource.text("com/m1racle/reader/ui/pdf/AnchoredNestedPopover.kt")
         assertTrue(card.contains(".weight(1f)"))
         assertTrue(pop.contains("bodyMaxHeightDp = bodyMaxHeightDp"))
         assertFalse(pop.contains("bodyMaxHeightDp - 80"))

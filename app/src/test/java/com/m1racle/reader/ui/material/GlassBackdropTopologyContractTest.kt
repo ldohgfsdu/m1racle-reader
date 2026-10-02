@@ -1,10 +1,11 @@
 package com.m1racle.reader.ui.material
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /** R32.3 regression contract for acyclic Backdrop ownership. */
 class GlassBackdropTopologyContractTest {
@@ -15,7 +16,7 @@ class GlassBackdropTopologyContractTest {
         val normalized = source.replace(Regex("\\s+"), " ")
 
         assertTrue(normalized.contains("LocalGlassBackdropHost provides null"))
-        assertTrue(normalized.contains("modifier = modifier.layerBackdrop(backdrop)"))
+        assertTrue(normalized.contains("modifier = if (enabled) modifier.layerBackdrop(backdrop) else modifier"))
         assertTrue(
             normalized.indexOf("LocalGlassBackdropHost provides null") <
                 normalized.indexOf("modifier.layerBackdrop(backdrop)"),
@@ -24,7 +25,7 @@ class GlassBackdropTopologyContractTest {
 
     @Test
     fun `all production capture nodes use the guarded ownership boundary`() {
-        val javaRoot = appSourceRoot()
+        val javaRoot = ProductionSource.javaRoot()
         val directCaptureOwners = javaRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filter { it.readText().contains(Regex("""\.layerBackdrop\s*\(""")) }
@@ -48,18 +49,24 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
-    fun `dock is an L3 tab bar without a moving glass capsule`() {
+    fun `dock samples the soft edge beneath its capsule and keeps selection in the foreground`() {
         val dock = appSource("ui/hub/GlassDock.kt").readText()
+        // Whitespace-free: a re-wrapped call keeps the contract green, a changed
+        // role, shape, or backdrop source does not.
+        val dockShape = ProductionSource.compact("com/m1racle/reader/ui/hub/GlassDock.kt")
         assertTrue(dock.contains("GlassMaterialRole.Dock"))
-        assertTrue(dock.contains("dockSpec.surfaceColor"))
+        assertTrue(dockShape.contains(".glassMaterial(GlassMaterialRole.Dock,barShape,sourceBackdrop=dockBackdrop,layerBlock=barTransform,)"))
+        assertTrue(dock.contains("rememberCombinedBackdrop(it.root, edgeBackdrop)"))
+        assertTrue(dock.contains("SoftScrollEdge(edgeBackdrop"))
         assertTrue(dock.contains("M1racleGlassUsage.Dock"))
         assertTrue(dock.contains("selectableGroup()"))
         assertFalse(dock.contains("GlassMaterialRole.DockSelection"))
-        assertFalse(dock.contains("glassMaterial("))
+        assertTrue(dock.contains("glassMaterial("))
         assertFalse(dock.contains("DockCapsulePressedScale"))
         assertFalse(dock.contains("dockCapsuleScales("))
         assertFalse(dock.contains("sourceBackdrop = selectionBackdrop"))
-        assertTrue(dock.contains("DockIndicatorWidth"))
+        assertTrue(dock.contains("testTag(\"dock-selection\")"))
+        assertTrue(dock.contains("dockPhysicalPosition(motion.position.value, rtl)"))
         assertTrue(dock.contains("alpha = contentAlpha"))
         val engine = appSource("ui/material/GlassMaterial.kt").readText()
         assertTrue(engine.contains("sourceBackdrop: Backdrop? = null"))
@@ -69,10 +76,20 @@ class GlassBackdropTopologyContractTest {
     @Test
     fun `shared hub shell owns dock outside captured page content`() {
         val hub = appSource("ui/hub/GlassDock.kt").readText()
-        assertFalse(hub.contains("rememberLayerBackdrop("))
+        assertEquals(1, Regex("rememberLayerBackdrop\\(\\)").findAll(hub).count())
         assertFalse(hub.contains("GlassBackdropSource("))
+        val edge = appSource("ui/hub/SoftScrollEdge.kt").readText()
+        assertTrue(edge.contains("GlassBackdropSource(export,"))
+        assertTrue(edge.contains("val backdrop = LocalGlassBackdropHost.current?.root"))
+        assertTrue(edge.contains("backdrop = backdrop"))
+        assertFalse(edge.contains("backdrop = export"))
+        assertFalse(edge.contains("pointerInput"))
         val nav = appSource("ui/navigation/NavGraph.kt").readText()
         assertTrue(nav.contains("GlassDock("))
+        val capture = trailingLambda(nav, "GlassBackdropSource(")
+        assertTrue(capture.body.contains("NavHost("))
+        assertFalse(capture.body.contains("GlassDock("))
+        assertTrue(nav.indexOf("GlassDock(", capture.closeBrace) > capture.closeBrace)
         assertTrue(nav.contains("HubDestination.isTopLevelRoute(currentEntry?.destination?.route)"))
 
         listOf("LibraryScreen.kt", "BookmarksScreen.kt", "HubSettingsScreen.kt").forEach { name ->
@@ -149,14 +166,6 @@ class GlassBackdropTopologyContractTest {
         )
     }
 
-    private fun appSource(relative: String): File = File(
-        appSourceRoot(),
-        "com/m1racle/reader/$relative",
-    ).also { check(it.isFile) { "Missing source: $it" } }
-
-    private fun appSourceRoot(): File = listOf(
-        File("src/main/java"),
-        File("app/src/main/java"),
-        File("/root/code/m1racle-reader/app/src/main/java"),
-    ).first { it.isDirectory }
+    private fun appSource(relative: String): File =
+        ProductionSource.file("com/m1racle/reader/$relative")
 }

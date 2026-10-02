@@ -11,10 +11,10 @@ import com.m1racle.reader.data.local.HighlightEntity
 import com.m1racle.reader.data.local.NoteDao
 import com.m1racle.reader.data.local.NoteEntity
 import com.m1racle.reader.data.repository.ReadingRepository
+import com.m1racle.reader.testing.ProductionSource
 import com.m1racle.reader.testing.testSearchRepository
 import com.m1racle.reader.ui.annotation.RepositoryAnnotationOverlaySource
 import com.m1racle.reader.ui.annotation.TextSelection
-import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -22,6 +22,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * P0-1 Markdown 标注契约：与 PDF 同一 Controller → Repository → Anchor 链，
@@ -131,7 +132,8 @@ class ReaderMarkdownAnnotationTest {
         highlightDao = highlightDao,
         noteDao = noteDao,
         searchRepository = testSearchRepository(),
-    )
+            transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
+        )
     private val highlights = ReaderHighlightController(repo, "md-1")
     private val notes = ReaderNoteController(repo, "md-1")
 
@@ -195,12 +197,7 @@ class ReaderMarkdownAnnotationTest {
 
     @Test
     fun `viewer route injects markdown highlight and note controllers`() {
-        val root = listOf(File("."), File(".."), File("/root/code/m1racle-reader"))
-            .first { File(it, "app/src/main/java/com/m1racle/reader").isDirectory }
-        val nav = File(
-            root,
-            "app/src/main/java/com/m1racle/reader/ui/navigation/NavGraph.kt",
-        ).readText()
+        val nav = ProductionSource.text("com/m1racle/reader/ui/navigation/NavGraph.kt")
         val viewer = nav.substringAfter("route = Routes.VIEWER").substringBefore("route = Routes.PDF_VIEWER")
         assertTrue(viewer.contains("ReaderHighlightController("))
         assertTrue(viewer.contains("ReaderNoteController("))

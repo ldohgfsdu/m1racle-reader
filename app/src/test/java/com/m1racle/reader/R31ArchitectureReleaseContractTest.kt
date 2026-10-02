@@ -1,11 +1,12 @@
 package com.m1racle.reader
 
 import com.m1racle.reader.data.local.AppDatabase
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /** R31 executable architecture, migration and release-configuration gates. */
 class R31ArchitectureReleaseContractTest {
@@ -87,15 +88,10 @@ class R31ArchitectureReleaseContractTest {
         )
     }
 
-    private fun projectRoot(): File = listOf(File("."), File(".."), File("/root/code/m1racle-reader"))
-        .first { File(it, "app/src/main/java/com/m1racle/reader").isDirectory }
-        .canonicalFile
+    private fun projectRoot(): File = ProductionSource.repositoryRoot()
 
     private fun sourceDir(relative: String): File =
-        File(projectRoot(), "app/src/main/java/com/m1racle/reader/$relative")
+        ProductionSource.resolve("com/m1racle/reader/$relative")
 
-    private fun source(relative: String): String = File(
-        projectRoot(),
-        "app/src/main/java/com/m1racle/reader/$relative",
-    ).readText()
+    private fun source(relative: String): String = ProductionSource.text("com/m1racle/reader/$relative")
 }

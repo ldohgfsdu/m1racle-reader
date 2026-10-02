@@ -1,9 +1,10 @@
 package com.m1racle.reader.pdf
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class PdfImmersiveSystemBarsTest {
 
@@ -16,11 +17,7 @@ class PdfImmersiveSystemBarsTest {
 
     @Test
     fun `reader immersive re-enters without transient swipe reveal`() {
-        val source = listOf(
-            File("app/src/main/java/com/m1racle/reader/ui/pdf/PdfViewerScreen.kt"),
-            File("src/main/java/com/m1racle/reader/ui/pdf/PdfViewerScreen.kt"),
-            File("/root/code/m1racle-reader/app/src/main/java/com/m1racle/reader/ui/pdf/PdfViewerScreen.kt"),
-        ).first { it.isFile }.readText()
+        val source = ProductionSource.text("com/m1racle/reader/ui/pdf/PdfViewerScreen.kt")
         assertFalse(source.contains("BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE"))
         assertTrue(source.contains("shouldReassertHide"))
         assertTrue(source.contains("OnWindowFocusChangeListener"))
@@ -32,11 +29,7 @@ class PdfImmersiveSystemBarsTest {
 
     @Test
     fun `theme opts out of status bar contrast scrim`() {
-        val theme = listOf(
-            File("app/src/main/res/values/themes.xml"),
-            File("src/main/res/values/themes.xml"),
-            File("/root/code/m1racle-reader/app/src/main/res/values/themes.xml"),
-        ).first { it.isFile }.readText()
+        val theme = ProductionSource.projectText("app/src/main/res/values/themes.xml")
         assertTrue(theme.contains("android:enforceStatusBarContrast\">false"))
         assertTrue(theme.contains("android:enforceNavigationBarContrast\">false"))
     }

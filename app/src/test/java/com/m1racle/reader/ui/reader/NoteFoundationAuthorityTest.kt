@@ -1,9 +1,10 @@
 package com.m1racle.reader.ui.reader
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /** R27 结构红线：Note UI 只消费控制器，Repository 是唯一持久化门面。 */
 class NoteFoundationAuthorityTest {
@@ -37,10 +38,5 @@ class NoteFoundationAuthorityTest {
         assertTrue(sheet.contains("onDeleteNote"))
     }
 
-    private fun source(relative: String): String = listOf(
-        File(relative),
-        File(relative.removePrefix("app/")),
-        File("../$relative"),
-        File("/root/code/m1racle-reader/$relative"),
-    ).first { it.isFile }.readText()
+    private fun source(relative: String): String = ProductionSource.projectText(relative)
 }

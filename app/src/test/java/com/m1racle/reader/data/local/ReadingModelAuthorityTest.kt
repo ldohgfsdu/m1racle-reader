@@ -1,10 +1,11 @@
 package com.m1racle.reader.data.local
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * H2.1 阅读模型权威收口（源码钉，防第二事实源复活）：
@@ -82,15 +83,8 @@ class ReadingModelAuthorityTest {
         assertTrue(app.contains("bookmarkDao = database.bookmarkDao()"))
     }
 
-    private fun appSource(relative: String): File {
-        val path = if (relative.startsWith("/")) relative else "app/src/main/java/com/m1racle/reader/$relative"
-        return listOf(
-            File(path),
-            File(path.removePrefix("app/")),
-            File("../$path"),
-            File("/root/code/m1racle-reader/$path"),
-        ).first { it.isFile }
-    }
+    private fun appSource(relative: String): File =
+        ProductionSource.file("com/m1racle/reader/$relative")
 
     private fun norm(s: String): String = s.replace(Regex("\\s+"), " ")
 }

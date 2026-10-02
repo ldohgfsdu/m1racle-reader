@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.material
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -19,7 +19,7 @@ class GlassAuthorityContractTest {
                     assertEquals(1f, spec.foreground.contentAlpha, 0f)
                     assertEquals(spec.foreground.mutedAlpha, spec.contentMutedAlpha, 0f)
                     assertTrue(spec.surfaceColor.alpha in 0f..1f)
-                    val expectLens = role == GlassMaterialRole.PreviewCapsule &&
+                    val expectLens = role in listOf(GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.Dock, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard) &&
                         cap == GlassCapability.FULL_OPTICAL
                     assertEquals(expectLens, spec.lensEnabled)
                 }
@@ -58,15 +58,12 @@ class GlassAuthorityContractTest {
     }
 
     @Test
-    fun `markdown chrome and settings preview do not own blur tint literals`() {
+    fun `markdown chrome does not own blur tint literals`() {
         val gradient = appSource("ui/viewer/ReaderGradient.kt")
         assertTrue(gradient.contains("GlassMaterialRole.ProgressiveChrome"))
         assertFalse(gradient.contains("0.62f"))
         assertFalse(gradient.contains("16.dp"))
-        val preview = appSource("ui/material/BlurComparisonPreview.kt")
-        assertTrue(preview.contains("GlassPreviewPreset"))
-        assertFalse(preview.contains("4.32.dp"))
-        assertFalse(preview.contains("drawBackdrop(backdrop"))
+
     }
 
     @Test
@@ -101,13 +98,6 @@ class GlassAuthorityContractTest {
         assertEquals("content()", body.trim())
     }
 
-    private fun appSource(relative: String): String = File(
-        appSourceRoot(),
-        "com/m1racle/reader/$relative",
-    ).also { check(it.isFile) { "Missing source: $it" } }.readText()
-
-    private fun appSourceRoot(): File = listOf(
-        File("src/main/java"),
-        File("app/src/main/java"),
-    ).first { it.isDirectory }
+    private fun appSource(relative: String): String =
+        ProductionSource.text("com/m1racle/reader/$relative")
 }

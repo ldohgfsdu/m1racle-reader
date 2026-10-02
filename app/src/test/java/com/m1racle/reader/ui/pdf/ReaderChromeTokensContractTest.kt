@@ -3,6 +3,7 @@ package com.m1racle.reader.ui.pdf
 import com.m1racle.reader.ui.material.GlassMaterialEngine
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.GlassRenderState
+import com.m1racle.reader.testing.ProductionSource
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,8 +14,21 @@ import org.junit.Test
 class ReaderChromeTokensContractTest {
 
     @Test
+    fun `menu text has no independent geometric animation`() {
+        val root = listOf(File("src/main/java/com/m1racle/reader/ui/pdf"),
+            File("app/src/main/java/com/m1racle/reader/ui/pdf")).first { it.isDirectory }
+        val main = File(root, "ReaderMoreHost.kt").readText()
+        assertFalse(main.contains("contentScale"))
+        assertTrue(main.contains("wrapContentWidth(Alignment.End, unbounded = true)"))
+        val nested = File(root, "AnchoredNestedPopover.kt").readText()
+        assertFalse(nested.contains("bodySlidePx"))
+        assertFalse(nested.contains("translationY ="))
+    }
+
+    @Test
     fun `every product role has a complete bounded recipe`() {
-        assertEquals(9, GlassMaterialRole.entries.size)
+        assertEquals(8, GlassMaterialRole.entries.size)
+        assertFalse(GlassMaterialRole.entries.any { it.name.startsWith("Preview") })
         GlassMaterialRole.entries.forEach { role ->
             listOf(false, true).forEach { dark ->
                 val spec = GlassMaterialEngine.resolve(role, dark)
@@ -22,7 +36,7 @@ class ReaderChromeTokensContractTest {
                 assertEquals(1f, spec.foreground.contentAlpha, 0f)
                 assertEquals(spec.contentMutedAlpha, spec.foreground.mutedAlpha, 0f)
                 if (role == GlassMaterialRole.Dock) {
-                    assertEquals("solid overlay keeps zero blur", 0f, spec.blur.value, 0f)
+                    assertEquals("dock uses liquid blur", 4f, spec.blur.value, 0f)
                 } else {
                     assertTrue(spec.blur.value > 0f)
                 }
@@ -30,14 +44,16 @@ class ReaderChromeTokensContractTest {
                     assertTrue("$role shadow", spec.shadow.value > 0f)
                 }
                 val expectedHighlightW = when (role) {
-                    GlassMaterialRole.Dialog, GlassMaterialRole.PreviewCapsule -> 0.5f
-                    else -> 0f
+                    GlassMaterialRole.Dialog -> 0.5f
+                    GlassMaterialRole.ProgressiveChrome -> 0f
+                    else -> 0.75f
                 }
                 assertEquals(expectedHighlightW, spec.highlightWidth.value, 0.001f)
                 val expectedHighlightA = when (role) {
                     GlassMaterialRole.Dialog -> if (dark) 0.38f else 0.30f
-                    GlassMaterialRole.PreviewCapsule -> if (dark) 0.78f else 0.96f
-                    else -> 0f
+
+                    GlassMaterialRole.ProgressiveChrome -> 0f
+                    else -> 0.60f
                 }
                 assertEquals(expectedHighlightA, spec.highlightColor.alpha, 0.004f)
                 assertTrue(spec.contentDividerAlpha in 0.04f..0.08f)
@@ -54,7 +70,7 @@ class ReaderChromeTokensContractTest {
             val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark)
             assertEquals(0.97f, dialog.surfaceColor.alpha, 0.002f)
             assertTrue(dialog.surfaceColor.alpha < 1f)
-            val expectedHierarchyGap = if (dark) 0.11f else 0.07f
+            val expectedHierarchyGap = if (dark) 0.33f else 0.37f
             assertEquals(expectedHierarchyGap, dialog.surfaceColor.alpha - settings.surfaceColor.alpha, 0.004f)
         }
     }
@@ -68,7 +84,7 @@ class ReaderChromeTokensContractTest {
             pressed = true,
         )
         assertEquals(0.04f, pressed.surfaceColor.alpha - rest.surfaceColor.alpha, 0.01f)
-        assertEquals(0f, pressed.highlightColor.alpha, 0f)
+        assertEquals(0.70f, pressed.highlightColor.alpha, 0.004f)
         assertEquals(rest.blur, pressed.blur)
         assertEquals(rest.shadow, pressed.shadow)
         assertEquals(0.965f, pressed.scale, 0.001f)
@@ -112,7 +128,7 @@ class ReaderChromeTokensContractTest {
         assertTrue(engine.contains("colorControls("))
         assertTrue(engine.contains("blur(blurPx)"))
         assertTrue(engine.contains("lens("))
-        assertTrue(engine.contains("Highlight.Plain.copy("))
+        assertTrue(engine.contains("Highlight.Default.copy("))
         assertTrue(engine.contains("dropShadow("))
         assertTrue(engine.contains("shadow = null"))
         assertTrue(engine.contains("animationSpec = GlassMaterialEngine.PressSpring"))
@@ -149,11 +165,9 @@ class ReaderChromeTokensContractTest {
 
     @Test
     fun `old material authorities are removed`() {
-        assertFalse(sourceFile("ReaderChromeGlass.kt").exists())
-        assertFalse(sourceFile("ReaderChromeMaterial.kt").exists())
-        assertFalse(appSourceCandidate(
-            "com/m1racle/reader/ui/common/M1racleReaderLiquidSurface.kt",
-        ).exists())
+        assertFalse(ProductionSource.resolve("com/m1racle/reader/ui/pdf/ReaderChromeGlass.kt").exists())
+        assertFalse(ProductionSource.resolve("com/m1racle/reader/ui/pdf/ReaderChromeMaterial.kt").exists())
+        assertFalse(ProductionSource.resolve("com/m1racle/reader/ui/common/M1racleReaderLiquidSurface.kt").exists())
     }
 
     @Test
@@ -190,22 +204,9 @@ class ReaderChromeTokensContractTest {
         "com/m1racle/reader/ui/material/GlassMaterial.kt",
     ).readText()
 
-    private fun sourceFile(name: String): File = appSourceCandidate(
+    private fun sourceFile(name: String): File = ProductionSource.file(
         "com/m1racle/reader/ui/pdf/$name",
     )
 
-    private fun appSource(relative: String): File = listOf(
-        File("src/main/java/$relative"),
-        File("app/src/main/java/$relative"),
-        File("/root/code/m1racle-reader/app/src/main/java/$relative"),
-    ).first { it.isFile }
-
-    private fun appSourceCandidate(relative: String): File {
-        val candidates = listOf(
-            File("src/main/java/$relative"),
-            File("app/src/main/java/$relative"),
-            File("/root/code/m1racle-reader/app/src/main/java/$relative"),
-        )
-        return candidates.firstOrNull { it.exists() } ?: candidates.first()
-    }
+    private fun appSource(relative: String): File = ProductionSource.file(relative)
 }
