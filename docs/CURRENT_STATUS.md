@@ -58,11 +58,19 @@ R32.4 记录的 native crash 闭环只覆盖 2026-08-27 的 APK，不覆盖当�
 
 ## 仓库与交付风险
 
-- **远端未备份**：17 个分支均无 upstream，`origin/master` 停在 2026-08-17（`bd0b344`），
-  比本线落后 100+ commits。当前所有成果只存在这台设备上。用户已决定本轮只在本地提交并打 tag，不推送。
+- **远端未备份**：仓库只有一个分支 `master`（原开发线 `feat/risediary-inspired-dock` 已并入并删除），
+  **没有任何 upstream**，`origin/master` 停在 2026-08-17（`bd0b344`），比本线落后 100+ commits，
+  且 `origin` 指向的 `ldohgfsdu/markleaf` 并不是当前产品身份的仓库。当前所有成果只存在这台设备上。
+  用户已决定本轮只在本地提交并打 tag，不推送。
+- **历史分支已归档**：删除前的 8 个分支各有一个未合入提交，因此在删除分支前先打了
+  `archive/*` annotated tag 保底（版本身份 1.0.1 候选、R41 RC、R38/R40/r33 文档线、R58/R60 的
+  Room v13 落点、旧 master）。`release-1.0.1-canonical`（versionCode 24）按用户决定作废，
+  其提交由 `archive/version-1.0.1-candidate-identity-2026-10-02` 保底。10 个 worktree 缩到 1 个。
+  另有 5 个 `workspace-cleanup-20260905` 的 stash 作为历史恢复网保留，未清理。
 - **签名私钥位置**：正式 keystore 存放在设备内部存储 `M1racle Reader/keystore`，
   未写入仓库、未提交备份。`RELEASE_CHECKLIST.md` 中"生产密钥已在仓库外安全备份"一项仍未勾选。
-- **无 CI**：仓库没有 `.github/`，全量测试只能在这台设备上手动触发。
+- **无 CI**：仓库没有 `.github/`，全量测试只能在这台设备上手动触发；aarch64 上的 2 项 Room
+  事务测试因此长期无法在此环境转绿。
 
 ## 未决项
 
