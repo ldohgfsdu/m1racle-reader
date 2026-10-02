@@ -110,7 +110,8 @@ class EpubReaderUiTest {
     @Test fun `directory header and list stay within status and navigation safe regions`() {
         rule.setContent {
             M1racleReaderTheme {
-                EpubTocDrawer("测试书", book.toc, { if (it.spineIndex == 0) 0 else 5 }, {}, {},
+                EpubTocDrawer("测试书", book.toc, mapOf(tocKey(book.toc[0]) to 0, tocKey(book.toc[1]) to 5), {},
+                    {},
                     insets = WindowInsets(top = 32.dp, bottom = 24.dp))
             }
         }

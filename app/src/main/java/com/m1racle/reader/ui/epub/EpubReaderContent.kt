@@ -100,9 +100,15 @@ internal fun EpubReaderContent(
     var anchorText by rememberSaveable { mutableIntStateOf(-1) }
     val gap = with(density) { 10.dp.toPx() }
     val inset = with(density) { 12.dp.roundToPx() }
+    // Probe image sizes off the main thread, then paginate in bounded slices. The
+    // block is cancelled and restarted when the book, settings, or viewport change.
     val layout by produceState<EpubTextLayout?>(null, rows, viewport, measurer, density) {
         if (viewport.width > 0 && viewport.height > 0) {
-            value = measureEpub(rows, measurer, viewport.width, viewport.height, gap, inset)
+            val bounds = probeEpubImageBounds(rows)
+            value = measureEpub(
+                rows, measurer, viewport.width, viewport.height, gap, inset,
+                imageBounds = bounds, anchorRow = initialRow,
+            )
         }
     }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
@@ -120,6 +126,8 @@ internal fun EpubReaderContent(
         }
     }
     val ready = layout
+    // Resolved once per layout; the drawer only does a map lookup per row.
+    val tocPages = remember(ready) { ready?.let { epubTocPages(book, it) } ?: emptyMap() }
     val pager = rememberPagerState { (ready?.pages?.size ?: 1).coerceAtLeast(1) }
     LaunchedEffect(ready) {
         val pages = ready?.pages ?: return@LaunchedEffect
@@ -149,7 +157,7 @@ internal fun EpubReaderContent(
         // A rightward page swipe must never open the table of contents.
         gesturesEnabled = drawer.isOpen,
         drawerContent = {
-            EpubTocDrawer(title, book.toc, ready?.let { measured -> { node: EpubTocNode -> measured.pageForToc(book, node) } },
+            EpubTocDrawer(title, book.toc, tocPages,
                 onSelect = { page -> scope.launch { pager.scrollToPage(page); drawer.close() } },
                 onClose = { scope.launch { drawer.close() } }, insets = insets)
         },
@@ -173,13 +181,13 @@ internal fun EpubReaderContent(
                     val pageOffset = pager.getOffsetDistanceInPages(index)
                     val fraction = pager.currentPageOffsetFraction
                     val scrollFromSettled = pager.currentPage - pager.settledPage + fraction
-                    val turn = epubPageTurnLayer(pageOffset, fraction, pager.currentPage, pager.settledPage, 1f)
+                    val turn = remember(index, pageOffset, fraction, pager.currentPage, pager.settledPage, viewport.width) {
+                        epubPageTurnLayer(pageOffset, fraction, pager.currentPage, pager.settledPage, viewport.width.toFloat())
+                    }
                     Box(
                         Modifier
                             .zIndex(turn.zIndex)
-                            .graphicsLayer {
-                                translationX = epubPageTurnLayer(pageOffset, fraction, pager.currentPage, pager.settledPage, size.width).translationX
-                            }
+                            .graphicsLayer { translationX = turn.translationX }
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.background),
                     ) {
@@ -284,6 +292,10 @@ private fun EpubPageView(
 ) {
     val page = layout.pages[index]
     val density = LocalDensity.current
+    // Visible rows only; the layout re-measures any row evicted from the bounded cache.
+    val pageLayouts = remember(layout, index) {
+        page.slices.associate { it.row to layout.layoutFor(it.row) }
+    }
     val shade = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     val visibleText = remember(page) {
         AnnotatedString(page.slices.joinToString("\n") { slice ->
@@ -331,7 +343,7 @@ private fun EpubPageView(
                 } else {
                     if (row.shaded) drawRect(shade, Offset(0f, pageTop), Size(size.width, height))
                     clipRect(0f, pageTop, size.width, pageTop + height) {
-                        drawText(layout.layouts[slice.row], topLeft = Offset(
+                        drawText(pageLayouts.getValue(slice.row), topLeft = Offset(
                             if (row.shaded) inset.toFloat() else 0f, pageTop - slice.sourceTop))
                     }
                 }
@@ -345,7 +357,7 @@ private fun EpubPageView(
 internal fun EpubTocDrawer(
     title: String,
     toc: List<EpubTocNode>,
-    pageForNode: ((EpubTocNode) -> Int?)?,
+    pages: Map<String, Int>,
     onSelect: (Int) -> Unit,
     onClose: () -> Unit,
     insets: WindowInsets = WindowInsets.safeDrawing,
@@ -368,7 +380,7 @@ internal fun EpubTocDrawer(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             LazyColumn(Modifier.weight(1f).testTag("epub-toc-list")) {
                 itemsIndexed(entries) { _, (node, depth) ->
-                    val page = pageForNode?.invoke(node)
+                    val page = pages[tocKey(node)]
                     TextButton(onClick = { page?.let(onSelect) }, enabled = page != null,
                         modifier = Modifier.fillMaxWidth()) {
                         Text(node.title, modifier = Modifier.weight(1f).padding(start = (depth.coerceAtMost(6) * 12).dp),
