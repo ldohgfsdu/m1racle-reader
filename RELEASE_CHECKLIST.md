@@ -18,7 +18,7 @@
 
 v12 is the first public database baseline. Do not fabricate v1-v5 schema snapshots. 已公开基线的升级必须经过真实的 12 → 13 → 14 migration。
 
-- [x] Room 当前 v14，后续 schema 变更必须补 migration 和对应测试。
+- [x] Room 当前 v15（14 → 15 只加 `documents.readingAnchor`、`bookmarks.anchor` 两个可空列，见 MigrationV14ToV15Test），后续 schema 变更必须补 migration 和对应测试。
 - [x] CHANGELOG 与 `docs/releases/vX.Y.Z.md` 描述本轮用户可见变更及限制。
 - [ ] 真机安装、升级保留数据、Markdown/PDF/EPUB 打开与位置恢复通过。
 - [ ] EPUB 超长段落翻页、TOC、字号重排和图片通过真机性能/视觉验收。
