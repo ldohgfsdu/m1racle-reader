@@ -219,7 +219,7 @@ class GlassDockPixelsInstrumentedTest {
         assertBlurredPage("idle")
         val lens = rule.onNodeWithTag("dock-selection")
         val resting = lens.fetchSemanticsNode().boundsInRoot
-        val before = captureDockPixels()
+        val before = captureDockPixels("sampled-rim-idle")
         val home = rule.onAllNodes(isSelectable())[0]
         val homeBounds = home.fetchSemanticsNode().boundsInRoot.translate(
             -rule.onNodeWithTag("dock-pixel-scene").fetchSemanticsNode().boundsInRoot.topLeft)
@@ -229,7 +229,7 @@ class GlassDockPixelsInstrumentedTest {
             rule.mainClock.advanceTimeBy(800)
             rule.waitForIdle()
             assertBlurredPage("holding Home")
-            val after = captureDockPixels()
+            val after = captureDockPixels("sampled-rim-held")
             val heldInk = blueInkCount(after, homeBounds)
             assertTrue("sampled icon and label must magnify while held: $restingInk -> $heldInk",
                 restingInk > 0 && heldInk > restingInk * 1.35f)
@@ -398,7 +398,7 @@ class GlassDockPixelsInstrumentedTest {
         return ink
     }
 
-    private fun captureDockPixels(): PixelMap {
+    private fun captureDockPixels(evidenceName: String? = null): PixelMap {
         rule.waitForIdle()
         val bounds = rule.onNodeWithTag("dock-pixel-scene").fetchSemanticsNode().boundsInWindow
         val region = Rect(bounds.left.roundToInt(), bounds.top.roundToInt(),
@@ -416,6 +416,12 @@ class GlassDockPixelsInstrumentedTest {
         // emulator longer than Compose's one-second PixelCopy callback deadline.
         assertTrue("PixelCopy callback did not complete", copied.await(5, TimeUnit.SECONDS))
         assertEquals("PixelCopy must copy the drawn window", PixelCopy.SUCCESS, result)
+        if (evidenceName != null) {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            java.io.File(context.getExternalFilesDir(null), "$evidenceName.png").outputStream().use {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
         return bitmap.asImageBitmap().toPixelMap()
     }
 }

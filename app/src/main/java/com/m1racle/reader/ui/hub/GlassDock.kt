@@ -13,7 +13,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.m1racle.reader.ui.material.GlassBackdropSource
 import com.m1racle.reader.ui.material.LocalGlassBackdropHost
 import com.m1racle.reader.ui.material.GlassCapability
@@ -163,9 +162,11 @@ fun GlassDock(
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val optical = LocalGlassBackdropHost.current != null &&
         LocalGlassCapability.current == GlassCapability.FULL_OPTICAL
-    val barExport = rememberLayerBackdrop()
-    val iconBackdrop = rememberLayerBackdrop()
-    val selectionBackdrop = rememberCombinedBackdrop(barExport, iconBackdrop)
+    val selectionBackdrop = rememberLayerBackdrop()
+    // Resolve against the page host before entering the guarded capture.
+    // The source is a complete, shorter dock including its glass rim, as in
+    // RiseDiary. It never samples the selection layer that consumes it.
+    val sampledBarMaterial = Modifier.glassMaterial(GlassMaterialRole.Dock, barShape)
     Box(modifier = modifier.fillMaxSize()) {
         val barHeight = with(LocalDensity.current) {
             (DockTabIconSize.toPx() + 2.dp.toPx() + 12.sp.toPx() +
@@ -218,13 +219,16 @@ fun GlassDock(
                         .glassMaterial(
                             GlassMaterialRole.Dock, barShape,
                             layerBlock = barTransform,
-                            surfaceExport = barExport,
                         ),
                 )
+                val lensWidth = slotWidth - 4.dp
+                val lensHeight = barHeight - HomeDesignTokens.DockContentPadding * 2
                 if (optical) {
-                    GlassBackdropSource(iconBackdrop,
+                    GlassBackdropSource(selectionBackdrop,
                         Modifier.matchParentSize().alpha(0f).clearAndSetSemantics {}) {
-                        Row(Modifier.fillMaxSize().padding(HomeDesignTokens.DockContentPadding),
+                        Row(Modifier.align(Alignment.Center).fillMaxWidth().height(lensHeight)
+                            .then(sampledBarMaterial)
+                            .padding(horizontal = HomeDesignTokens.DockContentPadding),
                             verticalAlignment = Alignment.CenterVertically) {
                             dockEntries.forEach { entry ->
                                 Box(Modifier.weight(HomeDesignTokens.DockItemWeight).fillMaxSize(),
@@ -240,8 +244,6 @@ fun GlassDock(
                         }
                     }
                 }
-                val lensWidth = slotWidth - 4.dp
-                val lensHeight = barHeight - HomeDesignTokens.DockContentPadding * 2
                 Row(
                     modifier = Modifier
                         .matchParentSize()

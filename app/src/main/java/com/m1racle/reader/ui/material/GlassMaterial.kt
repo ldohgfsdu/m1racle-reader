@@ -423,7 +423,6 @@ fun Modifier.glassMaterial(
     interaction: Boolean = false,
     sourceBackdrop: Backdrop? = null,
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
-    surfaceExport: LayerBackdrop? = null,
 ): Modifier {
     val environment = LocalGlassEnvironment.current
     val host = LocalGlassBackdropHost.current
@@ -489,7 +488,6 @@ fun Modifier.glassMaterial(
         pressLayerActive = pressLayerActive,
         sourceBackdrop = sourceBackdrop,
         layerBlock = layerBlock,
-        surfaceExport = surfaceExport,
     )
 }
 
@@ -564,7 +562,6 @@ private fun drawGlassMaterial(
     pressLayerActive: Boolean,
     sourceBackdrop: Backdrop? = null,
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
-    surfaceExport: LayerBackdrop? = null,
 ): Modifier {
     val density = LocalDensity.current
     // An explicit processed source replaces the page source. Adding raw page
@@ -573,7 +570,7 @@ private fun drawGlassMaterial(
         GlassBackdropLayer.Root -> host.root
         GlassBackdropLayer.RootAndMenu -> rememberCombinedBackdrop(host.root, host.menuExport)
     }
-    val exportedBackdrop = surfaceExport ?: if (idleSpec.exportsForSettingsCard) host.menuExport else null
+    val exportedBackdrop = if (idleSpec.exportsForSettingsCard) host.menuExport else null
     val blurPx = with(density) { idleSpec.blur.toPx() }
     // Android's large-radius blur downsamples its input. Prefilter the dock's
     // fine page detail first so it cannot alias into broad bands under the lens.

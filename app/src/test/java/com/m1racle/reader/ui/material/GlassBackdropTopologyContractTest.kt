@@ -49,15 +49,19 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
-    fun `dock samples page and selection samples exported material plus isolated icons`() {
+    fun `dock selection samples a complete isolated glass bar with icons and rim`() {
         val dock = appSource("ui/hub/GlassDock.kt").readText()
         assertTrue(dock.contains("sourceBackdrop = selectionBackdrop"))
-        assertTrue(dock.contains("surfaceExport = barExport"))
-        assertTrue(dock.contains("rememberCombinedBackdrop(barExport, iconBackdrop)"))
+        assertFalse(dock.contains("surfaceExport = barExport"))
+        assertFalse(dock.contains("rememberCombinedBackdrop(barExport, iconBackdrop)"))
+        assertTrue(dock.contains("val sampledBarMaterial = Modifier.glassMaterial(GlassMaterialRole.Dock, barShape)"))
         assertTrue(dock.contains("GlassMaterialRole.SelectionLens"))
-        val capture = dock.substringAfter("GlassBackdropSource(iconBackdrop,").substringBefore("val lensWidth")
+        val capture = dock.substringAfter("GlassBackdropSource(selectionBackdrop,")
+            .substringBefore("\n                Row(")
         assertTrue(capture.contains("DockTabVisual("))
         assertFalse(capture.contains("glassMaterial("))
+        assertTrue(capture.contains(".then(sampledBarMaterial)"))
+        assertTrue(capture.contains(".height(lensHeight)"))
         assertTrue(dock.contains(".alpha(0f).clearAndSetSemantics {}"))
         assertTrue(dock.contains("blendMode = BlendMode.Clear"))
         assertFalse(dock.contains("sampleBackdrop = false"))
