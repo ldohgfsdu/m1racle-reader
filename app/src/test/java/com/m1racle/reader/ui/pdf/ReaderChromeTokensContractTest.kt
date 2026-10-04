@@ -58,13 +58,15 @@ class ReaderChromeTokensContractTest {
                 }
                 assertEquals(expectedHighlightW, spec.highlightWidth.value, 0.001f)
                 val expectedHighlightA = when (role) {
+                    // Approved iOS transparency recipe (design.md, 2026-10-04).
+                    GlassMaterialRole.Dock -> if (dark) 0.28f else 0.24f
                     GlassMaterialRole.SelectionLens -> 0f
                     GlassMaterialRole.Dialog -> if (dark) 0.38f else 0.30f
 
                     GlassMaterialRole.ProgressiveChrome -> 0f
                     else -> 0.60f
                 }
-                assertEquals(expectedHighlightA, spec.highlightColor.alpha, 0.004f)
+                assertEquals("$role highlight (dark=$dark)", expectedHighlightA, spec.highlightColor.alpha, 0.004f)
                 assertTrue(spec.contentDividerAlpha in 0.04f..0.08f)
                 assertTrue(spec.contentPressedOverlayAlpha in 0.04f..0.05f)
                 assertEquals(1f, spec.scale, 0.001f)
