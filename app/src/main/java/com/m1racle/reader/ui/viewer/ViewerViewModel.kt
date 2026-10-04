@@ -327,7 +327,7 @@ class ViewerViewModel(
                 // Non-fatal.
             }
 
-            val textResult = repository.readDocumentText(entity.uri)
+            val textResult = repository.readDocumentText(entity.uri, entity.contentSha256.takeIf { entity.type == com.m1racle.reader.data.local.DocumentType.MARKDOWN })
             textResult.fold(
                 onSuccess = { text ->
                     var parseFallback = false
@@ -400,6 +400,8 @@ class ViewerViewModel(
                 },
                 onFailure = { error ->
                     val message = when (error) {
+                        is DocumentReadException.ContentChanged ->
+                            "原文件内容已变化，请重新导入；原有阅读记录已保留"
                         is DocumentReadException.NotFound ->
                             "文件可能已被移动或删除"
                         is DocumentReadException.PermissionDenied ->

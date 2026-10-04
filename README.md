@@ -80,6 +80,8 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 # 注意：本机默认 JDK 25 时需 export JAVA_HOME 指向 JDK 17
 ```
 
+Windows 的 `local.properties` 使用属性文件转义，例如 `sdk.dir=C\:/Android/Sdk`；不要把本机路径提交。
+
 - **最低系统：** Android 12（API 31）
 - **包名：** `com.m1racle.reader`
 - Android Studio：打开仓库根目录 → Run `app`
@@ -87,7 +89,7 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 ### arm64 本机构建说明
 
 构建使用 JDK 17、Gradle 9.5.0、AGP 9.1.1、Android SDK Platform 37.0 与 Build Tools 36.0.0。
-仓库 `tools/aapt2` 使用 `app/build.gradle.kts` 声明的 Build Tools 版本（缺失则报错），在 ARM 主机通过 qemu 运行；`gradle.properties` 使用相对路径，无需提交本机路径。
+Windows / Linux x86_64 / macOS 默认使用 AGP 下载的原生 aapt2。只有 ARM 主机需要在本机 `~/.gradle/gradle.properties` 配置 `android.aapt2FromMavenOverride=/absolute/path/to/tools/aapt2`，经 qemu 运行仓库脚本；不要把该 override 提交到项目。Windows 使用 `gradlew.bat`，SDK 安装包名为 `platforms;android-37.0`。依赖优先使用官方仓库，镜像仅作后备。
 
 ## 如何导入文档
 

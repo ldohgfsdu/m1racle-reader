@@ -14,7 +14,6 @@ import com.m1racle.reader.data.local.PdfPrintPageAnchorEntity
 import com.m1racle.reader.data.local.TextbookOutlineNodeDao
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.data.repository.DocumentRepository
-import com.m1racle.reader.data.repository.ImportPayloadPolicy
 import com.m1racle.reader.data.repository.ResolvedImportRequest
 import com.m1racle.reader.identity.ContentIdentityDecision
 import com.m1racle.reader.identity.PreparedContentIdentity
@@ -135,7 +134,6 @@ class ExternalOpenPendingNavigationTest {
                 ),
                 canonicalExternalKey = "doc:provider/$id",
                 documentType = type,
-                payloadPolicy = ImportPayloadPolicy.MANAGED_COPY,
             ),
             activeDocumentId = activeDocumentId,
         )

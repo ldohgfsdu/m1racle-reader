@@ -2,6 +2,10 @@ package com.m1racle.reader.epub
 
 import java.io.File
 import java.io.InputStream
+import java.io.InterruptedIOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
@@ -16,7 +20,12 @@ object EpubPackageImporter {
     const val MAX_XML_BYTES = 8L * 1024 * 1024
     private const val MAX_XML_DEPTH = 128
     private const val MAX_XML_NODES = 200_000
-    const val EXTRACTOR_VERSION = 1
+    const val MAX_SPINE_ITEMS = 2_048
+    const val MAX_BOOK_XML_BYTES = 32L * 1024 * 1024
+    const val MAX_BOOK_TEXT_CHARS = 4L * 1024 * 1024
+    const val MAX_BOOK_BLOCKS = 40_000L
+    const val EXTRACTOR_VERSION = 2
+    private const val COMPLETION_MARKER = ".m1racle-extraction-complete"
 
     private const val CONTAINER_PATH = "META-INF/container.xml"
     private const val ENCRYPTION_PATH = "META-INF/encryption.xml"
@@ -37,6 +46,29 @@ object EpubPackageImporter {
     /** Full open: extract with limits, then parse. */
     fun open(epubFile: File, destDir: File): EpubBook {
         extract(epubFile, destDir)
+        return parseExtracted(destDir)
+    }
+
+    /** Only a fully extracted tree with the exact source/version marker is reusable. */
+    fun openCached(epubFile: File, destDir: File, contentSha256: String): EpubBook {
+        require(Regex("^[0-9a-f]{64}$").matches(contentSha256))
+        val signature = "$EXTRACTOR_VERSION:$contentSha256"
+        val marker = File(destDir, COMPLETION_MARKER)
+        if (marker.isFile && marker.length() <= 128 && marker.readText() == signature) {
+            return parseExtracted(destDir)
+        }
+        val parent = requireNotNull(destDir.canonicalFile.parentFile)
+        check(parent.mkdirs() || parent.isDirectory)
+        val staging = File(parent, "${destDir.name}.extract-${UUID.randomUUID()}")
+        try {
+            extract(epubFile, staging)
+            File(staging, COMPLETION_MARKER).outputStream().use { it.write(signature.toByteArray()) }
+            if (Thread.currentThread().isInterrupted) throw InterruptedIOException("EPUB extraction interrupted")
+            check(!destDir.exists() || destDir.deleteRecursively()) { "无法替换 EPUB 缓存" }
+            Files.move(staging.toPath(), destDir.toPath(), StandardCopyOption.ATOMIC_MOVE)
+        } finally {
+            if (staging.exists()) staging.deleteRecursively()
+        }
         return parseExtracted(destDir)
     }
 
@@ -63,6 +95,7 @@ object EpubPackageImporter {
                         val buf = ByteArray(64 * 1024)
                         var entryBytes = 0L
                         while (true) {
+                            if (Thread.currentThread().isInterrupted) throw InterruptedIOException("EPUB extraction interrupted")
                             val n = input.read(buf)
                             if (n < 0) break
                             entryBytes += n
@@ -104,22 +137,62 @@ object EpubPackageImporter {
         }
         if (spine.isEmpty()) throw EpubException.Corrupt("空 spine")
         val toc = parseToc(rootCanon, opfDir, manifest, spine, navHref)
+        var xmlBytes = 0L
+        var bookTextChars = 0L
+        var bookBlocks = 0L
+        val parsedChapters = mutableMapOf<String, Pair<List<EpubBlock>, Map<String, Int>>>()
         val chapters = spine.mapIndexed { index, item ->
+            if (Thread.currentThread().isInterrupted) throw InterruptedIOException("EPUB parsing interrupted")
             val file = File(opfDir, item.href)
             if (!file.canonicalFile.path.startsWith(rootCanon.path + File.separator) || !file.isFile) {
                 throw EpubException.Corrupt("缺章节文件")
             }
+            xmlBytes += file.length()
+            if (xmlBytes > MAX_BOOK_XML_BYTES) throw EpubException.TooLarge("全书章节体积超限")
             // A single unparseable chapter degrades to a placeholder block so the
             // book still opens and spine indices (TOC/progress) stay aligned.
-            val (blocks, anchors) = try {
+            val (blocks, anchors) = parsedChapters.getOrPut(file.canonicalPath) { try {
                 val parsed = EpubXhtmlParser.parse(readXmlBytes(file))
                 resolveChapterImages(parsed.first, file.parentFile ?: opfDir, rootCanon) to parsed.second
+            } catch (tooLarge: EpubException.TooLarge) {
+                throw tooLarge
+            } catch (interrupted: InterruptedIOException) {
+                throw interrupted
             } catch (_: Exception) {
                 listOf(EpubBlock.Unsupported("本章排版异常，已跳过")) to emptyMap<String, Int>()
+            } }
+            val cost = contentCost(blocks)
+            bookBlocks += cost.first
+            bookTextChars += cost.second
+            if (bookBlocks > MAX_BOOK_BLOCKS || bookTextChars > MAX_BOOK_TEXT_CHARS) {
+                throw EpubException.TooLarge("全书正文规模超限")
             }
             EpubChapter(index, item.href, tocTitleFor(toc, index), blocks, anchors)
         }
         return EpubBook(metadata, spine, toc, chapters)
+    }
+
+    private fun contentCost(blocks: List<EpubBlock>): Pair<Long, Long> {
+        var count = 0L
+        var chars = 0L
+        val pending = ArrayDeque(blocks)
+        while (pending.isNotEmpty()) {
+            count++
+            when (val block = pending.removeFirst()) {
+                is EpubBlock.Heading -> chars += block.text.length
+                is EpubBlock.Paragraph -> chars += block.inlines.sumOf { it.text.length.toLong() }
+                is EpubBlock.Code -> chars += block.text.length
+                is EpubBlock.ListBlock -> {
+                    count += block.items.size
+                    chars += block.items.sumOf { item -> item.sumOf { it.text.length.toLong() } }
+                }
+                is EpubBlock.Quote -> pending.addAll(block.blocks)
+                is EpubBlock.Image -> chars += block.alt.orEmpty().length
+                is EpubBlock.Unsupported -> chars += block.label.length
+                EpubBlock.Divider -> Unit
+            }
+        }
+        return count to chars
     }
 
     // ── internals ──
@@ -230,6 +303,7 @@ object EpubPackageImporter {
         val buf = ByteArray(32 * 1024)
         var total = 0L
         while (true) {
+            if (Thread.currentThread().isInterrupted) throw InterruptedIOException("EPUB parsing interrupted")
             val n = input.read(buf)
             if (n < 0) break
             total += n
@@ -366,7 +440,10 @@ object EpubPackageImporter {
         for (i in 0 until itemrefs.length) {
             val el = itemrefs.item(i) as? Element ?: continue
             val idref = el.getAttribute("idref")
-            if (idref.isNotEmpty()) refs.add(idref to (el.getAttribute("linear") != "no"))
+            if (idref.isNotEmpty()) {
+                if (refs.size >= MAX_SPINE_ITEMS) throw EpubException.TooLarge("章节引用过多")
+                refs.add(idref to (el.getAttribute("linear") != "no"))
+            }
         }
         return Triple(manifest, refs, navHref)
     }

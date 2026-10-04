@@ -41,8 +41,8 @@ val DefaultM1racleTypography = M1racleTypography(
     section = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Medium,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
+        fontSize = 15.sp,
+        lineHeight = 22.sp,
     ),
     body = TextStyle(
         fontFamily = FontFamily.Default,

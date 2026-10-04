@@ -39,6 +39,80 @@ import org.robolectric.annotation.GraphicsMode
 class EpubPaginationHostTest {
     @get:Rule val rule = createComposeRule()
 
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun `list item gaps and hanging lines preserve page position and section anchors`() {
+        val book = EpubBook(EpubMetadata(null, emptyList(), null, null, null, false, false),
+            listOf(EpubSpineItem("0", "0.xhtml", true, 0)), emptyList(),
+            listOf(EpubChapter(0, "0.xhtml", null, listOf(
+                EpubBlock.ListBlock(false, List(30) { listOf(EpubInline("List $it " + "Long reading list text ".repeat(20))) }),
+                EpubBlock.Heading(3, "后一节"),
+            ), mapOf("target" to 1))))
+        val layout = measure(book, MEASURE_SLICE_NANOS).single()
+        assertEquals(31, layout.rows.size)
+        val first = layout.layoutFor(0)
+        assertTrue(first.lineCount > 1)
+        val markerLeft = first.getBoundingBox(0).left
+        val continuationLeft = first.getBoundingBox(first.getLineStart(1)).left
+        assertTrue("marker=$markerLeft continuation=$continuationLeft indent=${first.layoutInput.style.textIndent}",
+            continuationLeft > markerLeft)
+        layout.pages.forEachIndexed { index, page ->
+            val position = layout.positionAt(page.slices.first())
+            assertEquals(index, layout.pageForText(position.first, position.third))
+            assertEquals(index, layout.pageForPosition(position.first, position.second))
+            page.slices.zipWithNext().forEach { (a, b) ->
+                assertEquals(24f, b.pageTop - (a.pageTop + a.sourceBottom - a.sourceTop), 0.01f)
+            }
+        }
+        assertEquals(layout.pages.pageForText(30, 0), layout.pageForToc(book,
+            EpubTocNode("后一节", "0.xhtml#target", 0, emptyList())))
+    }
+
+    @Test fun `split paragraphs restore source coordinates and TOC targets after pagination`() {
+        val toc = EpubTocNode("Target", "0.xhtml#target", 0, emptyList())
+        val book = EpubBook(EpubMetadata("Book", emptyList(), null, null, null, false, false),
+            listOf(EpubSpineItem("0", "0.xhtml", true, 0)), listOf(toc),
+            listOf(EpubChapter(0, "0.xhtml", null, listOf(
+                EpubBlock.Paragraph(listOf(EpubInline("Long paragraph ".repeat(1_000)))),
+                EpubBlock.Heading(2, "Target")), mapOf("target" to 1))))
+        val layout = measure(book, MEASURE_SLICE_NANOS).single()
+        assertTrue(layout.rows.size > 2)
+        layout.pages.forEachIndexed { index, page ->
+            val position = layout.positionAt(page.slices.first())
+            assertEquals(index, layout.pageForText(position.first, position.third))
+            assertEquals(index, layout.pageForPosition(position.first, position.second))
+        }
+        val targetRow = layout.rows.indexOfFirst { it.blockIndex == 1 }
+        assertEquals(layout.pages.pageForText(targetRow, 0), layout.pageForToc(book, toc))
+    }
+
+    @Test fun `nested TOC chapters in one XHTML start at page top instead of sharing the preceding page`() {
+        val second = EpubTocNode("第二章", "0.xhtml#second", 0, listOf(
+            EpubTocNode("小节", "0.xhtml#nested", 0, emptyList())))
+        val first = EpubTocNode("第一章", "0.xhtml#first", 0, listOf(second))
+        val book = EpubBook(EpubMetadata("Book", emptyList(), null, null, "3.0", false, false),
+            listOf(EpubSpineItem("0", "0.xhtml", true, 0)), listOf(first),
+            listOf(EpubChapter(0, "0.xhtml", "第一章", listOf(
+                EpubBlock.Heading(1, "第一章"), EpubBlock.Paragraph(listOf(EpubInline("第一章正文"))),
+                EpubBlock.Heading(2, "第二章"), EpubBlock.Paragraph(listOf(EpubInline("第二章正文"))),
+                EpubBlock.Heading(3, "小节"), EpubBlock.Paragraph(listOf(EpubInline("小节正文"))),
+            ), mapOf("first" to 0, "second" to 2, "nested" to 4))))
+        val layout = measure(book, MEASURE_SLICE_NANOS).single()
+        assertEquals(3, layout.pages.size)
+        assertEquals(listOf(0, 2, 4), layout.pages.map { it.slices.first().row })
+        assertEquals(listOf("第一章", "第二章", "小节"), layout.pages.map { layout.rows[it.slices.first().row].chapterTitle })
+        for ((index, toc) in listOf(first, second, second.children.single()).withIndex()) {
+            assertEquals(index, layout.pageForToc(book, toc))
+            assertEquals(index..index, layout.sectionPages(index))
+            assertEquals(0f, layout.pages[index].slices.first().pageTop, 0f)
+            assertEquals(0, layout.pages[index].slices.first().start)
+        }
+    }
+
+    @Test fun `unresolved TOC fragments are not falsely redirected to the first chapter page`() {
+        val layout = measure(longBook, MEASURE_SLICE_NANOS).single()
+        assertNull(layout.pageForToc(longBook, EpubTocNode("Missing", "0.xhtml#does-not-exist", 0, emptyList())))
+    }
+
     private val longBook = EpubBook(
         EpubMetadata("长书", emptyList(), "zh", null, "3.0", false, false),
         listOf(EpubSpineItem("0", "0.xhtml", true, 0), EpubSpineItem("1", "1.xhtml", true, 1)),

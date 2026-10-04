@@ -11,12 +11,12 @@ class GlassOpticalPolicyTest {
         // User requested promotion of the settings liquid material on 2026-09-25.
         val expectedLight = mapOf(
             GlassMaterialRole.Control to 0.60f,
-            GlassMaterialRole.Capsule to 0.60f,
+            GlassMaterialRole.SelectionLens to 0.10f,
             GlassMaterialRole.Menu to 0.60f,
             GlassMaterialRole.ExpandedMenu to 0.90f,
             GlassMaterialRole.SettingsCard to 0.60f,
             GlassMaterialRole.Dialog to 0.97f,
-            GlassMaterialRole.ProgressiveChrome to 0.62f,
+            GlassMaterialRole.ProgressiveChrome to 0.90f,
         )
         for ((role, alpha) in expectedLight) {
             val spec = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT)
@@ -25,12 +25,12 @@ class GlassOpticalPolicyTest {
         // Shared liquid role colors also apply in dark mode.
         val expectedDark = mapOf(
             GlassMaterialRole.Control to 0.64f,
-            GlassMaterialRole.Capsule to 0.64f,
+            GlassMaterialRole.SelectionLens to 0.10f,
             GlassMaterialRole.Menu to 0.64f,
             GlassMaterialRole.ExpandedMenu to 0.90f,
             GlassMaterialRole.SettingsCard to 0.64f,
             GlassMaterialRole.Dialog to 0.97f,
-            GlassMaterialRole.ProgressiveChrome to 0.62f,
+            GlassMaterialRole.ProgressiveChrome to 0.90f,
         )
         for ((role, alpha) in expectedDark) {
             val spec = GlassMaterialEngine.resolve(role, GlassEnvironment.READER_DARK)
@@ -39,12 +39,16 @@ class GlassOpticalPolicyTest {
         // Controls and readable panels retain distinct liquid blur radii.
         for (role in listOf(
             GlassMaterialRole.Control,
-            GlassMaterialRole.Capsule,
+            GlassMaterialRole.SelectionLens,
             GlassMaterialRole.Menu,
             GlassMaterialRole.ExpandedMenu,
             GlassMaterialRole.SettingsCard,
         )) {
-            assertEquals("production blur $role", if (role in listOf(GlassMaterialRole.ExpandedMenu)) 24.dp else 4.dp,
+            assertEquals("production blur $role", when (role) {
+                GlassMaterialRole.ExpandedMenu -> 24.dp
+                GlassMaterialRole.SelectionLens -> 0.dp
+                else -> 4.dp
+            },
                 GlassMaterialEngine.resolve(role, GlassEnvironment.READER_LIGHT).blur)
         }
     }
@@ -103,7 +107,7 @@ class GlassOpticalPolicyTest {
     fun `families preserve role semantics across both environments and themes`() {
         val expected = mapOf(
             GlassMaterialRole.Control to GlassOpticalFamily.INTERACTIVE,
-            GlassMaterialRole.Capsule to GlassOpticalFamily.CONTENT,
+            GlassMaterialRole.SelectionLens to GlassOpticalFamily.CONTENT,
             GlassMaterialRole.Menu to GlassOpticalFamily.CONTENT,
             GlassMaterialRole.ExpandedMenu to GlassOpticalFamily.CONTENT,
             GlassMaterialRole.SettingsCard to GlassOpticalFamily.CONTENT,
@@ -120,7 +124,7 @@ class GlassOpticalPolicyTest {
             assertEquals(full.surfaceColor, blur.surfaceColor)
             assertFalse(blur.lensEnabled)
             assertEquals(0.dp, blur.lensAmount)
-            assertFalse(full.chromaticAberration)
+            assertEquals(role == GlassMaterialRole.SelectionLens, full.chromaticAberration)
             assertEquals(1f, full.foreground.contentAlpha, 0f)
             if (family == GlassOpticalFamily.PANEL) assertFalse(full.lensEnabled)
         }

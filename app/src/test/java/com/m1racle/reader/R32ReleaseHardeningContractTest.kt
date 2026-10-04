@@ -16,7 +16,7 @@ class R32ReleaseHardeningContractTest {
         val version = Properties().apply {
             File(projectRoot(), "app/version.properties").inputStream().use(::load)
         }
-        assertEquals("23", version.getProperty("versionCode"))
+        assertEquals("31", version.getProperty("versionCode"))
         assertEquals("1.0.0", version.getProperty("versionName"))
 
         val build = buildScript()

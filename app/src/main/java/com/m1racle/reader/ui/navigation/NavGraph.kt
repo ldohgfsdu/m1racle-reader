@@ -1,6 +1,19 @@
 package com.m1racle.reader.ui.navigation
 
 import android.app.Application
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.m1racle.reader.R
+import com.m1racle.reader.ui.home.HomeEvent
+import com.m1racle.reader.ui.home.HomeDesignTokens
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +30,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -46,6 +61,7 @@ import com.m1racle.reader.ui.hub.HubTabTransitions
 import com.m1racle.reader.ui.hub.LibraryScreen
 import com.m1racle.reader.ui.hub.LibraryViewModel
 import com.m1racle.reader.ui.hub.HubSettingsScreen
+import com.m1racle.reader.ui.hub.glasslab.GlassLabScreen
 import com.m1racle.reader.ui.pdf.PdfViewerScreen
 import com.m1racle.reader.ui.pdf.PdfViewerViewModel
 import com.m1racle.reader.ui.search.SearchScreen
@@ -69,6 +85,7 @@ object Routes {
     const val LIBRARY = "library"
     const val BOOKMARKS = "bookmarks"
     const val SETTINGS = "settings"
+    const val GLASS_LAB = "settings/glass-workbench"
     const val SEARCH = "search"
 
     fun viewer(documentId: String, anchor: DocumentAnchor? = null): String =
@@ -139,6 +156,35 @@ fun M1racleReaderNavGraph(
     val searchRepo = searchRepository
         ?: (application as? com.m1racle.reader.M1racleReaderApplication)?.searchRepository
 
+    // One import owner for the home empty state and the shared trailing action.
+    val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(repository))
+    val importing by homeViewModel.isImporting.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val resources = androidx.compose.ui.platform.LocalResources.current
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) homeViewModel.onImportDocument(uri)
+    }
+    val launchImport = {
+        importLauncher.launch(arrayOf("text/*", "application/pdf", "application/epub+zip",
+            "application/zip", "application/x-zip-compressed", "application/octet-stream"))
+    }
+    LaunchedEffect(homeViewModel, resources) {
+        homeViewModel.events.collect { event ->
+            val message = when (event) {
+                is HomeEvent.OpenDocument -> {
+                    openDocument(navController, event.document)
+                    return@collect
+                }
+                HomeEvent.UnsupportedFormat -> resources.getString(R.string.error_unsupported_format)
+                HomeEvent.SourceTooLarge -> resources.getString(R.string.home_import_too_large,
+                    com.m1racle.reader.share.ExternalDocumentImporter.MAX_BYTES / (1024L * 1024L))
+                HomeEvent.DeleteFailed -> resources.getString(R.string.home_delete_failed)
+                HomeEvent.ReadFailed -> resources.getString(R.string.error_read_failed)
+            }
+            snackbar.showSnackbar(message)
+        }
+    }
+
     val currentEntry by navController.currentBackStackEntryAsState()
     val selectedHub = HubDestination.fromRoute(currentEntry?.destination?.route)
         ?: HubDestination.fromRoute(navController.previousBackStackEntry?.destination?.route)
@@ -149,7 +195,17 @@ fun M1racleReaderNavGraph(
     val hubExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> androidx.compose.animation.ExitTransition? = {
         HubTabTransitions.exit(initialState.destination.route, targetState.destination.route)
     }
-    val hubBackdrop = rememberLayerBackdrop()
+    // Capture the actual opaque page base, including the empty area below content.
+    // Parent window/background pixels are not part of this RenderNode. Without
+    // this fill, transparent hub pages become gray after optical processing.
+    val hubBackground = MaterialTheme.colorScheme.background
+    val drawHubBackdrop: ContentDrawScope.() -> Unit = remember(hubBackground) {
+        {
+            drawRect(hubBackground)
+            drawContent()
+        }
+    }
+    val hubBackdrop = rememberLayerBackdrop(onDraw = drawHubBackdrop)
     val hubMenuExport = rememberLayerBackdrop()
     val hubBackdropHost = remember(hubBackdrop, hubMenuExport) { GlassBackdropHost(hubBackdrop, hubMenuExport) }
     val showDock = HubDestination.isTopLevelRoute(currentEntry?.destination?.route)
@@ -162,18 +218,16 @@ fun M1racleReaderNavGraph(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     composable(Routes.HOME, enterTransition = hubEnter, exitTransition = hubExit) {
-                        val homeViewModel: HomeViewModel = viewModel(
-                            factory = HomeViewModel.Factory(repository),
-                        )
                         HomeScreen(
                             viewModel = homeViewModel,
+                            onImport = launchImport,
+                            onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onOpenDocument = { document ->
                                 openDocument(navController, document)
                             },
                             onNavigateHub = { destination ->
                                 navController.navigateToHub(destination)
                             },
-                            onOpenSearch = { navController.navigate(Routes.SEARCH) },
                         )
                     }
 
@@ -183,13 +237,13 @@ fun M1racleReaderNavGraph(
                         )
                         LibraryScreen(
                             viewModel = libraryViewModel,
+                            onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onOpenDocument = { document ->
                                 openDocument(navController, document)
                             },
                             onNavigateHub = { destination ->
                                 navController.navigateToHub(destination)
                             },
-                            onOpenSearch = { navController.navigate(Routes.SEARCH) },
                         )
                     }
 
@@ -249,10 +303,15 @@ fun M1racleReaderNavGraph(
 
                     composable(Routes.SETTINGS, enterTransition = hubEnter, exitTransition = hubExit) {
                         HubSettingsScreen(
+                            onOpenGlassLab = { navController.navigate(Routes.GLASS_LAB) { launchSingleTop = true } },
                             onNavigateHub = { destination ->
                                 navController.navigateToHub(destination)
                             },
                         )
+                    }
+
+                    composable(Routes.GLASS_LAB) {
+                        GlassLabScreen(onBack = { navController.popBackStack() })
                     }
 
                     composable(
@@ -487,10 +546,14 @@ fun M1racleReaderNavGraph(
                     }
                 }
             } // Captured navigation content; dock is a sibling.
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                .padding(bottom = if (showDock) HomeDesignTokens.DockContentClearance else 8.dp))
             if (showDock) {
                 CompositionLocalProvider(LocalGlassBackdropHost provides hubBackdropHost) {
                     GlassDock(
                         onSelect = { destination -> navController.navigateToHub(destination) },
+                        onImportDocument = launchImport,
+                        importing = importing,
                     )
                 }
             }

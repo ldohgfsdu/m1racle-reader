@@ -205,13 +205,15 @@ class ExportSafCancellationCleanupTest {
         source: InputStream,
         token: ExportCancellationToken,
     ) {
-        resolver.openOutputStream(destUri, "w")!!.use { out ->
-            try {
+        // Match both production exporters: close the destination before deletion.
+        // Windows providers cannot unlink a file while its stream remains open.
+        try {
+            resolver.openOutputStream(destUri, "w")!!.use { out ->
                 copyWithExportCancellation(source, out, token)
-            } catch (ce: CancellationException) {
-                deleteSafDocumentBestEffort(resolver, destUri)
-                throw ce
             }
+        } catch (ce: CancellationException) {
+            deleteSafDocumentBestEffort(resolver, destUri)
+            throw ce
         }
     }
 

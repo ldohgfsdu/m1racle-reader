@@ -1,17 +1,15 @@
-id: PROJECT_AUDIT_FIXES_20260930
-status: implemented_automated_verified_device_pending
+id: DOCK_IOS_TRANSPARENCY_20261004
+status: completed_emulator_verified_physical_pending
 scope: >-
-  Findings from the 2026-10-02 project audit. Land the 2026-09-30 EPUB hardening
-  (bounded parsing, ZIP accounting, preserved text and anchors); give EPUB pagination
-  a bounded main-thread slice and a bounded resident layout cache instead of retaining
-  one layout per row; restore the three red contracts and consolidate the nine copies of
-  the production-source test lookup; reconcile the candidate documentation. Release
-  delivery still needs the injected production signer and a device.
+  Match the user's confirmed left iOS reference with clearer transmitted page
+  colors, quieter edge highlights and a softer floating shadow in the Hub dock.
+  Increase held lens and sampled icon magnification using the user's new Books
+  bottom-bar video. Preserve spring follow, release/cancel behavior, navigation,
+  import and transparent gesture area. No reader, dependency or database changes.
 project_state: docs/CURRENT_STATUS.md
-report: docs/PROJECT_AUDIT_FIXES_20260930.md
+report: docs/DOCK_IOS_TRANSPARENCY_20261004.md
 index: docs/PROJECT_INDEX.md
-previous: PDF_MENU_ELASTIC_HIGHLIGHT_20260927; implemented_device_pending
-blocked:
-  DEVICE_ACCEPTANCE: NOT_RUN (no adb device)
-release: 1.0.0/23 signed 2026-10-02, SHA-256 b4b5258f...e927b3, signer 2d9daba0...
-updated: 2026-10-02
+previous: DOCK_VIDEO_MOTION_20261004
+emulator_report: docs/DOCK_IOS_TRANSPARENCY_20261004.md
+physical_device: no physical device connected; current release verified in emulator only
+updated: 2026-10-04

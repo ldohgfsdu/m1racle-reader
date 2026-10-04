@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,6 +37,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.m1racle.reader.ui.home.HomeDesignTokens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -113,7 +119,9 @@ fun SearchScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.search_library_title)) },
+                title = { Text(stringResource(R.string.search_library_title),
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp,
+                        lineHeight = 28.sp, fontWeight = FontWeight.SemiBold)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -135,9 +143,22 @@ fun SearchScreen(
                 onValueChange = viewModel::onQueryChange,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = HomeDesignTokens.PageHorizontal, vertical = 12.dp),
                 singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                ),
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = if (state.query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { viewModel.onQueryChange("") }) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.search_clear))
+                        }
+                    }
+                } else null,
                 placeholder = { Text(stringResource(R.string.search_library_placeholder)) },
             )
             when {
@@ -145,17 +166,20 @@ fun SearchScreen(
                     CircularProgressIndicator(modifier = Modifier.size(28.dp))
                 }
                 state.failed -> SearchStatus {
-                    Text(stringResource(R.string.search_library_failed))
+                    Text(stringResource(R.string.search_library_failed),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 state.query.isBlank() -> SearchStatus {
-                    Text(stringResource(R.string.search_library_hint))
+                    Text(stringResource(R.string.search_library_hint),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 state.results.isEmpty() -> SearchStatus {
-                    Text(stringResource(R.string.search_library_empty))
+                    Text(stringResource(R.string.search_library_empty),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(horizontal = HomeDesignTokens.PageHorizontal, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(
@@ -173,7 +197,7 @@ fun SearchScreen(
 @Composable
 private fun SearchStatus(content: @Composable () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().padding(horizontal = HomeDesignTokens.PageHorizontal),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -194,10 +218,10 @@ private fun SearchResultRow(result: SearchResult, onClick: () -> Unit) {
             Text(
                 text = result.documentTitle,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
+            FlowRow(
                 modifier = Modifier.padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {

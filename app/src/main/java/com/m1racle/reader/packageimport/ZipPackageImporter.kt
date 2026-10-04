@@ -25,6 +25,9 @@ object ZipPackageImporter {
     const val MAX_ENTRY_COUNT: Int = 5_000
     const val MAX_TOTAL_UNCOMPRESSED_BYTES: Long = 200L * 1024L * 1024L // 200 MiB
     const val MAX_SINGLE_ENTRY_BYTES: Long = 80L * 1024L * 1024L // 80 MiB
+    const val MAX_MARKDOWN_BYTES: Int = 32 * 1024 * 1024
+    const val MAX_MANIFEST_BYTES: Int = 64 * 1024
+    internal const val MAX_TITLE_PREFIX_CHARS: Int = 16 * 1024
 
     data class ExtractResult(
         val packageRoot: File,
@@ -85,6 +88,7 @@ object ZipPackageImporter {
 
         val entry = resolveEntrypoint(destDir)
             ?: throw IllegalArgumentException("ZIP 中未找到 Markdown 入口文件")
+        require(entry.length() <= MAX_MARKDOWN_BYTES) { "Markdown 入口超过 32 MiB 上限" }
         val rel = entry.relativeTo(destDir).path.replace('\\', '/')
         return ExtractResult(packageRoot = destDir.canonicalFile, entryFile = entry.canonicalFile, entryRelativePath = rel)
     }
@@ -135,6 +139,7 @@ object ZipPackageImporter {
     fun readManifestEntrypoint(packageRoot: File): File? {
         val manifest = File(packageRoot, "package-manifest.json")
         if (!manifest.isFile || !manifest.canRead()) return null
+        require(manifest.length() <= MAX_MANIFEST_BYTES) { "教材包 manifest 超过 64 KiB 上限" }
         val text = try {
             manifest.readText(Charsets.UTF_8)
         } catch (_: Exception) {
@@ -248,6 +253,17 @@ object ZipPackageImporter {
     }
 
     /** First ATX H1 plain text, or null. */
+    fun extractFirstH1(markdownFile: File): String? = markdownFile.reader(Charsets.UTF_8).use { reader ->
+        val prefix = CharArray(MAX_TITLE_PREFIX_CHARS)
+        var count = 0
+        while (count < prefix.size) {
+            val n = reader.read(prefix, count, prefix.size - count)
+            if (n < 0) break
+            count += n
+        }
+        extractFirstH1(String(prefix, 0, count))
+    }
+
     fun extractFirstH1(markdown: String): String? {
         for (line in markdown.lineSequence()) {
             val t = line.trim()

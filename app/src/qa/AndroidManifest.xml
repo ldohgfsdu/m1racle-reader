@@ -29,7 +29,11 @@
             android:exported="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.M1racleReader" />
-            <activity
+        <activity
+            android:name=".ui.home.DockGlassHarnessActivity"
+            android:exported="true"
+            android:theme="@style/Theme.M1racleReader" />
+        <activity
             android:name=".ui.home.MinimalListHarnessActivity"
             android:exported="true"
             android:screenOrientation="portrait"

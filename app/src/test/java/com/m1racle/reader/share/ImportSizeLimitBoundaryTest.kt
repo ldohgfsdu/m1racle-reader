@@ -71,6 +71,12 @@ class ImportSizeLimitBoundaryTest {
         context = ApplicationProvider.getApplicationContext()
         resolver = context.contentResolver
         tempDir = context.cacheDir.resolve("b3-${System.nanoTime()}").apply { mkdirs() }
+        // Companion state is shared by Robolectric's sandbox across test cases.
+        // Each boundary must start with a readable descriptor and plain-text MIME.
+        StubContentProvider.row = null
+        StubContentProvider.type = "text/plain"
+        StubContentProvider.serveDescriptors = true
+        StubContentProvider.backingDir = tempDir
     }
 
     /** Yields [totalBytes] logical bytes in 64 KiB chunks — nothing allocated. */
@@ -222,7 +228,10 @@ class ImportSizeLimitBoundaryTest {
     @Test
     fun noHint_streamWithinCap_acceptedOnBothPaths() = runBlocking {
         registerStub("bn2")
-        StubContentProvider.row = listOf("big.md", null)
+        // Test the generic 200 MiB envelope with PDF. Markdown has a stricter
+        // 32 MiB readable-text limit, covered independently below.
+        StubContentProvider.row = listOf("big.pdf", null)
+        StubContentProvider.type = "application/pdf"
         StubContentProvider.serveDescriptors = false
         val uri = stubUri("bn2")
         shadowOf(resolver).registerInputStream(uri, FakeSizedStream(cap())) // exact cap drains clean
@@ -234,6 +243,21 @@ class ImportSizeLimitBoundaryTest {
         val pathB = importer.prepare(uri, intentType = null)
         assertTrue(pathB is PrepareOutcome.Success)
         importer.discardPrepared((pathB as PrepareOutcome.Success).prepared)
+    }
+
+    @Test
+    fun markdownAboveReadableLimitIsRejectedAtCommit() = runBlocking {
+        registerStub("md-limit")
+        StubContentProvider.row = listOf("big.md", null)
+        StubContentProvider.type = "text/plain"
+        StubContentProvider.serveDescriptors = false
+        val uri = stubUri("md-limit")
+        shadowOf(resolver).registerInputStream(uri,
+            FakeSizedStream(DocumentRepository.MAX_MARKDOWN_BYTES.toLong() + 1))
+        assertEquals(ImportResult.UnsupportedFormat, installRepository().importDocument(uri))
+        val importer = importerWithFakeStream(installRepository(), DocumentRepository.MAX_MARKDOWN_BYTES.toLong() + 1)
+        val prepared = importer.prepare(uri, intentType = null) as PrepareOutcome.Success
+        assertTrue(importer.commitPrepared(prepared.prepared) is com.m1racle.reader.share.CommitOutcome.Failed)
     }
 
     // ── shared constant sanity ───────────────────────────────────────────────

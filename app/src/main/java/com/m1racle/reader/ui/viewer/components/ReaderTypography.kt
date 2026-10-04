@@ -25,8 +25,8 @@ object ReaderTypography {
     val codeBlockLineHeight = 20.sp
     const val CODE_BLOCK_MAX_SP = 15.5f
 
-    val h1Size = 26.sp
-    val h2Size = 22.sp
+    val h1Size = 24.sp
+    val h2Size = 21.sp
     val h3Size = 19.sp
     val h4Size = 17.sp
     val h56Size = 16.sp
@@ -36,6 +36,14 @@ object ReaderTypography {
     val tocH3Size = 14.sp
 
     val topBarTitleSize = 16.sp
+
+    fun headingSize(level: Int, fontScale: Float): TextUnit = when (level) {
+        1 -> h1Size
+        2 -> h2Size
+        3 -> h3Size
+        4 -> h4Size
+        else -> h56Size
+    }.scaled(fontScale)
 
     /** Tablet reading column max width. */
     val contentMaxWidthDp = 760

@@ -71,7 +71,6 @@ class EpubPaginationTest {
         val next = epubPageTurnLayer(0.7f, 0.3f, 0, 0, 100f)
         assertEquals(30f, current.translationX, 0.01f)
         assertEquals(0f, current.zIndex, 0f)
-        assertTrue(current.dim > 0f)
         assertEquals(0f, next.translationX, 0.01f)
         assertEquals(1f, next.zIndex, 0f)
         assertTrue(next.edgeShadow > 0f)
@@ -87,7 +86,6 @@ class EpubPaginationTest {
         listOf(-1f, 0f, 1f).forEach { offset ->
             val layer = epubPageTurnLayer(offset, 0f, 0, 0, 100f)
             assertEquals(0f, layer.translationX, 0.01f)
-            assertEquals(0f, layer.dim, 0.01f)
             assertEquals(0f, layer.edgeShadow, 0.01f)
         }
         val offscreenPrev = epubPageTurnLayer(-1.2f, 0.3f, 0, 0, 100f)
@@ -100,6 +98,17 @@ class EpubPaginationTest {
         assertTrue(epubViewportSettled(base, IntSize(1079, 1920)))
         assertFalse(epubViewportSettled(IntSize.Zero, base))
         assertFalse(epubViewportSettled(base, IntSize(1080, 1800)))
+    }
+
+    @Test fun `cover keeps paper undimmed throughout forward and backward drags`() {
+        for (progress in listOf(0.1f, 0.49f, 0.51f, 0.9f)) {
+            val forwardCurrent = if (progress < 0.5f) 0 else 1
+            val backwardCurrent = if (progress < 0.5f) 1 else 0
+            assertEquals(EpubPageTurnLayer(progress * 100f, 0f, 0f),
+                epubPageTurnLayer(-progress, progress - forwardCurrent, forwardCurrent, 0, 100f))
+            assertEquals(EpubPageTurnLayer(-progress * 100f, 0f, 0f),
+                epubPageTurnLayer(progress, 1 - progress - backwardCurrent, backwardCurrent, 1, 100f))
+        }
     }
 
     @Test fun `forward cover stays pinned across current page half way switch`() {

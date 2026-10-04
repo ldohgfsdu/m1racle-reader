@@ -2,6 +2,12 @@ package com.m1racle.reader.ui.viewer
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import org.junit.Assert.assertTrue
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -68,4 +74,43 @@ class ReaderFixedGradientUiTest {
         assertEquals(body, rule.onNodeWithTag("body").fetchSemanticsNode().boundsInRoot)
         rule.onNodeWithContentDescription("更多").assertDoesNotExist()
     }
+    @Test
+    fun groupedControlsKeepTouchTargetsAndSeparationOnNarrowLargeTextScreen() {
+        var searches = 0
+        var tocOpens = 0
+        rule.setContent {
+            M1racleReaderTheme {
+                CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
+                    val backdrop = rememberLayerBackdrop()
+                    Box(Modifier.size(320.dp, 400.dp)) {
+                        GlassBackdropSource(backdrop, Modifier.fillMaxSize()) {}
+                        ReaderTopBarOverlay(
+                            backdrop = backdrop, title = "A long document title for large text",
+                            subtitle = { androidx.compose.material3.Text("33%", style = androidx.compose.material3.MaterialTheme.typography.labelSmall) },
+                            topBarScrollState = null, searchState = null, onBack = {},
+                            searchEnabled = true, onOpenSearch = { searches++ },
+                            settingsEnabled = true, onOpenSettings = {},
+                            tocEnabled = true, onOpenToc = { tocOpens++ },
+                            onSearchQueryChange = {}, onCloseSearch = {},
+                            onSearchPrevious = {}, onSearchNext = {},
+                        )
+                    }
+                }
+            }
+        }
+        val titleBounds = rule.onNodeWithText("A long document title for large text", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val subtitleBounds = rule.onNodeWithText("33%", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("subtitle below title", subtitleBounds.top >= titleBounds.bottom)
+        assertTrue("title and subtitle stay inside enlarged toolbar", subtitleBounds.bottom <= 75f)
+        val buttons = listOf("返回", "搜索当前文档", "打开目录", "更多")
+            .map { rule.onNodeWithContentDescription(it) }
+        val bounds = buttons.map { it.fetchSemanticsNode().boundsInRoot }
+        bounds.forEach { assertTrue(it.width >= 48f); assertTrue(it.height >= 48f) }
+        bounds.zipWithNext().forEach { (left, right) -> assertTrue(left.right <= right.left) }
+        assertTrue("navigation and more are separate groups", bounds[3].left - bounds[2].right >= 8f)
+        buttons[1].performClick()
+        buttons[2].performClick()
+        rule.runOnIdle { assertEquals(1, searches); assertEquals(1, tocOpens) }
+    }
+
 }

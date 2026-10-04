@@ -11,6 +11,18 @@ import org.junit.Test
 
 class DockMotionTest {
     @Test
+    fun `drag stretch is symmetric in direction and disappears at rest`() {
+        assertEquals(1f to 1f, dockLensScale(0f, 1f))
+        assertEquals(1.38f to 1.44f, dockLensScale(1f, 0f))
+        for (velocity in listOf(0.1f, 0.5f, 1f, 4f)) {
+            val forward = dockLensScale(1f, velocity)
+            val reverse = dockLensScale(1f, -velocity)
+            assertEquals(forward, reverse)
+            assertTrue(forward.first > 1.38f && forward.first <= 1.50f)
+            assertTrue(forward.second < 1.44f && forward.second >= 1.35f)
+        }
+    }
+    @Test
     fun `drag is bounded and commits the nearest destination once`() {
         val preview = DockDragPreview()
         preview.moveTo(0f)

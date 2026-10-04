@@ -62,9 +62,23 @@ class M1racleMotionContractTest {
     }
 
     @Test
-    fun `home import uses the fixed action without floating scale animation`() {
+    fun `hub import uses a bounded shared press spring without a floating entry animation`() {
         val home = source("ui/home/HomeScreen.kt")
-        assertTrue(home.contains("IconButton(onClick = onImport, enabled = !isImporting)"))
+        val dock = source("ui/hub/GlassDock.kt")
+        val importControl = dock.substringAfter("val importInteraction")
+        val nav = source("ui/navigation/NavGraph.kt")
+        assertTrue(importControl.contains(".clickable(enabled = !importing"))
+        assertTrue(importControl.contains("onClick = onImportDocument"))
+        assertTrue(importControl.contains("Icon(Icons.Filled.Add"))
+        assertTrue(importControl.contains(".testTag(\"dock-import\")"))
+        assertTrue(nav.contains("onImportDocument = launchImport"))
+        assertTrue(importControl.contains("animationSpec = M1racleMotion.dockPickup"))
+        assertTrue(importControl.contains("importPickup.value.coerceIn(0f, 1f)"))
+        assertTrue(importControl.contains("layerBlock = importTransform"))
+        assertTrue(importControl.contains(".graphicsLayer(importTransform)"))
+        assertFalse(importControl.contains("spring("))
+        assertFalse(importControl.contains("scaleIn("))
+        assertFalse(importControl.contains("scaleOut("))
         assertFalse(home.contains("HomeImportFab"))
         assertFalse(home.contains("floatingActionButton"))
         assertFalse(home.contains("scaleX"))

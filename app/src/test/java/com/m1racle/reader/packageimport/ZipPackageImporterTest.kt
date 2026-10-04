@@ -21,6 +21,33 @@ class ZipPackageImporterTest {
     val tmp = TemporaryFolder()
 
     @Test
+    fun oversizedMarkdownEntrypointIsRejectedAtImport() {
+        val zip = buildZip("index.md" to "x".repeat(ZipPackageImporter.MAX_MARKDOWN_BYTES.toInt() + 1))
+        try {
+            ZipPackageImporter.extract(ByteArrayInputStream(zip), tmp.newFolder("oversized-md"))
+            fail("expected reader-compatible Markdown limit")
+        } catch (_: IllegalArgumentException) { }
+    }
+
+    @Test
+    fun oversizedManifestIsRejectedBeforeReadingIt() {
+        val zip = buildZip("index.md" to "# Book", "package-manifest.json" to " ".repeat(ZipPackageImporter.MAX_MANIFEST_BYTES.toInt() + 1))
+        try {
+            ZipPackageImporter.extract(ByteArrayInputStream(zip), tmp.newFolder("oversized-manifest"))
+            fail("expected manifest limit")
+        } catch (_: IllegalArgumentException) { }
+    }
+
+    @Test
+    fun titleExtractionUsesOnlyBoundedPrefix() {
+        val file = tmp.newFile("title.md")
+        file.writeText("# First\n" + "x".repeat(100_000))
+        assertEquals("First", ZipPackageImporter.extractFirstH1(file))
+        file.writeText("x".repeat(ZipPackageImporter.MAX_TITLE_PREFIX_CHARS) + "\n# Too late")
+        assertNull(ZipPackageImporter.extractFirstH1(file))
+    }
+
+    @Test
     fun legalZip_extractsAndFindsIndex() {
         val zip = buildZip(
             "index.md" to "# Hello\n\n![a](images/a.png)\n",

@@ -49,53 +49,60 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
-    fun `dock samples the soft edge beneath its capsule and keeps selection in the foreground`() {
+    fun `dock samples page and selection samples exported material plus isolated icons`() {
         val dock = appSource("ui/hub/GlassDock.kt").readText()
-        // Whitespace-free: a re-wrapped call keeps the contract green, a changed
-        // role, shape, or backdrop source does not.
-        val dockShape = ProductionSource.compact("com/m1racle/reader/ui/hub/GlassDock.kt")
-        assertTrue(dock.contains("GlassMaterialRole.Dock"))
-        assertTrue(dockShape.contains(".glassMaterial(GlassMaterialRole.Dock,barShape,sourceBackdrop=dockBackdrop,layerBlock=barTransform,)"))
-        assertTrue(dock.contains("rememberCombinedBackdrop(it.root, edgeBackdrop)"))
-        assertTrue(dock.contains("SoftScrollEdge(edgeBackdrop"))
-        assertTrue(dock.contains("M1racleGlassUsage.Dock"))
+        assertTrue(dock.contains("sourceBackdrop = selectionBackdrop"))
+        assertTrue(dock.contains("surfaceExport = barExport"))
+        assertTrue(dock.contains("rememberCombinedBackdrop(barExport, iconBackdrop)"))
+        assertTrue(dock.contains("GlassMaterialRole.SelectionLens"))
+        val capture = dock.substringAfter("GlassBackdropSource(iconBackdrop,").substringBefore("val lensWidth")
+        assertTrue(capture.contains("DockTabVisual("))
+        assertFalse(capture.contains("glassMaterial("))
+        assertTrue(dock.contains(".alpha(0f).clearAndSetSemantics {}"))
+        assertTrue(dock.contains("blendMode = BlendMode.Clear"))
+        assertFalse(dock.contains("sampleBackdrop = false"))
+        assertFalse(dock.contains(".background(MaterialTheme.colorScheme.background"))
+        assertTrue(dock.contains("layerBlock = lensTransform"))
         assertTrue(dock.contains("selectableGroup()"))
-        assertFalse(dock.contains("GlassMaterialRole.DockSelection"))
-        assertTrue(dock.contains("glassMaterial("))
-        assertFalse(dock.contains("DockCapsulePressedScale"))
-        assertFalse(dock.contains("dockCapsuleScales("))
-        assertFalse(dock.contains("sourceBackdrop = selectionBackdrop"))
-        assertTrue(dock.contains("testTag(\"dock-selection\")"))
-        assertTrue(dock.contains("dockPhysicalPosition(motion.position.value, rtl)"))
-        assertTrue(dock.contains("alpha = contentAlpha"))
-        val engine = appSource("ui/material/GlassMaterial.kt").readText()
-        assertTrue(engine.contains("sourceBackdrop: Backdrop? = null"))
-        assertFalse("processed glass must not mix raw page detail back in", engine.contains("extraBackdrop"))
+    }
+
+    @Test
+    fun `hub capture includes opaque page background before content across all routes`() {
+        val nav = appSource("ui/navigation/NavGraph.kt").readText()
+        val compact = nav.replace(Regex("\\s+"), " ")
+        assertTrue(compact.contains("val hubBackground = MaterialTheme.colorScheme.background"))
+        assertTrue(compact.contains("remember(hubBackground) { { drawRect(hubBackground) drawContent() } }"))
+        assertTrue(compact.contains("rememberLayerBackdrop(onDraw = drawHubBackdrop)"))
+        assertFalse(nav.contains("val hubBackdrop = rememberLayerBackdrop()"))
     }
 
     @Test
     fun `shared hub shell owns dock outside captured page content`() {
         val hub = appSource("ui/hub/GlassDock.kt").readText()
-        assertEquals(1, Regex("rememberLayerBackdrop\\(\\)").findAll(hub).count())
-        assertFalse(hub.contains("GlassBackdropSource("))
-        val edge = appSource("ui/hub/SoftScrollEdge.kt").readText()
-        assertTrue(edge.contains("GlassBackdropSource(export,"))
-        assertTrue(edge.contains("val backdrop = LocalGlassBackdropHost.current?.root"))
-        assertTrue(edge.contains("backdrop = backdrop"))
-        assertFalse(edge.contains("backdrop = export"))
-        assertFalse(edge.contains("pointerInput"))
+        val shell = hub.substringAfter("fun HubGlassShell(").substringBefore("private data class DockEntry")
+        assertFalse(shell.contains("GlassBackdropSource("))
+        assertFalse(shell.contains("rememberLayerBackdrop("))
+        assertFalse(shell.contains("LocalGlassBackdropHost"))
         val nav = appSource("ui/navigation/NavGraph.kt").readText()
-        assertTrue(nav.contains("GlassDock("))
         val capture = trailingLambda(nav, "GlassBackdropSource(")
         assertTrue(capture.body.contains("NavHost("))
         assertFalse(capture.body.contains("GlassDock("))
         assertTrue(nav.indexOf("GlassDock(", capture.closeBrace) > capture.closeBrace)
         assertTrue(nav.contains("HubDestination.isTopLevelRoute(currentEntry?.destination?.route)"))
-
         listOf("LibraryScreen.kt", "BookmarksScreen.kt", "HubSettingsScreen.kt").forEach { name ->
             val screen = appSource("ui/hub/$name").readText()
-            assertTrue("$name delegates Dock ownership", screen.contains("HubGlassShell("))
-            assertFalse("$name must not place its own Dock in captured content", screen.contains("GlassDock("))
+            assertTrue(screen.contains("HubGlassShell("))
+            assertFalse(screen.contains("GlassDock("))
+        }
+    }
+
+    @Test
+    fun `hub scrolling reaches gesture area with navigation clearance at content tail`() {
+        for (name in listOf("LibraryScreen.kt", "BookmarksScreen.kt", "HubSettingsScreen.kt")) {
+            val screen = appSource("ui/hub/$name").readText()
+            assertFalse(name, screen.contains(".navigationBarsPadding()"))
+            assertTrue(name, screen.contains("WindowInsets.navigationBars.asPaddingValues()"))
+            assertTrue(name, screen.contains("bottom = HomeDesignTokens.DockContentClearance + navBottom"))
         }
     }
 

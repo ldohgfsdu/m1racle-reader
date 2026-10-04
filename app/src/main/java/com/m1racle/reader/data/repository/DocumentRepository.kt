@@ -47,7 +47,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
@@ -250,16 +249,33 @@ class DocumentRepository(
             val prepared = request.content
             var payload: MaterializedImportPayload? = null
             var payloadOwnedByCommittedDocument = false
+            suspend fun freezeMarkdown(document: DocumentEntity): DocumentEntity {
+                if (document.type != DocumentType.MARKDOWN) return document
+                val existing = uriToFile(document.uri)
+                val library = File(context.filesDir, "library").canonicalFile
+                if (existing != null && existing.isFile && ZipPackageImporter.isUnder(existing, library) &&
+                    PdfSourceWriteStore.sha256(existing) == prepared.contentSha256) return document
+                // The database hash describes the original identity, even if an old
+                // SAF locator has since changed. Restore that identity from verified
+                // staging rather than exposing the locator's new bytes to its assets.
+                val frozen = payload ?: materializeImportPayload(request, "snapshot-${prepared.stagedFile.name}").also { payload = it }
+                return document.copy(uri = frozen.uri, fileSize = frozen.fileSize,
+                    sourceUri = document.sourceUri ?: document.uri)
+            }
             try {
                 check(prepared.stagedFile.isFile) { "Resolved import staging file is missing" }
+                if (request.documentType == DocumentType.MARKDOWN && prepared.byteCount > MAX_MARKDOWN_BYTES) {
+                    throw ResolvedImportCommitException.UnsupportedFormat(DocumentReadException.TooLarge(MAX_MARKDOWN_BYTES))
+                }
 
                 var earlyConstraint: SQLiteConstraintException? = null
                 for (attempt in 0 until MAX_IDENTITY_COMMIT_ATTEMPTS) {
                     try {
                         val firstDecision = importTransactionRunner.run {
-                            reuseOrEnrichResolvedImport(request, System.currentTimeMillis())
+                            reuseOrEnrichResolvedImport(request, System.currentTimeMillis(), ::freezeMarkdown)
                         }
                         if (firstDecision != null) {
+                            payloadOwnedByCommittedDocument = payload != null && firstDecision.document.uri == payload?.uri
                             return@withLock firstDecision
                         }
                         earlyConstraint = null
@@ -272,6 +288,7 @@ class DocumentRepository(
 
                 // New ids are minted only here, after a fresh transactional miss.
                 val newDocumentId = UUID.randomUUID().toString()
+                payload?.deleteOperationOwnedFiles()
                 payload = materializeImportPayload(request, newDocumentId)
 
                 var lastConstraint: SQLiteConstraintException? = null
@@ -281,6 +298,7 @@ class DocumentRepository(
                             reuseOrEnrichResolvedImport(
                                 request = request,
                                 now = System.currentTimeMillis(),
+                                freezeMarkdown = ::freezeMarkdown,
                             ) ?: insertResolvedImport(
                                 request = request,
                                 documentId = newDocumentId,
@@ -288,7 +306,7 @@ class DocumentRepository(
                                 now = System.currentTimeMillis(),
                             )
                         }
-                        if (committed.document.id == newDocumentId) {
+                        if (committed.document.id == newDocumentId || committed.document.uri == payload?.uri) {
                             payloadOwnedByCommittedDocument = true
                         }
                         return@withLock committed
@@ -311,14 +329,16 @@ class DocumentRepository(
     private suspend fun reuseOrEnrichResolvedImport(
         request: ResolvedImportRequest,
         now: Long,
+        freezeMarkdown: suspend (DocumentEntity) -> DocumentEntity,
     ): ResolvedImportCommit? {
         val prepared = request.content
         val hashOwner = contentIdentityResolver.findExistingDocument(prepared.contentSha256)
         if (hashOwner != null) {
             // Equal bytes may come from different external files. Write back to the
             // source the user actually opened, rather than the first imported alias.
-            val opened = hashOwner.copy(lastOpenedAt=now,
-                sourceUri=if(hashOwner.isPdf) prepared.sourceUri.toString() else hashOwner.sourceUri,
+            val frozen = freezeMarkdown(hashOwner)
+            val opened = frozen.copy(lastOpenedAt=now,
+                sourceUri=if(hashOwner.isPdf) prepared.sourceUri.toString() else frozen.sourceUri,
                 sourceSha256=if(hashOwner.isPdf) prepared.contentSha256 else hashOwner.sourceSha256)
             documentDao.updateDocument(opened)
             bindVerifiedSourceAliases(request, hashOwner.id, now)
@@ -332,19 +352,18 @@ class DocumentRepository(
             (prepared.decision as? ContentIdentityDecision.ExistingDocumentFound)?.document
         if (resolvedCandidate != null && resolvedCandidate.contentSha256 == null) {
             val current = documentDao.getById(resolvedCandidate.id)
-            if (current != null && current.contentSha256 == null) {
+            if (current != null && current.contentSha256 == null && contentIdentityResolver.hasExactContent(current, prepared)) {
                 val updated = documentDao.assignContentSha256IfNull(
                     id = current.id,
                     contentSha256 = prepared.contentSha256,
                     lastOpenedAt = now,
                 )
                 check(updated == 1) { "Verified legacy identity candidate changed during commit" }
+                val frozen = freezeMarkdown(current).copy(contentSha256 = prepared.contentSha256, lastOpenedAt = now)
+                documentDao.updateDocument(frozen)
                 bindVerifiedSourceAliases(request, current.id, now)
                 return ResolvedImportCommit(
-                    document = current.copy(
-                        contentSha256 = prepared.contentSha256,
-                        lastOpenedAt = now,
-                    ),
+                    document = frozen,
                     reusedExisting = true,
                 )
             }
@@ -354,7 +373,7 @@ class DocumentRepository(
         for (key in sourceAliasKeys(prepared.sourceUri, request.canonicalExternalKey)) {
             val documentId = documentAliasDao.getByKey(key)?.documentId ?: continue
             val document = documentDao.getById(documentId) ?: continue
-            if (document.contentSha256 == null) {
+            if (document.contentSha256 == null && contentIdentityResolver.hasExactContent(document, prepared)) {
                 aliasCandidate = document
                 break
             }
@@ -367,12 +386,11 @@ class DocumentRepository(
             lastOpenedAt = now,
         )
         check(updated == 1) { "Legacy identity candidate changed during commit" }
+        val frozen = freezeMarkdown(legacyCandidate).copy(contentSha256 = prepared.contentSha256, lastOpenedAt = now)
+        documentDao.updateDocument(frozen)
         bindVerifiedSourceAliases(request, legacyCandidate.id, now)
         return ResolvedImportCommit(
-            document = legacyCandidate.copy(
-                contentSha256 = prepared.contentSha256,
-                lastOpenedAt = now,
-            ),
+            document = frozen,
             reusedExisting = true,
         )
     }
@@ -400,7 +418,7 @@ class DocumentRepository(
             documentType = request.documentType.name,
             pageCount = 0,
             contentSha256 = prepared.contentSha256,
-            sourceUri = if (request.documentType == DocumentType.PDF) prepared.sourceUri.toString() else null,
+            sourceUri = if (request.documentType == DocumentType.PDF || request.documentType == DocumentType.MARKDOWN) prepared.sourceUri.toString() else null,
             sourceSha256 = if (request.documentType == DocumentType.PDF) prepared.contentSha256 else null,
         )
         documentDao.insertDocument(entity)
@@ -461,17 +479,6 @@ class DocumentRepository(
         if (request.documentType == DocumentType.MARKDOWN_PACKAGE) {
             return materializeZipPackage(prepared, documentId)
         }
-        if (request.payloadPolicy == ImportPayloadPolicy.SOURCE_URI) {
-            return MaterializedImportPayload(
-                uri = prepared.sourceUri.toString(),
-                displayName = prepared.metadata.displayName,
-                mimeType = prepared.metadata.mimeType,
-                fileSize = prepared.byteCount,
-                title = null,
-                operationOwnedPath = null,
-            )
-        }
-
         val destinationDirectory = File(
             context.filesDir,
             "library/${prepared.contentSha256}/$documentId",
@@ -486,10 +493,9 @@ class DocumentRepository(
         val destination = File(destinationDirectory, safeName)
         try {
             check(!destination.exists()) { "Managed import destination already exists" }
-            if (!prepared.stagedFile.renameTo(destination)) {
-                prepared.stagedFile.copyTo(destination, overwrite = false)
-                prepared.stagedFile.delete()
-            }
+            // Retain staging until the transaction commits so a constraint retry
+            // and a legacy identity promotion can use the same verified bytes.
+            prepared.stagedFile.copyTo(destination, overwrite = false)
             check(destination.isFile && destination.length() == prepared.byteCount) {
                 "Managed import length mismatch"
             }
@@ -526,7 +532,7 @@ class DocumentRepository(
 
         val entry = extracted.entryFile
         val title = runCatching {
-            ZipPackageImporter.extractFirstH1(entry.readText(Charsets.UTF_8))
+            ZipPackageImporter.extractFirstH1(entry)
         }.getOrNull()
         val extractedSize = entry.length().takeIf { it > 0L }
             ?: ZipPackageImporter.packageTotalSize(extracted.packageRoot).takeIf { it > 0L }
@@ -669,9 +675,11 @@ class DocumentRepository(
     /** Delete node and all descendants. */
     suspend fun deleteOutlineNode(documentId: String, nodeId: String) {
         withContext(Dispatchers.IO) {
-            val all = textbookOutlineNodeDao.listForDocument(documentId)
-            val ids = TextbookOutlineResolver.subtreeIds(nodeId, all)
-            ids.forEach { textbookOutlineNodeDao.deleteById(it) }
+            importTransactionRunner.run {
+                val all = textbookOutlineNodeDao.listForDocument(documentId)
+                val ids = TextbookOutlineResolver.subtreeIds(nodeId, all)
+                ids.forEach { textbookOutlineNodeDao.deleteById(it) }
+            }
         }
     }
 
@@ -683,7 +691,7 @@ class DocumentRepository(
 
     suspend fun insertOutlineNodes(nodes: List<TextbookOutlineNodeEntity>) {
         withContext(Dispatchers.IO) {
-            nodes.forEach { textbookOutlineNodeDao.upsert(it) }
+            importTransactionRunner.run { nodes.forEach { textbookOutlineNodeDao.upsert(it) } }
         }
     }
 
@@ -696,35 +704,37 @@ class DocumentRepository(
         drafts: List<com.m1racle.reader.pdf.EmbeddedOutlineNodeDraft>,
         mode: com.m1racle.reader.pdf.OutlineImportMode,
     ): Int = withContext(Dispatchers.IO) {
-        val existing = textbookOutlineNodeDao.listForDocument(documentId)
-        if (com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.isAlreadyImported(drafts, existing) &&
-            mode == com.m1racle.reader.pdf.OutlineImportMode.MERGE
-        ) {
-            return@withContext 0
-        }
-        // REPLACE always rewrites; MERGE may skip all
-        if (mode == com.m1racle.reader.pdf.OutlineImportMode.REPLACE) {
-            // REPLACE: if identical embedded set already present and no MANUAL nodes, skip
-            val onlyEmbedded = existing.isNotEmpty() &&
-                existing.all { it.source == com.m1racle.reader.data.local.OutlineNodeSource.PDF_EMBEDDED.name }
-            if (onlyEmbedded &&
-                com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.isAlreadyImported(drafts, existing) &&
-                existing.size == drafts.size
+        importTransactionRunner.run {
+            val existing = textbookOutlineNodeDao.listForDocument(documentId)
+            if (com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.isAlreadyImported(drafts, existing) &&
+                mode == com.m1racle.reader.pdf.OutlineImportMode.MERGE
             ) {
-                return@withContext 0
+                return@run 0
             }
-            textbookOutlineNodeDao.deleteAllForDocument(documentId)
-            val plan = com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.buildReplace(documentId, drafts)
+            // REPLACE always rewrites; MERGE may skip all
+            if (mode == com.m1racle.reader.pdf.OutlineImportMode.REPLACE) {
+                // REPLACE: if identical embedded set already present and no MANUAL nodes, skip
+                val onlyEmbedded = existing.isNotEmpty() &&
+                    existing.all { it.source == com.m1racle.reader.data.local.OutlineNodeSource.PDF_EMBEDDED.name }
+                if (onlyEmbedded &&
+                    com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.isAlreadyImported(drafts, existing) &&
+                    existing.size == drafts.size
+                ) {
+                    return@run 0
+                }
+                val plan = com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.buildReplace(documentId, drafts)
+                textbookOutlineNodeDao.deleteAllForDocument(documentId)
+                plan.nodes.forEach { textbookOutlineNodeDao.upsert(it) }
+                return@run plan.inserted
+            }
+            val plan = com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.buildMerge(
+                documentId = documentId,
+                drafts = drafts,
+                existing = existing,
+            )
             plan.nodes.forEach { textbookOutlineNodeDao.upsert(it) }
-            return@withContext plan.inserted
+            plan.inserted
         }
-        val plan = com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.buildMerge(
-            documentId = documentId,
-            drafts = drafts,
-            existing = existing,
-        )
-        plan.nodes.forEach { textbookOutlineNodeDao.upsert(it) }
-        plan.inserted
     }
 
     // endregion
@@ -783,7 +793,7 @@ class DocumentRepository(
 
     /**
      * Open an EPUB document: resolve the managed .epub copy, extract to the
-     * app-private cache (epubs/{id}, reused while the container marker exists),
+     * app-private cache (epubs/{id}, reused only with an exact content/version completion marker),
      * parse, and persist OPF title + TOC size. Throws [EpubException].
      */
     suspend fun openEpubBook(id: String): EpubBook = withContext(Dispatchers.IO) {
@@ -792,12 +802,17 @@ class DocumentRepository(
         val epubFile = uriToFile(entity.uri) ?: throw EpubException.Corrupt("找不到文件")
         val destDir = java.io.File(context.filesDir, "epubs/$id")
         val book = try {
-            openEpubCached(epubFile, destDir)
+            kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+                EpubPackageImporter.openCached(epubFile, destDir, entity.contentSha256 ?: PdfSourceWriteStore.sha256(epubFile))
+            }
         } catch (e: EpubException.Corrupt) {
-            // A partial extraction left by an older failed run poisons the cache
-            // marker check; wipe and retry exactly once before surfacing the error.
+            // Rebuild once if an otherwise completed cache has lost required files.
             destDir.deleteRecursively()
-            openEpubCached(epubFile, destDir)
+            kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+                EpubPackageImporter.openCached(epubFile, destDir, entity.contentSha256 ?: PdfSourceWriteStore.sha256(epubFile))
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: EpubException) {
             throw e
         } catch (_: Exception) {
@@ -806,14 +821,6 @@ class DocumentRepository(
         touchLastOpenedAt(id)
         updateParseMetadata(id, book.metadata.title, book.toc.size)
         book
-    }
-
-    private fun openEpubCached(epubFile: java.io.File, destDir: java.io.File): EpubBook {
-        if (!java.io.File(destDir, "META-INF/container.xml").isFile) {
-            destDir.deleteRecursively()
-            EpubPackageImporter.extract(epubFile, destDir)
-        }
-        return EpubPackageImporter.parseExtracted(destDir)
     }
 
     private fun uriToFile(uriString: String): java.io.File? {
@@ -930,7 +937,7 @@ class DocumentRepository(
      * Oversized input fails explicitly instead of silently returning partial text.
      * Runs on [Dispatchers.IO]; never throws to callers.
      */
-    suspend fun readDocumentText(uriString: String): Result<String> =
+    suspend fun readDocumentText(uriString: String, expectedContentSha256: String? = null): Result<String> =
         withContext(Dispatchers.IO) {
             try {
                 val uri = Uri.parse(uriString)
@@ -938,9 +945,9 @@ class DocumentRepository(
                     ?: return@withContext Result.failure(DocumentReadException.NotFound)
 
                 input.use { stream ->
-                    Result.success(readUtf8TextFully(stream))
+                    Result.success(readUtf8TextFully(stream, expectedContentSha256 = expectedContentSha256))
                 }
-            } catch (e: DocumentReadException.TooLarge) {
+            } catch (e: DocumentReadException) {
                 Result.failure(e)
             } catch (_: SecurityException) {
                 Result.failure(DocumentReadException.PermissionDenied)
@@ -1021,11 +1028,6 @@ class DocumentRepository(
                             content = identity.content,
                             canonicalExternalKey = canonicalExternalKey,
                             documentType = documentType,
-                            payloadPolicy = if (documentType == DocumentType.MARKDOWN) {
-                                ImportPayloadPolicy.SOURCE_URI
-                            } else {
-                                ImportPayloadPolicy.MANAGED_COPY
-                            },
                         ),
                     )
                     ImportResult.Success(committed.document)
@@ -1078,7 +1080,7 @@ class DocumentRepository(
          * Full-read safety ceiling. 32 MiB is far beyond the old 200 KiB preview
          * while keeping the current full-document parser inside a bounded heap.
          */
-        const val MAX_MARKDOWN_BYTES: Int = 32 * 1024 * 1024
+        const val MAX_MARKDOWN_BYTES: Int = ZipPackageImporter.MAX_MARKDOWN_BYTES
         private const val MAX_IDENTITY_COMMIT_ATTEMPTS = 3
 
         /** Progress 0f..1f from 0-based page index. */
@@ -1091,19 +1093,10 @@ class DocumentRepository(
     }
 }
 
-enum class ImportPayloadPolicy {
-    /** Keep a persistable/user-owned locator; the resolver stage is identity evidence only. */
-    SOURCE_URI,
-
-    /** Consume the resolver stage into app-private managed storage. */
-    MANAGED_COPY,
-}
-
 data class ResolvedImportRequest(
     val content: PreparedContentIdentity,
     val canonicalExternalKey: String,
     val documentType: DocumentType,
-    val payloadPolicy: ImportPayloadPolicy,
 )
 
 data class ResolvedImportCommit(
@@ -1130,26 +1123,6 @@ private data class MaterializedImportPayload(
     }
 }
 
-internal fun readUtf8TextFully(
-    input: InputStream,
-    maxBytes: Int = DocumentRepository.MAX_MARKDOWN_BYTES,
-): String {
-    require(maxBytes > 0) { "maxBytes must be positive" }
-    val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
-    val buffer = ByteArray(64 * 1024)
-    var total = 0
-    while (true) {
-        val read = input.read(buffer)
-        if (read < 0) break
-        if (read == 0) continue
-        if (read > maxBytes - total) {
-            throw DocumentReadException.TooLarge(maxBytes)
-        }
-        output.write(buffer, 0, read)
-        total += read
-    }
-    return output.toString(Charsets.UTF_8.name())
-}
 
 sealed class ImportResult {
     data class Success(val document: DocumentEntity) : ImportResult()
@@ -1165,6 +1138,7 @@ sealed class ImportResult {
 }
 
 sealed class DocumentReadException : Exception() {
+    data object ContentChanged : DocumentReadException()
     data object NotFound : DocumentReadException()
     data object PermissionDenied : DocumentReadException()
     data class TooLarge(val maxBytes: Int) : DocumentReadException()

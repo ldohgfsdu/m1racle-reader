@@ -257,6 +257,12 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// Robolectric resolves Android runtime jars separately from Gradle repositories.
+// Use the same official Central endpoint as the build dependencies.
+tasks.withType<Test>().configureEach {
+    systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.05.00")
     implementation(composeBom)

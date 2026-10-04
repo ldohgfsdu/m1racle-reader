@@ -1,7 +1,5 @@
 package com.m1racle.reader.ui.home
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,19 +22,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import com.m1racle.reader.ui.hub.HubPageHeader
+import com.m1racle.reader.ui.hub.HubEmptyState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -66,14 +63,13 @@ import androidx.compose.ui.unit.sp
 fun HomeScreen(
     viewModel: HomeViewModel,
     onOpenDocument: (DocumentEntity) -> Unit,
-    onNavigateHub: (com.m1racle.reader.ui.hub.HubDestination) -> Unit = {},
+    onImport: () -> Unit,
     onOpenSearch: () -> Unit = {},
+    onNavigateHub: (com.m1racle.reader.ui.hub.HubDestination) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isImporting by viewModel.isImporting.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val resources = androidx.compose.ui.platform.LocalResources.current
     val view = LocalView.current
     LaunchedEffect(Unit) {
         val activity = view.context as? android.app.Activity ?: return@LaunchedEffect
@@ -81,45 +77,19 @@ fun HomeScreen(
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
         controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
     }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.onImportDocument(uri)
-    }
-    LaunchedEffect(viewModel, resources) {
-        viewModel.events.collect { event ->
-            val message = when (event) {
-                is HomeEvent.OpenDocument -> {
-                    onOpenDocument(event.document)
-                    return@collect
-                }
-                HomeEvent.UnsupportedFormat -> resources.getString(R.string.error_unsupported_format)
-                HomeEvent.SourceTooLarge -> resources.getString(R.string.home_import_too_large,
-                    com.m1racle.reader.share.ExternalDocumentImporter.MAX_BYTES / (1024L * 1024L))
-                HomeEvent.DeleteFailed -> resources.getString(R.string.home_delete_failed)
-                HomeEvent.ReadFailed -> resources.getString(R.string.error_read_failed)
-            }
-            snackbarHostState.showSnackbar(message)
-        }
-    }
     Box(modifier = modifier.fillMaxSize()) {
         HomeContent(
             uiState = uiState,
             isImporting = isImporting,
-            onImport = { launcher.launch(arrayOf("text/*", "application/pdf", "application/epub+zip", "application/zip",
-                "application/x-zip-compressed", "application/octet-stream")) },
+            onImport = onImport,
             onOpenSearch = onOpenSearch,
             onOpen = onOpenDocument,
             onDelete = viewModel::deleteDocument,
         )
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom =
-                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-                    HomeDesignTokens.DockHeight + HomeDesignTokens.DockBottomGap + 8.dp),
-        )
     }
 }
 
-/** Fixed safe-area owner: scroll content cannot draw or receive taps in system/dock regions. */
+/** Fixed header and system insets; list content scrolls behind the floating glass. */
 @Composable
 internal fun HomeContent(
     uiState: HomeUiState,
@@ -132,31 +102,14 @@ internal fun HomeContent(
     statusTop: Dp = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
     navBottom: Dp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
 ) {
-    val bottomReserved = navBottom + HomeDesignTokens.DockHeight + HomeDesignTokens.DockBottomGap + 8.dp
     Column(
         modifier = modifier.fillMaxSize()
             .background(com.m1racle.reader.ui.theme.M1racleReaderTheme.surface.background)
-            .padding(top = statusTop, bottom = bottomReserved),
+            .padding(top = statusTop),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().testTag("home-header")
-                .padding(start = HomeDesignTokens.PageHorizontal, end = 12.dp, top = 4.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.app_name),
-                style = com.m1racle.reader.ui.theme.M1racleReaderTheme.typography.title.copy(
-                    fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+        HubPageHeader(title = stringResource(R.string.app_name), modifier = Modifier.testTag("home-header")) {
             IconButton(onClick = onOpenSearch) {
                 Icon(Icons.Default.Search, stringResource(R.string.search_library_entry), modifier = Modifier.size(22.dp))
-            }
-            IconButton(onClick = onImport, enabled = !isImporting) {
-                Icon(Icons.Default.Add, stringResource(R.string.import_file), modifier = Modifier.size(24.dp))
             }
         }
         if (isImporting) {
@@ -168,23 +121,14 @@ internal fun HomeContent(
             )
         }
         if (uiState.ready && uiState.isEmpty) {
-            Column(
-                modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()
-                    .testTag("home-empty")
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = HomeDesignTokens.PageHorizontal, vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+            HubEmptyState(
+                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                title = stringResource(R.string.empty_title),
+                description = stringResource(R.string.empty_subtitle),
+                modifier = Modifier.weight(1f).fillMaxWidth()
+                    .padding(bottom = HomeDesignTokens.DockContentClearance + navBottom)
+                    .clipToBounds().testTag("home-empty"),
             ) {
-                Text(stringResource(R.string.empty_title),
-                    style = com.m1racle.reader.ui.theme.M1racleReaderTheme.typography.title,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.semantics { heading() })
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.empty_subtitle),
-                    style = com.m1racle.reader.ui.theme.M1racleReaderTheme.typography.body,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(24.dp))
                 Button(onClick = onImport, enabled = !isImporting) {
                     Text(stringResource(R.string.import_file), textAlign = TextAlign.Center)
@@ -196,6 +140,7 @@ internal fun HomeContent(
                 continueReading = uiState.continueReading,
                 onOpen = onOpen,
                 onDelete = onDelete,
+                navBottom = navBottom,
                 modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("home-list"),
             )
         }
@@ -206,6 +151,7 @@ internal fun HomeContent(
 private fun RecentDocumentList(
     documents: List<DocumentEntity>,
     continueReading: DocumentEntity?,
+    navBottom: Dp,
     onOpen: (DocumentEntity) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -213,7 +159,12 @@ private fun RecentDocumentList(
     LazyColumn(
         state = rememberLazyListState(),
         modifier = modifier,
-        contentPadding = PaddingValues(horizontal = HomeDesignTokens.PageHorizontal, vertical = 8.dp),
+        contentPadding = PaddingValues(
+            start = HomeDesignTokens.PageHorizontal,
+            end = HomeDesignTokens.PageHorizontal,
+            top = 8.dp,
+            bottom = HomeDesignTokens.DockContentClearance + navBottom,
+        ),
     ) {
         if (continueReading != null) {
             item(key = "home_continue_reading") {
@@ -230,7 +181,7 @@ private fun RecentDocumentList(
         if (recentDocuments.isNotEmpty()) {
             item(key = "home_recent_section") {
                 Text(stringResource(R.string.recent_reads),
-                    style = com.m1racle.reader.ui.theme.M1racleReaderTheme.typography.caption,
+                    style = com.m1racle.reader.ui.theme.M1racleReaderTheme.typography.section,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp).semantics { heading() })
             }

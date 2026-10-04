@@ -173,7 +173,7 @@ class ContentIdentityImportWiringTest {
     @Test
     fun sidecarPathABridge_survivesUriChangeAndReusesOriginalDocument() = runBlocking {
         val oldId = "a".repeat(64)
-        val oldUri = Uri.parse("content://r37.test/tree/old/document/42.pdf")
+        val oldUri = fixture.source("content://r37.test/tree/old/document/42.pdf")
         fixture.seedLegacyPathA(oldId, oldUri)
         fixture.writeSidecar(
             """{"formatVersion":1,"entries":[{"documentId":"$oldId","canonicalUriIdentity":"doc:r37.test/42.pdf","sha256":"not-content-authority"}]}""",
@@ -283,6 +283,77 @@ class ContentIdentityImportWiringTest {
         assertEquals(0,fixture.documentDao.replaceCalls)
     }
 
+    @Test
+    fun mutableMarkdownSourceCannotChangeImportedIdentity() = runBlocking {
+        val a = "# Original\nOriginal text".toByteArray()
+        val uri = fixture.source("content://r37.test/book.md", a)
+        val first = (fixture.repository.importDocument(uri) as ImportResult.Success).document
+        fixture.documentDao.bookmarks += "saved" to first.id
+        assertEquals(a.toString(Charsets.UTF_8), File(Uri.parse(first.uri).path!!).readText())
+        fixture.source(uri.toString(), "# Changed".toByteArray())
+        val copy = fixture.source("content://r37.test/copy.md", a)
+        val duplicate = (fixture.repository.importDocument(copy) as ImportResult.Success).document
+        assertEquals(first.id, duplicate.id)
+        assertEquals(first.uri, duplicate.uri)
+        assertEquals(a.toString(Charsets.UTF_8), File(Uri.parse(duplicate.uri).path!!).readText())
+        assertEquals(uri.toString(), duplicate.sourceUri)
+        assertEquals(listOf("saved" to first.id), fixture.documentDao.bookmarks)
+    }
+
+    @Test
+    fun oldHashedMarkdownIsRestoredFromVerifiedIncomingBytes() = runBlocking {
+        val a = "Original".toByteArray()
+        val old = fixture.source("content://r37.test/old.md", a)
+        fixture.seedLegacyPathA("old", old)
+        val hash = com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(a.inputStream())
+        fixture.documentDao.assignContentSha256IfNull("old", hash, 1)
+        fixture.source(old.toString(), "Changed".toByteArray())
+        val incoming = fixture.source("content://r37.test/copy.md", a)
+        val document = (fixture.repository.importDocument(incoming) as ImportResult.Success).document
+        assertEquals("old", document.id)
+        assertEquals("Original", File(Uri.parse(document.uri).path!!).readText())
+        assertEquals(hash, document.contentSha256)
+        assertEquals(listOf("bookmark-legacy" to "old"), fixture.documentDao.bookmarks)
+    }
+
+    @Test
+    fun unreadableLegacyAliasCannotClaimUnverifiedBytes() = runBlocking {
+        val oldId = "a".repeat(64)
+        val old = Uri.parse("content://r37.test/tree/old/document/42.pdf")
+        fixture.seedLegacyPathA(oldId, old)
+        fixture.writeSidecar("""{"formatVersion":1,"entries":[{"documentId":"$oldId","canonicalUriIdentity":"doc:r37.test/42.pdf","sha256":"not-content-authority"}]}""")
+        val incoming = fixture.source("content://r37.test/42.pdf")
+        val document = (fixture.repository.importDocument(incoming) as ImportResult.Success).document
+        assertNotEquals(oldId, document.id)
+        assertEquals(null, fixture.documentDao.getById(oldId)!!.contentSha256)
+        assertEquals(old.toString(), fixture.documentDao.getById(oldId)!!.uri)
+        assertEquals(listOf("bookmark-legacy" to oldId), fixture.documentDao.bookmarks)
+        assertEquals(2, fixture.documentDao.rows.size)
+    }
+
+    @Test
+    fun legacyPayloadChangedAfterPrepareIsNotPromoted() = runBlocking {
+        val old = fixture.source("content://r37.test/old.pdf")
+        fixture.seedLegacyPathA("old", old)
+        val incoming = fixture.source("content://r37.test/new.pdf")
+        val importer = fixture.importer()
+        val prepared = importer.prepare(incoming, "application/pdf") as PrepareOutcome.Success
+        fixture.source(old.toString(), "different bytes".toByteArray())
+        val result = importer.commitPrepared(prepared.prepared) as CommitOutcome.Success
+        assertNotEquals("old", result.documentId)
+        assertEquals(null, fixture.documentDao.getById("old")!!.contentSha256)
+    }
+
+    @Test
+    fun markdownReaderRejectsBytesThatDoNotMatchTheirIdentity() = runBlocking {
+        val source = fixture.source("content://r37.test/book.md", "# Original".toByteArray())
+        val document = (fixture.repository.importDocument(source) as ImportResult.Success).document
+        assertEquals("# Original", fixture.repository.readDocumentText(document.uri, document.contentSha256).getOrThrow())
+        File(Uri.parse(document.uri).path!!).writeText("# Changed")
+        assertEquals(DocumentReadException.ContentChanged,
+            fixture.repository.readDocumentText(document.uri, document.contentSha256).exceptionOrNull())
+    }
+
     private class Fixture(private val context: Context) {
         val documentDao = IdentityDocumentDao()
         val aliasDao = TestDocumentAliasDao()
@@ -340,11 +411,12 @@ class ContentIdentityImportWiringTest {
             repository = repository,
             contentIdentityResolver = resolver,
         )
+        fun importer() = externalImporter
 
         fun localPdf(text: String): File = File(staging,"${UUID.randomUUID()}.pdf").apply { writeText(text) }
 
-        fun source(value: String): Uri = Uri.parse(value).also {
-            sources[it.toString()] = PDF_BYTES
+        fun source(value: String, bytes: ByteArray = PDF_BYTES): Uri = Uri.parse(value).also {
+            sources[it.toString()] = bytes
         }
 
         suspend fun seedLegacyPathA(id: String, uri: Uri) {

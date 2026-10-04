@@ -11,7 +11,6 @@ import androidx.compose.ui.unit.dp
 import com.m1racle.reader.data.settings.ReaderSettings
 import com.m1racle.reader.markdown.MarkdownBlock
 import com.m1racle.reader.search.BlockSearchHighlights
-import com.m1racle.reader.ui.viewer.components.ReaderTypography.scaled
 
 @Composable
 fun HeadingBlockView(
@@ -21,14 +20,7 @@ fun HeadingBlockView(
     onLinkClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val fs = settings.fontScale
-    val fontSize = when (block.level) {
-        1 -> ReaderTypography.h1Size.scaled(fs)
-        2 -> ReaderTypography.h2Size.scaled(fs)
-        3 -> ReaderTypography.h3Size.scaled(fs)
-        4 -> ReaderTypography.h4Size.scaled(fs)
-        else -> ReaderTypography.h56Size.scaled(fs)
-    }
+    val fontSize = ReaderTypography.headingSize(block.level, settings.fontScale)
     val lineHeight = ReaderTypography.headingLineHeight(fontSize, settings)
     val weight = when (block.level) {
         in 1..3 -> FontWeight.SemiBold

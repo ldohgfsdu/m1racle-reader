@@ -10,10 +10,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.m1racle.reader.data.settings.ReaderSettings
+import com.m1racle.reader.ui.viewer.components.ReaderTypography
+import com.m1racle.reader.ui.viewer.components.ReaderTypography.scaled
 import com.m1racle.reader.epub.EpubBlock
 import com.m1racle.reader.epub.EpubBook
 import com.m1racle.reader.epub.EpubInline
@@ -40,6 +44,7 @@ internal const val MEASURE_SLICE_NANOS = 8_000_000L
  * its page is actually shown.
  */
 internal const val RETAINED_ROW_WINDOW = 64
+internal const val MAX_MEASURE_ROW_CHARS = 2_048
 
 internal data class EpubTextRow(
     val spineIndex: Int,
@@ -49,6 +54,10 @@ internal data class EpubTextRow(
     val style: TextStyle,
     val shaded: Boolean = false,
     val imagePath: String? = null,
+    val sourceRow: Int = 0,
+    val sourceTextStart: Int = 0,
+    val continuation: Boolean = sourceTextStart > 0,
+    val blockIndex: Int = 0,
 )
 
 /**
@@ -112,14 +121,55 @@ internal class EpubTextLayout(
         )
     }
 
+    // A navigation section can start inside one spine XHTML, not just at its file boundary.
+    private val sectionStarts = pages.indices.filter { index ->
+        val first = pages[index].slices.first()
+        first.start == 0 && rows[first.row].chapterStart
+    }
+
+    fun sectionPages(page: Int): IntRange {
+        if (page !in pages.indices) return IntRange.EMPTY
+        val found = sectionStarts.binarySearch(page)
+        val section = if (found >= 0) found else -found - 2
+        return sectionStarts.getOrElse(section) { 0 } until
+            sectionStarts.getOrElse(section + 1) { pages.size }
+    }
+
     fun pageForToc(book: EpubBook, node: EpubTocNode): Int? {
-        val start = rows.indexOfFirst { it.chapterStart && it.spineIndex == node.spineIndex }
-        if (start < 0) return null
-        val fragment = node.href.substringAfter('#', "")
-        val chapter = book.chapters.firstOrNull { it.spineIndex == node.spineIndex }
-        val block = chapter?.idAnchors?.get(fragment)
-        val row = if (block != null && block in chapter.blocks.indices) start + block else start
+        val chapter = book.chapters.firstOrNull { it.spineIndex == node.spineIndex } ?: return null
+        val block = epubTocBlock(chapter, node) ?: return null
+        val row = rows.indexOfFirst { it.spineIndex == node.spineIndex && it.blockIndex == block }
+        if (row < 0) return null
         return pages.pageForText(row, 0)
+    }
+
+    fun pageForText(sourceRow: Int, offset: Int): Int {
+        if (rows.isEmpty()) return 0
+        val row = rows.indexOfLast { it.sourceRow == sourceRow && it.sourceTextStart <= offset }.coerceAtLeast(0)
+        return pages.pageForText(row, (offset - rows[row].sourceTextStart).coerceAtLeast(0))
+    }
+
+    fun pageForPosition(sourceRow: Int, pixelOffset: Int): Int {
+        var remaining = pixelOffset.toFloat()
+        val candidates = rows.indices.filter { rows[it].sourceRow == sourceRow }
+        for (row in candidates) {
+            val height = rowMetrics[row].lines.lastOrNull()?.bottom ?: 0f
+            if (remaining < height || row == candidates.last()) return pages.pageForPosition(row, remaining.toInt())
+            remaining -= height
+        }
+        return 0
+    }
+
+    /** Persist original block rows, so splitting a paragraph does not shift saved identities. */
+    fun positionAt(slice: EpubPageSlice): Triple<Int, Int, Int> {
+        val row = rows[slice.row]
+        var top = slice.sourceTop
+        var previous = slice.row - 1
+        while (previous >= 0 && rows[previous].sourceRow == row.sourceRow) {
+            top += rowMetrics[previous].lines.lastOrNull()?.bottom ?: 0f
+            previous--
+        }
+        return Triple(row.sourceRow, kotlin.math.ceil(top).toInt(), row.sourceTextStart + slice.start)
     }
 }
 
@@ -139,31 +189,93 @@ internal fun epubTocPages(book: EpubBook, layout: EpubTextLayout): Map<String, I
 
 internal fun tocKey(node: EpubTocNode): String = "${node.spineIndex ?: -1}#${node.href}"
 
-internal fun epubTextRows(book: EpubBook, settings: ReaderSettings, base: TextStyle): List<EpubTextRow> {
-    val bodySize = 16.sp * settings.fontScale
-    val body = base.copy(fontSize = bodySize, lineHeight = bodySize * settings.lineHeightScale)
+/** Shared target resolution for page breaks and TOC jumps; invalid fragments never mean chapter start. */
+private fun epubTocBlock(chapter: com.m1racle.reader.epub.EpubChapter, node: EpubTocNode): Int? {
+    if (chapter.spineIndex != node.spineIndex) return null
+    val fragment = node.href.substringAfter('#', "")
+    val block = if (fragment.isEmpty()) 0 else chapter.idAnchors[fragment] ?: return null
+    return block.takeIf { it in chapter.blocks.indices }
+}
+
+internal fun epubTextRows(book: EpubBook, settings: ReaderSettings, base: TextStyle, checkpoint: () -> Unit = {}): List<EpubTextRow> {
+    val bodySize = ReaderTypography.bodyFontSize.scaled(settings.fontScale)
+    val body = base.copy(fontSize = bodySize, lineHeight = ReaderTypography.bodyLineHeight(settings),
+        fontWeight = ReaderTypography.bodyWeight, lineBreak = LineBreak.Paragraph)
+    val chapters = book.readingOrder.associateBy { it.spineIndex }
+    val sectionTitles = mutableMapOf<Pair<Int, Int>, String>()
+    fun visit(nodes: List<EpubTocNode>) {
+        nodes.forEach { node ->
+            checkpoint()
+            val chapter = chapters[node.spineIndex]
+            if (chapter != null) epubTocBlock(chapter, node)?.let { block ->
+                sectionTitles.putIfAbsent(chapter.spineIndex to block, node.title)
+            }
+            visit(node.children)
+        }
+    }
+    visit(book.toc)
     return buildList {
+        var sourceRow = 0
         book.readingOrder.forEach { chapter ->
-            val title = chapter.title ?: "第 ${chapter.spineIndex + 1} 章"
+            var title = chapter.title ?: "第 ${chapter.spineIndex + 1} 章"
             chapter.blocks.forEachIndexed { index, block ->
+                checkpoint()
+                val sectionTitle = sectionTitles[chapter.spineIndex to index]
+                    ?: (block as? EpubBlock.Heading)?.takeIf { it.level == 1 }?.text
+                if (sectionTitle != null) title = sectionTitle
+                val startsSection = index == 0 || sectionTitle != null
                 val style = when (block) {
                     is EpubBlock.Heading -> {
-                        val size = (22 - block.level.coerceIn(1, 4)).sp * settings.fontScale
-                        body.copy(fontSize = size, lineHeight = size * settings.lineHeightScale, fontWeight = FontWeight.Bold)
+                        val size = ReaderTypography.headingSize(block.level, settings.fontScale)
+                        body.copy(fontSize = size, lineHeight = ReaderTypography.headingLineHeight(size, settings),
+                            fontWeight = if (block.level <= 3) FontWeight.SemiBold else FontWeight.Normal)
                     }
-                    is EpubBlock.Code -> body.copy(fontFamily = FontFamily.Monospace)
+                    is EpubBlock.Code -> body.copy(fontFamily = FontFamily.Monospace,
+                        fontSize = ReaderTypography.codeBlockSize(settings.fontScale),
+                        lineHeight = ReaderTypography.codeBlockLine(settings.fontScale))
                     is EpubBlock.Paragraph -> body.copy(textIndent = TextIndent(firstLine = bodySize * 2))
                     else -> body
                 }
                 val imagePath = (block as? EpubBlock.Image)?.resolvedPath
                 val text = if (imagePath != null) {
-                    AnnotatedString(block.alt.orEmpty())
+                    // One image stays one row, even when its alternative text is huge.
+                    AnnotatedString(block.alt.orEmpty().take(MAX_MEASURE_ROW_CHARS))
                 } else {
                     epubBlockText(block)
                 }
-                add(EpubTextRow(chapter.spineIndex, title, index == 0, text, style,
-                    shaded = block is EpubBlock.Quote || block is EpubBlock.Code,
-                    imagePath = imagePath))
+                // Keep original block/character coordinates while giving each list item
+                // its own paragraph gap. A long item's measurement chunks remain continuations.
+                val sections = if (block is EpubBlock.ListBlock && block.items.isNotEmpty()) {
+                    var offset = 0
+                    block.items.mapIndexed { itemIndex, item ->
+                        val prefix = if (block.ordered) "${itemIndex + 1}. " else "• "
+                        val end = offset + prefix.length + item.sumOf { it.text.length }
+                        val itemStyle = style.copy(textIndent = TextIndent(
+                            firstLine = 0.sp,
+                            restLine = (if (block.ordered) prefix.length * 0.55f else 1.1f).em,
+                        ))
+                        Triple(offset, end, itemStyle).also { offset = end + 1 }
+                    }
+                } else listOf(Triple(0, text.length, style))
+                sections.forEach { (sectionStart, sectionEnd, sectionStyle) ->
+                    var start = sectionStart
+                    do {
+                        checkpoint()
+                        var end = minOf(sectionEnd, start + MAX_MEASURE_ROW_CHARS)
+                        // Do not split a UTF-16 surrogate pair.
+                        if (end < sectionEnd && end > start && text[end - 1].isHighSurrogate() && text[end].isLowSurrogate()) end--
+                        val restIndent = sectionStyle.textIndent?.restLine ?: 0.sp
+                        add(EpubTextRow(chapter.spineIndex, title, startsSection && start == 0,
+                            text.subSequence(start, end),
+                            if (start == sectionStart) sectionStyle else sectionStyle.copy(
+                                textIndent = TextIndent(firstLine = restIndent, restLine = restIndent)),
+                            shaded = block is EpubBlock.Quote || block is EpubBlock.Code,
+                            imagePath = imagePath, sourceRow = sourceRow, sourceTextStart = start,
+                            continuation = start > sectionStart, blockIndex = index))
+                        start = end
+                    } while (start < sectionEnd)
+                }
+                sourceRow++
             }
         }
     }
@@ -181,7 +293,7 @@ private fun AnnotatedString.Builder.appendInlines(inlines: List<EpubInline>) {
 
 private fun epubBlockText(block: EpubBlock): AnnotatedString = buildAnnotatedString {
     when (block) {
-        is EpubBlock.Heading -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(block.text) }
+        is EpubBlock.Heading -> append(block.text)
         is EpubBlock.Paragraph -> appendInlines(block.inlines)
         is EpubBlock.ListBlock -> block.items.forEachIndexed { index, item ->
             if (index > 0) append('\n')
@@ -259,7 +371,7 @@ internal suspend fun measureEpub(
                 EpubLine(layout.getLineTop(line), layout.getLineBottom(line),
                     layout.getLineStart(line), layout.getLineEnd(line))
             }
-        }))
+        }, continuation = row.continuation))
         cache.put(index, layout)
     }
     return EpubTextLayout(

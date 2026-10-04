@@ -56,8 +56,8 @@ fun DocumentListRow(
         document.id, document.readingProgress, document.isPdf,
         document.pageCount, document.lastScrollIndex,
     ) { formatListMetadata(document) }
-    val spokenText = remember(titles.displayTitle, metadata) {
-        listOf(titles.displayTitle, metadata).joinToString(", ")
+    val spokenText = remember(titles.displayTitle, titles.typeLabel, metadata) {
+        listOf(titles.displayTitle, titles.typeLabel, metadata).joinToString(", ")
     }
     val icon = if (document.isPdf) Icons.Outlined.PictureAsPdf else Icons.Outlined.Description
     val rowModifier = if (onDelete != null) {
@@ -75,19 +75,19 @@ fun DocumentListRow(
                 .fillMaxWidth()
                 .then(rowModifier)
                 .semantics { contentDescription = spokenText }
-                .padding(vertical = 12.dp),
+                .padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(36.dp)
                     .clip(RoundedCornerShape(M1racleReaderTheme.cornerRadius.control))
                     .background(scheme.onSurface.copy(alpha = 0.06f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
-                    contentDescription = titles.typeLabel,
+                    contentDescription = null,
                     tint = scheme.onSurfaceVariant,
                     modifier = Modifier.size(19.dp),
                 )
@@ -96,17 +96,17 @@ fun DocumentListRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = titles.displayTitle,
-                    style = M1racleReaderTheme.typography.title.copy(fontSize = 15.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium),
+                    style = M1racleReaderTheme.typography.title.copy(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium),
                     color = scheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = metadata,
+                    text = "${titles.typeLabel} · $metadata",
                     style = M1racleReaderTheme.typography.caption,
                     color = scheme.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -117,7 +117,11 @@ fun DocumentListRow(
                 }
             }
         }
-
+        HorizontalDivider(
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 48.dp),
+            color = scheme.outlineVariant,
+            thickness = 0.5.dp,
+        )
     }
 }
 

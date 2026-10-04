@@ -101,7 +101,7 @@ object MarkdownAssetResolver {
     fun fromDocument(context: Context, document: DocumentEntity): MarkdownDocumentBase {
         return fromDocumentUri(
             context = context,
-            documentUri = document.uri,
+            documentUri = if (document.type == DocumentType.MARKDOWN) document.sourceUri ?: document.uri else document.uri,
             documentType = document.type,
         )
     }
@@ -444,7 +444,9 @@ object MarkdownAssetResolver {
         }
         p = percentDecodeOnce(p)
         if (p.isEmpty()) return null
-        return p
+        // A file URI uses /C:/ on Windows; the filesystem uses C:\.
+        if (File.separatorChar == '\\' && Regex("^/[A-Za-z]:[/\\\\]").containsMatchIn(p)) p = p.drop(1)
+        return File(p).path
     }
 
     fun userMessage(result: MarkdownAssetResult): String {

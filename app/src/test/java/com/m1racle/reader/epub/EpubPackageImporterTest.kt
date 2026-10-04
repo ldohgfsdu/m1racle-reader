@@ -9,6 +9,83 @@ import org.junit.Test
 import javax.xml.parsers.DocumentBuilderFactory
 
 class EpubPackageImporterTest {
+    @Test
+    fun `incomplete extraction with container is rebuilt before opening`() {
+        val dir = tmpDir()
+        try {
+            EpubPackageImporter.extract(fixture("sample-epub2.epub"), dir)
+            val chapter = dir.walkTopDown().first { it.name == "ch1.xhtml" }
+            chapter.writeText("<broken")
+            val book = EpubPackageImporter.openCached(fixture("sample-epub2.epub"), dir, "a".repeat(64))
+            assertTrue(book.chapters.first().blocks.any { it is EpubBlock.Heading })
+            assertTrue(File(dir, ".m1racle-extraction-complete").isFile)
+            // A different source identity also invalidates a completed tree.
+            chapter.writeText("<broken")
+            val reopened = EpubPackageImporter.openCached(fixture("sample-epub2.epub"), dir, "b".repeat(64))
+            assertTrue(reopened.chapters.first().blocks.any { it is EpubBlock.Heading })
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test
+    fun `repeated spine references count toward whole book text budget`() {
+        val dir = tmpDir()
+        try {
+            writeSyntheticBook(dir, 6, "<p>${"x".repeat(800_000)}</p>")
+            expectTooLarge { EpubPackageImporter.parseExtracted(dir) }
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test
+    fun `whole book block and spine budgets reject amplification`() {
+        val dir = tmpDir()
+        try {
+            writeSyntheticBook(dir, 6, "<p>x</p>".repeat(8_000))
+            expectTooLarge { EpubPackageImporter.parseExtracted(dir) }
+            writeSyntheticBook(dir, EpubPackageImporter.MAX_SPINE_ITEMS + 1, "<p>x</p>")
+            expectTooLarge { EpubPackageImporter.parseExtracted(dir) }
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test
+    fun `whole book XML budget includes repeated references even without body text`() {
+        val dir = tmpDir()
+        try {
+            writeSyntheticBook(dir, 6, "<!--${"x".repeat(6 * 1024 * 1024)}-->")
+            expectTooLarge { EpubPackageImporter.parseExtracted(dir) }
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test
+    fun `failed extraction does not publish a partial cache or completion marker`() {
+        val parent = tmpDir()
+        try {
+            val archive = File(parent, "bad.epub")
+            java.util.zip.ZipOutputStream(archive.outputStream()).use { zip ->
+                zip.putNextEntry(java.util.zip.ZipEntry("META-INF/container.xml"))
+                zip.write("<container/>".toByteArray()); zip.closeEntry()
+                zip.putNextEntry(java.util.zip.ZipEntry("../escape.txt"))
+                zip.write("unsafe".toByteArray()); zip.closeEntry()
+            }
+            val cache = File(parent, "cache").apply { mkdirs() }
+            File(cache, "prior").writeText("old cache")
+            try { EpubPackageImporter.openCached(archive, cache, "c".repeat(64)); fail("unsafe EPUB accepted") }
+            catch (_: EpubException.UnsafeEntry) { }
+            assertEquals("old cache", File(cache, "prior").readText())
+            assertFalse(File(cache, ".m1racle-extraction-complete").exists())
+            assertFalse(parent.listFiles().orEmpty().any { it.name.startsWith("cache.extract-") })
+        } finally { parent.deleteRecursively() }
+    }
+
+    private fun expectTooLarge(action: () -> Unit) {
+        try { action(); fail("expected whole-book limit") } catch (_: EpubException.TooLarge) { }
+    }
+
+    private fun writeSyntheticBook(root: File, repetitions: Int, body: String) {
+        File(root, "META-INF").mkdirs()
+        File(root, "META-INF/container.xml").writeText("""<container><rootfiles><rootfile full-path="book.opf"/></rootfiles></container>""")
+        File(root, "book.opf").writeText("""<package version="3.0"><metadata/><manifest><item id="ch" href="ch.xhtml" media-type="application/xhtml+xml"/></manifest><spine>${"<itemref idref=\"ch\"/>".repeat(repetitions)}</spine></package>""")
+        File(root, "ch.xhtml").writeText("<html><body>$body</body></html>")
+    }
     companion object {
         private val platformFactoryName = DocumentBuilderFactory.newInstance().javaClass.name
     }

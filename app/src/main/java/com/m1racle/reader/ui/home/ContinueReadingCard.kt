@@ -71,17 +71,17 @@ fun ContinueReadingCard(
             Spacer(Modifier.height(16.dp))
             Text(
                 text = titles.displayTitle,
-                style = M1racleReaderTheme.typography.title.copy(fontSize = 20.sp, lineHeight = 27.sp, fontWeight = FontWeight.Medium),
+                style = M1racleReaderTheme.typography.title.copy(fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
                 color = scheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = positionLine,
                 style = M1racleReaderTheme.typography.caption,
                 color = scheme.onSurfaceVariant,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }

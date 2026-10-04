@@ -104,6 +104,12 @@ class ContentIdentityResolver internal constructor(
         return documentDao.getByContentSha256(contentSha256)
     }
 
+    /** Aliases and pre-commit candidates are locators, never proof of equal bytes. */
+    internal suspend fun hasExactContent(document: DocumentEntity, prepared: PreparedContentIdentity): Boolean =
+        runInterruptible(Dispatchers.IO) {
+            sourceHasExactContent(document.uri, StagedSource(prepared.stagedFile, prepared.byteCount, prepared.contentSha256))
+        }
+
     /**
      * v12 Path-A rows intentionally migrated with a null content hash. A renamed SAF URI
      * cannot reach those rows through their old URI alias, so an indexed hash miss must

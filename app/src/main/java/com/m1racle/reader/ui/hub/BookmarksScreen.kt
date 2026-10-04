@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -73,29 +75,22 @@ fun BookmarksScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val bookmarks = uiState.bookmarks
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     HubGlassShell(
         modifier = modifier.fillMaxSize(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
+                .statusBarsPadding(),
         ) {
-            Text(
-                text = stringResource(R.string.hub_bookmarks_title),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(
-                    horizontal = HomeDesignTokens.PageHorizontal,
-                    vertical = 12.dp,
-                ),
-            )
+            HubPageHeader(title = stringResource(R.string.hub_bookmarks_title))
             if (uiState.ready && bookmarks.isEmpty()) {
                 EmptyBookmarksHint(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .padding(bottom = HomeDesignTokens.DockContentClearance + navBottom),
                 )
             } else if (bookmarks.isNotEmpty()) {
                 LazyColumn(
@@ -104,7 +99,7 @@ fun BookmarksScreen(
                         start = HomeDesignTokens.PageHorizontal,
                         end = HomeDesignTokens.PageHorizontal,
                         top = 4.dp,
-                        bottom = HomeDesignTokens.DockContentClearance,
+                        bottom = HomeDesignTokens.DockContentClearance + navBottom,
                     ),
                 ) {
                     items(bookmarks, key = { it.id }) { bookmark ->
@@ -132,8 +127,6 @@ private fun BookmarkRow(
     Surface(
         shape = HomeDesignTokens.CardShape,
         color = scheme.surfaceContainerLow,
-        border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.45f)),
-        tonalElevation = 1.dp,
         modifier = modifier,
         onClick = onClick,
     ) {
@@ -143,7 +136,7 @@ private fun BookmarkRow(
                     text = BookmarkRowFormatter.headline(bookmark.title, bookmark.documentName),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = scheme.onSurface,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
@@ -157,14 +150,16 @@ private fun BookmarkRow(
                 )
             }
             Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Text(
                     text = bookmark.documentName,
                     style = MaterialTheme.typography.labelMedium,
                     color = scheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
                 )
                 Text(
                     text = BookmarkRowFormatter.locationLine(bookmark.locationKind, bookmark.location),
@@ -177,7 +172,7 @@ private fun BookmarkRow(
                 Text(
                     text = note,
                     style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    color = scheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -188,27 +183,7 @@ private fun BookmarkRow(
 
 @Composable
 private fun EmptyBookmarksHint(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(horizontal = HomeDesignTokens.PageHorizontal),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Bookmarks,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = stringResource(R.string.hub_bookmarks_empty),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(4.dp))
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.MenuBook,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
-        )
-    }
+    HubEmptyState(icon = Icons.Outlined.Bookmarks,
+        title = stringResource(R.string.hub_bookmarks_empty_title),
+        description = stringResource(R.string.hub_bookmarks_empty), modifier = modifier)
 }

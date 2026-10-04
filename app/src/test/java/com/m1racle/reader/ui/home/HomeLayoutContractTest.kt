@@ -100,14 +100,18 @@ class HomeLayoutContractTest {
         assertTrue(row.contains("GlassMaterialRole.Dock"))
         assertTrue(row.contains("GlassCapability.SOLID_FALLBACK"))
         assertFalse(row.contains(".glassMaterial("))
-        assertTrue(home.contains("IconButton(onClick = onImport, enabled = !isImporting)"))
+        val dock = ProductionSource.text("com/m1racle/reader/ui/hub/GlassDock.kt")
+        assertTrue(dock.contains("Icons.Filled.Add"))
+        assertTrue(dock.contains("clickable(enabled = !importing"))
+        assertTrue(home.contains("Button(onClick = onImport, enabled = !isImporting)"))
         assertFalse(home.contains("floatingActionButton ="))
     }
 
     @Test
     fun `single content rail is retained`() {
         assertEquals(24f, HomeDesignTokens.PageHorizontal.value)
-        assertTrue(homeSource().contains("PaddingValues(horizontal = HomeDesignTokens.PageHorizontal"))
+        assertTrue(homeSource().contains("start = HomeDesignTokens.PageHorizontal"))
+        assertTrue(homeSource().contains("end = HomeDesignTokens.PageHorizontal"))
     }
 
     @Test
@@ -128,7 +132,7 @@ class HomeLayoutContractTest {
     @Test
     fun `home typography separates current document from list and progress`() {
         assertTrue(continueSource().contains("fontSize = 20.sp"))
-        assertTrue(rowSource().contains("fontSize = 15.sp"))
+        assertTrue(rowSource().contains("fontSize = 16.sp"))
         assertTrue(rowSource().contains("typography.caption"))
         assertTrue(rowSource().contains("maxLines = 2"))
     }
@@ -141,9 +145,12 @@ class HomeLayoutContractTest {
     }
 
     @Test
-    fun `fixed safe area bounds the scroll viewport`() {
+    fun `system insets clear the content tail instead of bounding the viewport and content padding clears the floating dock`() {
         val home = homeSource()
-        assertTrue(home.contains(".padding(top = statusTop, bottom = bottomReserved)"))
+        assertTrue(home.contains(".padding(top = statusTop)"))
+        assertFalse(home.contains(".padding(top = statusTop, bottom = navBottom)"))
+        assertTrue(home.contains("bottom = HomeDesignTokens.DockContentClearance + navBottom"))
+        assertFalse(home.contains("bottom = bottomReserved"))
         assertTrue(home.contains(".clipToBounds().testTag(\"home-list\")"))
         assertFalse(home.contains("item(key = \"home_brand_header\")"))
         assertFalse(home.contains("nestedScroll"))

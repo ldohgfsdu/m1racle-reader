@@ -46,6 +46,143 @@ class EpubReaderUiTest {
         rule.waitForIdle()
     }
 
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun `large default large reflow keeps the same text anchor inside a long list item`() {
+        val text = (0..3_000).joinToString(" ") { "word" + it.toString().padStart(4, '0') }
+        val longBook = book.copy(chapters = listOf(book.chapters.first().copy(blocks = listOf(
+            EpubBlock.ListBlock(false, listOf(listOf(EpubInline(text)), listOf(EpubInline("End")))),
+        ))))
+        val settings = mutableStateOf(ReaderSettings(fontScale = ReaderSettings.FONT_LARGE))
+        rule.setContent {
+            LegacyHostReaderTheme {
+                EpubReaderContent(longBook, settings.value, "测试书", 0, 0,
+                    onPosition = { _, _, _ -> }, onFlush = {}, onBack = {}, onSettings = {},
+                    modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
+            }
+        }
+        waitForPages()
+        repeat(5) {
+            rule.onNodeWithTag("epub-pager").performTouchInput { click(percentOffset(0.88f, 0.5f)) }
+            rule.waitForIdle()
+        }
+        val before = pageLabel()
+        val visible = rule.onAllNodes(hasText("word", substring = true)).fetchSemanticsNodes()
+            .first { it.boundsInRoot.overlaps(rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot) }
+            .config[SemanticsProperties.Text].joinToString { it.text }
+        val anchor = Regex("word\\d{4}").find(visible)!!.value
+        assertFalse(before.startsWith("第 1 /"))
+        rule.runOnIdle { settings.value = settings.value.copy(fontScale = ReaderSettings.FONT_DEFAULT) }
+        rule.waitUntil(15_000) { pageLabel().substringAfter('/') != before.substringAfter('/') }
+        rule.waitForIdle()
+        rule.onNodeWithText(anchor, substring = true).assertIsDisplayed()
+        rule.runOnIdle { settings.value = settings.value.copy(fontScale = ReaderSettings.FONT_LARGE) }
+        rule.waitUntil(15_000) { pageLabel().substringAfter('/') == before.substringAfter('/') }
+        rule.waitForIdle()
+        assertEquals(before, pageLabel())
+        rule.onNodeWithText(anchor, substring = true).assertIsDisplayed()
+    }
+
+    @Test fun `dragging past half does not commit footer or position before the page settles`() {
+        var savedRow = 0
+        rule.setContent {
+            LegacyHostReaderTheme {
+                EpubReaderContent(book, ReaderSettings(), "测试书", 0, 0,
+                    onPosition = { row, _, _ -> savedRow = row }, onFlush = {}, onBack = {}, onSettings = {},
+                    modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
+            }
+        }
+        waitForPages()
+        val initial = pageLabel()
+        rule.onNodeWithTag("epub-pager").performTouchInput {
+            down(percentOffset(0.9f, 0.5f))
+            moveTo(percentOffset(0.75f, 0.5f), delayMillis = 120)
+            moveTo(percentOffset(0.25f, 0.5f), delayMillis = 400)
+        }
+        rule.waitForIdle()
+        assertEquals("The visible number must describe the committed reading position", initial, pageLabel())
+        assertEquals(0, savedRow)
+        rule.onNodeWithTag("epub-pager").performTouchInput {
+            moveTo(percentOffset(0.8f, 0.5f), delayMillis = 400)
+            advanceEventTime(200)
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals(initial, pageLabel())
+        assertEquals(0, savedRow)
+        rule.onNodeWithTag("epub-pager").performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        assertTrue(pageLabel().startsWith("第 2 /"))
+        assertTrue(savedRow > 0)
+    }
+
+    @Test fun `large system text leaves footer outside reading area without reflow on chrome toggle`() {
+        rule.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
+                androidx.compose.ui.unit.Density(density.density, 2f)) {
+                LegacyHostReaderTheme {
+                    EpubReaderContent(book, ReaderSettings(), "测试书", 0, 0,
+                        onPosition = { _, _, _ -> }, onFlush = {}, onBack = {}, onSettings = {},
+                        modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
+                }
+            }
+        }
+        waitForPages()
+        val before = rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot
+        val label = pageLabel()
+        val footer = rule.onNodeWithTag("epub-page-number").fetchSemanticsNode().boundsInRoot
+        assertTrue("reading=$before footer=$footer", before.bottom <= footer.top)
+        rule.onNodeWithTag("epub-pager").performTouchInput { click(percentOffset(0.5f, 0.5f)) }
+        rule.waitForIdle()
+        val chapter = rule.onNodeWithText("第一章 ·", substring = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("reading=$before chapter=$chapter", before.bottom <= chapter.top)
+        for (description in listOf("返回", "目录", "设置")) {
+            val control = rule.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInRoot
+            assertTrue("$description=$control must be above reading=$before", control.bottom <= before.top)
+        }
+        assertEquals(before, rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot)
+        assertEquals(label, pageLabel())
+    }
+
+    @Test fun `revealing controls preserves visible text and keeps all top controls outside the page`() {
+        var settingsOpened = false
+        var backClicked = false
+        rule.setContent {
+            LegacyHostReaderTheme {
+                EpubReaderContent(book, ReaderSettings(), "很长的测试书名用于检查标题省略而不会挤占目录设置", 0, 0,
+                    onPosition = { _, _, _ -> }, onFlush = {}, onBack = { backClicked = true },
+                    onSettings = { settingsOpened = true }, modifier = Modifier.size(320.dp, 560.dp),
+                    insets = WindowInsets(0, 0, 0, 0))
+            }
+        }
+        waitForPages()
+        val reading = rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot
+        val label = pageLabel()
+        val text = rule.onNodeWithText("第一章段落 0", substring = true).fetchSemanticsNode()
+            .config[SemanticsProperties.Text]
+        repeat(2) {
+            rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
+            rule.waitForIdle()
+            for (description in listOf("返回", "目录", "设置")) {
+                val control = rule.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInRoot
+                assertTrue("$description=$control reading=$reading", control.bottom <= reading.top)
+            }
+            assertEquals(reading, rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot)
+            assertEquals(label, pageLabel())
+            assertEquals(text, rule.onNodeWithText("第一章段落 0", substring = true).fetchSemanticsNode()
+                .config[SemanticsProperties.Text])
+            rule.onNodeWithContentDescription("设置").performClick()
+            rule.runOnIdle { assertTrue(settingsOpened) }
+            rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
+            rule.waitForIdle()
+            rule.onNodeWithContentDescription("设置").assertDoesNotExist()
+            assertEquals(reading, rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot)
+        }
+        rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.runOnIdle { assertTrue(backClicked) }
+    }
+
     @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     @Test fun `legacy host dispatches pointer input with a rectangular drawer outline`() {
         var clicked = false
@@ -105,6 +242,48 @@ class EpubReaderUiTest {
         rule.onNodeWithTag("epub-pager").performTouchInput { click(percentOffset(0.5f, 0.5f)) }
         rule.waitForIdle()
         rule.onNodeWithText("第二章 ·", substring = true).assertIsDisplayed()
+    }
+
+    @Test fun `swiping and TOC jumps show each same-file chapter at the first line with its own footer`() {
+        val oneFile = book.copy(spine = listOf(book.spine.first()),
+            toc = listOf(EpubTocNode("同文件第一章", "one.xhtml#first", 0, emptyList()),
+                EpubTocNode("同文件第二章", "one.xhtml#second", 0, emptyList())),
+            chapters = listOf(EpubChapter(0, "one.xhtml", "同文件第一章", listOf(
+                EpubBlock.Heading(1, "同文件第一章"), EpubBlock.Paragraph(listOf(EpubInline("上一章结尾"))),
+                EpubBlock.Heading(1, "同文件第二章"), EpubBlock.Paragraph(listOf(EpubInline("下一章正文"))),
+            ), mapOf("first" to 0, "second" to 2))))
+        rule.setContent {
+            LegacyHostReaderTheme {
+                EpubReaderContent(oneFile, ReaderSettings(), "测试书", 0, 0,
+                    onPosition = { _, _, _ -> }, onFlush = {}, onBack = {}, onSettings = {},
+                    modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
+            }
+        }
+        waitForPages()
+        fun visibleText(): String {
+            val bounds = rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot
+            return rule.onAllNodes(hasText("同文件", substring = true)).fetchSemanticsNodes()
+                .first { it.boundsInRoot.overlaps(bounds) }.config[SemanticsProperties.Text].joinToString { it.text }
+        }
+        assertEquals("第 1 / 2 页", pageLabel())
+        assertFalse(visibleText().contains("同文件第二章"))
+        rule.onNodeWithTag("epub-pager").performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        assertEquals("第 2 / 2 页", pageLabel())
+        assertTrue(visibleText().startsWith("同文件第二章"))
+        assertFalse(visibleText().contains("上一章结尾"))
+        rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
+        rule.onNodeWithText("同文件第二章 · 1/1").assertIsDisplayed()
+        rule.onNodeWithTag("epub-pager").performTouchInput { swipeRight() }
+        rule.waitForIdle()
+        rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
+        rule.onNodeWithContentDescription("目录").performClick()
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.onNode(hasText("同文件第二章") and hasClickAction()).performClick()
+        rule.waitForIdle()
+        assertEquals("第 2 / 2 页", pageLabel())
+        assertTrue(visibleText().startsWith("同文件第二章"))
+        assertFalse(visibleText().contains("上一章结尾"))
     }
 
     @Test fun `directory header and list stay within status and navigation safe regions`() {

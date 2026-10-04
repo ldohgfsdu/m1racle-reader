@@ -9,6 +9,7 @@ internal data class EpubRowMetrics(
     val spineIndex: Int,
     val chapterStart: Boolean,
     val lines: List<EpubLine>,
+    val continuation: Boolean = false,
 )
 
 internal data class EpubPageSlice(
@@ -37,12 +38,12 @@ internal fun paginateEpub(rows: List<EpubRowMetrics>, pageHeight: Float, paragra
         used = 0f
     }
     rows.forEachIndexed { rowIndex, row ->
-        if (row.chapterStart) finish()
+        if (row.chapterStart || row.spineIndex != spine) finish()
         spine = row.spineIndex
         row.lines.forEach { line ->
             val height = line.bottom - line.top
             val previous = slices.lastOrNull()
-            var gap = if (previous != null && previous.row != rowIndex) paragraphGap else 0f
+            var gap = if (previous != null && previous.row != rowIndex && !row.continuation) paragraphGap else 0f
             if (used + gap + height > pageHeight && slices.isNotEmpty()) {
                 finish()
                 gap = 0f
@@ -104,7 +105,6 @@ internal fun epubFitImage(intrinsicWidth: Int, intrinsicHeight: Int, maxWidth: I
 internal data class EpubPageTurnLayer(
     val translationX: Float,
     val zIndex: Float,
-    val dim: Float,
     val edgeShadow: Float,
 )
 
@@ -121,7 +121,7 @@ internal fun epubPageTurnLayer(
     // Pinning every offset<=0 page pulled the previous page onto the current one
     // and flipped whenever currentPageOffsetFraction jittered around 0.
     if (kotlin.math.abs(scrollFromSettledPage) < 0.002f || kotlin.math.abs(pageOffset) >= 0.999f) {
-        return EpubPageTurnLayer(0f, 0f, 0f, 0f)
+        return EpubPageTurnLayer(0f, 0f, 0f)
     }
     val goingForward = scrollFromSettledPage > 0f
     val pinned = if (goingForward) pageOffset < 0f else pageOffset > 0f
@@ -129,7 +129,6 @@ internal fun epubPageTurnLayer(
     return EpubPageTurnLayer(
         translationX = if (pinned) -pageOffset * width else 0f,
         zIndex = if (pinned) 0f else 1f,
-        dim = if (pinned) (kotlin.math.abs(pageOffset).coerceIn(0f, 1f) * 0.18f) else 0f,
         edgeShadow = if (pinned) 0f else progress,
     )
 }

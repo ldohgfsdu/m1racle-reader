@@ -1,42 +1,34 @@
 package com.m1racle.reader.ui.hub
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.m1racle.reader.ui.components.PillSegmentedControl
 import com.m1racle.reader.R
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.repository.DocumentRepository
-import androidx.compose.foundation.shape.RoundedCornerShape
 import com.m1racle.reader.ui.home.DocumentListRow
 import com.m1racle.reader.ui.home.HomeDesignTokens
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -96,78 +88,51 @@ class LibraryViewModel(
 }
 
 /**
- * H2.2 Phase 3 文库页：全部 / PDF / Markdown 分类（EPUB 为 PRD 外扩展位，
- * 仅留枚举位置不实现）。卡片主展示文件名/类型/进度，日期/大小弱化。
+ * Shared document rows with real format filters; selection is separate from content.
  */
 @Composable
 fun LibraryScreen(
     viewModel: LibraryViewModel,
     onOpenDocument: (DocumentEntity) -> Unit,
-    onNavigateHub: (HubDestination) -> Unit,
     onOpenSearch: () -> Unit = {},
+    onNavigateHub: (HubDestination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     HubGlassShell(
         modifier = modifier.fillMaxSize(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
+                .statusBarsPadding(),
         ) {
-            Row(
-                modifier = Modifier.padding(
-                    horizontal = HomeDesignTokens.PageHorizontal,
-                    vertical = 12.dp,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.hub_library_title),
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
+            HubPageHeader(title = stringResource(R.string.hub_library_title)) {
                 IconButton(onClick = onOpenSearch) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = stringResource(R.string.search_library_entry),
-                    )
+                    Icon(Icons.Default.Search, stringResource(R.string.search_library_entry))
                 }
             }
-            Row(
-                modifier = Modifier.padding(horizontal = HomeDesignTokens.PageHorizontal),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                LibraryFilterChip(
-                    labelRes = R.string.hub_filter_all,
-                    selected = filter == LibraryFilter.ALL,
-                    onClick = { viewModel.setFilter(LibraryFilter.ALL) },
-                )
-                LibraryFilterChip(
-                    labelRes = R.string.hub_filter_pdf,
-                    selected = filter == LibraryFilter.PDF,
-                    onClick = { viewModel.setFilter(LibraryFilter.PDF) },
-                )
-                LibraryFilterChip(
-                    labelRes = R.string.hub_filter_markdown,
-                    selected = filter == LibraryFilter.MARKDOWN,
-                    onClick = { viewModel.setFilter(LibraryFilter.MARKDOWN) },
-                )
-                LibraryFilterChip(
-                    labelRes = R.string.hub_filter_epub,
-                    selected = filter == LibraryFilter.EPUB,
-                    onClick = { viewModel.setFilter(LibraryFilter.EPUB) },
-                )
-            }
+            val filters = LibraryFilter.entries
+            PillSegmentedControl(
+                labels = listOf(
+                    stringResource(R.string.hub_filter_all),
+                    stringResource(R.string.hub_filter_pdf),
+                    stringResource(R.string.hub_filter_markdown),
+                    stringResource(R.string.hub_filter_epub),
+                ),
+                selectedIndex = filters.indexOf(filter),
+                onSelect = { viewModel.setFilter(filters[it]) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = HomeDesignTokens.PageHorizontal),
+            )
             if (uiState.ready && uiState.documents.isEmpty()) {
                 EmptyLibraryHint(
+                    filtered = filter != LibraryFilter.ALL,
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .padding(bottom = HomeDesignTokens.DockContentClearance + navBottom),
                 )
             } else if (uiState.documents.isNotEmpty()) {
                 LazyColumn(
@@ -177,7 +142,7 @@ fun LibraryScreen(
                         end = HomeDesignTokens.PageHorizontal,
                         top = 12.dp,
                         // 底部避让 Dock（导航条 + Dock 高度 + 间隙）。
-                        bottom = HomeDesignTokens.DockContentClearance,
+                        bottom = HomeDesignTokens.DockContentClearance + navBottom,
                     ),
                 ) {
                     items(uiState.documents, key = { it.id }) { document ->
@@ -194,43 +159,9 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun LibraryFilterChip(
-    labelRes: Int,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(stringResource(labelRes), style = MaterialTheme.typography.labelLarge) },
-        shape = RoundedCornerShape(50),
-        border = null,
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-    )
-}
-
-@Composable
-private fun EmptyLibraryHint(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(horizontal = HomeDesignTokens.PageHorizontal),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Description,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = stringResource(R.string.hub_library_empty),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+private fun EmptyLibraryHint(filtered: Boolean, modifier: Modifier = Modifier) {
+    HubEmptyState(icon = Icons.Filled.Description,
+        title = stringResource(if (filtered) R.string.hub_library_filter_empty_title else R.string.hub_library_empty_title),
+        description = stringResource(if (filtered) R.string.hub_library_filter_empty else R.string.hub_library_empty),
+        modifier = modifier)
 }

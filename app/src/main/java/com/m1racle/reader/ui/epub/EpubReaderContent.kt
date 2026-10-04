@@ -17,21 +17,19 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
@@ -40,6 +38,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.drawText
@@ -55,10 +54,18 @@ import com.m1racle.reader.epub.EpubBook
 import com.m1racle.reader.epub.EpubTocNode
 import com.m1racle.reader.image.LocalImageLoader
 import com.m1racle.reader.image.LocalImageState
+import com.m1racle.reader.ui.material.GlassBackdropHost
+import com.m1racle.reader.ui.material.GlassBackdropSource
+import com.m1racle.reader.ui.material.GlassEnvironment
+import com.m1racle.reader.ui.material.LocalGlassBackdropHost
+import com.m1racle.reader.ui.material.LocalGlassEnvironment
+import com.m1racle.reader.ui.theme.LocalReaderDarkTheme
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlin.math.ceil
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlin.math.roundToInt
 
 private val EpubPageTurnSpec = tween<Float>(
@@ -91,23 +98,44 @@ internal fun EpubReaderContent(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
-    val rows = remember(book, settings, style) { epubTextRows(book, settings, style) }
+    // Measure both footer lines, including system font scaling and font padding.
+    // Keep both lines laid out while chrome is hidden so a tap cannot repaginate.
+    var footerHeight by remember { mutableIntStateOf(0) }
+    val footerClearance = with(density) { footerHeight.toDp() } + 12.dp
+    // Reserve this even in immersion mode: revealing controls must not cover
+    // a line, resize the page, or change its character anchor.
+    val topClearance = epubTopBarHeight()
+    val background = MaterialTheme.colorScheme.background
+    val drawPageBackdrop: ContentDrawScope.() -> Unit = remember(background) {
+        { drawRect(background); drawContent() }
+    }
+    val backdrop = rememberLayerBackdrop(onDraw = drawPageBackdrop)
+    val glassHost = remember(backdrop) { GlassBackdropHost(backdrop, backdrop) }
+    val rows by produceState<List<EpubTextRow>?>(null, book, settings, style) {
+        value = null
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val context = kotlinx.coroutines.currentCoroutineContext()
+            epubTextRows(book, settings, style) { context.ensureActive() }
+        }
+    }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     // KOReader / Foliate / Apple Books / 微信读书: the book is the default view.
     var chromeVisible by rememberSaveable { mutableStateOf(false) }
     // Text offsets survive a settings/viewport reflow. Persisted data remains row + pixel offset.
     var anchorRow by rememberSaveable { mutableIntStateOf(initialRow) }
     var anchorText by rememberSaveable { mutableIntStateOf(-1) }
-    val gap = with(density) { 10.dp.toPx() }
+    val gap = with(density) { com.m1racle.reader.ui.viewer.components.ReaderTypography.bodyParagraphBottom.dp.toPx() }
     val inset = with(density) { 12.dp.roundToPx() }
     // Probe image sizes off the main thread, then paginate in bounded slices. The
     // block is cancelled and restarted when the book, settings, or viewport change.
     val layout by produceState<EpubTextLayout?>(null, rows, viewport, measurer, density) {
-        if (viewport.width > 0 && viewport.height > 0) {
-            val bounds = probeEpubImageBounds(rows)
+        value = null
+        val currentRows = rows
+        if (currentRows != null && viewport.width > 0 && viewport.height > 0) {
+            val bounds = probeEpubImageBounds(currentRows)
             value = measureEpub(
-                rows, measurer, viewport.width, viewport.height, gap, inset,
-                imageBounds = bounds, anchorRow = initialRow,
+                currentRows, measurer, viewport.width, viewport.height, gap, inset,
+                imageBounds = bounds, anchorRow = currentRows.indexOfFirst { it.sourceRow == initialRow }.coerceAtLeast(0),
             )
         }
     }
@@ -129,26 +157,31 @@ internal fun EpubReaderContent(
     // Resolved once per layout; the drawer only does a map lookup per row.
     val tocPages = remember(ready) { ready?.let { epubTocPages(book, it) } ?: emptyMap() }
     val pager = rememberPagerState { (ready?.pages?.size ?: 1).coerceAtLeast(1) }
-    LaunchedEffect(ready) {
+    LaunchedEffect(pager, ready) {
         val pages = ready?.pages ?: return@LaunchedEffect
-        if (pager.isScrollInProgress) return@LaunchedEffect
-        val page = if (anchorText >= 0) pages.pageForText(anchorRow, anchorText)
-        else pages.pageForPosition(anchorRow, initialOffset)
+        // Finish restoring against the new layout before observing/persisting
+        // its page numbers. An old page number has no meaning after reflow.
+        snapshotFlow { pager.isScrollInProgress }.first { !it }
+        val page = if (anchorText >= 0) ready.pageForText(anchorRow, anchorText)
+        else ready.pageForPosition(anchorRow, initialOffset)
         val target = page.coerceIn(0, pages.lastIndex.coerceAtLeast(0))
         if (pager.currentPage != target) pager.scrollToPage(target)
-    }
-    LaunchedEffect(pager, ready) {
-        if (ready == null) return@LaunchedEffect
-        var lastSettled = pager.settledPage
+        var lastSettled = target
         snapshotFlow { pager.settledPage }.collect { index ->
-            if (index != lastSettled) chromeVisible = false
-            lastSettled = index
             val page = ready.pages.getOrNull(index) ?: return@collect
             val first = page.slices.first()
-            anchorRow = first.row
-            anchorText = first.start
+            val position = ready.positionAt(first)
+            // Reflow can put the original character part way down a new page.
+            // Keep that character until a real page turn; rounding to the new
+            // page's first line here made repeated font changes drift backwards.
+            if (index != lastSettled || anchorText < 0) {
+                if (index != lastSettled) chromeVisible = false
+                anchorRow = position.first
+                anchorText = position.third
+            }
+            lastSettled = index
             val progress = if (ready.pages.size <= 1) 1f else index.toFloat() / ready.pages.lastIndex
-            currentPosition(first.row, ceil(first.sourceTop).toInt(), progress)
+            currentPosition(position.first, position.second, progress)
         }
     }
     ModalNavigationDrawer(
@@ -162,121 +195,120 @@ internal fun EpubReaderContent(
                 onClose = { scope.launch { drawer.close() } }, insets = insets)
         },
     ) {
-        Box(Modifier.fillMaxSize().windowInsetsPadding(insets)) {
-            Box(
-                Modifier.fillMaxSize()
-                    .padding(horizontal = settings.contentPaddingLevel.horizontalDp, vertical = 12.dp)
-                    .onSizeChanged { size ->
-                        if (!epubViewportSettled(viewport, size)) viewport = size
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (ready == null) CircularProgressIndicator()
-                else if (ready.pages.isEmpty()) Text("本书没有可顺序阅读的章节")
-                else HorizontalPager(
-                    state = pager,
-                    beyondViewportPageCount = 1,
-                    modifier = Modifier.fillMaxSize().testTag("epub-pager"),
-                ) { index ->
-                    val pageOffset = pager.getOffsetDistanceInPages(index)
-                    val fraction = pager.currentPageOffsetFraction
-                    val scrollFromSettled = pager.currentPage - pager.settledPage + fraction
-                    val turn = remember(index, pageOffset, fraction, pager.currentPage, pager.settledPage, viewport.width) {
-                        epubPageTurnLayer(pageOffset, fraction, pager.currentPage, pager.settledPage, viewport.width.toFloat())
-                    }
+        CompositionLocalProvider(
+            LocalGlassEnvironment provides GlassEnvironment.reader(LocalReaderDarkTheme.current),
+        ) {
+            Box(Modifier.fillMaxSize().windowInsetsPadding(insets).background(background)) {
+                // Only paper and content are captured. Controls remain siblings
+                // so their glass never samples itself or duplicates its icons.
+                GlassBackdropSource(backdrop, Modifier.fillMaxSize().background(background)) {
                     Box(
-                        Modifier
-                            .zIndex(turn.zIndex)
-                            .graphicsLayer { translationX = turn.translationX }
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background),
+                        Modifier.fillMaxSize()
+                            .padding(horizontal = settings.contentPaddingLevel.horizontalDp)
+                            .padding(top = topClearance + 12.dp, bottom = footerClearance)
+                            .onSizeChanged { size ->
+                                if (!epubViewportSettled(viewport, size)) viewport = size
+                            },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        EpubPageView(ready, index, inset, viewport.height) { tap ->
-                            when (tap) {
-                                EpubPageTap.Previous -> {
-                                    chromeVisible = false
-                                    turnTo(pager, pager.currentPage - 1, scope)
-                                }
-                                EpubPageTap.Next -> {
-                                    chromeVisible = false
-                                    turnTo(pager, pager.currentPage + 1, scope)
-                                }
-                                EpubPageTap.ToggleChrome -> chromeVisible = !chromeVisible
+                        if (ready == null) CircularProgressIndicator()
+                        else if (ready.pages.isEmpty()) Text("本书没有可顺序阅读的章节")
+                        else HorizontalPager(
+                            state = pager,
+                            beyondViewportPageCount = 1,
+                            modifier = Modifier.fillMaxSize().testTag("epub-pager"),
+                        ) { index ->
+                            val pageOffset = pager.getOffsetDistanceInPages(index)
+                            val fraction = pager.currentPageOffsetFraction
+                            val scrollFromSettled = pager.currentPage - pager.settledPage + fraction
+                            val turn = remember(index, pageOffset, fraction, pager.currentPage, pager.settledPage, viewport.width) {
+                                epubPageTurnLayer(pageOffset, fraction, pager.currentPage, pager.settledPage, viewport.width.toFloat())
                             }
-                        }
-                        if (turn.dim > 0f) {
-                            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = turn.dim)))
-                        }
-                        if (turn.edgeShadow > 0f) {
-                            val goingForward = scrollFromSettled >= 0f
                             Box(
                                 Modifier
-                                    .align(if (goingForward) Alignment.CenterStart else Alignment.CenterEnd)
-                                    .fillMaxHeight()
-                                    .width(18.dp)
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = if (goingForward) {
-                                                listOf(Color.Black.copy(alpha = 0.22f * turn.edgeShadow), Color.Transparent)
-                                            } else {
-                                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.22f * turn.edgeShadow))
-                                            },
-                                        ),
-                                    ),
-                            )
+                                    .zIndex(turn.zIndex)
+                                    .graphicsLayer { translationX = turn.translationX }
+                                    .fillMaxSize()
+                                    .drawBehind {
+                                        if (turn.edgeShadow > 0f) {
+                                            // The shadow falls on the sheet underneath, outside this
+                                            // page's edge. Painting it inside obscured the first glyphs.
+                                            val shadowWidth = 10.dp.toPx()
+                                            val forward = scrollFromSettled > 0f
+                                            val left = if (forward) -shadowWidth else size.width
+                                            drawRect(
+                                                Brush.horizontalGradient(
+                                                    if (forward) listOf(Color.Transparent, Color.Black.copy(alpha = 0.14f * turn.edgeShadow))
+                                                    else listOf(Color.Black.copy(alpha = 0.14f * turn.edgeShadow), Color.Transparent),
+                                                    startX = left, endX = left + shadowWidth,
+                                                ),
+                                                topLeft = Offset(left, 0f),
+                                                size = Size(shadowWidth, size.height),
+                                            )
+                                        }
+                                    }
+                                    .background(MaterialTheme.colorScheme.background),
+                            ) {
+                                EpubPageView(ready, index, inset, viewport.height) { tap ->
+                                    when (tap) {
+                                        EpubPageTap.Previous -> {
+                                            chromeVisible = false
+                                            turnTo(pager, pager.currentPage - 1, scope)
+                                        }
+                                        EpubPageTap.Next -> {
+                                            chromeVisible = false
+                                            turnTo(pager, pager.currentPage + 1, scope)
+                                        }
+                                        EpubPageTap.ToggleChrome -> chromeVisible = !chromeVisible
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-            }
-            AnimatedVisibility(
-                visible = chromeVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.TopCenter),
-            ) {
-                TopAppBar(
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
-                    },
-                    actions = {
-                        IconButton(onClick = { scope.launch { drawer.open() } }) {
-                            Icon(Icons.AutoMirrored.Filled.FormatListBulleted, "目录")
+                    Column(
+                        Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp).fillMaxWidth()
+                            .onSizeChanged { footerHeight = it.height },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        run {
+                            val page = ready?.pages?.getOrNull(pager.settledPage)
+                            val chapterPages = remember(ready, pager.settledPage) {
+                                ready?.sectionPages(pager.settledPage) ?: IntRange.EMPTY
+                            }
+                            val chapterTitle = page?.slices?.firstOrNull()?.let { ready.rows[it.row].chapterTitle }.orEmpty()
+                            val chapterPage = chapterPages.indexOf(pager.settledPage) + 1
+                                Text(
+                                    if (page != null) "$chapterTitle · $chapterPage/${chapterPages.count()}" else "章节 · 1/1",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (chromeVisible) 1f else 0f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = if (chromeVisible) Modifier else Modifier.clearAndSetSemantics {},
+                                )
                         }
-                        IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "设置") }
-                    },
-                )
-            }
-            Column(
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                if (chromeVisible && ready != null) {
-                    val page = ready.pages.getOrNull(pager.currentPage)
-                    val chapterPages = ready.pages.indices.filter { ready.pages[it].spineIndex == page?.spineIndex }
-                    val chapterTitle = page?.slices?.firstOrNull()?.let { ready.rows[it.row].chapterTitle }.orEmpty()
-                    val chapterPage = chapterPages.indexOf(pager.currentPage) + 1
-                    if (page != null) {
                         Text(
-                            "$chapterTitle · $chapterPage/${chapterPages.size}",
+                            when {
+                                ready == null -> "正在分页…"
+                                ready.pages.isEmpty() -> "无可阅读页面"
+                                else -> "第 ${pager.settledPage + 1} / ${ready.pages.size} 页"
+                            },
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (chromeVisible) 1f else 0.72f),
+                            modifier = Modifier.testTag("epub-page-number"),
                         )
                     }
                 }
-                Text(
-                    when {
-                        ready == null -> "正在分页…"
-                        ready.pages.isEmpty() -> "无可阅读页面"
-                        else -> "第 ${pager.currentPage + 1} / ${ready.pages.size} 页"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (chromeVisible) 1f else 0.72f),
-                    modifier = Modifier.testTag("epub-page-number"),
-                )
+                CompositionLocalProvider(LocalGlassBackdropHost provides glassHost) {
+                    AnimatedVisibility(
+                        visible = chromeVisible,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    ) {
+                        EpubReaderTopBar(title = title, onBack = onBack,
+                            onToc = { scope.launch { drawer.open() } }, onSettings = onSettings)
+                    }
+                }
             }
         }
     }

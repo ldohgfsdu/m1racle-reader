@@ -47,6 +47,8 @@ enum class GlassMaterialRole {
     Control,
     Dock,
     Capsule,
+    /** Selected lens over dock icons and segmented labels. */
+    SelectionLens,
     Menu,
     ExpandedMenu,
     SettingsCard,
@@ -131,6 +133,7 @@ private data class GlassRecipe(
     val pressedLensAmount: Dp? = null,
     val pressedInnerShadow: Dp? = null,
     val pressedSurfaceAlpha: Float? = null,
+    val pressedHighlightAlpha: Float? = null,
     val lensEnabled: Boolean = false,
     val backdropLayer: GlassBackdropLayer = GlassBackdropLayer.Root,
     val exportsForSettingsCard: Boolean = false,
@@ -201,10 +204,10 @@ object GlassMaterialEngine {
         )
     }
 
-    // Markdown top chrome legacy equivalent. R36.x OPTICAL_REFINEMENT_PENDING.
-    private val progressiveLegacy = regularFrost.copy(
-        lightSurfaceAlpha = 0.62f,
-        darkSurfaceAlpha = 0.62f,
+    // Readable Markdown chrome; the renderer matches its tint to the page.
+    private val progressiveChrome = regularFrost.copy(
+        lightSurfaceAlpha = 0.90f,
+        darkSurfaceAlpha = 0.90f,
         blur = 16.dp,
         shadow = 0.dp,
         vibrancy = false,
@@ -235,6 +238,16 @@ object GlassMaterialEngine {
             family = GlassOpticalFamily.INTERACTIVE,
         ),
         GlassMaterialRole.Capsule to liquidRecipe(GlassMaterialRole.Capsule),
+        GlassMaterialRole.SelectionLens to liquidRecipe(GlassMaterialRole.SelectionLens).copy(
+            lensEnabled = true,
+            pressedScale = 1f, // Dock owns the pickup transform, including drag preview.
+            pressedLensHeight = 10.dp,
+            pressedLensAmount = 14.dp,
+            pressedSurfaceAlpha = 0f,
+            pressedHighlightAlpha = 1f,
+            pressedInnerShadow = 8.dp,
+            chromaticAberration = true,
+        ),
         GlassMaterialRole.Menu to liquidRecipe(GlassMaterialRole.Menu).copy(
             exportsForSettingsCard = true,
         ),
@@ -246,7 +259,7 @@ object GlassMaterialEngine {
             backdropLayer = GlassBackdropLayer.RootAndMenu,
         ),
         GlassMaterialRole.Dialog to fallbackPlate.copy(family = GlassOpticalFamily.PANEL),
-        GlassMaterialRole.ProgressiveChrome to progressiveLegacy,
+        GlassMaterialRole.ProgressiveChrome to progressiveChrome,
     )
 
     fun rolesWithConsumers(): Set<GlassMaterialRole> = recipes.keys
@@ -301,7 +314,7 @@ object GlassMaterialEngine {
             idleSurfaceAlpha
         }
         val highlightBoost = if (pressed && recipe.highlightWidth > 0.dp) PressedHighlightAlphaBoost else 0f
-        val highlightAlpha = (
+        val highlightAlpha = if (pressed && recipe.pressedHighlightAlpha != null) recipe.pressedHighlightAlpha else (
             if (dark) recipe.darkHighlightAlpha else recipe.lightHighlightAlpha
             ) + highlightBoost
         val brightness = if (dark) recipe.darkBrightness else recipe.lightBrightness
@@ -467,6 +480,7 @@ fun Modifier.glassMaterial(
     }
     return drawGlassMaterial(
         modifier = this,
+        role = role,
         host = host,
         shape = shape,
         idleSpec = idleSpec,
@@ -541,6 +555,7 @@ private fun softGlassPlate(
 @Composable
 private fun drawGlassMaterial(
     modifier: Modifier,
+    role: GlassMaterialRole,
     host: GlassBackdropHost,
     shape: Shape,
     idleSpec: GlassMaterialSpec,
@@ -560,6 +575,9 @@ private fun drawGlassMaterial(
     }
     val exportedBackdrop = surfaceExport ?: if (idleSpec.exportsForSettingsCard) host.menuExport else null
     val blurPx = with(density) { idleSpec.blur.toPx() }
+    // Android's large-radius blur downsamples its input. Prefilter the dock's
+    // fine page detail first so it cannot alias into broad bands under the lens.
+    val prefilterBlurPx = with(density) { if (role == GlassMaterialRole.Dock) 1.dp.toPx() else 0f }
     val lensHeightPx = with(density) { idleSpec.lensHeight.toPx() }
     val lensAmountPx = with(density) { idleSpec.lensAmount.toPx() }
     val pressedLensHeightPx = with(density) { pressedSpec.lensHeight.toPx() }
@@ -582,6 +600,7 @@ private fun drawGlassMaterial(
         pressProgress,
         pressLayerActive,
         blurPx,
+        prefilterBlurPx,
         lensHeightPx,
         lensAmountPx,
         pressedLensHeightPx,
@@ -609,6 +628,7 @@ private fun drawGlassMaterial(
                 if (idleSpec.vibrancy) {
                     vibrancy()
                 }
+                if (prefilterBlurPx > 0f) blur(prefilterBlurPx)
                 blur(blurPx)
                 if (lensEnabled) {
                     val progress = pressProgress.value.coerceIn(0f, 1f)

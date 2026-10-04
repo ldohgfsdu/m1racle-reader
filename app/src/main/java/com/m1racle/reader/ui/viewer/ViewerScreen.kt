@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -45,6 +47,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.layout.NestedPrefetchScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
@@ -103,6 +106,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -127,6 +131,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.derivedStateOf
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.m1racle.reader.ui.material.GlassBackdropHost
+import com.m1racle.reader.ui.material.LocalGlassBackdropHost
 import com.m1racle.reader.ui.material.GlassEnvironment
 import com.m1racle.reader.ui.material.LocalGlassEnvironment
 import com.m1racle.reader.ui.theme.LocalReaderDarkTheme
@@ -300,6 +306,7 @@ private fun ViewerSuccessScreen(
     var showSettings by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val density = LocalDensity.current
+    val toolbarHeight = readerTopBarHeight()
     val tableLayoutCache = remember(state.document.id) {
         TableLayoutCache(documentId = state.document.id)
     }
@@ -309,7 +316,7 @@ private fun ViewerSuccessScreen(
         ReaderTopBarScrollState(
             maxHiddenOffsetPx = with(density) {
                 // Placeholder until first composition measures status bars; updated below.
-                (ReaderTopBarHeight).toPx()
+                toolbarHeight.toPx()
             },
             // 8dp reverse noise: still debounces micro-jitter, closer to X re-show latency
             // than the previous 12dp gate (which felt late after full hide).
@@ -320,7 +327,7 @@ private fun ViewerSuccessScreen(
         WindowInsets.statusBars.asPaddingValues().calculateTopPadding().toPx()
     }
     val topChromeMaxPx = with(density) {
-        statusBarTopPx + (ReaderTopBarHeight).toPx()
+        statusBarTopPx + toolbarHeight.toPx()
     }
     // Keep max clamp in sync with inset / density without recreating the state object.
     SideEffect {
@@ -672,12 +679,16 @@ private fun ViewerSuccessScreen(
     ) {
         ViewerScaffold(
             title = title,
+            hasContentBehindBar = {
+                listState.firstVisibleItemIndex > 0 ||
+                    listState.firstVisibleItemScrollOffset > with(density) { 8.dp.roundToPx() }
+            },
             subtitle = {
-                val caption by remember(listState, state.toc, listHeaderCount) {
+                val caption by remember(listState, state.toc, listHeaderCount, title) {
                     derivedStateOf {
                         val chapter = state.toc.activeAt(listState.firstVisibleItemIndex - listHeaderCount)?.title
                         val progress = (readingProgressOf(listState) * 100).toInt()
-                        listOfNotNull(chapter, "$progress%").joinToString(" · ")
+                        com.m1racle.reader.ui.viewer.components.readerPositionCaption(title, chapter, progress)
                     }
                 }
                 Text(caption, style = MaterialTheme.typography.labelSmall,
@@ -895,12 +906,13 @@ private fun ReaderDocumentBody(
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val toolbarHeight = readerTopBarHeight()
     val uriHandler = LocalUriHandler.current
     val contentPadding = readerSettings.contentPaddingLevel.horizontalDp
     // Initial top chrome reservation lives in LazyColumn contentPadding only — never as a
     // fixed outer Box padding — so fully-hidden chrome leaves zero permanent top blank.
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val listTopInset = statusBarTop + ReaderTopBarHeight + 8.dp
+    val listTopInset = statusBarTop + toolbarHeight + 8.dp
     val navBottom = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
@@ -1147,7 +1159,15 @@ private object DisabledLazyListPrefetchStrategy : LazyListPrefetchStrategy {
 }
 
 /** Reader chrome row height only — excludes status bar. */
-private val ReaderTopBarHeight = 56.dp
+@Composable
+private fun readerTopBarHeight(): Dp {
+    val density = LocalDensity.current
+    val subtitleLineHeight = MaterialTheme.typography.labelSmall.lineHeight
+    return with(density) {
+        (ReaderTypography.topBarTitleSize.toDp() + subtitleLineHeight.toDp() + 11.dp)
+            .coerceAtLeast(56.dp)
+    }
+}
 private val ReaderTopBarIconButton = 48.dp
 private val ReaderTopBarIcon = 24.dp
 /** Gap after back button so icon-edge → title ≈ 12dp (12dp internal + 4dp). */
@@ -1190,6 +1210,7 @@ private fun ReaderTopBarRow(
         onDispose { topBarScrollState?.setInteractionPinned(false) }
     }
     val density = LocalDensity.current
+    val toolbarHeight = readerTopBarHeight()
     val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
     val popupMaxWidth = minOf(300.dp, (screenWidthDp - 32.dp).coerceAtLeast(160.dp))
 
@@ -1215,7 +1236,8 @@ private fun ReaderTopBarRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(ReaderTopBarHeight),
+            .padding(horizontal = 8.dp)
+            .height(toolbarHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ReaderTopBarIconButton(
@@ -1233,11 +1255,11 @@ private fun ReaderTopBarRow(
         )
         Spacer(modifier = Modifier.width(ReaderTopBarTitleStartGap))
 
-        // Fixed 48dp title hit-box, vertically centered with IconButtons (not fillMaxHeight).
+        // Title and position scale together; preserve at least a 48dp title hit target.
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(ReaderTopBarIconButton)
+                .height(toolbarHeight - 8.dp)
                 .semantics {
                     role = Role.Button
                     contentDescription = titlePopupCd
@@ -1270,9 +1292,8 @@ private fun ReaderTopBarRow(
 
             if (showTitlePopup) {
                 val yOffsetPx = with(density) {
-                    // Anchor is 48dp title box; bar is 56dp so bottom of bar is
-                    // (56-48)/2 + 48 = 52dp from title box top; +4dp gap → 56dp.
-                    (ReaderTopBarIconButton + 4.dp + 4.dp).roundToPx()
+                    // Anchor stays 4dp below the adaptive title row.
+                    toolbarHeight.roundToPx()
                 }
                 Popup(
                     alignment = Alignment.TopStart,
@@ -1308,20 +1329,36 @@ private fun ReaderTopBarRow(
             }
         }
 
-        ReaderTopBarIconButton(
-            imageVector = Icons.Default.Search,
-            contentDescription = stringResource(R.string.search_open),
-            onClick = { closePopupThen(onOpenSearch) },
-            enabled = searchEnabled,
-            tint = iconTint,
-        )
-        ReaderTopBarIconButton(
-            imageVector = Icons.AutoMirrored.Filled.List,
-            contentDescription = stringResource(if (tocEnabled) R.string.toc_open else R.string.toc_empty),
-            onClick = { closePopupThen(onOpenToc) },
-            enabled = tocEnabled,
-            tint = iconTint,
-        )
+        Spacer(Modifier.width(8.dp))
+        val navigationInteraction = remember { MutableInteractionSource() }
+        val navigationPressed by navigationInteraction.collectIsPressedAsState()
+        Box {
+            // One glass surface for related document navigation; glyphs stay in front.
+            Box(Modifier.matchParentSize().padding(vertical = 4.dp)
+                .glassMaterial(GlassMaterialRole.Control, RoundedCornerShape(20.dp),
+                    pressed = navigationPressed))
+            Row {
+                ReaderTopBarIconButton(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = stringResource(R.string.search_open),
+                    onClick = { closePopupThen(onOpenSearch) },
+                    enabled = searchEnabled,
+                    tint = iconTint,
+                    glassBackground = false,
+                    interactionSource = navigationInteraction,
+                )
+                ReaderTopBarIconButton(
+                    imageVector = Icons.AutoMirrored.Filled.List,
+                    contentDescription = stringResource(if (tocEnabled) R.string.toc_open else R.string.toc_empty),
+                    onClick = { closePopupThen(onOpenToc) },
+                    enabled = tocEnabled,
+                    tint = iconTint,
+                    glassBackground = false,
+                    interactionSource = navigationInteraction,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
         Box {
             ReaderTopBarIconButton(
                 imageVector = Icons.Default.MoreHoriz,
@@ -1377,19 +1414,27 @@ private fun ReaderTopBarIconButton(
     onClick: () -> Unit,
     enabled: Boolean,
     tint: Color,
+    glassBackground: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
 ) {
+    val buttonInteraction = interactionSource ?: remember { MutableInteractionSource() }
+    val pressed by buttonInteraction.collectIsPressedAsState()
     // Explicit 48×48 hit target; icon centered (no per-button top/bottom padding).
     Box(
         modifier = Modifier
             .size(ReaderTopBarIconButton)
             .clickable(
                 enabled = enabled,
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = buttonInteraction,
                 indication = ripple(bounded = true, radius = 24.dp),
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
     ) {
+        if (glassBackground) {
+            Box(Modifier.matchParentSize().padding(4.dp)
+                .glassMaterial(GlassMaterialRole.Control, CircleShape, pressed = pressed))
+        }
         Icon(
             imageVector = imageVector,
             contentDescription = contentDescription,
@@ -1407,6 +1452,7 @@ private fun ReaderTopBarIconButton(
 @Composable
 private fun ViewerScaffold(
     title: String,
+    hasContentBehindBar: () -> Boolean = { false },
     subtitle: @Composable () -> Unit = {},
     onBack: () -> Unit,
     tocEnabled: Boolean,
@@ -1479,6 +1525,7 @@ private fun ViewerScaffold(
 
                 ReaderTopBarOverlay(
                     backdrop = backdrop,
+                    hasContentBehindBar = hasContentBehindBar,
                     title = title,
                     subtitle = subtitle,
                     topBarScrollState = if (activeSearch != null) null else topBarScrollState,
@@ -1509,15 +1556,16 @@ private fun ViewerScaffold(
 }
 
 /**
- * Fixed gradient backdrop with independently fading controls.
+ * Soft scroll edge follows the controls, retaining separation for system status icons.
  *
- * - Backdrop extent and opacity never depend on collapse; only controls fade and move 6dp.
- * - Search replaces the reading row in place (same 56dp) so the body does not jump.
+ * - Backdrop bounds stay fixed; its falloff contracts as the controls disappear.
+ * - Search replaces the reading row in place so the body does not jump.
  * - LazyColumn contentPadding reserves status+bar once; body never reads offset.
  */
 @Composable
 internal fun ReaderTopBarOverlay(
     backdrop: LayerBackdrop,
+    hasContentBehindBar: () -> Boolean = { true },
     title: String,
     subtitle: @Composable () -> Unit = {},
     topBarScrollState: ReaderTopBarScrollState?,
@@ -1540,12 +1588,31 @@ internal fun ReaderTopBarOverlay(
 ) {
     val scrollState = topBarScrollState
     val searching = searchState != null
+    val contentOverlaps by remember(hasContentBehindBar) {
+        derivedStateOf(hasContentBehindBar)
+    }
+    val edgeOpacity = animateFloatAsState(
+        targetValue = if (contentOverlaps) 1f else 0f,
+        animationSpec = tween(180),
+        label = "readerScrollEdgeOverlap",
+    )
     val controlsVisible by remember(scrollState) {
         derivedStateOf { (scrollState?.collapseFraction ?: 0f) < 1f }
     }
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    Box(modifier.height(statusHeight + ReaderTopBarHeight + 24.dp)) {
-        Box(Modifier.fillMaxSize().readerGradient(backdrop))
+    val toolbarHeight = readerTopBarHeight()
+    val host = remember(backdrop) { GlassBackdropHost(backdrop, backdrop) }
+    CompositionLocalProvider(LocalGlassBackdropHost provides host) {
+    Box(modifier.height(statusHeight + toolbarHeight + 48.dp)) {
+        Box(
+            Modifier.fillMaxSize()
+                .graphicsLayer { alpha = edgeOpacity.value }
+                .readerGradient(
+                backdrop,
+                statusBarHeight = statusHeight,
+                controlsVisibility = { 1f - (scrollState?.collapseFraction ?: 0f) },
+            ),
+        )
         if (controlsVisible) Column(
             Modifier.graphicsLayer {
                 val fraction = scrollState?.collapseFraction ?: 0f
@@ -1590,6 +1657,7 @@ internal fun ReaderTopBarOverlay(
                 }
             }
         }
+    }
     }
 }
 

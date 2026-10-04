@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import com.m1racle.reader.data.local.DocumentType
 import com.m1racle.reader.data.repository.DocumentRepository
-import com.m1racle.reader.data.repository.ImportPayloadPolicy
 import com.m1racle.reader.data.repository.ResolvedImportCommitException
 import com.m1racle.reader.data.repository.ResolvedImportRequest
 import com.m1racle.reader.identity.ContentIdentityInput
@@ -111,7 +110,6 @@ open class ExternalDocumentImporter(
                             content = identity.content,
                             canonicalExternalKey = canonicalExternalKey,
                             documentType = documentType,
-                            payloadPolicy = ImportPayloadPolicy.MANAGED_COPY,
                         ),
                         activeDocumentId = activeDocumentId,
                     ),
@@ -150,7 +148,7 @@ open class ExternalDocumentImporter(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: ResolvedImportCommitException.UnsupportedFormat) {
-                CommitOutcome.Failed("教材包超出大小或条目限制")
+                CommitOutcome.Failed("文档超出支持的大小或条目限制")
             } catch (error: Exception) {
                 prepared.importRequest.content.close()
                 CommitOutcome.Failed(error.message ?: "提交失败")

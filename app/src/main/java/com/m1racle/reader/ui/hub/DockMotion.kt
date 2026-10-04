@@ -1,7 +1,6 @@
 package com.m1racle.reader.ui.hub
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -57,7 +56,7 @@ internal fun HubDockMotionProvider(
     LaunchedEffect(selected) { preview.cancel() }
     val position = animateFloatAsState(
         targetValue = preview.position ?: selected.ordinal.toFloat(),
-        animationSpec = if (preview.position != null) tween(0) else M1racleMotion.dockSelection,
+        animationSpec = if (preview.position != null) M1racleMotion.dockPickup else M1racleMotion.dockSelection,
         label = "hubDockSelection",
     )
     val motion = remember(selected, position, preview) { HubDockMotion(selected, position, preview) }

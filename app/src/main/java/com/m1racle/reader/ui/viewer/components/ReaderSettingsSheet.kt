@@ -1,8 +1,8 @@
 package com.m1racle.reader.ui.viewer.components
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -22,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.m1racle.reader.ui.components.PillSegmentedControl
 import com.m1racle.reader.R
 import com.m1racle.reader.data.settings.ContentPaddingLevel
 import com.m1racle.reader.data.settings.ReaderSettings
@@ -58,6 +58,7 @@ fun ReaderSettingsSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .navigationBarsPadding()
                 .padding(bottom = 16.dp),
@@ -70,63 +71,60 @@ fun ReaderSettingsSheet(
             Spacer(modifier = Modifier.height(14.dp))
 
             SettingSectionLabel(stringResource(R.string.reader_settings_font_size))
-            ChipRow {
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_font_small),
-                    selected = near(settings.fontScale, ReaderSettings.FONT_SMALL),
-                    onClick = { onFontScale(ReaderSettings.FONT_SMALL) },
-                )
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_font_default),
-                    selected = near(settings.fontScale, ReaderSettings.FONT_DEFAULT),
-                    onClick = { onFontScale(ReaderSettings.FONT_DEFAULT) },
-                )
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_font_large),
-                    selected = near(settings.fontScale, ReaderSettings.FONT_LARGE),
-                    onClick = { onFontScale(ReaderSettings.FONT_LARGE) },
-                )
-            }
+            PillSegmentedControl(
+                labels = listOf(
+                    stringResource(R.string.reader_settings_font_small),
+                    stringResource(R.string.reader_settings_font_default),
+                    stringResource(R.string.reader_settings_font_large),
+                ),
+                selectedIndex = listOf(near(settings.fontScale, ReaderSettings.FONT_SMALL), near(settings.fontScale, ReaderSettings.FONT_DEFAULT), near(settings.fontScale, ReaderSettings.FONT_LARGE)).indexOf(true),
+                onSelect = { index ->
+                    when (index) {
+                        0 -> onFontScale(ReaderSettings.FONT_SMALL)
+                        1 -> onFontScale(ReaderSettings.FONT_DEFAULT)
+                        2 -> onFontScale(ReaderSettings.FONT_LARGE)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
             SettingSectionLabel(stringResource(R.string.reader_settings_line_height))
-            ChipRow {
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_line_compact),
-                    selected = near(settings.lineHeightScale, ReaderSettings.LINE_COMPACT),
-                    onClick = { onLineHeightScale(ReaderSettings.LINE_COMPACT) },
-                )
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_line_default),
-                    selected = near(settings.lineHeightScale, ReaderSettings.LINE_DEFAULT),
-                    onClick = { onLineHeightScale(ReaderSettings.LINE_DEFAULT) },
-                )
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_line_relaxed),
-                    selected = near(settings.lineHeightScale, ReaderSettings.LINE_RELAXED),
-                    onClick = { onLineHeightScale(ReaderSettings.LINE_RELAXED) },
-                )
-            }
+            PillSegmentedControl(
+                labels = listOf(
+                    stringResource(R.string.reader_settings_line_compact),
+                    stringResource(R.string.reader_settings_line_default),
+                    stringResource(R.string.reader_settings_line_relaxed),
+                ),
+                selectedIndex = listOf(near(settings.lineHeightScale, ReaderSettings.LINE_COMPACT), near(settings.lineHeightScale, ReaderSettings.LINE_DEFAULT), near(settings.lineHeightScale, ReaderSettings.LINE_RELAXED)).indexOf(true),
+                onSelect = { index ->
+                    when (index) {
+                        0 -> onLineHeightScale(ReaderSettings.LINE_COMPACT)
+                        1 -> onLineHeightScale(ReaderSettings.LINE_DEFAULT)
+                        2 -> onLineHeightScale(ReaderSettings.LINE_RELAXED)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
             SettingSectionLabel(stringResource(R.string.reader_settings_padding))
-            ChipRow {
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_padding_compact),
-                    selected = settings.contentPaddingLevel == ContentPaddingLevel.Compact,
-                    onClick = { onPaddingLevel(ContentPaddingLevel.Compact) },
-                )
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_padding_standard),
-                    selected = settings.contentPaddingLevel == ContentPaddingLevel.Standard,
-                    onClick = { onPaddingLevel(ContentPaddingLevel.Standard) },
-                )
-                SettingChip(
-                    label = stringResource(R.string.reader_settings_padding_relaxed),
-                    selected = settings.contentPaddingLevel == ContentPaddingLevel.Relaxed,
-                    onClick = { onPaddingLevel(ContentPaddingLevel.Relaxed) },
-                )
-            }
+            PillSegmentedControl(
+                labels = listOf(
+                    stringResource(R.string.reader_settings_padding_compact),
+                    stringResource(R.string.reader_settings_padding_standard),
+                    stringResource(R.string.reader_settings_padding_relaxed),
+                ),
+                selectedIndex = listOf(settings.contentPaddingLevel == ContentPaddingLevel.Compact, settings.contentPaddingLevel == ContentPaddingLevel.Standard, settings.contentPaddingLevel == ContentPaddingLevel.Relaxed).indexOf(true),
+                onSelect = { index ->
+                    when (index) {
+                        0 -> onPaddingLevel(ContentPaddingLevel.Compact)
+                        1 -> onPaddingLevel(ContentPaddingLevel.Standard)
+                        2 -> onPaddingLevel(ContentPaddingLevel.Relaxed)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Spacer(modifier = Modifier.height(2.dp))
             TextButton(onClick = onReset) {
@@ -146,33 +144,6 @@ private fun SettingSectionLabel(text: String) {
         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Normal),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 6.dp),
-    )
-}
-
-@Composable
-private fun ChipRow(content: @Composable () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        content = { content() },
-    )
-}
-
-@Composable
-private fun SettingChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = {
-            Text(
-                text = label,
-                fontWeight = FontWeight.Normal,
-            )
-        },
     )
 }
 

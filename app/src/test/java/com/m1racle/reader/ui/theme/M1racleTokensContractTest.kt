@@ -13,7 +13,7 @@ class M1racleTokensContractTest {
         val type = DefaultM1racleTypography
         assertEquals(28f, type.display.fontSize.value)
         assertEquals(17f, type.title.fontSize.value)
-        assertEquals(13f, type.section.fontSize.value)
+        assertEquals(15f, type.section.fontSize.value)
         assertEquals(15f, type.body.fontSize.value)
         assertEquals(12f, type.caption.fontSize.value)
         val names = M1racleTypography::class.java.declaredFields

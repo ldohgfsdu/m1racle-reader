@@ -19,7 +19,7 @@ class GlassAuthorityContractTest {
                     assertEquals(1f, spec.foreground.contentAlpha, 0f)
                     assertEquals(spec.foreground.mutedAlpha, spec.contentMutedAlpha, 0f)
                     assertTrue(spec.surfaceColor.alpha in 0f..1f)
-                    val expectLens = role in listOf(GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.Dock, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard) &&
+                    val expectLens = role in listOf(GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.SelectionLens, GlassMaterialRole.Dock, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard) &&
                         cap == GlassCapability.FULL_OPTICAL
                     assertEquals(expectLens, spec.lensEnabled)
                 }
@@ -62,7 +62,11 @@ class GlassAuthorityContractTest {
         val gradient = appSource("ui/viewer/ReaderGradient.kt")
         assertTrue(gradient.contains("GlassMaterialRole.ProgressiveChrome"))
         assertFalse(gradient.contains("0.62f"))
-        assertFalse(gradient.contains("16.dp"))
+        // The 16dp collapsed edge extent is geometry, not a local blur recipe.
+        assertTrue(gradient.contains("spec.blur.toPx()"))
+        assertTrue(gradient.contains("blur(blurPx)"))
+        assertFalse(gradient.contains("blur(16.dp"))
+        assertTrue(gradient.contains("pageColor.copy(alpha = spec.surfaceColor.alpha)"))
 
     }
 

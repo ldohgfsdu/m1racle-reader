@@ -1,6 +1,13 @@
 package com.m1racle.reader.ui.home
 
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
+import com.m1racle.reader.ui.hub.GlassDock
+import com.m1racle.reader.ui.hub.HubDockMotionProvider
+import com.m1racle.reader.ui.hub.HubDestination
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -33,10 +40,23 @@ class HomeViewportUiTest {
             headingCount = 0, documentType = "PDF")
     }
 
-    @Test fun `header remains fixed and list excludes status dock and gesture regions while scrolling`() {
+    @Composable
+    private fun HomeWithDock(uiState: HomeUiState, busy: Boolean, onImport: () -> Unit,
+        onSearch: () -> Unit, onOpen: (DocumentEntity) -> Unit, onDelete: (String) -> Unit,
+        modifier: Modifier = Modifier, statusTop: Dp = 0.dp, navBottom: Dp = 0.dp) {
+        Box(modifier.fillMaxSize()) {
+            HomeContent(uiState, busy, onImport, onSearch, onOpen, onDelete,
+                statusTop = statusTop, navBottom = navBottom)
+            HubDockMotionProvider(HubDestination.HOME) {
+                GlassDock(onSelect = {}, onImportDocument = onImport, importing = busy)
+            }
+        }
+    }
+
+    @Test fun `header stays fixed while the list reaches behind glass and clears the last item`() {
         rule.setContent {
             M1racleReaderTheme {
-                HomeContent(HomeUiState(documents = docs, ready = true), false, {}, {}, {}, {},
+                HomeWithDock(HomeUiState(documents = docs, ready = true), false, {}, {}, {}, {},
                     modifier = Modifier.size(380.dp, 700.dp), statusTop = 32.dp, navBottom = 24.dp)
             }
         }
@@ -45,12 +65,18 @@ class HomeViewportUiTest {
         val scale = rule.density.density
         assertTrue(header.top >= 32f * scale)
         assertTrue(list.top >= header.bottom)
-        assertTrue(list.bottom <= (700f - 24f - 64f - 12f - 8f) * scale)
+        assertEquals("list must draw through the gesture area", 700f * scale, list.bottom, 1f)
+        val dock = rule.onNodeWithTag("dock-selection", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("list=$list dock=$dock", list.bottom > dock.top)
         rule.onNodeWithTag("home-list").performScrollToIndex(20)
         assertEquals(header, rule.onNodeWithTag("home-header").fetchSemanticsNode().boundsInRoot)
         assertEquals(list, rule.onNodeWithTag("home-list").fetchSemanticsNode().boundsInRoot)
         rule.onNodeWithContentDescription("搜索文档与标注").assertIsDisplayed()
         rule.onNodeWithContentDescription("导入文件").assertIsDisplayed()
+        rule.onNodeWithTag("home-list").performScrollToIndex(30)
+        val last = rule.onNodeWithText("document-30").fetchSemanticsNode().boundsInRoot
+        assertTrue("last=$last dock=$dock", last.bottom < dock.top)
     }
 
     @Test fun `fixed import action is disabled while busy and available again afterwards`() {
@@ -58,7 +84,7 @@ class HomeViewportUiTest {
         var imports = 0
         rule.setContent {
             M1racleReaderTheme {
-                HomeContent(HomeUiState(ready = true, isEmpty = true), busy.value,
+                HomeWithDock(HomeUiState(ready = true, isEmpty = true), busy.value,
                     { imports++ }, {}, {}, {})
             }
         }
@@ -75,7 +101,7 @@ class HomeViewportUiTest {
         var imports = 0
         rule.setContent {
             M1racleReaderTheme {
-                HomeContent(HomeUiState(ready = true, isEmpty = true), busy.value,
+                HomeWithDock(HomeUiState(ready = true, isEmpty = true), busy.value,
                     { imports++; busy.value = true }, {}, {}, {})
             }
         }
@@ -92,7 +118,7 @@ class HomeViewportUiTest {
             val density = LocalDensity.current.density
             CompositionLocalProvider(LocalDensity provides Density(density, fontScale = 2f)) {
                 M1racleReaderTheme {
-                    HomeContent(HomeUiState(ready = true, isEmpty = true), false,
+                    HomeWithDock(HomeUiState(ready = true, isEmpty = true), false,
                         { imports++ }, {}, {}, {}, modifier = Modifier.size(380.dp, 320.dp),
                         statusTop = 24.dp, navBottom = 24.dp)
                 }

@@ -27,7 +27,7 @@ class ReaderChromeTokensContractTest {
 
     @Test
     fun `every product role has a complete bounded recipe`() {
-        assertEquals(8, GlassMaterialRole.entries.size)
+        assertEquals(9, GlassMaterialRole.entries.size)
         assertFalse(GlassMaterialRole.entries.any { it.name.startsWith("Preview") })
         GlassMaterialRole.entries.forEach { role ->
             listOf(false, true).forEach { dark ->
@@ -35,14 +35,22 @@ class ReaderChromeTokensContractTest {
                 assertTrue(spec.surfaceColor.alpha in 0f..1f)
                 assertEquals(1f, spec.foreground.contentAlpha, 0f)
                 assertEquals(spec.contentMutedAlpha, spec.foreground.mutedAlpha, 0f)
-                if (role == GlassMaterialRole.Dock) {
-                    assertEquals("dock uses liquid blur", 4f, spec.blur.value, 0f)
-                } else {
-                    assertTrue(spec.blur.value > 0f)
+                val expectedBlur = when (role) {
+                    GlassMaterialRole.Dock -> 8f
+                    GlassMaterialRole.SelectionLens -> 0f
+                    GlassMaterialRole.ExpandedMenu -> 24f
+                    GlassMaterialRole.Dialog -> 18f
+                    GlassMaterialRole.ProgressiveChrome -> 16f
+                    else -> 4f
                 }
-                if (role != GlassMaterialRole.ProgressiveChrome) {
-                    assertTrue("$role shadow", spec.shadow.value > 0f)
+                assertEquals("$role blur", expectedBlur, spec.blur.value, 0f)
+                val expectedShadow = when (role) {
+                    GlassMaterialRole.Dock -> 10f
+                    GlassMaterialRole.SelectionLens, GlassMaterialRole.ProgressiveChrome -> 0f
+                    GlassMaterialRole.Dialog -> 18f
+                    else -> 8f
                 }
+                assertEquals("$role shadow", expectedShadow, spec.shadow.value, 0f)
                 val expectedHighlightW = when (role) {
                     GlassMaterialRole.Dialog -> 0.5f
                     GlassMaterialRole.ProgressiveChrome -> 0f
@@ -50,6 +58,7 @@ class ReaderChromeTokensContractTest {
                 }
                 assertEquals(expectedHighlightW, spec.highlightWidth.value, 0.001f)
                 val expectedHighlightA = when (role) {
+                    GlassMaterialRole.SelectionLens -> 0f
                     GlassMaterialRole.Dialog -> if (dark) 0.38f else 0.30f
 
                     GlassMaterialRole.ProgressiveChrome -> 0f
