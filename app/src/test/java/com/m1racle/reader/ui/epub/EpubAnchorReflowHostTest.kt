@@ -17,6 +17,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.percentOffset
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,8 @@ import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import com.m1racle.reader.epub.EpubRestoreSession
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -241,5 +245,70 @@ class EpubAnchorReflowHostTest {
         assertEquals(label, pageLabel())
         rule.onNodeWithText(firstWord, substring = true).assertIsDisplayed()
         assertEquals(migrated.anchor, emitted.first().anchor)
+    }
+
+    @Test fun `fallback keeps original anchor through font changes until an explicit page turn`() {
+        val original = DocumentAnchor.EpubText("one.xhtml", 999, 0, parserVersion = 0,
+            quote = "这段文字已经消失并且不会匹配到书中内容")
+        val initial = EpubSavedPosition(original, 0, 0, 0f)
+        val session = EpubRestoreSession(EpubReadingAnchors.restore(book, initial))
+        val settings = mutableStateOf(ReaderSettings())
+        val emitted = mutableListOf<EpubPosition>()
+        var persisted = original
+        rule.setContent {
+            M1racleReaderTheme {
+                EpubReaderContent(book, settings.value, "测试书", initial,
+                    onPosition = {
+                        emitted += it
+                        if (it.canSaveAnchor) persisted = it.anchor
+                    }, onFlush = {}, onBack = {}, onSettings = {},
+                    modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0),
+                    restoreSession = session)
+            }
+        }
+        waitForPages()
+        rule.onNodeWithText("没能精确回到上次的位置，已跳到附近").assertIsDisplayed()
+        assertTrue(emitted.isNotEmpty())
+        assertTrue(emitted.all { !it.canSaveAnchor })
+        assertEquals(original, persisted)
+        val beforeReflow = emitted.size
+        rule.runOnIdle { settings.value = ReaderSettings(fontScale = ReaderSettings.FONT_LARGE) }
+        rule.waitUntil(15_000) { emitted.size > beforeReflow }
+        waitForPages()
+        assertTrue(session.preservesOriginalAnchor)
+        assertTrue(emitted.all { !it.canSaveAnchor })
+        assertEquals(original, persisted)
+        rule.onNodeWithTag("epub-pager").performTouchInput { click(percentOffset(0.88f, 0.5f)) }
+        rule.waitForIdle()
+        assertFalse(session.preservesOriginalAnchor)
+        assertTrue(emitted.last().canSaveAnchor)
+        assertNotEquals(original, persisted)
+    }
+
+    @Test fun `prefix restore stays silent and a user swipe releases anchor protection`() {
+        val original = requireNotNull(EpubReadingAnchors.anchorAt(book,
+            com.m1racle.reader.epub.EpubLocation(0, 0, 0))).let {
+            it.copy(quote = it.quote.take(12) + "old suffix")
+        }
+        val initial = EpubSavedPosition(original, 0, 0, 0f)
+        val session = EpubRestoreSession(EpubReadingAnchors.restore(book, initial))
+        assertEquals(EpubRestoreTier.QuotePrefix, session.result.tier)
+        val emitted = mutableListOf<EpubPosition>()
+        rule.setContent {
+            M1racleReaderTheme {
+                EpubReaderContent(book, ReaderSettings(), "测试书", initial,
+                    onPosition = { emitted += it }, onFlush = {}, onBack = {}, onSettings = {},
+                    modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0),
+                    restoreSession = session)
+            }
+        }
+        waitForPages()
+        assertTrue(emitted.isNotEmpty())
+        assertTrue(emitted.all { !it.canSaveAnchor })
+        rule.onNodeWithText("没能精确回到上次的位置，已跳到附近").assertDoesNotExist()
+        rule.onNodeWithTag("epub-pager").performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        assertFalse(session.preservesOriginalAnchor)
+        assertTrue(emitted.last().canSaveAnchor)
     }
 }
