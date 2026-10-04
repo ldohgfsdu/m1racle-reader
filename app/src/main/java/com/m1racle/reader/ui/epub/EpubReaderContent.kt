@@ -102,6 +102,7 @@ internal fun EpubReaderContent(
 ) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val snackbarHost = remember { SnackbarHostState() }
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
@@ -167,6 +168,11 @@ internal fun EpubReaderContent(
         }
     }
     val ready = layout
+    LaunchedEffect(ready, restoreSession) {
+        if (ready != null && ready.pages.isNotEmpty() && restoreSession.takeDegradedNotice()) {
+            snackbarHost.showSnackbar("没能精确回到上次的位置，已跳到附近")
+        }
+    }
     // Resolved once per layout; the drawer only does a map lookup per row.
     val tocPages = remember(ready) { ready?.let { epubTocPages(book, it) } ?: emptyMap() }
     val pager = rememberPagerState { (ready?.pages?.size ?: 1).coerceAtLeast(1) }
@@ -363,6 +369,7 @@ internal fun EpubReaderContent(
                             onToc = { scope.launch { drawer.open() } }, onSettings = onSettings)
                     }
                 }
+                SnackbarHost(snackbarHost, Modifier.align(Alignment.BottomCenter).padding(bottom = footerClearance))
             }
         }
     }

@@ -39,4 +39,16 @@ class EpubRestoreSessionTest {
             assertEquals(nearby, EpubRestoreSession(EpubRestoreResult(it)).anchorForSave(nearby))
         }
     }
+
+    @Test fun `fallback notice is shown once per opening and prefix matches stay silent`() {
+        EpubRestoreTier.entries.forEach { tier ->
+            val session = EpubRestoreSession(EpubRestoreResult(tier))
+            val fallback = tier == EpubRestoreTier.ChapterStart || tier == EpubRestoreTier.Progress
+            assertEquals(fallback, session.takeDegradedNotice())
+            assertFalse(session.takeDegradedNotice())
+            session.onUserNavigation()
+            assertFalse(session.takeDegradedNotice())
+            assertEquals(fallback, EpubRestoreSession(EpubRestoreResult(tier)).takeDegradedNotice())
+        }
+    }
 }
