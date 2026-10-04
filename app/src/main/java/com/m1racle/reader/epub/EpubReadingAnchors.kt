@@ -7,7 +7,7 @@ import com.m1racle.reader.data.local.DocumentEntity
 /** Characters of normalized source text stored with an anchor for relocation. */
 const val EPUB_QUOTE_CHARS = 32
 
-/** Leading quote characters that must still match for a block number to be trusted. */
+/** Leading quote characters used by the second text matching round. */
 const val EPUB_QUOTE_VERIFY_CHARS = 12
 
 /** Raw characters scanned to build a quote; whitespace runs collapse, so allow slack. */
@@ -43,6 +43,9 @@ enum class EpubRestoreTier {
     /** Block number untrusted; the quote was found in the same chapter (nearest occurrence). */
     Quote,
 
+    /** Full quote missing; its first 12 characters were found in the same chapter. */
+    QuotePrefix,
+
     /** Neither held: degraded to the chapter start (logged), never the book start. */
     ChapterStart,
 
@@ -59,7 +62,7 @@ enum class EpubRestoreTier {
 /** Result of [EpubReadingAnchors.restore]; exactly the field matching [tier] is set. */
 data class EpubRestoreResult(
     val tier: EpubRestoreTier,
-    /** Set for [EpubRestoreTier.Exact], [EpubRestoreTier.Quote], [EpubRestoreTier.ChapterStart]. */
+    /** Set for text matches and chapter-start fallback. */
     val location: EpubLocation? = null,
     /** Set for [EpubRestoreTier.Progress]: 0f..1f of the whole reading order. */
     val progress: Float? = null,
@@ -129,7 +132,7 @@ object EpubReadingAnchors {
         if (block != null && anchor.parserVersion == EpubXhtmlParser.BLOCK_RULES_VERSION) {
             val text = block.readingText()
             if (anchor.charStart <= text.length &&
-                epubQuoteAt(text, anchor.charStart).startsWith(anchor.quote.take(EPUB_QUOTE_VERIFY_CHARS))
+                epubQuoteAt(text, anchor.charStart) == anchor.quote
             ) {
                 return EpubRestoreResult(
                     EpubRestoreTier.Exact,
@@ -137,14 +140,16 @@ object EpubReadingAnchors {
                 )
             }
         }
-        findQuote(chapter, anchor)?.let { (blockIndex, offset) ->
+        findQuote(chapter, anchor, anchor.quote)?.let { (blockIndex, offset) ->
             return EpubRestoreResult(EpubRestoreTier.Quote, location = EpubLocation(chapter.spineIndex, blockIndex, offset))
+        }
+        findQuote(chapter, anchor, anchor.quote.take(EPUB_QUOTE_VERIFY_CHARS))?.let { (blockIndex, offset) ->
+            return EpubRestoreResult(EpubRestoreTier.QuotePrefix, location = EpubLocation(chapter.spineIndex, blockIndex, offset))
         }
         return EpubRestoreResult(EpubRestoreTier.ChapterStart, location = EpubLocation(chapter.spineIndex, 0, 0))
     }
 
-    private fun findQuote(chapter: EpubChapter, anchor: DocumentAnchor.EpubText): Pair<Int, Int>? {
-        val quote = anchor.quote
+    private fun findQuote(chapter: EpubChapter, anchor: DocumentAnchor.EpubText, quote: String): Pair<Int, Int>? {
         if (quote.isBlank()) return null
         var best: Pair<Int, Int>? = null
         var bestScore = Long.MAX_VALUE

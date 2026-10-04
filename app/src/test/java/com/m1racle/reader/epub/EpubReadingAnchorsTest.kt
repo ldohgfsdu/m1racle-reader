@@ -125,6 +125,37 @@ class EpubReadingAnchorsTest {
         assertTrue(expected.degraded)
     }
 
+    @Test fun `changed quote suffix is a second round match even at the original offset`() {
+        val original = EpubReadingAnchors.anchorAt(book(), EpubLocation(2, 6, 0))!!
+        val changed = original.copy(quote = original.quote.take(12) + "原来的后半句")
+        val result = EpubReadingAnchors.restore(book(), saved(changed))
+        assertEquals(EpubRestoreTier.QuotePrefix, result.tier)
+        assertEquals(EpubLocation(2, 6, 0), result.location)
+        assertFalse(result.degraded)
+    }
+
+    @Test fun `second round duplicates select nearest block then nearest raw offset`() {
+        val prefix = "abcdefghijkl"
+        val c2 = chapter2.copy(blocks = listOf(
+            p(prefix + "changed"),
+            p("x".repeat(10) + prefix + "changed " + prefix + "changed"),
+            p(prefix + "changed"),
+        ))
+        val anchor = DocumentAnchor.EpubText(c2.href, 1, 28, parserVersion = 0, quote = prefix + "old suffix")
+        val result = EpubReadingAnchors.restore(book(c2 = c2), saved(anchor))
+        assertEquals(EpubRestoreTier.QuotePrefix, result.tier)
+        assertEquals(EpubLocation(2, 1, 30), result.location)
+    }
+
+    @Test fun `full quote match takes precedence over closer prefix match`() {
+        val quote = "abcdefghijkloriginal"
+        val c2 = chapter2.copy(blocks = listOf(p("abcdefghijklchanged"), p(quote)))
+        val anchor = DocumentAnchor.EpubText(c2.href, 0, 0, parserVersion = 0, quote = quote)
+        val result = EpubReadingAnchors.restore(book(c2 = c2), saved(anchor))
+        assertEquals(EpubRestoreTier.Quote, result.tier)
+        assertEquals(EpubLocation(2, 1, 0), result.location)
+    }
+
     @Test fun `a missing or non linear chapter falls back to the saved progress`() {
         val book = book()
         val anchor = EpubReadingAnchors.anchorAt(book, EpubLocation(2, 1, 0))!!
