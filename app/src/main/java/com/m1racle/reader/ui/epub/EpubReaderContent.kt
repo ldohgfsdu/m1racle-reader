@@ -168,8 +168,9 @@ internal fun EpubReaderContent(
         }
     }
     val ready = layout
-    LaunchedEffect(ready, restoreSession) {
-        if (ready != null && ready.pages.isNotEmpty() && restoreSession.takeDegradedNotice()) {
+    LaunchedEffect(restoreSession) {
+        snapshotFlow { layout }.first { it != null && it.pages.isNotEmpty() }
+        if (restoreSession.takeDegradedNotice()) {
             snackbarHost.showSnackbar("没能精确回到上次的位置，已跳到附近")
         }
     }
