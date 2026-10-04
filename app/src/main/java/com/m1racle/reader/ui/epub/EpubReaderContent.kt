@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -55,6 +56,7 @@ import com.m1racle.reader.epub.EpubTocNode
 import com.m1racle.reader.epub.EpubReadingAnchors
 import com.m1racle.reader.epub.EpubRestoreTier
 import com.m1racle.reader.epub.EpubSavedPosition
+import com.m1racle.reader.epub.EpubRestoreSession
 import com.m1racle.reader.image.LocalImageLoader
 import com.m1racle.reader.image.LocalImageState
 import com.m1racle.reader.ui.material.GlassBackdropHost
@@ -94,6 +96,9 @@ internal fun EpubReaderContent(
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     insets: WindowInsets = WindowInsets.safeDrawing,
+    restoreSession: EpubRestoreSession = remember(book, initial) {
+        EpubRestoreSession(EpubReadingAnchors.restore(book, initial))
+    },
 ) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -165,10 +170,34 @@ internal fun EpubReaderContent(
     // Resolved once per layout; the drawer only does a map lookup per row.
     val tocPages = remember(ready) { ready?.let { epubTocPages(book, it) } ?: emptyMap() }
     val pager = rememberPagerState { (ready?.pages?.size ?: 1).coerceAtLeast(1) }
+    var dragStartPage by remember(pager) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(pager) {
+        pager.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) dragStartPage = pager.settledPage
+        }
+    }
+    fun navigateTo(page: Int, animated: Boolean) {
+        val currentLayout = ready ?: return
+        if (page !in currentLayout.pages.indices) return
+        // Even selecting the current TOC page is deliberate navigation.
+        restoreSession.onUserNavigation()
+        val position = currentLayout.positionAt(currentLayout.pages[page].slices.first())
+        if (page == pager.settledPage) {
+            anchorRow = position.first
+            anchorText = position.third
+            anchors?.anchorAt(anchorRow, anchorText)?.let {
+                val progress = if (currentLayout.pages.size <= 1) 1f else page.toFloat() / currentLayout.pages.lastIndex
+                currentPosition(EpubPosition(it, position.first, position.second, progress))
+            }
+        }
+        if (animated) turnTo(pager, page, scope)
+        else scope.launch { pager.scrollToPage(page) }
+    }
     LaunchedEffect(pager, ready) {
         val pages = ready?.pages ?: return@LaunchedEffect
         val anchors = anchors ?: return@LaunchedEffect
         if (pages.isEmpty()) return@LaunchedEffect
+        dragStartPage = null
         // Finish restoring against the new layout before observing/persisting
         // its page numbers. An old page number has no meaning after reflow.
         snapshotFlow { pager.isScrollInProgress }.first { !it }
@@ -192,6 +221,10 @@ internal fun EpubReaderContent(
             // Keep that character until a real page turn; rounding to the new
             // page's first line here made repeated font changes drift backwards.
             if (index != lastSettled || anchorText < 0) {
+                if (index != lastSettled && dragStartPage != null && dragStartPage != index) {
+                    restoreSession.onUserNavigation()
+                    dragStartPage = null
+                }
                 if (index != lastSettled) chromeVisible = false
                 anchorRow = position.first
                 anchorText = position.third
@@ -201,7 +234,8 @@ internal fun EpubReaderContent(
             val anchor = anchors.anchorAt(anchorRow, anchorText)
                 ?: anchors.anchorAt(position.first, position.third)
                 ?: return@collect
-            currentPosition(EpubPosition(anchor, position.first, position.second, progress))
+            currentPosition(EpubPosition(anchor, position.first, position.second, progress,
+                canSaveAnchor = restoreSession.anchorForSave(anchor) != null))
         }
     }
     ModalNavigationDrawer(
@@ -211,7 +245,7 @@ internal fun EpubReaderContent(
         gesturesEnabled = drawer.isOpen,
         drawerContent = {
             EpubTocDrawer(title, book.toc, tocPages,
-                onSelect = { page -> scope.launch { pager.scrollToPage(page); drawer.close() } },
+                onSelect = { page -> navigateTo(page, animated = false); scope.launch { drawer.close() } },
                 onClose = { scope.launch { drawer.close() } }, insets = insets)
         },
     ) {
@@ -273,11 +307,11 @@ internal fun EpubReaderContent(
                                     when (tap) {
                                         EpubPageTap.Previous -> {
                                             chromeVisible = false
-                                            turnTo(pager, pager.currentPage - 1, scope)
+                                            navigateTo(pager.currentPage - 1, animated = true)
                                         }
                                         EpubPageTap.Next -> {
                                             chromeVisible = false
-                                            turnTo(pager, pager.currentPage + 1, scope)
+                                            navigateTo(pager.currentPage + 1, animated = true)
                                         }
                                         EpubPageTap.ToggleChrome -> chromeVisible = !chromeVisible
                                     }

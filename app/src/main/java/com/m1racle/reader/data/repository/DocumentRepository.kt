@@ -860,12 +860,20 @@ class DocumentRepository(
      */
     suspend fun updateEpubReadingPosition(
         id: String,
-        anchor: com.m1racle.reader.data.anchor.DocumentAnchor.EpubText,
+        anchor: com.m1racle.reader.data.anchor.DocumentAnchor.EpubText?,
         lastScrollIndex: Int,
         lastScrollOffset: Int,
         readingProgress: Float,
     ) {
         withContext(Dispatchers.IO) {
+            if (anchor == null) {
+                // Omit readingAnchor entirely: retain the original stored value.
+                documentDao.updateReadingPosition(
+                    id, lastScrollIndex.coerceAtLeast(0), lastScrollOffset.coerceAtLeast(0),
+                    readingProgress.coerceIn(0f, 1f),
+                )
+                return@withContext
+            }
             documentDao.updateEpubReadingPosition(
                 id = id,
                 lastScrollIndex = lastScrollIndex.coerceAtLeast(0),

@@ -16,6 +16,7 @@ internal data class EpubPosition(
     val sourceRow: Int,
     val pixelOffset: Int,
     val progress: Float,
+    val canSaveAnchor: Boolean = true,
 ) {
     fun saved() = EpubSavedPosition(anchor, sourceRow, pixelOffset, progress)
 }

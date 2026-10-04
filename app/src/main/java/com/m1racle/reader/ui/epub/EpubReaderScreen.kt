@@ -65,6 +65,7 @@ fun EpubReaderScreen(
                     onBack = onBack,
                     onSettings = { showSettings = true },
                     modifier = modifier,
+                    restoreSession = requireNotNull(viewModel.restoreSession),
                 )
                 if (showSettings) ReaderSettingsSheet(
                     settings = readySettings,

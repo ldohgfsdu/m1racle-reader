@@ -33,6 +33,9 @@ class EpubReaderViewModel(
     private val _uiState = MutableStateFlow<EpubUiState>(EpubUiState.Loading)
     val uiState: StateFlow<EpubUiState> = _uiState.asStateFlow()
 
+    internal var restoreSession: com.m1racle.reader.epub.EpubRestoreSession? = null
+        private set
+
     val readerSettings = readerSettingsRepository.settingsFlow.map<ReaderSettings, ReaderSettings?> { it }.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5_000),
         null,
@@ -81,7 +84,7 @@ class EpubReaderViewModel(
     private val positionSaver = ReadingPositionSaver<EpubPosition>(viewModelScope) { position ->
         repository.updateEpubReadingPosition(
             id = documentId,
-            anchor = position.anchor,
+            anchor = position.anchor.takeIf { position.canSaveAnchor },
             lastScrollIndex = position.sourceRow,
             lastScrollOffset = position.pixelOffset,
             readingProgress = position.progress,
@@ -105,8 +108,12 @@ class EpubReaderViewModel(
                     return@launch
                 }
                 val book = repository.openEpubBook(documentId)
+                val document = repository.getDocumentById(documentId) ?: entity
+                restoreSession = com.m1racle.reader.epub.EpubRestoreSession(
+                    com.m1racle.reader.epub.EpubReadingAnchors.restore(book, document),
+                )
                 _uiState.value = EpubUiState.Success(
-                    document = repository.getDocumentById(documentId) ?: entity,
+                    document = document,
                     book = book,
                 )
             } catch (e: EpubException) {
