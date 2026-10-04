@@ -26,6 +26,17 @@ class ReleaseHygieneHostTest {
     }
 
     @Test
+    fun glassLab_onlyEnabledOnDebugAndQaBuildTypes() {
+        // defaultConfig and release are false; debug and qa opt in (release check: src/testRelease).
+        val expected = BuildConfig.BUILD_TYPE == "debug" || BuildConfig.BUILD_TYPE == "qa"
+        assertEquals(
+            "Glass Lab must be enabled only for buildType debug / qa",
+            expected,
+            BuildConfig.GLASS_LAB_ENABLED,
+        )
+    }
+
+    @Test
     fun noInternetPermission_inMainManifest() {
         val manifest = File("src/main/AndroidManifest.xml").takeIf { it.isFile }
             ?: File("app/src/main/AndroidManifest.xml")

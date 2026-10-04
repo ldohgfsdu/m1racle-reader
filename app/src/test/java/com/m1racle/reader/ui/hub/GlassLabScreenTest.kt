@@ -55,4 +55,11 @@ class GlassLabScreenTest {
         rule.onNodeWithText("液态玻璃工作台").performScrollTo().performClick()
         assertTrue(opened)
     }
+
+    @Test fun settingsEntryOmittedWhenBuildHasNoGlassLab() {
+        // Release passes null (BuildConfig.GLASS_LAB_ENABLED == false): no entry is composed.
+        rule.setContent {M1racleReaderTheme {HubSettingsScreen({}, null)}}
+        rule.onNodeWithText("材质对比").performScrollTo().assertExists()
+        rule.onNodeWithText("液态玻璃工作台").assertDoesNotExist()
+    }
 }

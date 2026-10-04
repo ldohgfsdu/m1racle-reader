@@ -27,11 +27,14 @@ import com.m1racle.reader.BuildConfig
 import com.m1racle.reader.R
 import com.m1racle.reader.ui.home.HomeDesignTokens
 
-/** Read-only guidance stays visibly distinct from actionable settings. */
+/**
+ * Read-only guidance stays visibly distinct from actionable settings.
+ * [onOpenGlassLab] is null when the build has no Glass Lab (release); the entry is then omitted.
+ */
 @Composable
 fun HubSettingsScreen(
     onNavigateHub: (HubDestination) -> Unit,
-    onOpenGlassLab: () -> Unit,
+    onOpenGlassLab: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     var comparingMaterials by rememberSaveable { mutableStateOf(false) }
@@ -91,16 +94,18 @@ fun HubSettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                Surface(onClick = onOpenGlassLab, shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                    Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                        Text(stringResource(R.string.glass_lab_title),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
-                        Spacer(Modifier.height(8.dp))
-                        Text(stringResource(R.string.glass_lab_entry_hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (onOpenGlassLab != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Surface(onClick = onOpenGlassLab, shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                            Text(stringResource(R.string.glass_lab_title),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
+                            Spacer(Modifier.height(8.dp))
+                            Text(stringResource(R.string.glass_lab_entry_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
                 Spacer(Modifier.height(24.dp))

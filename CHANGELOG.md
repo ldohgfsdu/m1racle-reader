@@ -2,6 +2,7 @@
 
 ## Unreleased — v1.0.0 signed acceptance build (versionCode 32)
 
+- “液态玻璃工作台”（Glass Lab）只在 debug / QA 构建中提供：正式版（release）的设置页不再显示入口，也不注册 `settings/glass-workbench` 路由；由构建开关 `BuildConfig.GLASS_LAB_ENABLED` 控制（debug=true、qa=true、release=false）。
 - EPUB 阅读位置改为与排版无关的文本锚点（章节文件 + 章内段落 + 段内字符偏移 + 原文片段）：换字体、字号、行距、页边距或屏幕尺寸后冷启动，仍回到同一段文字；前面章节的解析变化不再让后面章节的进度错位。锚点失效时先在本章按原文片段找回，找不到落到本章开头并记录日志，不会跳回全书第 1 页；章节不存在（书被替换）时按原百分比进度恢复。数据库升级到 v15（`documents.readingAnchor`、`bookmarks.anchor` 两个可空列，原有数据不变）。
 - 旧版本保存的 EPUB 进度会在升级后第一次打开该书时一次性转换为文本锚点。转换基于旧的“段落 + 像素偏移”记录按当前排版计算，旧记录本身的像素误差会被带入，属于尽力迁移：位置可能与上次阅读处相差几行至一页；之后的保存与恢复都以新锚点为准。
 

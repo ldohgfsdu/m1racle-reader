@@ -11,6 +11,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.m1racle.reader.BuildConfig
 import com.m1racle.reader.R
 import com.m1racle.reader.ui.home.HomeEvent
 import com.m1racle.reader.ui.home.HomeDesignTokens
@@ -303,15 +304,22 @@ fun M1racleReaderNavGraph(
 
                     composable(Routes.SETTINGS, enterTransition = hubEnter, exitTransition = hubExit) {
                         HubSettingsScreen(
-                            onOpenGlassLab = { navController.navigate(Routes.GLASS_LAB) { launchSingleTop = true } },
+                            onOpenGlassLab = if (BuildConfig.GLASS_LAB_ENABLED) {
+                                { navController.navigate(Routes.GLASS_LAB) { launchSingleTop = true } }
+                            } else {
+                                null
+                            },
                             onNavigateHub = { destination ->
                                 navController.navigateToHub(destination)
                             },
                         )
                     }
 
-                    composable(Routes.GLASS_LAB) {
-                        GlassLabScreen(onBack = { navController.popBackStack() })
+                    // Release builds do not register the destination at all.
+                    if (BuildConfig.GLASS_LAB_ENABLED) {
+                        composable(Routes.GLASS_LAB) {
+                            GlassLabScreen(onBack = { navController.popBackStack() })
+                        }
                     }
 
                     composable(

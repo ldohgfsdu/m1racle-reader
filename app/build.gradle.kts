@@ -83,6 +83,8 @@ android {
         buildConfigField("float", "DETAIL_TILE_OVERLAY_ALPHA", "${detailTileOverlayAlpha}f")
         // Disabled for every normal build; the qa build type overrides this below.
         buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "false")
+        // Glass Lab workbench (Settings entry + route). Off unless a build type enables it.
+        buildConfigField("boolean", "GLASS_LAB_ENABLED", "false")
     }
 
     // Public signing: AGP applies zipalign and APK Signature Scheme signing.
@@ -102,6 +104,9 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            buildConfigField("boolean", "GLASS_LAB_ENABLED", "true")
+        }
         create("qa") {
             initWith(getByName("debug"))
             matchingFallbacks += listOf("debug")
@@ -109,6 +114,8 @@ android {
             versionNameSuffix = "-qa"
             isDebuggable = true
             buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "true")
+            // QA keeps Glass Lab for internal acceptance; flip to "false" to hide it in QA too.
+            buildConfigField("boolean", "GLASS_LAB_ENABLED", "true")
             manifestPlaceholders["appLabel"] = "M1racle Reader QA"
         }
         release {
@@ -121,6 +128,8 @@ android {
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.getByName("release")
+            // Public release never ships Glass Lab (no Settings entry, no route).
+            buildConfigField("boolean", "GLASS_LAB_ENABLED", "false")
         }
         // Non-debuggable release-like build for Macrobenchmark / FrameTiming on device.
         create("benchmark") {
