@@ -70,8 +70,12 @@ data class EpubRestoreResult(
     val legacyRow: Int? = null,
     val legacyPixelOffset: Int? = null,
 ) {
-    /** True when the stored position could not be used as-is and the reader should log it. */
+    /** Protect the original anchor until the user navigates after a non-exact restore. */
     val degraded: Boolean
+        get() = tier == EpubRestoreTier.Quote || tier == EpubRestoreTier.QuotePrefix || needsDegradedNotice
+
+    /** Only the chapter/progress fallback needs a visible notice; prefix matches stay silent. */
+    val needsDegradedNotice: Boolean
         get() = tier == EpubRestoreTier.ChapterStart || tier == EpubRestoreTier.Progress
 }
 
@@ -101,7 +105,7 @@ object EpubReadingAnchors {
     }
 
     /**
-     * Restore order: exact anchor -> nearest quote in the chapter -> chapter start
+     * Restore order: exact anchor -> nearest full quote -> nearest 12-char prefix -> chapter start
      * -> saved progress when the chapter is gone. A record without an anchor is a
      * pre-anchor record (legacy row/pixel) unless it is at the very start.
      */
@@ -125,7 +129,7 @@ object EpubReadingAnchors {
     fun restore(book: EpubBook, document: DocumentEntity): EpubRestoreResult =
         restore(book, EpubSavedPosition.of(document))
 
-    /** Exact, Quote or ChapterStart; null only when the anchored chapter is not readable. */
+    /** Text match or ChapterStart; null only when the anchored chapter is not readable. */
     fun resolve(book: EpubBook, anchor: DocumentAnchor.EpubText): EpubRestoreResult? {
         val chapter = book.readingOrder.firstOrNull { it.href == anchor.spineHref } ?: return null
         val block = chapter.blocks.getOrNull(anchor.blockIndex)

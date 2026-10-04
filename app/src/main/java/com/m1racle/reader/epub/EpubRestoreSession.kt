@@ -8,15 +8,12 @@ class EpubRestoreSession(val result: EpubRestoreResult) {
 
     /** Claim before showing so rotation or another layout cannot repeat the notice. */
     fun takeDegradedNotice(): Boolean {
-        if (!result.degraded || noticeConsumed) return false
+        if (!result.needsDegradedNotice || noticeConsumed) return false
         noticeConsumed = true
         return true
     }
 
-    var preservesOriginalAnchor: Boolean = when (result.tier) {
-        EpubRestoreTier.Exact, EpubRestoreTier.LegacyPosition, EpubRestoreTier.BookStart -> false
-        else -> true
-    }
+    var preservesOriginalAnchor: Boolean = result.degraded
         private set
 
     /** Called only by explicit page turns, progress seeks or table-of-contents jumps. */

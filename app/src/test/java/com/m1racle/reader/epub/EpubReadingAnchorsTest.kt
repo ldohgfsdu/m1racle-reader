@@ -131,7 +131,8 @@ class EpubReadingAnchorsTest {
         val result = EpubReadingAnchors.restore(book(), saved(changed))
         assertEquals(EpubRestoreTier.QuotePrefix, result.tier)
         assertEquals(EpubLocation(2, 6, 0), result.location)
-        assertFalse(result.degraded)
+        assertTrue(result.degraded)
+        assertFalse(result.needsDegradedNotice)
     }
 
     @Test fun `second round duplicates select nearest block then nearest raw offset`() {
