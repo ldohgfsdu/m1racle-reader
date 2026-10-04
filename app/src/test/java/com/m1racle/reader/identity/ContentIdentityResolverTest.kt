@@ -358,6 +358,13 @@ private class ResolverDocumentDao(
         lastScrollOffset: Int,
         readingProgress: Float,
     ) = Unit
+    override suspend fun updateEpubReadingPosition(
+        id: String,
+        lastScrollIndex: Int,
+        lastScrollOffset: Int,
+        readingProgress: Float,
+        readingAnchor: String,
+    ) = Unit
     override suspend fun updatePdfReadingPosition(
         id: String,
         pageIndex: Int,

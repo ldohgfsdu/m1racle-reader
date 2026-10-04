@@ -78,6 +78,29 @@ interface DocumentDao {
     )
 
     /**
+     * EPUB progress: [readingAnchor] is the restore authority; the flat row/pixel
+     * pair and [readingProgress] are written in the same statement for downgrade
+     * and as the missing-chapter fallback.
+     */
+    @Query(
+        """
+        UPDATE documents
+        SET lastScrollIndex = :lastScrollIndex,
+            lastScrollOffset = :lastScrollOffset,
+            readingProgress = :readingProgress,
+            readingAnchor = :readingAnchor
+        WHERE id = :id
+        """,
+    )
+    suspend fun updateEpubReadingPosition(
+        id: String,
+        lastScrollIndex: Int,
+        lastScrollOffset: Int,
+        readingProgress: Float,
+        readingAnchor: String,
+    )
+
+    /**
      * PDF progress: page index in [lastScrollIndex], total pages in [pageCount],
      * fractional progress in [readingProgress].
      */

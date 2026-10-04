@@ -52,6 +52,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.m1racle.reader.data.settings.ReaderSettings
 import com.m1racle.reader.epub.EpubBook
 import com.m1racle.reader.epub.EpubTocNode
+import com.m1racle.reader.epub.EpubReadingAnchors
+import com.m1racle.reader.epub.EpubRestoreTier
+import com.m1racle.reader.epub.EpubSavedPosition
 import com.m1racle.reader.image.LocalImageLoader
 import com.m1racle.reader.image.LocalImageState
 import com.m1racle.reader.ui.material.GlassBackdropHost
@@ -84,9 +87,8 @@ internal fun EpubReaderContent(
     book: EpubBook,
     settings: ReaderSettings,
     title: String,
-    initialRow: Int,
-    initialOffset: Int,
-    onPosition: (Int, Int, Float) -> Unit,
+    initial: EpubSavedPosition,
+    onPosition: (EpubPosition) -> Unit,
     onFlush: () -> Unit,
     onBack: () -> Unit,
     onSettings: () -> Unit,
@@ -121,9 +123,11 @@ internal fun EpubReaderContent(
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     // KOReader / Foliate / Apple Books / 微信读书: the book is the default view.
     var chromeVisible by rememberSaveable { mutableStateOf(false) }
-    // Text offsets survive a settings/viewport reflow. Persisted data remains row + pixel offset.
-    var anchorRow by rememberSaveable { mutableIntStateOf(initialRow) }
+    // Text offsets survive a settings/viewport reflow and are persisted as an
+    // EPUB text anchor. anchorText < 0 means the saved position is not restored yet.
+    var anchorRow by rememberSaveable { mutableIntStateOf(0) }
     var anchorText by rememberSaveable { mutableIntStateOf(-1) }
+    val anchors = remember(book, rows) { rows?.let { EpubRowIndex(book, it) } }
     val gap = with(density) { com.m1racle.reader.ui.viewer.components.ReaderTypography.bodyParagraphBottom.dp.toPx() }
     val inset = with(density) { 12.dp.roundToPx() }
     // Probe image sizes off the main thread, then paginate in bounded slices. The
@@ -131,11 +135,15 @@ internal fun EpubReaderContent(
     val layout by produceState<EpubTextLayout?>(null, rows, viewport, measurer, density) {
         value = null
         val currentRows = rows
-        if (currentRows != null && viewport.width > 0 && viewport.height > 0) {
+        val index = anchors
+        if (currentRows != null && index != null && viewport.width > 0 && viewport.height > 0) {
             val bounds = probeEpubImageBounds(currentRows)
+            val hint = if (anchorText >= 0) anchorRow else EpubReadingAnchors.restore(book, initial).let { restored ->
+                restored.location?.let(index::sourceRow) ?: restored.legacyRow ?: 0
+            }
             value = measureEpub(
                 currentRows, measurer, viewport.width, viewport.height, gap, inset,
-                imageBounds = bounds, anchorRow = currentRows.indexOfFirst { it.sourceRow == initialRow }.coerceAtLeast(0),
+                imageBounds = bounds, anchorRow = currentRows.indexOfFirst { it.sourceRow == hint }.coerceAtLeast(0),
             )
         }
     }
@@ -159,12 +167,21 @@ internal fun EpubReaderContent(
     val pager = rememberPagerState { (ready?.pages?.size ?: 1).coerceAtLeast(1) }
     LaunchedEffect(pager, ready) {
         val pages = ready?.pages ?: return@LaunchedEffect
+        val anchors = anchors ?: return@LaunchedEffect
+        if (pages.isEmpty()) return@LaunchedEffect
         // Finish restoring against the new layout before observing/persisting
         // its page numbers. An old page number has no meaning after reflow.
         snapshotFlow { pager.isScrollInProgress }.first { !it }
-        val page = if (anchorText >= 0) ready.pageForText(anchorRow, anchorText)
-        else ready.pageForPosition(anchorRow, initialOffset)
-        val target = page.coerceIn(0, pages.lastIndex.coerceAtLeast(0))
+        if (anchorText < 0) {
+            val restored = restoreEpubText(book, anchors, ready, initial)
+            // Never silent: a degraded restore is logged; it never falls back to page 1.
+            if (restored.tier == EpubRestoreTier.ChapterStart || restored.tier == EpubRestoreTier.Progress) {
+                android.util.Log.w("EpubReader", "定位已降级: ${restored.tier} ${initial.anchor?.spineHref}")
+            }
+            anchorRow = restored.sourceRow
+            anchorText = restored.offset
+        }
+        val target = ready.pageForText(anchorRow, anchorText).coerceIn(0, pages.lastIndex)
         if (pager.currentPage != target) pager.scrollToPage(target)
         var lastSettled = target
         snapshotFlow { pager.settledPage }.collect { index ->
@@ -181,7 +198,10 @@ internal fun EpubReaderContent(
             }
             lastSettled = index
             val progress = if (ready.pages.size <= 1) 1f else index.toFloat() / ready.pages.lastIndex
-            currentPosition(position.first, position.second, progress)
+            val anchor = anchors.anchorAt(anchorRow, anchorText)
+                ?: anchors.anchorAt(position.first, position.third)
+                ?: return@collect
+            currentPosition(EpubPosition(anchor, position.first, position.second, progress))
         }
     }
     ModalNavigationDrawer(

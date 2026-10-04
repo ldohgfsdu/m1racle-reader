@@ -78,17 +78,19 @@ class EpubReaderViewModel(
         }
     }
 
-    private val positionSaver = ReadingPositionSaver(viewModelScope) { index, offset, progress ->
-        repository.updateReadingPosition(
+    private val positionSaver = ReadingPositionSaver<EpubPosition>(viewModelScope) { position ->
+        repository.updateEpubReadingPosition(
             id = documentId,
-            lastScrollIndex = index,
-            lastScrollOffset = offset,
-            readingProgress = progress,
+            anchor = position.anchor,
+            lastScrollIndex = position.sourceRow,
+            lastScrollOffset = position.pixelOffset,
+            readingProgress = position.progress,
         )
     }
 
-    fun saveReadingPosition(lastScrollIndex: Int, lastScrollOffset: Int, readingProgress: Float) {
-        positionSaver.save(lastScrollIndex, lastScrollOffset, readingProgress)
+    /** The first save after opening a pre-anchor record is its one-time anchor migration. */
+    internal fun saveReadingPosition(position: EpubPosition) {
+        positionSaver.save(position)
     }
 
     fun flushReadingPosition() = positionSaver.flushFinal()

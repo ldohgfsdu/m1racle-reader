@@ -286,7 +286,7 @@ class ViewerViewModel(
      * Latest-wins and cancellable for high-frequency calls; the bounded final
      * flush on [onCleared] guarantees the last known position is persisted.
      */
-    private val positionSaver = ReadingPositionSaver(viewModelScope) { index, offset, progress ->
+    private val positionSaver = ReadingPositionSaver<ScrollPosition>(viewModelScope) { (index, offset, progress) ->
         repository.updateReadingPosition(
             id = documentId,
             lastScrollIndex = index,
@@ -300,7 +300,7 @@ class ViewerViewModel(
         lastScrollOffset: Int,
         readingProgress: Float,
     ) {
-        positionSaver.save(lastScrollIndex, lastScrollOffset, readingProgress)
+        positionSaver.save(ScrollPosition(lastScrollIndex, lastScrollOffset, readingProgress))
     }
 
     private fun load() {

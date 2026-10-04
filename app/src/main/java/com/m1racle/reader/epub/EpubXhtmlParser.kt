@@ -10,6 +10,13 @@ import org.w3c.dom.Node
 object EpubXhtmlParser {
     const val MAX_BLOCKS = 20_000
 
+    /**
+     * Version of the block-splitting rules. Saved EPUB text anchors record it;
+     * bump it whenever a change here can renumber the blocks of an unchanged
+     * chapter, so restore stops trusting old block numbers and relocates by quote.
+     */
+    const val BLOCK_RULES_VERSION = 1
+
     private class BlockBudget(var count: Int = 0)
 
     /** Both the chapter and nested quotes spend the same output budget. */

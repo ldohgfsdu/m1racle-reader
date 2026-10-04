@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.settings.ReaderSettingsRepository
+import com.m1racle.reader.epub.EpubSavedPosition
 import com.m1racle.reader.ui.viewer.components.ReaderSettingsSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,8 +59,7 @@ fun EpubReaderScreen(
                     book = state.book,
                     settings = readySettings,
                     title = state.book.metadata.title ?: state.document.displayName,
-                    initialRow = state.document.lastScrollIndex,
-                    initialOffset = state.document.lastScrollOffset,
+                    initial = remember(state.document) { EpubSavedPosition.of(state.document) },
                     onPosition = viewModel::saveReadingPosition,
                     onFlush = viewModel::flushReadingPosition,
                     onBack = onBack,

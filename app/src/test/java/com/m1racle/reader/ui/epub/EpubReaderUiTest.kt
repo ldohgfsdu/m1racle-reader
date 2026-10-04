@@ -55,8 +55,8 @@ class EpubReaderUiTest {
         val settings = mutableStateOf(ReaderSettings(fontScale = ReaderSettings.FONT_LARGE))
         rule.setContent {
             LegacyHostReaderTheme {
-                EpubReaderContent(longBook, settings.value, "测试书", 0, 0,
-                    onPosition = { _, _, _ -> }, onFlush = {}, onBack = {}, onSettings = {},
+                EpubReaderContent(longBook, settings.value, "测试书", EpubSavedPosition.Start,
+                    onPosition = { }, onFlush = {}, onBack = {}, onSettings = {},
                     modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
             }
         }
@@ -86,8 +86,8 @@ class EpubReaderUiTest {
         var savedRow = 0
         rule.setContent {
             LegacyHostReaderTheme {
-                EpubReaderContent(book, ReaderSettings(), "测试书", 0, 0,
-                    onPosition = { row, _, _ -> savedRow = row }, onFlush = {}, onBack = {}, onSettings = {},
+                EpubReaderContent(book, ReaderSettings(), "测试书", EpubSavedPosition.Start,
+                    onPosition = { savedRow = it.sourceRow }, onFlush = {}, onBack = {}, onSettings = {},
                     modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
             }
         }
@@ -121,8 +121,8 @@ class EpubReaderUiTest {
             CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
                 androidx.compose.ui.unit.Density(density.density, 2f)) {
                 LegacyHostReaderTheme {
-                    EpubReaderContent(book, ReaderSettings(), "测试书", 0, 0,
-                        onPosition = { _, _, _ -> }, onFlush = {}, onBack = {}, onSettings = {},
+                    EpubReaderContent(book, ReaderSettings(), "测试书", EpubSavedPosition.Start,
+                        onPosition = { }, onFlush = {}, onBack = {}, onSettings = {},
                         modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
                 }
             }
@@ -149,8 +149,8 @@ class EpubReaderUiTest {
         var backClicked = false
         rule.setContent {
             LegacyHostReaderTheme {
-                EpubReaderContent(book, ReaderSettings(), "很长的测试书名用于检查标题省略而不会挤占目录设置", 0, 0,
-                    onPosition = { _, _, _ -> }, onFlush = {}, onBack = { backClicked = true },
+                EpubReaderContent(book, ReaderSettings(), "很长的测试书名用于检查标题省略而不会挤占目录设置", EpubSavedPosition.Start,
+                    onPosition = { }, onFlush = {}, onBack = { backClicked = true },
                     onSettings = { settingsOpened = true }, modifier = Modifier.size(320.dp, 560.dp),
                     insets = WindowInsets(0, 0, 0, 0))
             }
@@ -198,13 +198,12 @@ class EpubReaderUiTest {
     }
 
     @Test fun `left and right swipes change real pages without opening drawer and saved position restores`() {
-        var savedRow = 0
-        var savedOffset = 0
+        var saved = EpubSavedPosition.Start
         val shown = mutableStateOf(true)
         rule.setContent {
             LegacyHostReaderTheme {
-                if (shown.value) EpubReaderContent(book, ReaderSettings(), "测试书", savedRow, savedOffset,
-                    onPosition = { row, offset, _ -> savedRow = row; savedOffset = offset },
+                if (shown.value) EpubReaderContent(book, ReaderSettings(), "测试书", saved,
+                    onPosition = { saved = it.saved() },
                     onFlush = {}, onBack = {}, onSettings = {}, modifier = Modifier.size(360.dp, 560.dp),
                     insets = WindowInsets(0, 0, 0, 0))
             }
@@ -254,8 +253,8 @@ class EpubReaderUiTest {
             ), mapOf("first" to 0, "second" to 2))))
         rule.setContent {
             LegacyHostReaderTheme {
-                EpubReaderContent(oneFile, ReaderSettings(), "测试书", 0, 0,
-                    onPosition = { _, _, _ -> }, onFlush = {}, onBack = {}, onSettings = {},
+                EpubReaderContent(oneFile, ReaderSettings(), "测试书", EpubSavedPosition.Start,
+                    onPosition = { }, onFlush = {}, onBack = {}, onSettings = {},
                     modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
             }
         }
@@ -310,8 +309,8 @@ class EpubReaderUiTest {
         var savedRow = 0
         rule.setContent {
             M1racleReaderTheme {
-                EpubReaderContent(book, settings.value, "测试书", 0, 0,
-                    onPosition = { row, _, _ -> savedRow = row }, onFlush = {}, onBack = {}, onSettings = {},
+                EpubReaderContent(book, settings.value, "测试书", EpubSavedPosition.Start,
+                    onPosition = { savedRow = it.sourceRow }, onFlush = {}, onBack = {}, onSettings = {},
                     modifier = Modifier.size(width.intValue.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
             }
         }
@@ -333,8 +332,8 @@ class EpubReaderUiTest {
     @Test fun `immersive reading hides app chrome until a center tap`() {
         rule.setContent {
             LegacyHostReaderTheme {
-                EpubReaderContent(book, ReaderSettings(), "测试书", 0, 0,
-                    onPosition = { _, _, _ -> }, onFlush = {}, onBack = {}, onSettings = {},
+                EpubReaderContent(book, ReaderSettings(), "测试书", EpubSavedPosition.Start,
+                    onPosition = { }, onFlush = {}, onBack = {}, onSettings = {},
                     modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
             }
         }

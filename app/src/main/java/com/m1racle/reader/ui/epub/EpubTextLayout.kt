@@ -22,6 +22,7 @@ import com.m1racle.reader.epub.EpubBlock
 import com.m1racle.reader.epub.EpubBook
 import com.m1racle.reader.epub.EpubInline
 import com.m1racle.reader.epub.EpubTocNode
+import com.m1racle.reader.epub.readingRuns
 import com.m1racle.reader.image.LocalImageLoader
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -283,32 +284,21 @@ internal fun epubTextRows(book: EpubBook, settings: ReaderSettings, base: TextSt
 
 private fun AnnotatedString.Builder.appendInlines(inlines: List<EpubInline>) {
     inlines.forEach { inline ->
-        withStyle(SpanStyle(
-            fontWeight = if (inline.bold) FontWeight.Bold else null,
-            fontStyle = if (inline.italic) FontStyle.Italic else null,
-            fontFamily = if (inline.code) FontFamily.Monospace else null,
-        )) { append(inline.text) }
+        if (!inline.bold && !inline.italic && !inline.code) {
+            append(inline.text)
+        } else {
+            withStyle(SpanStyle(
+                fontWeight = if (inline.bold) FontWeight.Bold else null,
+                fontStyle = if (inline.italic) FontStyle.Italic else null,
+                fontFamily = if (inline.code) FontFamily.Monospace else null,
+            )) { append(inline.text) }
+        }
     }
 }
 
+/** Styled form of [readingRuns]; its text is exactly [com.m1racle.reader.epub.readingText]. */
 private fun epubBlockText(block: EpubBlock): AnnotatedString = buildAnnotatedString {
-    when (block) {
-        is EpubBlock.Heading -> append(block.text)
-        is EpubBlock.Paragraph -> appendInlines(block.inlines)
-        is EpubBlock.ListBlock -> block.items.forEachIndexed { index, item ->
-            if (index > 0) append('\n')
-            append(if (block.ordered) "${index + 1}. " else "• ")
-            appendInlines(item)
-        }
-        is EpubBlock.Quote -> block.blocks.forEachIndexed { index, child ->
-            if (index > 0) append('\n')
-            append(epubBlockText(child))
-        }
-        is EpubBlock.Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(block.text) }
-        is EpubBlock.Image -> append(block.alt ?: if (block.resolvedPath == null) "本书图片暂不支持显示" else "")
-        is EpubBlock.Divider -> append("────────")
-        is EpubBlock.Unsupported -> append(block.label)
-    }
+    appendInlines(block.readingRuns())
 }
 
 /** Image intrinsic sizes, probed off the main thread before pagination starts. */

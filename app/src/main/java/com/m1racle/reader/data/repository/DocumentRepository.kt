@@ -855,6 +855,28 @@ class DocumentRepository(
     }
 
     /**
+     * Persist EPUB progress. [anchor] is what restore uses; row/offset/progress are
+     * kept current for downgrade and for books whose anchored chapter disappears.
+     */
+    suspend fun updateEpubReadingPosition(
+        id: String,
+        anchor: com.m1racle.reader.data.anchor.DocumentAnchor.EpubText,
+        lastScrollIndex: Int,
+        lastScrollOffset: Int,
+        readingProgress: Float,
+    ) {
+        withContext(Dispatchers.IO) {
+            documentDao.updateEpubReadingPosition(
+                id = id,
+                lastScrollIndex = lastScrollIndex.coerceAtLeast(0),
+                lastScrollOffset = lastScrollOffset.coerceAtLeast(0),
+                readingProgress = readingProgress.coerceIn(0f, 1f),
+                readingAnchor = com.m1racle.reader.data.anchor.AnchorCodec.encode(anchor),
+            )
+        }
+    }
+
+    /**
      * Persist PDF page progress (0-based page index + total page count).
      */
     suspend fun updatePdfReadingPosition(
