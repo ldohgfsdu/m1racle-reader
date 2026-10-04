@@ -2,6 +2,8 @@
 
 日期：2026-10-04（Asia/Shanghai）。状态：**implemented；automated verification pending；未做设备验证**。
 
+> 后续状态已更新：R04 已合入、修复测试编译问题并完成自动化及正式包模拟器验收，见 [2026-10-05 合入报告](R04_INTEGRATION_20261005.md)。本文保留最初交付时的历史记录；下文“待许可 / 待验证”不代表当前阻塞。
+
 ## 隔离与执行边界
 
 - 原仓库：`D:\03_M1racle Reader\reader`，`feature/epub-anchor`，起点 `03ebf1516c56349c8a553b8289585fd929fabbcf`。
