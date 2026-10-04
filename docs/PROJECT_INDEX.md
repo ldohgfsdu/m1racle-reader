@@ -33,7 +33,7 @@
 | 主题 | 文件 |
 |---|---|
 | PDF 阅读器技术交接（仍在演进的核心子系统） | [PDF_VIEWER_HANDOFF.md](PDF_VIEWER_HANDOFF.md) |
-| EPUB 有限阅读架构与范围 | [EPUB_SUPPORT_ARCHITECTURE_DESIGN.md](EPUB_SUPPORT_ARCHITECTURE_DESIGN.md) |
+| EPUB 有限阅读架构与范围 | [EPUB_SUPPORT_ARCHITECTURE_DESIGN.md](EPUB_SUPPORT_ARCHITECTURE_DESIGN.md)；阅读位置文本锚点见 [EPUB_ANCHOR_20261004.md](EPUB_ANCHOR_20261004.md) |
 | PDF 正文编辑 | [PDF_BODY_EDITING_DESIGN.md](PDF_BODY_EDITING_DESIGN.md) |
 | 全项目设计规范（含来源索引） | [../design.md](../design.md) |
 | 设置二级页液态玻璃调参工作台 | [GLASS_WORKBENCH_20261004.md](GLASS_WORKBENCH_20261004.md) |
