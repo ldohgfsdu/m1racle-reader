@@ -13,6 +13,7 @@ object BookmarkRowFormatter {
     fun locationLine(locationKind: String, location: Int): String = when (locationKind) {
         BookmarkLocationKind.PAGE_INDEX.name -> "页码 ${location + 1}"
         BookmarkLocationKind.SCROLL_POSITION.name -> "滚动位置 $location"
+        BookmarkLocationKind.EPUB_TEXT.name -> "第 ${location + 1} 章"
         else -> "位置 $location"
     }
 

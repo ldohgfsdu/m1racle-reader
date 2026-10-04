@@ -100,16 +100,56 @@ object MarkdownBlockAnchorResolver : AnnotationAnchorResolver {
     }
 }
 
+/**
+ * EPUB：EPUB_TEXT 坐标系，location = 章节 spine 序号（仅排序键，章内顺序靠解码锚点）。
+ *
+ * spine 序号是派生值、不进锚点身份，所以投影必须由知道书目结构的写入方提供
+ * （[projectInBook]）。无书目上下文的 [project] 会明确失败，而不是写入错误的排序键。
+ * 本步只建模型：EPUB 书签 / 标注的写入 UI 在下一步接入。
+ */
+object EpubTextAnchorResolver : AnnotationAnchorResolver {
+
+    const val LOCATION_KIND = "EPUB_TEXT"
+
+    fun projectInBook(anchor: DocumentAnchor.EpubText, spineIndex: Int): AnchorProjection {
+        require(spineIndex >= 0) { "spineIndex must be >= 0" }
+        return AnchorProjection(
+            locationKind = LOCATION_KIND,
+            location = spineIndex,
+            encoded = AnchorCodec.encode(anchor),
+        )
+    }
+
+    override fun project(anchor: DocumentAnchor): AnchorProjection {
+        require(anchor is DocumentAnchor.EpubText) { "expected EpubText anchor, got $anchor" }
+        throw IllegalStateException("EPUB_TEXT projection needs the chapter order; use projectInBook")
+    }
+
+    override fun resolve(
+        locationKind: String,
+        location: Int,
+        anchorRaw: String?,
+        legacyAnchorStart: Int?,
+        legacyAnchorEnd: Int?,
+    ): DocumentAnchor? {
+        if (locationKind != LOCATION_KIND) return null
+        // No historical EPUB rows exist, so there is nothing to synthesize.
+        return AnchorCodec.decode(anchorRaw) as? DocumentAnchor.EpubText
+    }
+}
+
 /** 按坐标系取解析器；未知 kind 返回 null（未来格式以注册扩展）。 */
 object AnnotationAnchorResolvers {
     fun forLocationKind(locationKind: String): AnnotationAnchorResolver? = when (locationKind) {
         "PAGE_INDEX" -> PdfPageAnchorResolver
         "SCROLL_POSITION" -> MarkdownBlockAnchorResolver
+        EpubTextAnchorResolver.LOCATION_KIND -> EpubTextAnchorResolver
         else -> null
     }
 
     fun forAnchor(anchor: DocumentAnchor): AnnotationAnchorResolver = when (anchor) {
         is DocumentAnchor.PdfPage -> PdfPageAnchorResolver
         is DocumentAnchor.MarkdownBlock -> MarkdownBlockAnchorResolver
+        is DocumentAnchor.EpubText -> EpubTextAnchorResolver
     }
 }
