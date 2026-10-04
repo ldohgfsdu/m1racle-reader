@@ -13,6 +13,10 @@ import androidx.room.PrimaryKey
  * 唯一阅读位置事实源（H2_1_READING_MODEL_AUTHORITY_REPORT.md）：下列阅读字段族由
  * DocumentRepository 保存路径单点写入，禁止任何第二阅读状态存储或投影表：
  * - Markdown: [lastScrollIndex]/[lastScrollOffset] = LazyColumn position
+ * - EPUB: [readingAnchor] (`epub:` AnchorCodec text anchor) is the restore authority;
+ *   [lastScrollIndex]/[lastScrollOffset] (flat block row + pixel offset) and
+ *   [readingProgress] are still written for downgrade and as the fallback when the
+ *   anchored chapter no longer exists.
  * - PDF: [lastScrollIndex] = 0-based page index; [lastScrollOffset] stores an encoded
  *   intra-page fraction; [pageCount] = total pages when last known;
  *   [readingProgress] ≈ page/(count-1)
@@ -61,6 +65,8 @@ data class DocumentEntity(
     val sourceUri: String? = null,
     /** Last verified external-source bytes, used to reject overwriting outside edits. */
     val sourceSha256: String? = null,
+    /** EPUB reading anchor (AnchorCodec `epub:` text); null until first saved. Added in v15. */
+    val readingAnchor: String? = null,
 ) {
     val type: DocumentType
         get() = DocumentType.fromStorage(documentType)

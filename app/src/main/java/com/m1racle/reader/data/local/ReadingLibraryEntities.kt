@@ -26,6 +26,12 @@ enum class BookmarkLocationKind {
 
     /** 流式坐标系：location = 块/滚动索引（Markdown）。 */
     SCROLL_POSITION,
+
+    /**
+     * EPUB 文本坐标系：location = 章节 spine 序号（仅排序键）；精确位置在 anchor 列
+     * （`epub:` 编码，见 AnchorCodec）。
+     */
+    EPUB_TEXT,
 }
 
 /**
@@ -73,6 +79,8 @@ data class BookmarkEntity(
     val title: String? = null,
     val note: String? = null,
     val createdAt: Long,
+    /** 规范化锚点原文（AnchorCodec），与 highlights/notes 的 anchor 列一致；v15 起可用。 */
+    val anchor: String? = null,
 ) {
     val kind: BookmarkLocationKind
         get() = BookmarkLocationKind.valueOf(locationKind)

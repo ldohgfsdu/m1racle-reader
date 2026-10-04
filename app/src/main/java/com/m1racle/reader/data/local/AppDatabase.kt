@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SearchIndexEntity::class,
         DocumentAliasEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -394,6 +394,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v14 -> v15: EPUB text anchors. Pure column additions; existing rows keep
+         * every value and get NULL anchors. Old EPUB progress cannot be converted in
+         * SQL (it needs the parsed book), so the reader migrates it once on open.
+         */
+        internal const val MIGRATION_14_15_DOCUMENTS_READING_ANCHOR_SQL =
+            "ALTER TABLE documents ADD COLUMN readingAnchor TEXT"
+        internal const val MIGRATION_14_15_BOOKMARKS_ANCHOR_SQL =
+            "ALTER TABLE bookmarks ADD COLUMN anchor TEXT"
+        val MIGRATION_14_15: Migration = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(MIGRATION_14_15_DOCUMENTS_READING_ANCHOR_SQL)
+                db.execSQL(MIGRATION_14_15_BOOKMARKS_ANCHOR_SQL)
+            }
+        }
+
         val MIGRATION_12_13: Migration = object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(MIGRATION_12_13_CREATE_ALIASES_SQL)
@@ -533,6 +549,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_11_12,
                         MIGRATION_12_13,
                         MIGRATION_13_14,
+                        MIGRATION_14_15,
                     )
                     .build()
                     .also { instance = it }
