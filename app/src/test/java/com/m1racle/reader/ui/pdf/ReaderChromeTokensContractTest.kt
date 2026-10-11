@@ -36,7 +36,7 @@ class ReaderChromeTokensContractTest {
                 assertEquals(1f, spec.foreground.contentAlpha, 0f)
                 assertEquals(spec.contentMutedAlpha, spec.foreground.mutedAlpha, 0f)
                 val expectedBlur = when (role) {
-                    GlassMaterialRole.Dock -> 8f
+                    GlassMaterialRole.Dock -> 4f
                     GlassMaterialRole.SelectionLens -> 0f
                     GlassMaterialRole.ExpandedMenu -> 24f
                     GlassMaterialRole.Dialog -> 18f
@@ -45,7 +45,7 @@ class ReaderChromeTokensContractTest {
                 }
                 assertEquals("$role blur", expectedBlur, spec.blur.value, 0f)
                 val expectedShadow = when (role) {
-                    GlassMaterialRole.Dock -> 10f
+                    GlassMaterialRole.Dock -> 8f
                     GlassMaterialRole.SelectionLens, GlassMaterialRole.ProgressiveChrome -> 0f
                     GlassMaterialRole.Dialog -> 18f
                     else -> 8f
@@ -58,8 +58,8 @@ class ReaderChromeTokensContractTest {
                 }
                 assertEquals(expectedHighlightW, spec.highlightWidth.value, 0.001f)
                 val expectedHighlightA = when (role) {
-                    // Approved iOS transparency recipe (design.md, 2026-10-04).
-                    GlassMaterialRole.Dock -> if (dark) 0.28f else 0.85f
+                    // User requested the current PDF control recipe on 2026-10-11.
+                    GlassMaterialRole.Dock -> 0.60f
                     GlassMaterialRole.SelectionLens -> 0f
                     GlassMaterialRole.Dialog -> if (dark) 0.38f else 0.30f
 
@@ -142,7 +142,7 @@ class ReaderChromeTokensContractTest {
         assertTrue(engine.contains("Highlight.Default.copy("))
         assertTrue(engine.contains("dropShadow("))
         assertTrue(engine.contains("shadow = null"))
-        assertTrue(engine.contains("else GlassMaterialEngine.PressSpring"))
+        assertTrue(engine.contains("else -> GlassMaterialEngine.PressSpring"))
         assertTrue(engine.contains("layerBlock = if (pressLayerActive || layerBlock != null)"))
         assertTrue(engine.contains("layerBlock?.invoke(this)"))
         assertTrue(engine.contains("scaleX *= scale"))

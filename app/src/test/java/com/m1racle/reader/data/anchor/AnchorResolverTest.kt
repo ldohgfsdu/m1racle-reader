@@ -82,21 +82,19 @@ class AnchorResolverTest {
     }
 
     @Test
-    fun `legacy v10 rows synthesize equivalent anchors from kind and location`() {
+    fun `canonical anchors are the only runtime authority after migration`() {
         // 历史高亮：kind+location + 旧字符区间，anchor 列为 null。
         val legacyMd = MarkdownBlockAnchorResolver.resolve(
             locationKind = "SCROLL_POSITION",
             location = 64,
-            anchorRaw = null,
-            legacyAnchorStart = 8,
-            legacyAnchorEnd = 55,
+            anchorRaw = "md:64|8,55",
         )
         assertEquals(DocumentAnchor.MarkdownBlock(blockIndex = 64, charStart = 8, charEnd = 55), legacyMd)
 
         val legacyPdf = PdfPageAnchorResolver.resolve(
             locationKind = "PAGE_INDEX",
             location = 23,
-            anchorRaw = null,
+            anchorRaw = "pdf:23|-",
         )
         assertEquals(DocumentAnchor.PdfPage(page = 23), legacyPdf)
 
@@ -104,6 +102,9 @@ class AnchorResolverTest {
         assertNull(PdfPageAnchorResolver.resolve("SCROLL_POSITION", 1, null))
         assertNull(MarkdownBlockAnchorResolver.resolve("PAGE_INDEX", 1, null))
         assertNull(MarkdownBlockAnchorResolver.resolve("ANCHOR", 1, null))
+        assertNull(MarkdownBlockAnchorResolver.resolve("SCROLL_POSITION", 64, null))
+        assertNull(PdfPageAnchorResolver.resolve("PAGE_INDEX", 23, null))
+        assertNull(PdfPageAnchorResolver.resolve("PAGE_INDEX", 1, "md:1|-"))
     }
 
     @Test

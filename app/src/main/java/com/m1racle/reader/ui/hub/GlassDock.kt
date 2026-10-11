@@ -104,7 +104,6 @@ fun GlassDock(
     modifier: Modifier = Modifier,
 ) {
     val motion = LocalHubDockMotion.current
-    val backdrop = LocalGlassBackdropHost.current?.root ?: rememberLayerBackdrop()
     val fadeColor = MaterialTheme.colorScheme.background
     // QA variant 2 (Coolapk) changes material only; geometry is always production.
     val dockHeight = HomeDesignTokens.DockHeight
@@ -120,14 +119,10 @@ fun GlassDock(
                     .7f to fadeColor.copy(alpha = .28f),
                     1f to fadeColor.copy(alpha = .85f)))
             }.clearAndSetSemantics {})
-        LiquidBottomTabs(
-            selectedTabIndex = { dockSlotForDestination(motion.selected.ordinal) },
+        OpticalDockTabs(
+            selectedSlot = dockSlotForDestination(motion.selected.ordinal),
             onTabSelected = { slot -> dockDestinationForSlot(slot)?.let { onSelect(HubDestination.entries[it]) } },
-            backdrop = backdrop,
-            tabsCount = 5,
-            actionSlot = 2,
             containerHeight = dockHeight,
-            lensExtraWidth = 6.dp,
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
                 .padding(horizontal = dockMargin)
                 .padding(bottom = dockBottomGap)
@@ -136,12 +131,12 @@ fun GlassDock(
         ) {
             dockEntries.forEachIndexed { index, entry ->
                 if (index == 2) DockImportAction(onImportDocument, enabled = !importing)
-                LiquidBottomTab(
+                OpticalDockTab(
                     onClick = { if (entry.destination != motion.selected) onSelect(entry.destination) },
                     selected = entry.destination == motion.selected,
                 ) {
-                    DockTabVisual(entry, selected = LocalLiquidBottomTabSampling.current,
-                        sampled = LocalLiquidBottomTabSampling.current)
+                    DockTabVisual(entry, selected = LocalDockSampling.current,
+                        sampled = LocalDockSampling.current)
                 }
             }
         }
@@ -149,8 +144,8 @@ fun GlassDock(
 }
 
 /**
- * Import button fill. QA variant 2 replaces the opaque gradient with an 80% accent tint,
- * so the Dock's blurred glass shows through underneath (QA_GLASS_VARIANTS.md).
+ * Tinted import glass transmits the processed dock underneath. QA variant 2
+ * retains its measured 80% accent tint (QA_GLASS_VARIANTS.md).
  */
 private fun dockImportBrush(
     enabled: Boolean,
@@ -160,7 +155,7 @@ private fun dockImportBrush(
 ): androidx.compose.ui.graphics.Brush = when {
     !enabled -> androidx.compose.ui.graphics.SolidColor(Color.Gray)
     coolapk -> androidx.compose.ui.graphics.SolidColor(qaCoolapkImportTint(dark))
-    else -> androidx.compose.ui.graphics.Brush.horizontalGradient(gradient)
+    else -> androidx.compose.ui.graphics.Brush.horizontalGradient(gradient.map { it.copy(alpha = .88f) })
 }
 
 /** The middle slot is an action, never a navigation destination. */
@@ -173,7 +168,8 @@ internal fun dockDestinationForSlot(slot: Int): Int? = when (slot) {
 
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.DockImportAction(onClick: () -> Unit, enabled: Boolean) {
-    val sampled = LocalLiquidBottomTabSampling.current
+    val sampled = LocalDockSampling.current
+    val visualTranslation = LocalDockVisualTranslation.current
     val interaction = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val coolapk = QaGlass.selection.coolapk
@@ -197,15 +193,24 @@ private fun androidx.compose.foundation.layout.RowScope.DockImportAction(onClick
     ) {
         Box(Modifier.size(width = 49.dp, height = 48.dp)
             .testTag(if (sampled) "dock-import-sample" else "dock-import-surface")
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .graphicsLayer { translationX = visualTranslation(); scaleX = scale; scaleY = scale }
             .clip(androidx.compose.foundation.shape.CircleShape)
             .background(dockImportBrush(enabled, coolapk, dark, colors), androidx.compose.foundation.shape.CircleShape)
-            // QA variant 2: dense tinted glass keeps a 1dp rim like the capsule.
-            .then(if (coolapk && enabled) Modifier.border(QaCoolapkImport.RimWidth,
-                qaCoolapkImportRim(dark), androidx.compose.foundation.shape.CircleShape) else Modifier)
+            .then(if (enabled) Modifier.border(
+                if (coolapk) QaCoolapkImport.RimWidth else .5.dp,
+                if (coolapk) qaCoolapkImportRim(dark) else Color.White.copy(alpha = .28f),
+                androidx.compose.foundation.shape.CircleShape) else Modifier)
             .drawBehind {
-                if (pressed) drawRect(Color.White.copy(
-                    alpha = if (coolapk) QaCoolapk.ImportPressOverlayAlpha else .20f))
+                if (enabled && !coolapk) {
+                    // Tinted glass keeps the processed rail visible underneath.
+                    // A top glint and animated wash share the pickup spring.
+                    drawRect(Brush.verticalGradient(listOf(
+                        Color.White.copy(alpha = .22f), Color.White.copy(alpha = 0f)),
+                        endY = size.height * .65f))
+                    val pickup = ((scale - 1f) / .085f).coerceIn(0f, 1f)
+                    drawRect(Color.White.copy(alpha = .20f * pickup))
+                } else if (pressed) drawRect(Color.White.copy(
+                    alpha = QaCoolapk.ImportPressOverlayAlpha))
             }, contentAlignment = Alignment.Center) {
             Icon(Icons.Filled.Add, if (sampled) null else stringResource(R.string.import_file),
                 tint = if (coolapk && enabled) qaCoolapkImportGlyph(dark) else Color.White, modifier = Modifier.size(28.dp))
@@ -221,6 +226,8 @@ private fun DockTabVisual(
     sampled: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val visualTranslation = LocalDockVisualTranslation.current
+    val sampledScale = LocalDockSampleScale.current
     val dark = LocalGlassEnvironment.current.isDark
     val qa = QaGlass.selection
     // QA-only: night lens B uses white bold selected labels; variants pin unselected text.
@@ -233,7 +240,10 @@ private fun DockTabVisual(
     val unified = qa.variant == com.m1racle.reader.ui.material.QaGlassVariant.UNIFIED
     val labelColor = if (unified && selected) qaGlassPrimaryText(qa.variant, dark) ?: color else color
     Column(
-        modifier = modifier,
+        modifier = modifier.graphicsLayer {
+            translationX = visualTranslation()
+            if (sampled) { scaleX = sampledScale(); scaleY = sampledScale() }
+        },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

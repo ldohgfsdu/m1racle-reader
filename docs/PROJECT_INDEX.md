@@ -24,6 +24,7 @@
 | 本机开发环境与最新工作树备份 | [环境修复说明](history/workspace-2026/环境修复说明-20261003.md)（2026-10-11 归档）；工作区根目录 `Reader构建.cmd` |
 | 本机入口等价关系（2026-10-11 标注） | `Reader构建.cmd` ≡ `reader-build-local.ps1`；`Reader模拟调试.cmd` ≡ `reader-emulator-local.ps1`（两者均为参数透传的薄包装） |
 | QA 连接测试唯一入口 | `scripts/run-qa-connected-tests.ps1`：先调用 `reader-emulator-local.ps1` 完成设备准备与 QA 构建，再执行 `:app:connectedQaAndroidTest` |
+| 玻璃材质与来源（当前） | [PDF 材质统一与 RiseDiary 来源移除](OPTICAL_GLASS_20261011.md)；覆盖历史底栏材质和扩张参数 |
 | Dock 拖动跟手与弹性形变 | 当前 [54版弹性与回弹](DOCK_ELASTIC_20261008.md)；[53版直接跟手](DOCK_DIRECT_DRAG_20261008.md) |
 | 酷安底栏真实参考数据 | [真机尺寸、按压/拖动录屏与帧统计](COOLAPK_DOCK_CAPTURE_20261008.md) |
 | 酷安玻璃复刻 | [底栏、阅读控件与独立动作反馈实现及验证](COOLAPK_GLASS_REPLICA_20261008.md) |
@@ -44,11 +45,13 @@
 | PDF 正文编辑 | [PDF_BODY_EDITING_DESIGN.md](PDF_BODY_EDITING_DESIGN.md) |
 | 全项目设计规范（含来源索引） | [../design.md](../design.md) |
 | 设置二级页液态玻璃调参工作台 | [GLASS_WORKBENCH_20261004.md](GLASS_WORKBENCH_20261004.md) |
-| 液态玻璃实现与阶段证据 | [按压玻璃完整底栏采样](DOCK_SAMPLED_RIM_20261004.md)；[底栏 iOS 通透度与按压放大](DOCK_IOS_TRANSPARENCY_20261004.md)；[底栏视频参考动效](DOCK_VIDEO_MOTION_20261004.md)；[底栏折射与缩放恢复](DOCK_GLASS_RESTORE_20261004.md)；[DOCK_CAPTURE_CONSISTENCY_20261003.md](DOCK_CAPTURE_CONSISTENCY_20261003.md)；历史审计：[R36_GLASS_GROUND_TRUTH_AUDIT.md](R36_GLASS_GROUND_TRUTH_AUDIT.md) · [R36_2_OPTICAL_MATERIAL_REPORT.md](R36_2_OPTICAL_MATERIAL_REPORT.md) |
+| 液态玻璃实现与阶段证据 | [视频复刻与底栏随动验收](DOCK_VIDEO_REPLICA_20261011.md)； [按压玻璃完整底栏采样](DOCK_SAMPLED_RIM_20261004.md)；[底栏 iOS 通透度与按压放大](DOCK_IOS_TRANSPARENCY_20261004.md)；[底栏视频参考动效](DOCK_VIDEO_MOTION_20261004.md)；[底栏折射与缩放恢复](DOCK_GLASS_RESTORE_20261004.md)；[DOCK_CAPTURE_CONSISTENCY_20261003.md](DOCK_CAPTURE_CONSISTENCY_20261003.md)；历史审计：[R36_GLASS_GROUND_TRUTH_AUDIT.md](R36_GLASS_GROUND_TRUTH_AUDIT.md) · [R36_2_OPTICAL_MATERIAL_REPORT.md](R36_2_OPTICAL_MATERIAL_REPORT.md) |
 | 滚动与手势物理 | [APP_WIDE_SCROLL_AND_MAIN_THREAD_STALL_ISOLATION_REPORT.md](APP_WIDE_SCROLL_AND_MAIN_THREAD_STALL_ISOLATION_REPORT.md) |
 | 导入身份权威 | [D1_1_IDENTITY_ARCHITECTURE_DECISION.md](D1_1_IDENTITY_ARCHITECTURE_DECISION.md) · [D1_ZIP_IDENTITY_AUDIT.md](D1_ZIP_IDENTITY_AUDIT.md) |
 
 ## 审查与修复报告
+
+当前审查接手入口：[2026-10-11 审查现状复核](AUDIT_TAKEOVER_20261011.md)，包含原报告逐项状态、Git 恢复边界与本轮验证结果。
 
 | 主题 | 文件 |
 |---|---|

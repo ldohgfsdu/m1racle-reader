@@ -56,8 +56,6 @@ class ReaderNoteController(
             note.locationKind,
             note.location,
             note.anchor,
-            note.anchorStart,
-            note.anchorEnd,
         )
     }
 

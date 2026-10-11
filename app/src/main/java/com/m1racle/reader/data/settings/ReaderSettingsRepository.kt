@@ -15,6 +15,7 @@ import java.io.IOException
 
 private val Context.readerSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "reader_settings",
+    produceMigrations = { listOf(ReaderLineHeightMigration) },
 )
 
 /**
@@ -103,7 +104,7 @@ class ReaderSettingsRepository(
 
     private companion object {
         val KEY_FONT_SCALE = floatPreferencesKey("font_scale")
-        val KEY_LINE_HEIGHT_SCALE = floatPreferencesKey("line_height_scale")
+        val KEY_LINE_HEIGHT_SCALE = ReaderLineHeightMigration.key
         val KEY_PADDING_LEVEL = stringPreferencesKey("content_padding_level")
         val KEY_EPUB_FONT = stringPreferencesKey("epub_font_family")
         val KEY_EPUB_MODE = stringPreferencesKey("epub_reading_mode")

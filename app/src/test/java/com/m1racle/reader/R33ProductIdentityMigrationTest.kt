@@ -54,7 +54,7 @@ class R33ProductIdentityMigrationTest {
     }
 
     @Test
-    fun `historical Room schema bytes stay unchanged and v16 is additive`() {
+    fun `historical Room schema bytes stay unchanged and v17 is additive`() {
         val schemaRoot = file("app/schemas/com.m1racle.reader.data.local.AppDatabase")
         val expected = mapOf(
             "6.json" to "c42c8784223ccb6dba45a5a6b9c2d2e1e200cdf636b66d886330ebb9ebc832f3",
@@ -68,6 +68,7 @@ class R33ProductIdentityMigrationTest {
             "14.json" to "e5bd1ee265d36999a6d5e1da96ad661616ca45ffd45199a105429df11e2c9017",
             "15.json" to "755494bc3c6470c4c7e0502d85df6af55d1253b24897b593d8749d8b4064f7a7",
             "16.json" to "11f043a8f37d307bbaf3a182924fdea8458031f66bbfd6d65b31797082249c99",
+            "17.json" to "4e87a0bed8e983c80995db0778e23b1965f09c6d38a12f2cf5cb4f84b97e1a70",
         )
         assertEquals(expected.keys, schemaRoot.listFiles().orEmpty().map { it.name }.toSet())
         expected.forEach { (name, digest) ->

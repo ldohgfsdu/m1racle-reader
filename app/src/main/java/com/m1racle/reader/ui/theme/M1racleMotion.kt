@@ -8,7 +8,7 @@ import androidx.compose.animation.core.tween
  * Enter / show uses [easeOut]; exit / hide uses [easeIn].
  * No bounce, stretch, or overshoot lives here.
  *
- * The RiseDiary bottom bar owns its imported physical springs.
+ * The dock keeps its gesture springs in the UI layer.
  */
 object M1racleMotion {
     val easeOut = CubicBezierEasing(0.2f, 0f, 0f, 1f)

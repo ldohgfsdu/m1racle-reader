@@ -5,7 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 
-/** Navigation is the selection owner; RiseDiaryBottomTabs owns only its optical animation. */
+/** Navigation is the selection owner; OpticalDockTabs owns only its optical animation. */
 @Immutable
 internal class HubDockMotion(val selected: HubDestination)
 internal val LocalHubDockMotion = staticCompositionLocalOf<HubDockMotion> {

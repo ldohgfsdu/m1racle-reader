@@ -42,7 +42,7 @@ class R31ArchitectureReleaseContractTest {
     }
 
     @Test
-    fun `Room migration chain is contiguous through v16 with committed v6 plus schemas`() {
+    fun `Room migration chain is contiguous through v17 with committed v6 plus schemas`() {
         val migrations = listOf(
             AppDatabase.MIGRATION_1_2,
             AppDatabase.MIGRATION_2_3,
@@ -59,14 +59,15 @@ class R31ArchitectureReleaseContractTest {
             AppDatabase.MIGRATION_13_14,
             AppDatabase.MIGRATION_14_15,
             AppDatabase.MIGRATION_15_16,
+            AppDatabase.MIGRATION_16_17,
         )
-        assertEquals((1..15).map { it to it + 1 }, migrations.map { it.startVersion to it.endVersion })
+        assertEquals((1..16).map { it to it + 1 }, migrations.map { it.startVersion to it.endVersion })
         val schemas = File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase")
             .listFiles()
             .orEmpty()
             .mapNotNull { it.nameWithoutExtension.toIntOrNull() }
             .sorted()
-        assertEquals((6..16).toList(), schemas)
+        assertEquals((6..17).toList(), schemas)
     }
 
     @Test

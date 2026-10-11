@@ -58,7 +58,7 @@ class RepositoryAnnotationOverlaySource(
         return readingRepository.highlightsAtLocation(documentId, locationKind, location)
             .mapNotNull { row ->
                 val anchor = resolver.resolve(
-                    row.locationKind, row.location, row.anchor, row.anchorStart, row.anchorEnd,
+                    row.locationKind, row.location, row.anchor,
                 ) ?: return@mapNotNull null
                 AnnotationOverlayItem(id = row.id, type = AnnotationType.HIGHLIGHT, anchor = anchor, excerpt = row.excerpt,
                     style = com.m1racle.reader.data.anchor.HighlightStyle.fromStorage(row.style))
@@ -75,7 +75,7 @@ class RepositoryAnnotationOverlaySource(
         return readingRepository.notesAtLocation(documentId, locationKind, location)
             .mapNotNull { row ->
                 val anchor = resolver.resolve(
-                    row.locationKind, row.location, row.anchor, row.anchorStart, row.anchorEnd,
+                    row.locationKind, row.location, row.anchor,
                 ) ?: return@mapNotNull null
                 AnnotationOverlayItem(id = row.id, type = AnnotationType.NOTE, anchor = anchor, excerpt = null)
             }

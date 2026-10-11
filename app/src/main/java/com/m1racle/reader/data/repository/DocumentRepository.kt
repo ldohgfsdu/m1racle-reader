@@ -284,8 +284,8 @@ class DocumentRepository(
             val prepared = request.content
             var payload: MaterializedImportPayload? = null
             var payloadOwnedByCommittedDocument = false
-            suspend fun freezeMarkdown(document: DocumentEntity): DocumentEntity {
-                if (document.type != DocumentType.MARKDOWN) return document
+            suspend fun freezeManagedDocument(document: DocumentEntity): DocumentEntity {
+                if (document.type != DocumentType.MARKDOWN && !document.isPdf) return document
                 val existing = uriToFile(document.uri)
                 val library = File(context.filesDir, "library").canonicalFile
                 if (existing != null && existing.isFile && ZipPackageImporter.isUnder(existing, library) &&
@@ -307,7 +307,7 @@ class DocumentRepository(
                 for (attempt in 0 until MAX_IDENTITY_COMMIT_ATTEMPTS) {
                     try {
                         val firstDecision = importTransactionRunner.run {
-                            reuseOrEnrichResolvedImport(request, System.currentTimeMillis(), ::freezeMarkdown)
+                            reuseOrEnrichResolvedImport(request, System.currentTimeMillis(), ::freezeManagedDocument)
                         }
                         if (firstDecision != null) {
                             payloadOwnedByCommittedDocument = payload != null && firstDecision.document.uri == payload?.uri
@@ -333,7 +333,7 @@ class DocumentRepository(
                             reuseOrEnrichResolvedImport(
                                 request = request,
                                 now = System.currentTimeMillis(),
-                                freezeMarkdown = ::freezeMarkdown,
+                                freezeManagedDocument = ::freezeManagedDocument,
                             ) ?: insertResolvedImport(
                                 request = request,
                                 documentId = newDocumentId,
@@ -364,7 +364,7 @@ class DocumentRepository(
     private suspend fun reuseOrEnrichResolvedImport(
         request: ResolvedImportRequest,
         now: Long,
-        freezeMarkdown: suspend (DocumentEntity) -> DocumentEntity,
+        freezeManagedDocument: suspend (DocumentEntity) -> DocumentEntity,
     ): ResolvedImportCommit? {
         val prepared = request.content
         // The indexed content hash is the sole reuse authority. Legacy
@@ -374,7 +374,7 @@ class DocumentRepository(
             ?: return null
         // Equal bytes may come from different external files. Write back to the
         // source the user actually opened, rather than the first imported alias.
-        val frozen = freezeMarkdown(hashOwner)
+        val frozen = freezeManagedDocument(hashOwner)
         val opened = frozen.copy(lastOpenedAt=now,
             sourceUri=if(hashOwner.isPdf) prepared.sourceUri.toString() else frozen.sourceUri,
             sourceSha256=if(hashOwner.isPdf) prepared.contentSha256 else hashOwner.sourceSha256)

@@ -31,16 +31,18 @@ class GlassMaterialRegressionTest {
         GlassMaterialEngine.resolve(role, dark = dark, pressed = pressed)
 
     @Test
-    fun `dock has lighter navigation glass while reader controls retain their recipe`() {
+    fun `dock and PDF controls share the exact same optical material`() {
         for (dark in listOf(false, true)) {
             val dock = spec(GlassMaterialRole.Dock, dark)
             val overlay = spec(GlassMaterialRole.Control, dark)
-            assertEquals(8.dp, dock.blur)
-            assertEquals(if (dark) 0.30f else 0.36f, dock.surfaceColor.alpha, 0.004f)
-            assertEquals(if (dark) .22f else .32f, overlay.surfaceColor.alpha, .004f)
-            assertEquals(10.dp, dock.shadow)
-            assertEquals(20.dp, dock.lensHeight)
-            assertEquals(24.dp, dock.lensAmount)
+            assertEquals(overlay.blur, dock.blur)
+            assertEquals(overlay.surfaceColor, dock.surfaceColor)
+            assertEquals(overlay.shadow, dock.shadow)
+            assertEquals(overlay.shadowColor, dock.shadowColor)
+            assertEquals(overlay.highlightWidth, dock.highlightWidth)
+            assertEquals(overlay.highlightColor, dock.highlightColor)
+            assertEquals(overlay.lensHeight, dock.lensHeight)
+            assertEquals(overlay.lensAmount, dock.lensAmount)
             for (role in listOf(
                 GlassMaterialRole.Menu,
                 GlassMaterialRole.SettingsCard,
@@ -97,7 +99,7 @@ class GlassMaterialRegressionTest {
             assertEquals(0.dp, capsule.blur)
             assertEquals(control.blur, menu.blur)
             assertEquals(4.dp, card.blur)
-            assertEquals(8.dp, dock.blur)
+            assertEquals(4.dp, dock.blur)
             assertEquals(0.dp, capsule.shadow)
             assertEquals(control.shadow, menu.shadow)
             assertEquals(control.shadow, card.shadow)
@@ -109,9 +111,9 @@ class GlassMaterialRegressionTest {
 
     @Test
     fun `surface alpha values stay at promoted liquid recipe numbers`() {
-        // Optical Dock reference: light 0.36 / near-black dark 0.30; other roles unchanged.
+        // Dock now shares the PDF control recipe.
         val expectedLight = mapOf(
-            GlassMaterialRole.Dock to 0.36f,
+            GlassMaterialRole.Dock to 0.32f,
             GlassMaterialRole.Control to 0.32f,
             GlassMaterialRole.SelectionLens to 0.10f,
             GlassMaterialRole.Menu to 0.60f,
@@ -121,7 +123,7 @@ class GlassMaterialRegressionTest {
             GlassMaterialRole.ProgressiveChrome to 0.90f,
         )
         val expectedDark = mapOf(
-            GlassMaterialRole.Dock to 0.30f,
+            GlassMaterialRole.Dock to 0.22f,
             GlassMaterialRole.Control to 0.22f,
             GlassMaterialRole.SelectionLens to 0.10f,
             GlassMaterialRole.Menu to 0.64f,
@@ -162,7 +164,7 @@ class GlassMaterialRegressionTest {
             assertEquals("$role highlight width", expectedWidth, light.highlightWidth)
             assertEquals("$role highlight width dark", light.highlightWidth, dark.highlightWidth)
             val expectedLightHl = when (role) {
-                GlassMaterialRole.Dock -> 0.85f
+                GlassMaterialRole.Dock -> 0.60f
                 GlassMaterialRole.SelectionLens -> 0f
                 GlassMaterialRole.Dialog -> 0.30f
 
@@ -170,7 +172,7 @@ class GlassMaterialRegressionTest {
                 else -> 0.60f
             }
             val expectedDarkHl = when (role) {
-                GlassMaterialRole.Dock -> 0.28f
+                GlassMaterialRole.Dock -> 0.60f
                 GlassMaterialRole.SelectionLens -> 0f
                 GlassMaterialRole.Dialog -> 0.38f
 
@@ -212,7 +214,7 @@ class GlassMaterialRegressionTest {
                 "dark tint $role",
                 if (role == GlassMaterialRole.SelectionLens) {
                     Color.White
-                } else if (role == GlassMaterialRole.Dialog || role == GlassMaterialRole.Dock) {
+                } else if (role == GlassMaterialRole.Dialog) {
                     Color(0xFF121212)
                 } else if (role in listOf(GlassMaterialRole.Dock, GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.SelectionLens, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard)) {
                     Color(0xFF242424)
@@ -283,7 +285,7 @@ class GlassMaterialRegressionTest {
         val dock = spec(GlassMaterialRole.Dock)
         val dockPressed = spec(GlassMaterialRole.Dock, pressed = true)
         assertTrue(dock.vibrancy)
-        assertEquals(20.dp, dock.lensHeight)
+        assertEquals(8.dp, dock.lensHeight)
         assertEquals(24.dp, dock.lensAmount)
         assertEquals(1f, dock.scale, 0f)
         assertEquals(1f, dockPressed.scale, 0f)
@@ -350,7 +352,7 @@ class GlassMaterialRegressionTest {
     fun `glass modifier press path lerps rather than replaces specs`() {
         val n = materialSource().replace(Regex("\\s+"), " ")
         assertTrue(n.contains("animateFloatAsState("))
-        assertTrue(n.contains("else GlassMaterialEngine.PressSpring"))
+        assertTrue(n.contains("else -> GlassMaterialEngine.PressSpring"))
         assertTrue(n.contains("pressLayerActive = pressed || kotlin.math.abs(pressProgress.value) > 0.001f"))
         // plate 路径对 (idleSpec, pressedSpec) 做颜色插值；backdrop 路径表面用同一
         // lerp、highlight 用 alpha 混合 —— 两条路径都不允许整块替换规格。

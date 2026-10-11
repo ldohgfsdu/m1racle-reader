@@ -185,8 +185,8 @@ class SearchRepositoryTest {
     fun `every result carries complete document and source locator`() = runTest {
         val repo = SearchRepository(FakeSearchIndexDao())
         repo.index(document("pdf", title = "定位", type = DocumentType.PDF), indexedAt = 1L)
-        // v10-style null anchor must be synthesized from kind/location before indexing.
-        repo.index(highlight("pdf", id = 2, page = 9, excerpt = "定位").copy(anchor = null), indexedAt = 2L)
+        // Canonical anchors reach the index after migration or a modern write.
+        repo.index(highlight("pdf", id = 2, page = 9, excerpt = "定位"), indexedAt = 2L)
         val markdownAnchor = DocumentAnchor.MarkdownBlock(blockIndex = 6, charStart = 3, charEnd = 12)
         repo.index(
             note("md", id = 3, block = 6, content = "定位").copy(
@@ -200,7 +200,7 @@ class SearchRepositoryTest {
         val results = repo.search("定位")
         assertTrue(results.all { it.documentId.isNotBlank() && it.locationKind.isNotBlank() })
         assertEquals(DocumentAnchor.PdfPage(page = 0), results.first { it.contentType == SearchContentType.DOCUMENT }.anchor)
-        assertEquals(DocumentAnchor.PdfPage(page = 9), results.first { it.contentType == SearchContentType.HIGHLIGHT }.anchor)
+        assertEquals(DocumentAnchor.PdfPage(page = 9, rects = listOf(NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f))), results.first { it.contentType == SearchContentType.HIGHLIGHT }.anchor)
         assertEquals(markdownAnchor, results.first { it.contentType == SearchContentType.NOTE }.anchor)
         assertFalse(results.any { it.location < 0 })
     }

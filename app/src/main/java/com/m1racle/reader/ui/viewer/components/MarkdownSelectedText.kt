@@ -44,8 +44,8 @@ internal fun rememberMarkdownSelectedText(searched: AnnotatedString, annotationO
         val builder = AnnotatedString.Builder(searched)
         selectionContext?.highlights?.forEach { highlight ->
             val anchor = com.m1racle.reader.data.anchor.AnchorCodec.decode(highlight.anchor) as? com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock
-            val start = ((anchor?.charStart ?: highlight.anchorStart ?: 0) - inlineOffset).coerceIn(0, searched.length)
-            val end = ((anchor?.charEnd ?: highlight.anchorEnd ?: selectionContext.plainText.length) - inlineOffset).coerceIn(0, searched.length)
+            val start = ((anchor?.charStart ?: 0) - inlineOffset).coerceIn(0, searched.length)
+            val end = ((anchor?.charEnd ?: selectionContext.plainText.length) - inlineOffset).coerceIn(0, searched.length)
             val kind = com.m1racle.reader.data.anchor.HighlightStyle.fromStorage(highlight.style)
             val span = when (kind) {
                 com.m1racle.reader.data.anchor.HighlightStyle.Underline -> SpanStyle(textDecoration = TextDecoration.Underline, color = Color(kind.argb))

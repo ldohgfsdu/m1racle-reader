@@ -111,7 +111,7 @@ private data class GlassRecipe(
     val lightTint: Color = Color(0xFFFAFAFA),
     val lightShadowAlpha: Float = 0.10f,
     val darkShadowAlpha: Float = 0.46f,
-    // Kyant LiquidBottomTabs / RiseDiary night plate. Neutral near-black.
+    // Optical night plate. Neutral near-black.
     val darkTint: Color = Color(0xFF121212),
     val lightBrightness: Float = 0f,
     val darkBrightness: Float = 0f,
@@ -475,7 +475,9 @@ fun Modifier.glassMaterial(
     pressed: Boolean = false,
     interaction: Boolean = false,
     sourceBackdrop: Backdrop? = null,
+    exportBackdrop: LayerBackdrop? = null,
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
+    interactionProgress: State<Float>? = null,
 ): Modifier {
     val environment = LocalGlassEnvironment.current
     val host = LocalGlassBackdropHost.current
@@ -513,7 +515,7 @@ fun Modifier.glassMaterial(
         )
     }
     val floatingControl = role == GlassMaterialRole.Control || role == GlassMaterialRole.Capsule
-    val pressProgress = animateFloatAsState(
+    val pressProgress = interactionProgress ?: animateFloatAsState(
         targetValue = if (pressed) 1f else 0f,
         animationSpec = when {
             // QA variant 2: 120ms decelerate in, spring 0.7 / 500 out.
@@ -522,6 +524,9 @@ fun Modifier.glassMaterial(
             } else {
                 spring(QaCoolapk.ReleaseDampingRatio, QaCoolapk.ReleaseStiffness, .001f)
             }
+            // Match the dock pickup spring: refraction and rim must settle with
+            // the silhouette rather than fading out before its elastic rebound.
+            role == GlassMaterialRole.SelectionLens -> spring(.55f, 450f, visibilityThreshold = .001f)
             floatingControl -> spring(dampingRatio = .55f, stiffness = 450f, visibilityThreshold = .001f)
             else -> GlassMaterialEngine.PressSpring
         },
@@ -554,6 +559,7 @@ fun Modifier.glassMaterial(
         pressProgress = pressProgress,
         pressLayerActive = pressLayerActive,
         sourceBackdrop = sourceBackdrop,
+        exportBackdrop = exportBackdrop,
         layerBlock = layerBlock,
     )
 }
@@ -629,6 +635,7 @@ private fun drawGlassMaterial(
     pressProgress: State<Float>,
     pressLayerActive: Boolean,
     sourceBackdrop: Backdrop? = null,
+    exportBackdrop: LayerBackdrop? = null,
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
 ): Modifier {
     val density = LocalDensity.current
@@ -638,11 +645,11 @@ private fun drawGlassMaterial(
         GlassBackdropLayer.Root -> host.root
         GlassBackdropLayer.RootAndMenu -> rememberCombinedBackdrop(host.root, host.menuExport)
     }
-    val exportedBackdrop = if (idleSpec.exportsForSettingsCard) host.menuExport else null
+    val exportedBackdrop = exportBackdrop ?: if (idleSpec.exportsForSettingsCard) host.menuExport else null
+    require(exportedBackdrop == null || exportedBackdrop !== backdrop) {
+        "A glass surface cannot export into its own sampling source"
+    }
     val blurPx = with(density) { idleSpec.blur.toPx() }
-    // Android's large-radius blur downsamples its input. Prefilter the dock's
-    // fine page detail first so it cannot alias into broad bands under the lens.
-    val prefilterBlurPx = with(density) { if (role == GlassMaterialRole.Dock) 1.dp.toPx() else 0f }
     val lensHeightPx = with(density) { idleSpec.lensHeight.toPx() }
     val lensAmountPx = with(density) { idleSpec.lensAmount.toPx() }
     val pressedLensHeightPx = with(density) { pressedSpec.lensHeight.toPx() }
@@ -665,7 +672,6 @@ private fun drawGlassMaterial(
         pressProgress,
         pressLayerActive,
         blurPx,
-        prefilterBlurPx,
         lensHeightPx,
         lensAmountPx,
         pressedLensHeightPx,
@@ -698,7 +704,6 @@ private fun drawGlassMaterial(
                     )
                     if (idleSpec.vibrancy) vibrancy()
                 }
-                if (prefilterBlurPx > 0f) blur(prefilterBlurPx)
                 blur(blurPx)
                 if (lensEnabled) {
                     val progress = pressProgress.value.coerceIn(0f, 1f)

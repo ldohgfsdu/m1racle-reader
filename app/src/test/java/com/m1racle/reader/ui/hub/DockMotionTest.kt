@@ -1,50 +1,58 @@
 package com.m1racle.reader.ui.hub
-import com.m1racle.reader.ui.hub.liquidglass.shouldConsumeDragChange
+
 import org.junit.Assert.*
-import com.m1racle.reader.ui.hub.liquidglass.opticalDeformationX
-import com.m1racle.reader.ui.hub.liquidglass.opticalDeformationY
-import com.m1racle.reader.ui.hub.liquidglass.dragDeformationTarget
 import org.junit.Test
+
 class DockMotionTest {
     @Test fun `central action has no navigation destination and both sides map correctly`() {
         assertEquals(listOf(0, 1, 3, 4), (0..3).map(::dockSlotForDestination))
         assertNull(dockDestinationForSlot(2))
         assertEquals(listOf(0, 1, 2, 3), listOf(0, 1, 3, 4).map(::dockDestinationForSlot))
     }
-
-    @Test fun `speed target is symmetric bounded and visible at ordinary drag speed`() {
-        assertEquals(0f, dragDeformationTarget(0f), 0f)
-        for (speed in listOf(0.01f, 0.5f, 2f, 10f, 1000f)) {
-            assertEquals(dragDeformationTarget(speed), dragDeformationTarget(-speed), 0f)
-            assertTrue(dragDeformationTarget(speed) in 0f..1f)
+    @Test fun `upstream signed velocity deforms both directions and remains bounded`() {
+        assertEquals(0f, dockLensStretch(0f), 0f)
+        for (speed in listOf(.1f, 3f, 1000f)) {
+            assertEquals(-dockLensStretch(speed), dockLensStretch(-speed), 0f)
+            assertTrue(dockLensStretch(speed) in 0f..1f)
         }
-        assertTrue(opticalDeformationX(dragDeformationTarget(3f)) > 1.15f)
-        assertTrue(opticalDeformationY(dragDeformationTarget(3f)) < .95f)
+        assertTrue(dockLensScaleX(dockLensStretch(20f)) > 1.15f)
+        assertTrue(dockLensScaleY(dockLensStretch(20f)) < .95f)
     }
-
-    @Test fun `signed shape rebound squashes width and expands height past rest`() {
-        assertEquals(1f, opticalDeformationX(0f), 0f)
-        assertEquals(1f, opticalDeformationY(0f), 0f)
-        assertTrue(opticalDeformationX(-.2f) < 1f)
-        assertTrue(opticalDeformationY(-.2f) > 1f)
-        for (strain in listOf(-100f, -.4f, 0f, .5f, 1f, 100f)) {
-            assertTrue(opticalDeformationX(strain) in .85f..1.46f)
-            assertTrue(opticalDeformationY(strain) in .76f..1.08f)
+    @Test fun `shape settles at rest and allows bounded spring rebound`() {
+        assertEquals(1f, dockLensScaleX(0f), 0f)
+        assertEquals(1f, dockLensScaleY(0f), 0f)
+        assertTrue(dockLensScaleX(-.2f) < 1f)
+        assertTrue(dockLensScaleY(-.2f) > 1f)
+        for (strain in listOf(-100f, -.2f, 0f, 1f, 100f)) {
+            assertTrue(dockLensScaleX(strain) in (1f / 1.2f)..1.251f)
+            assertTrue(dockLensScaleY(strain) in .8f..1.2f)
         }
     }
-
-    @Test fun `RiseDiary mask mirrors its physical position in RTL`() {
-        val ltr=compactLensMaskBounds(400f,64f,4f,98f,1f,56f,1.4f,1.4f,true,lensWidth=104f)
-        val rtl=compactLensMaskBounds(400f,64f,4f,98f,1f,56f,1.4f,1.4f,false,lensWidth=104f)
-        assertEquals(400f-ltr.left-ltr.width,rtl.left,.001f)
-        assertEquals(ltr.height,rtl.height,0f)
-        assertEquals(4f + 98f * 1.5f, ltr.left + ltr.width / 2f, .001f)
-        assertEquals(67f/48f, originalLiquidSelectionPressedScale(),0f)
+    @Test fun `reference pickup lifts lens above rail with bounded rebound`() {
+        assertEquals(1f, dockLensPickupX(0f), 0f)
+        assertEquals(1f, dockLensPickupY(0f), 0f)
+        assertEquals(78f / 56f, dockLensPickupX(1f), .001f)
+        assertEquals(48f * 78f / 56f, 48f * dockLensPickupY(1f), .001f)
+        assertTrue(dockLensPickupY(-.2f) < 1f)
+        assertEquals(dockLensPickupY(1.3f), dockLensPickupY(100f), 0f)
+        assertEquals(dockLensPickupX(-.3f), dockLensPickupX(-100f), 0f)
     }
-    @Test fun `drag consumes movement but honors an unconsumed down policy`() {
-        assertFalse(shouldConsumeDragChange(false,true,true))
-        assertFalse(shouldConsumeDragChange(true,false,false))
-        assertTrue(shouldConsumeDragChange(true,false,true))
-        assertTrue(shouldConsumeDragChange(true,true,false))
+    @Test fun `upstream panel follow is directional bounded and returns to zero`() {
+        assertEquals(0f, dockPanelOffset(0f, 400f, 4f), 0f)
+        assertTrue(dockPanelOffset(120f, 400f, 4f) in 0f..4f)
+        assertEquals(-dockPanelOffset(120f, 400f, 4f), dockPanelOffset(-120f, 400f, 4f), 0f)
+        assertEquals(4f, dockPanelOffset(900f, 400f, 4f), 0f)
+        assertEquals(0f, dockPanelOffset(90f, 0f, 4f), 0f)
+    }
+    @Test fun `physical pointer mapping mirrors in RTL and clamps the edges`() {
+        for (slot in 0..4) {
+            val x = slot * 80f + 40f
+            assertEquals(slot, dockSlotAt(x, 400f, false))
+            assertEquals(4 - slot, dockSlotAt(x, 400f, true))
+        }
+        assertEquals(0, dockSlotAt(-900f, 400f, false))
+        assertEquals(4, dockSlotAt(900f, 400f, false))
+        assertEquals(0, dockSlotAt(10f, 0f, false))
     }
 }
+

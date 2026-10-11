@@ -16,7 +16,7 @@ class R32ReleaseHardeningContractTest {
         val version = Properties().apply {
             File(projectRoot(), "app/version.properties").inputStream().use(::load)
         }
-        assertEquals("56", version.getProperty("versionCode"))
+        assertEquals("57", version.getProperty("versionCode"))
         assertEquals("1.0.0", version.getProperty("versionName"))
 
         val build = buildScript()
@@ -53,11 +53,12 @@ class R32ReleaseHardeningContractTest {
     @Test
     fun `v12 public baseline upgrades explicitly through every data preserving migration to v16`() {
         val database = source("data/local/AppDatabase.kt")
-        assertTrue(database.contains("version = 16"))
+        assertTrue(database.contains("version = 17"))
         assertTrue(database.contains("MIGRATION_12_13"))
         assertTrue(database.contains("MIGRATION_13_14"))
         assertTrue(database.contains("MIGRATION_14_15"))
         assertTrue(database.contains("MIGRATION_15_16"))
+        assertTrue(database.contains("MIGRATION_16_17"))
         assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/16.json").isFile)
         assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/14.json").isFile)
         assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/15.json").isFile)

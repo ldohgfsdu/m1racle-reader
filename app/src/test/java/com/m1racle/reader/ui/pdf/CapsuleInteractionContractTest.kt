@@ -1,6 +1,7 @@
 package com.m1racle.reader.ui.pdf
 
 import com.m1racle.reader.testing.ProductionSource
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -130,7 +131,8 @@ class CapsuleInteractionContractTest {
         assertTrue(norm(source("PdfViewerScreen.kt")).contains("private val CapsuleRadiusDp = 22.dp"))
         // 锚点稳定性的另一半：header 行永远钉在收起态宽度上。
         assertTrue(r.contains(".width(collapsedWidth)"))
-        assertTrue(r.contains(".height(44.dp)"))
+        assertTrue(r.contains(".height(pdfChromeControlSize(44.dp))"))
+        assertEquals(44.dp, pdfChromeControlSize(44.dp))
     }
 
     @Test

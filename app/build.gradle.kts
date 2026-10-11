@@ -186,6 +186,9 @@ android {
     // P0A: expose Room schema JSONs to androidTest assets so MigrationTestHelper
     // can validate migrated schema against the exported v6.json.
     sourceSets {
+        listOf("debug", "release", "benchmark").forEach { name ->
+            getByName(name).kotlin.srcDir("src/production/java")
+        }
         getByName("qa") {
             kotlin.srcDirs("src/debug/java", "src/qa/java")
             manifest.srcFile("src/qa/AndroidManifest.xml")
@@ -304,7 +307,7 @@ dependencies {
     // artifact — no vendored sources. See docs/READER_CHROME_MATERIAL_REPORT.md.
     implementation("io.github.kyant0:backdrop:2.0.0")
     implementation("io.github.oleksandrbalan:pagecurl:1.5.1")
-    // RiseDiary's continuous capsule geometry (the maintained Kyant shapes artifact).
+    // Maintained Kyant shapes artifact for supported optical geometry.
     implementation("io.github.kyant0:shapes:1.2.0")
 
     testImplementation("junit:junit:4.13.2")

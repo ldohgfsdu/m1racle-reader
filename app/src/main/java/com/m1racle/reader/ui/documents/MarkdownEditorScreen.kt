@@ -151,8 +151,15 @@ fun MarkdownEditorScreen(id: String, repository: DocumentRepository, onBack: () 
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { it?.let(model::export) }
     val source = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) result.data?.let { intent -> intent.data?.let { uri ->
-            val flags = intent.flags and (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            runCatching { context.contentResolver.takePersistableUriPermission(uri, flags) }
+            runCatching { context.contentResolver.takePersistableUriPermission(uri,
+                when (intent.flags and (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)) {
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION -> android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION -> android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION) ->
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    else -> 0
+                }) }
             model.save(uri)
         } }
     }

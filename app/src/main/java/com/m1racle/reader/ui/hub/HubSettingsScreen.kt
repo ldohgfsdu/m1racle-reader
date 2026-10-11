@@ -29,7 +29,7 @@ import com.m1racle.reader.ui.home.HomeDesignTokens
 
 /**
  * Read-only guidance stays visibly distinct from actionable settings.
- * [onOpenGlassLab] opens the Glass Lab in every build, including Release.
+ * [onOpenGlassLab] opens the QA-only Glass Lab.
  */
 @Composable
 fun HubSettingsScreen(
@@ -39,8 +39,8 @@ fun HubSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     var comparingMaterials by rememberSaveable { mutableStateOf(false) }
-    if (comparingMaterials) {
-        MaterialComparisonScreen(onBack = { comparingMaterials = false }, modifier = modifier)
+    if (BuildConfig.QA_GLASS_VARIANTS_ENABLED && comparingMaterials) {
+        QaMaterialComparisonScreen(onBack = { comparingMaterials = false }, modifier = modifier)
         return
     }
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()

@@ -67,8 +67,6 @@ class SearchRepository(
             locationKind = highlight.locationKind,
             location = highlight.location,
             anchorRaw = highlight.anchor,
-            legacyAnchorStart = highlight.anchorStart,
-            legacyAnchorEnd = highlight.anchorEnd,
             indexedAt = indexedAt,
         )
 
@@ -82,8 +80,6 @@ class SearchRepository(
             locationKind = note.locationKind,
             location = note.location,
             anchorRaw = note.anchor,
-            legacyAnchorStart = note.anchorStart,
-            legacyAnchorEnd = note.anchorEnd,
             indexedAt = indexedAt,
         )
 
@@ -122,8 +118,6 @@ class SearchRepository(
         locationKind: String,
         location: Int,
         anchorRaw: String?,
-        legacyAnchorStart: Int?,
-        legacyAnchorEnd: Int?,
         indexedAt: Long,
     ): Boolean {
         val normalizedContent = content.trim()
@@ -139,8 +133,6 @@ class SearchRepository(
                 locationKind,
                 location,
                 anchorRaw,
-                legacyAnchorStart,
-                legacyAnchorEnd,
             ),
         ) { "annotation locator cannot be resolved" }
         return upsertOrDelete(

@@ -63,7 +63,7 @@ import com.m1racle.reader.ui.hub.HubTabTransitions
 import com.m1racle.reader.ui.hub.LibraryScreen
 import com.m1racle.reader.ui.hub.LibraryViewModel
 import com.m1racle.reader.ui.hub.HubSettingsScreen
-import com.m1racle.reader.ui.hub.glasslab.GlassLabScreen
+import com.m1racle.reader.ui.hub.QaGlassLabScreen
 import com.m1racle.reader.ui.pdf.PdfViewerScreen
 import com.m1racle.reader.ui.pdf.PdfViewerViewModel
 import com.m1racle.reader.ui.search.SearchScreen
@@ -363,8 +363,10 @@ fun M1racleReaderNavGraph(
                         )
                     }
 
-                    composable(Routes.GLASS_LAB) {
-                        GlassLabScreen(onBack = { navController.popBackStack() })
+                    if (com.m1racle.reader.BuildConfig.QA_GLASS_VARIANTS_ENABLED) {
+                        composable(Routes.GLASS_LAB) {
+                            QaGlassLabScreen(onBack = { navController.popBackStack() })
+                        }
                     }
 
                     composable(Routes.DOCUMENT_TOOLS) {

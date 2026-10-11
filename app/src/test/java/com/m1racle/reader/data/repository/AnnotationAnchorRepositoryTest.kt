@@ -131,7 +131,7 @@ class AnnotationAnchorRepositoryTest {
     }
 
     @Test
-    fun `legacy null-anchor rows restore via kind location synthesis`() = runTest {
+    fun `unmigrated null-anchor rows are refused without runtime synthesis`() = runTest {
         val highlightDao = FakeHighlightDao()
         val noteDao = FakeNoteDao()
         val repo = ReadingRepository(NoBookmarks(), NoFavorites(), highlightDao, noteDao, com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
@@ -154,10 +154,9 @@ class AnnotationAnchorRepositoryTest {
             createdAt = 1L,
             updatedAt = 1L,
         )
-        assertEquals(DocumentAnchor.PdfPage(page = 33), repo.resolveHighlightAnchor("d", 1))
-        assertEquals(
-            DocumentAnchor.MarkdownBlock(blockIndex = 77, charStart = 9, charEnd = 30),
-            repo.resolveNoteAnchor("d", 1),
-        )
+        assertEquals(null, repo.resolveHighlightAnchor("d", 1))
+        assertEquals(null, repo.resolveNoteAnchor("d", 1))
+        // Real historical rows are converted once by MIGRATION_16_17, covered
+        // by MigrationV16ToV17Test. The repository accepts only canonical anchors.
     }
 }

@@ -50,14 +50,18 @@ class GlassBackdropTopologyContractTest {
 
     @Test
     fun `dock lens captures only its isolated sampling bar and never itself`() {
-        val tabs = appSource("ui/hub/RiseDiaryBottomTabs.kt").readText()
+        val tabs = appSource("ui/hub/OpticalDockTabs.kt").readText()
         val capture = trailingLambda(tabs, "GlassBackdropSource(")
+        assertTrue(capture.body.contains("LocalDockSampling provides true"))
         assertTrue(capture.body.contains("content = content"))
-        assertTrue(capture.body.contains("backdrop = backdrop"))
-        assertFalse(capture.body.contains("combinedSelectionBackdrop"))
-        assertTrue(tabs.indexOf("rememberCombinedBackdrop(backdrop, tabsBackdrop)", capture.closeBrace) > capture.closeBrace)
-        assertTrue(tabs.contains("LocalLiquidBottomTabSampling provides true"))
-        assertTrue(tabs.contains("Modifier.clearAndSetSemantics {}.alpha(0f)"))
+        assertFalse(capture.body.contains("glassMaterial("))
+        assertFalse(capture.body.contains("opticalSource"))
+        assertTrue(tabs.contains("rememberCombinedBackdrop(dockSurface, foreground)"))
+        assertTrue(tabs.indexOf("exportBackdrop = dockSurface") < tabs.indexOf("GlassBackdropSource("))
+        assertFalse(tabs.contains("rememberCombinedBackdrop(root, foreground)"))
+        assertTrue(tabs.indexOf("sourceBackdrop = opticalSource", capture.closeBrace) > capture.closeBrace)
+        assertTrue(tabs.contains("Modifier.fillMaxSize().clearAndSetSemantics {}.alpha(0f)"))
+
     }
 
     @Test
@@ -138,6 +142,23 @@ class GlassBackdropTopologyContractTest {
         assertTrue(menu.contains("GlassMaterialRole.Dock"))
         assertTrue(menu.contains("GlassCapability.SOLID_FALLBACK"))
         assertFalse(menu.contains(".glassMaterial("))
+    }
+
+    @Test
+    fun `production source no longer includes the five GPL derived implementations`() {
+        val root = ProductionSource.javaRoot().resolve("com/m1racle/reader/ui/hub")
+        listOf(
+            "RiseDiaryBottomTabs.kt", "RiseDiaryGlassButton.kt",
+            "liquidglass/DampedDragAnimation.kt", "liquidglass/InteractiveHighlight.kt",
+            "liquidglass/DragGestureInspector.kt",
+        ).forEach { assertFalse("removed implementation remains: $it", root.resolve(it).exists()) }
+        val tabs = appSource("ui/hub/OpticalDockTabs.kt").readText()
+        assertFalse(tabs.contains("com.m1racle.reader.ui.hub.liquidglass"))
+        assertFalse(tabs.contains("drawBackdrop("))
+        assertTrue(tabs.contains("GlassMaterialRole.SelectionLens, capsule"))
+        assertTrue(tabs.contains("dockLensPickupX(pickupX.value)"))
+        assertTrue(tabs.contains("dockLensPickupY(pickupY.value)"))
+        assertFalse(tabs.contains("GlassMaterialRole.Control, LocalGlassEnvironment.current"))
     }
 
     private data class TrailingLambda(

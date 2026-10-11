@@ -151,7 +151,7 @@ class ReaderChromeMaterialTest {
         val end = screen.indexOf("private fun JumpPageBody")
         assertTrue(start >= 0 && end > start)
         val capsule = screen.substring(start, end)
-        val headerIdx = capsule.indexOf(".height(44.dp)")
+        val headerIdx = capsule.indexOf(".height(pdfChromeControlSize(44.dp))")
         val clickableIdx = capsule.indexOf("combinedClickable(")
         assertTrue(headerIdx >= 0)
         assertTrue(clickableIdx > headerIdx)

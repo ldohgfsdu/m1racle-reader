@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SearchIndexEntity::class,
         DocumentAliasEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,6 +36,12 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         private const val DB_NAME = "m1racle-reader.db"
+
+        val MIGRATION_16_17: Migration = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                AnnotationAnchorMigration.statements.forEach(db::execSQL)
+            }
+        }
 
         val MIGRATION_1_2: Migration = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -556,6 +562,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_13_14,
                         MIGRATION_14_15,
                         MIGRATION_15_16,
+                        MIGRATION_16_17,
                     )
                     .build()
                     .also { instance = it }

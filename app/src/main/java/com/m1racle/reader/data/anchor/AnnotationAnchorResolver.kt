@@ -6,9 +6,7 @@ package com.m1racle.reader.data.anchor
  * - 保存：[DocumentAnchor] → [AnchorProjection]（locationKind/location 派生列
  *   用作索引排序键 + anchor 列的规范化序列化原文）。派生列是写入时单点计算，
  *   不是第二事实源——恢复一律以 anchor 列优先。
- * - 恢复：行字段 → [DocumentAnchor]。anchor 列存在且合法时精确还原；
- *   为 null（v11 前历史行）时按 kind/location(+旧字符区间) 合成等价锚点——
- *   这是全量纯函数回退，不是遗留运行路径。
+ * - 恢复仅解码 canonical anchor；历史字段由 Room v17 一次性迁移补全。
  */
 interface AnnotationAnchorResolver {
 
@@ -21,8 +19,6 @@ interface AnnotationAnchorResolver {
         locationKind: String,
         location: Int,
         anchorRaw: String?,
-        legacyAnchorStart: Int? = null,
-        legacyAnchorEnd: Int? = null,
     ): DocumentAnchor?
 }
 
@@ -51,17 +47,9 @@ object PdfPageAnchorResolver : AnnotationAnchorResolver {
         locationKind: String,
         location: Int,
         anchorRaw: String?,
-        legacyAnchorStart: Int?,
-        legacyAnchorEnd: Int?,
     ): DocumentAnchor? {
         if (locationKind != "PAGE_INDEX") return null
-        AnchorCodec.decode(anchorRaw)?.let { return it }
-        // 历史行合成：整页锚。
-        return if (location >= 0) {
-            DocumentAnchor.PdfPage(page = location)
-        } else {
-            null
-        }
+        return AnchorCodec.decode(anchorRaw) as? DocumentAnchor.PdfPage
     }
 }
 
@@ -82,21 +70,9 @@ object MarkdownBlockAnchorResolver : AnnotationAnchorResolver {
         locationKind: String,
         location: Int,
         anchorRaw: String?,
-        legacyAnchorStart: Int?,
-        legacyAnchorEnd: Int?,
     ): DocumentAnchor? {
         if (locationKind != "SCROLL_POSITION") return null
-        AnchorCodec.decode(anchorRaw)?.let { return it }
-        // 历史行合成：块索引 + 旧字符区间精化。
-        return if (location >= 0) {
-            DocumentAnchor.MarkdownBlock(
-                blockIndex = location,
-                charStart = legacyAnchorStart,
-                charEnd = legacyAnchorEnd,
-            )
-        } else {
-            null
-        }
+        return AnchorCodec.decode(anchorRaw) as? DocumentAnchor.MarkdownBlock
     }
 }
 
@@ -129,8 +105,6 @@ object EpubTextAnchorResolver : AnnotationAnchorResolver {
         locationKind: String,
         location: Int,
         anchorRaw: String?,
-        legacyAnchorStart: Int?,
-        legacyAnchorEnd: Int?,
     ): DocumentAnchor? {
         if (locationKind != LOCATION_KIND) return null
         // No historical EPUB rows exist, so there is nothing to synthesize.

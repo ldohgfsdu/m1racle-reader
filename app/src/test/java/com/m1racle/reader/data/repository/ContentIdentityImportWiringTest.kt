@@ -319,6 +319,85 @@ class ContentIdentityImportWiringTest {
     }
 
     @Test
+    fun reclaimedLegacyPdfKeepsVerifiedBytesAfterExternalSourceChanges() = runBlocking {
+        val originalBytes = "original PDF bytes".toByteArray()
+        val old = fixture.source("content://r37.test/legacy.pdf", originalBytes)
+        fixture.seedLegacyPathA("legacy-pdf", old)
+        val before = fixture.documentDao.getById("legacy-pdf")!!
+        val incoming = fixture.source("content://r37.test/incoming.pdf", originalBytes)
+
+        val document = (fixture.repository.importDocument(incoming) as ImportResult.Success).document
+
+        assertEquals(before.id, document.id)
+        assertEquals("file", Uri.parse(document.uri).scheme)
+        assertEquals(originalBytes.toList(), File(Uri.parse(document.uri).path!!).readBytes().toList())
+        fixture.source(old.toString(), "changed old source".toByteArray())
+        fixture.source(incoming.toString(), "changed incoming source".toByteArray())
+        assertEquals(originalBytes.toList(), File(Uri.parse(document.uri).path!!).readBytes().toList())
+        assertEquals(before.lastScrollIndex, document.lastScrollIndex)
+        assertEquals(before.lastScrollOffset, document.lastScrollOffset)
+        assertEquals(before.readingProgress, document.readingProgress)
+        assertEquals(listOf("bookmark-legacy" to before.id), fixture.documentDao.bookmarks)
+        assertEquals(listOf("highlight-legacy" to before.id), fixture.documentDao.highlights)
+        assertEquals(listOf("note-legacy" to before.id), fixture.documentDao.notes)
+        assertEquals(listOf("anchor-legacy" to before.id), fixture.documentDao.anchors)
+        assertEquals(incoming.toString(), document.sourceUri)
+        assertEquals(document.contentSha256, document.sourceSha256)
+        assertEquals(1, fixture.documentDao.rows.size)
+        assertEquals(0, fixture.documentDao.replaceCalls)
+    }
+
+    @Test
+    fun oldHashedPdfRestoresItsIdentityFromIncomingVerifiedBytes() = runBlocking {
+        val bytes = "original PDF bytes".toByteArray()
+        val old = fixture.source("content://r37.test/old-hashed.pdf", bytes)
+        fixture.seedLegacyPathA("hashed-pdf", old)
+        val hash = com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(bytes.inputStream())
+        fixture.documentDao.assignContentSha256IfNull("hashed-pdf", hash, 1)
+        fixture.source(old.toString(), "changed PDF source".toByteArray())
+        val incoming = fixture.source("content://r37.test/restored.pdf", bytes)
+
+        val document = (fixture.repository.importDocument(incoming) as ImportResult.Success).document
+
+        assertEquals("hashed-pdf", document.id)
+        assertEquals("file", Uri.parse(document.uri).scheme)
+        assertEquals(hash, document.contentSha256)
+        assertEquals(hash, com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(File(Uri.parse(document.uri).path!!)))
+        assertEquals(listOf("bookmark-legacy" to document.id), fixture.documentDao.bookmarks)
+    }
+
+    @Test
+    fun duplicatePdfReusesAnIntactManagedCopy() = runBlocking {
+        val first = fixture.source("content://r37.test/managed.pdf")
+        val original = (fixture.repository.importDocument(first) as ImportResult.Success).document
+        val second = fixture.source("content://r37.test/managed-copy.pdf")
+
+        val duplicate = (fixture.repository.importDocument(second) as ImportResult.Success).document
+
+        assertEquals(original.id, duplicate.id)
+        assertEquals(original.uri, duplicate.uri)
+        assertEquals(second.toString(), duplicate.sourceUri)
+        assertEquals(PDF_BYTES.toList(), File(Uri.parse(duplicate.uri).path!!).readBytes().toList())
+    }
+
+    @Test
+    fun failedLegacyPdfClaimRemovesItsUncommittedSnapshot() = runBlocking {
+        val bytes = "original PDF bytes".toByteArray()
+        val old = fixture.source("content://r37.test/failed-claim.pdf", bytes)
+        fixture.seedLegacyPathA("failed-pdf", old)
+        val incoming = fixture.source("content://r37.test/retry-claim.pdf", bytes)
+        val library = File(ApplicationProvider.getApplicationContext<Context>().filesDir, "library")
+        val filesBefore = library.walkTopDown().filter { it.isFile }.map { it.path }.toSet()
+        fixture.documentDao.rejectUpdates = true
+
+        assertEquals(ImportResult.ReadFailed, fixture.repository.importDocument(incoming))
+
+        assertEquals(old.toString(), fixture.documentDao.getById("failed-pdf")!!.uri)
+        assertEquals(filesBefore, library.walkTopDown().filter { it.isFile }.map { it.path }.toSet())
+        assertEquals(listOf("bookmark-legacy" to "failed-pdf"), fixture.documentDao.bookmarks)
+    }
+
+    @Test
     fun unreadableLegacyAliasCannotClaimUnverifiedBytes() = runBlocking {
         val oldId = "a".repeat(64)
         val old = Uri.parse("content://r37.test/tree/old/document/42.pdf")

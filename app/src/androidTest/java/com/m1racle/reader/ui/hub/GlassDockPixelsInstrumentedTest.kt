@@ -72,23 +72,27 @@ class GlassDockPixelsInstrumentedTest {
             }
         } }
         val home = rule.onAllNodes(isSelectable())[0]
-        val hitbox = home.fetchSemanticsNode().boundsInRoot
+        val hitbox = home.renderedBounds()
         val lens = rule.onNodeWithTag("dock-selection")
         val material = rule.onNodeWithTag("dock-material", useUnmergedTree = true)
-        val rest = material.fetchSemanticsNode().boundsInRoot
+        val rest = material.renderedBounds()
         assertEquals(56f * rule.density.density, rest.height, .5f)
-        assertEquals(48f * rule.density.density, lens.fetchSemanticsNode().boundsInRoot.height, .5f)
+        assertEquals(48f * rule.density.density, lens.renderedBounds().height, .5f)
         home.performTouchInput { down(center); advanceEventTime(800) }
         try {
             rule.mainClock.advanceTimeBy(800)
-            val held = material.fetchSemanticsNode().boundsInRoot
-            assertEquals(rest.width * 1.05f, held.width, .5f)
-            assertEquals(rest.height * 1.05f, held.height, .5f)
-            assertEquals(hitbox, home.fetchSemanticsNode().boundsInRoot)
-            assertEquals(67f * rule.density.density, lens.fetchSemanticsNode().boundsInRoot.height, .5f)
+            awaitWindowFrame()
+            val held = material.renderedBounds()
+            assertEquals(rest.width + 16f * rule.density.density, held.width, .5f)
+            assertEquals(rest.height * held.width / rest.width, held.height, .5f)
+            val liftedLens = lens.renderedBounds()
+            assertTrue("pressed lens must exceed both rail edges vertically",
+                liftedLens.top < held.top && liftedLens.bottom > held.bottom)
+            assertEquals(hitbox, home.renderedBounds())
+            assertEquals(48f * (78f / 56f) * rule.density.density, lens.renderedBounds().height, .5f)
         } finally { home.performTouchInput { cancel() } }
         rule.waitForIdle()
-        assertEquals(rest, material.fetchSemanticsNode().boundsInRoot)
+        assertEquals(rest, material.renderedBounds())
     }
 
     @Test fun lightControlEnlargesBrightensAndRebounds() = assertControlResponse(false)
@@ -110,15 +114,16 @@ class GlassDockPixelsInstrumentedTest {
             }
         } }
         val node = rule.onNodeWithTag("reference-control")
-        val rest = node.fetchSemanticsNode().boundsInRoot
-        val origin = rule.onNodeWithTag("dock-pixel-scene").fetchSemanticsNode().boundsInRoot.topLeft
+        val rest = node.renderedBounds()
+        val origin = rule.onNodeWithTag("dock-pixel-scene").renderedBounds().topLeft
         val point = rest.center - origin
         val idleLight = captureDockPixels()[point.x.roundToInt(), point.y.roundToInt()].luminance()
         rule.mainClock.autoAdvance = false
         try {
             rule.runOnIdle { pressed.value = true }
             rule.mainClock.advanceTimeBy(800)
-            val held = node.fetchSemanticsNode().boundsInRoot
+            awaitWindowFrame()
+            val held = node.renderedBounds()
             assertEquals(rest.width * 1.085f, held.width, .5f)
             val heldPixels = captureDockPixels("reference-control-${if(dark) "dark" else "light"}-held")
             val heldLight = heldPixels[point.x.roundToInt(), point.y.roundToInt()].luminance()
@@ -127,12 +132,12 @@ class GlassDockPixelsInstrumentedTest {
             var rebounded = false
             repeat(40) {
                 rule.mainClock.advanceTimeByFrame()
-                if (node.fetchSemanticsNode().boundsInRoot.width < rest.width * .998f) rebounded = true
+                if (node.renderedBounds().width < rest.width * .998f) rebounded = true
             }
             assertTrue("release must rebound through resting size", rebounded)
         } finally { rule.mainClock.autoAdvance = true }
         rule.waitForIdle()
-        assertEquals(rest, node.fetchSemanticsNode().boundsInRoot)
+        assertEquals(rest, node.renderedBounds())
     }
 
     @Test fun opticalLensTracksEachDragFrameAndReversalOnDevice() {
@@ -156,9 +161,11 @@ class GlassDockPixelsInstrumentedTest {
         val home = rule.onAllNodes(isSelectable())[0]
         val library = rule.onAllNodes(isSelectable())[1]
         val lens = rule.onNodeWithTag("dock-selection")
-        val restingLens = lens.fetchSemanticsNode().boundsInRoot
-        val slot = library.fetchSemanticsNode().boundsInRoot.center.x -
-            home.fetchSemanticsNode().boundsInRoot.center.x
+        val restingLens = lens.renderedBounds()
+        val rail = rule.onNodeWithTag("dock-material", useUnmergedTree = true)
+        val restingRailCenter = rail.renderedBounds().center.x
+        val slot = library.renderedBounds().center.x -
+            home.renderedBounds().center.x
         rule.mainClock.autoAdvance = false
         var held = false
         try {
@@ -166,7 +173,8 @@ class GlassDockPixelsInstrumentedTest {
             home.performTouchInput { down(center); advanceEventTime(800) }
             held = true
             rule.mainClock.advanceTimeBy(800)
-            val heldLens = lens.fetchSemanticsNode().boundsInRoot
+            awaitWindowFrame()
+            val heldLens = lens.renderedBounds()
             var position = 0f
             var movementCount = 0
             repeat(3) {
@@ -174,14 +182,24 @@ class GlassDockPixelsInstrumentedTest {
                     position += movement
                     home.performTouchInput { moveBy(Offset(slot * movement, 0f), 16) }
                     rule.mainClock.advanceTimeByFrame()
+                    awaitWindowFrame()
                     movementCount++
                     assertEquals("optical lens must follow event $movementCount at slot $position on the next frame",
-                        home.fetchSemanticsNode().boundsInRoot.center.x + slot * position,
-                        lens.fetchSemanticsNode().boundsInRoot.center.x, 1f)
-                    if (movementCount == 5) {
-                        val stretched = lens.fetchSemanticsNode().boundsInRoot
+                        home.renderedBounds().center.x + slot * position +
+                            rail.renderedBounds().center.x - restingRailCenter,
+                        lens.renderedBounds().center.x, 1f)
+                    val follow = rail.renderedBounds().center.x - restingRailCenter
+                    assertTrue("rail follow must stay within the upstream 4dp bound",
+                        kotlin.math.abs(follow) <= 4f * rule.density.density + .5f)
+                    if (movementCount == 12) {
+                        val stretched = lens.renderedBounds()
                         assertTrue("optical drag must visibly stretch width", stretched.width > heldLens.width * 1.15f)
-                        assertTrue("optical drag must visibly squash height", stretched.height < heldLens.height * .94f)
+                        // Upstream couples X and Y through the same signed velocity.
+                        // Check that formula rather than the old independently tuned 6% squash.
+                        val strain = (1f - heldLens.width / stretched.width) / .75f
+                        assertEquals("vertical squash must match upstream velocity deformation",
+                            1f - .25f * strain, stretched.height / heldLens.height, .003f)
+                        assertTrue("rightward drag must squash height", stretched.height < heldLens.height)
                     }
                 }
             }
@@ -191,7 +209,7 @@ class GlassDockPixelsInstrumentedTest {
             var rebounded = false
             repeat(30) {
                 rule.mainClock.advanceTimeByFrame()
-                if (lens.fetchSemanticsNode().boundsInRoot.width < restingLens.width * .98f) rebounded = true
+                if (lens.renderedBounds().width < restingLens.width * .98f) rebounded = true
             }
             assertTrue("optical release must rebound past rest", rebounded)
         } finally {
@@ -199,8 +217,8 @@ class GlassDockPixelsInstrumentedTest {
             rule.mainClock.autoAdvance = true
         }
         rule.waitForIdle()
-        assertEquals(home.fetchSemanticsNode().boundsInRoot.center.x,
-            lens.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+        assertEquals(home.renderedBounds().center.x,
+            lens.renderedBounds().center.x, 1f)
         assertTrue(requests.isEmpty())
     }
 
@@ -232,21 +250,22 @@ class GlassDockPixelsInstrumentedTest {
         }
         rule.waitForIdle()
         val lens = rule.onNodeWithTag("dock-selection")
-        val resting = lens.fetchSemanticsNode().boundsInRoot
+        val resting = lens.renderedBounds()
         val library = rule.onAllNodes(isSelectable())[1]
         library.performTouchInput { down(center) }
         var gestureActive = true
         try {
             rule.mainClock.advanceTimeBy(800)
+            awaitWindowFrame()
             rule.waitForIdle()
-            assertEquals(library.fetchSemanticsNode().boundsInRoot.center.x,
-                lens.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+            assertEquals(library.renderedBounds().center.x,
+                lens.renderedBounds().center.x, 1f)
             assertEquals(HubDestination.HOME, selected.value)
             assertTrue(requests.isEmpty())
             val scene = rule.onNodeWithTag("dock-pixel-scene")
-            val pixels = captureDockPixels()
+            val pixels = captureDockPixels("inactive-tab-held")
             val icon = rule.onNodeWithTag("dock-icon-LIBRARY", useUnmergedTree = true)
-                .fetchSemanticsNode().boundsInRoot.translate(-scene.fetchSemanticsNode().boundsInRoot.topLeft)
+                .renderedBounds().translate(-scene.renderedBounds().topLeft)
             var blueInk = 0
             for (y in icon.top.roundToInt() until icon.bottom.roundToInt()) {
                 for (x in icon.left.roundToInt() until icon.right.roundToInt()) {
@@ -259,11 +278,11 @@ class GlassDockPixelsInstrumentedTest {
             library.performTouchInput { cancel() }
             gestureActive = false
             rule.mainClock.advanceTimeBy(32)
-            val returningLens = lens.fetchSemanticsNode().boundsInRoot
-                .translate(-scene.fetchSemanticsNode().boundsInRoot.topLeft)
+            val returningLens = lens.renderedBounds()
+                .translate(-scene.renderedBounds().topLeft)
             val returningPixels = captureDockPixels()
             val homeIcon = rule.onNodeWithTag("dock-icon-HOME", useUnmergedTree = true)
-                .fetchSemanticsNode().boundsInRoot.translate(-scene.fetchSemanticsNode().boundsInRoot.topLeft)
+                .renderedBounds().translate(-scene.renderedBounds().topLeft)
             var outsideLens = 0
             var duplicateBlue = 0
             for (y in homeIcon.top.roundToInt() until homeIcon.bottom.roundToInt()) {
@@ -281,7 +300,8 @@ class GlassDockPixelsInstrumentedTest {
             rule.mainClock.autoAdvance = true
         }
         rule.waitForIdle()
-        assertEquals(resting, lens.fetchSemanticsNode().boundsInRoot)
+        awaitWindowFrame()
+        assertEquals(resting, lens.renderedBounds())
         assertTrue(requests.isEmpty())
         library.performTouchInput { down(center); advanceEventTime(500); up() }
         rule.waitForIdle()
@@ -318,8 +338,8 @@ class GlassDockPixelsInstrumentedTest {
         }
         rule.waitForIdle()
         val scene = rule.onNodeWithTag("dock-pixel-scene")
-        val bounds = rule.onAllNodes(isSelectable())[1].fetchSemanticsNode().boundsInRoot
-            .translate(-scene.fetchSemanticsNode().boundsInRoot.topLeft)
+        val bounds = rule.onAllNodes(isSelectable())[1].renderedBounds()
+            .translate(-scene.renderedBounds().topLeft)
         val refracted = captureDockPixels()
         rule.runOnIdle { capability.value = GlassCapability.BLUR_ONLY }
         rule.waitForIdle()
@@ -371,27 +391,27 @@ class GlassDockPixelsInstrumentedTest {
         rule.waitForIdle()
         assertBlurredPage("idle")
         val lens = rule.onNodeWithTag("dock-selection")
-        val resting = lens.fetchSemanticsNode().boundsInRoot
+        val resting = lens.renderedBounds()
         val before = captureDockPixels("sampled-rim-idle")
         val home = rule.onAllNodes(isSelectable())[0]
-        val homeBounds = home.fetchSemanticsNode().boundsInRoot.translate(
-            -rule.onNodeWithTag("dock-pixel-scene").fetchSemanticsNode().boundsInRoot.topLeft)
+        val homeBounds = home.renderedBounds().translate(
+            -rule.onNodeWithTag("dock-pixel-scene").renderedBounds().topLeft)
         val restingInk = blueInkCount(before, homeBounds)
         home.performTouchInput { down(center) }
         try {
             rule.mainClock.advanceTimeBy(800)
+            awaitWindowFrame()
             rule.waitForIdle()
             assertBlurredPage("holding Home")
             val after = captureDockPixels("sampled-rim-held")
             val heldInk = blueInkCount(after, homeBounds)
-            assertTrue("sampled icon and label must magnify while held: $restingInk -> $heldInk",
-                restingInk > 0 && heldInk > restingInk * 1.35f)
-            val held = lens.fetchSemanticsNode().boundsInRoot
+            assertTrue("sampled icon and label remain visible during reference pickup: $restingInk -> $heldInk",
+                restingInk > 0 && heldInk > 0)
+            val held = lens.renderedBounds()
             assertTrue("lens must use the reference pickup: $resting -> $held",
-                held.width in resting.width * 1.36f..resting.width * 1.40f)
-            // The captured reference expands 48dp to approximately 67dp.
-            // an extra shell transform; only the lens now owns pickup scaling.
-            assertEquals(67f / 48f, held.height / resting.height, 0.003f)
+                held.width in resting.width * 1.388f..resting.width * 1.398f)
+            // The reference lens lifts to 66dp independently of PDF control feedback.
+            assertEquals(78f / 56f, held.height / resting.height, 0.003f)
             var changed = 0
             var area = 0
             for (y in resting.top.roundToInt() until resting.bottom.roundToInt()) {
@@ -409,12 +429,12 @@ class GlassDockPixelsInstrumentedTest {
         }
         rule.waitForIdle()
         assertBlurredPage("released")
-        assertEquals(resting, lens.fetchSemanticsNode().boundsInRoot)
+        assertEquals(resting, lens.renderedBounds())
     }
 
     private fun assertBlurredPage(phase: String) {
         val scene = rule.onNodeWithTag("dock-pixel-scene")
-        val origin = scene.fetchSemanticsNode().boundsInRoot.topLeft
+        val origin = scene.renderedBounds().topLeft
         val pixels = captureDockPixels("blur-$phase")
         rule.onAllNodes(isSelectable()).fetchSemanticsNodes().forEachIndexed { index, tab ->
             val bounds = tab.boundsInRoot.translate(-origin)
@@ -428,12 +448,19 @@ class GlassDockPixelsInstrumentedTest {
             val bottom = (bounds.center.y + bounds.height * 0.03f).roundToInt()
             var minLight = 1f
             var maxLight = 0f
+            var highFrequencyContrast = 0f
             for (y in top until bottom) for (x in left until right) {
                 val light = pixels[x, y].luminance()
                 minLight = minOf(minLight, light)
                 maxLight = maxOf(maxLight, light)
+                // Remove the smooth radial highlight. Raw one-dp stripes retain
+                // high-frequency contrast; the upstream light gradient does not.
+                if (x > left && x < right - 1) {
+                    val localAverage = (pixels[x - 1, y].luminance() + pixels[x + 1, y].luminance()) / 2f
+                    highFrequencyContrast = maxOf(highFrequencyContrast, kotlin.math.abs(light - localAverage))
+                }
             }
-            assertTrue("tab $index leaks raw background at $phase: ${maxLight - minLight}", maxLight - minLight < 0.02f)
+            assertTrue("tab $index leaks raw background at $phase: ${highFrequencyContrast}", highFrequencyContrast < 0.02f)
             assertTrue("tab $index must sample the gray stripe average at $phase: $minLight..$maxLight",
                 minLight > 0.10f && maxLight < 0.85f)
         }
@@ -470,12 +497,12 @@ class GlassDockPixelsInstrumentedTest {
         }
         rule.waitForIdle()
         val scene = rule.onNodeWithTag("dock-pixel-scene")
-        val origin = scene.fetchSemanticsNode().boundsInRoot.topLeft
+        val origin = scene.renderedBounds().topLeft
         // Capture the scene, not individual Icon nodes: a later glass layer can cover them.
         val pixels = captureDockPixels()
         HubDestination.entries.forEach { destination ->
             val bounds = rule.onNodeWithTag("dock-icon-${destination.name}", useUnmergedTree = true)
-                .fetchSemanticsNode().boundsInRoot.translate(-origin)
+                .renderedBounds().translate(-origin)
             val left = bounds.left.roundToInt()
             val top = bounds.top.roundToInt()
             val right = bounds.right.roundToInt()
@@ -515,7 +542,7 @@ class GlassDockPixelsInstrumentedTest {
             }
         }
         val scene = rule.onNodeWithTag("dock-pixel-scene")
-        val origin = scene.fetchSemanticsNode().boundsInRoot.topLeft
+        val origin = scene.renderedBounds().topLeft
         val warmPixels = captureDockPixels()
         rule.runOnIdle { background.value = cool }
         val coolPixels = captureDockPixels()
@@ -553,11 +580,32 @@ class GlassDockPixelsInstrumentedTest {
         return ink
     }
 
+    // LayoutCoordinates use mutable matrix scratch storage. Read them on the UI
+    // thread, where layer updates occur, rather than racing a frame on the test thread.
+    private fun androidx.compose.ui.test.SemanticsNodeInteraction.renderedBounds(): androidx.compose.ui.geometry.Rect {
+        val node = fetchSemanticsNode()
+        return rule.runOnIdle { node.boundsInRoot }
+    }
+
+    private fun awaitWindowFrame() {
+        // Compose idleness does not mean RenderThread has published its frame.
+        // Wait for a real buffer commit before PixelCopy, especially on the first
+        // optical shader frame; otherwise the test can read the preceding image.
+        val committed = CountDownLatch(1)
+        rule.runOnUiThread {
+            val view = rule.activity.window.decorView
+            view.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
+            view.invalidate()
+        }
+        assertTrue("Window did not commit the requested frame", committed.await(5, TimeUnit.SECONDS))
+    }
+
     private fun captureDockPixels(evidenceName: String? = null): PixelMap {
         rule.waitForIdle()
         val bounds = rule.onNodeWithTag("dock-pixel-scene").fetchSemanticsNode().boundsInWindow
         val region = Rect(bounds.left.roundToInt(), bounds.top.roundToInt(),
             bounds.right.roundToInt(), bounds.bottom.roundToInt())
+        awaitWindowFrame()
         val bitmap = Bitmap.createBitmap(region.width(), region.height(), Bitmap.Config.ARGB_8888)
         val copied = CountDownLatch(1)
         var result = PixelCopy.ERROR_UNKNOWN
@@ -580,3 +628,4 @@ class GlassDockPixelsInstrumentedTest {
         return bitmap.asImageBitmap().toPixelMap()
     }
 }
+

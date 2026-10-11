@@ -1752,7 +1752,6 @@ private fun FloatingChromeButton(
 }
 
 /** QA variant 2 changes material only, so every variant keeps the [production] size. */
-@Composable
 internal fun pdfChromeControlSize(production: Dp): Dp = production
 
 /** QA glass variants pin glass text to the spec colors; baseline keeps the theme. */

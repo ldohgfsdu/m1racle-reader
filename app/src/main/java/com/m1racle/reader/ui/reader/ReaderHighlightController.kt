@@ -43,8 +43,6 @@ class ReaderHighlightController(
                 locationKind = highlight.locationKind,
                 location = highlight.location,
                 anchorRaw = highlight.anchor,
-                legacyAnchorStart = highlight.anchorStart,
-                legacyAnchorEnd = highlight.anchorEnd,
             )
     }
 

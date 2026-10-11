@@ -22,14 +22,14 @@ class M1racleMotionContractTest {
     }
 
     @Test
-    fun `dock uses RiseDiary animation while navigation owns selection`() {
+    fun `dock owns optical interaction while navigation owns selection`() {
         val dock = source("ui/hub/GlassDock.kt")
         val motion = source("ui/hub/DockMotion.kt")
-        val tabs = source("ui/hub/RiseDiaryBottomTabs.kt")
-        assertTrue(dock.contains("LiquidBottomTabs("))
-        assertTrue(dock.contains("selectedTabIndex = { dockSlotForDestination(motion.selected.ordinal) }"))
-        assertTrue(tabs.contains("DampedDragAnimation("))
-        assertTrue(tabs.contains("onDragCancelled ="))
+        val tabs = source("ui/hub/OpticalDockTabs.kt")
+        assertTrue(dock.contains("OpticalDockTabs("))
+        assertTrue(dock.contains("selectedSlot = dockSlotForDestination(motion.selected.ordinal)"))
+        assertTrue(tabs.contains("awaitEachGesture {"))
+        assertTrue(tabs.contains("finally {"))
         assertFalse(motion.contains("Animatable"))
         assertFalse(motion.contains("preview"))
     }
@@ -55,10 +55,12 @@ class M1racleMotionContractTest {
 
         assertTrue(dock.contains("if (index == 2) DockImportAction(onImportDocument, enabled = !importing)"))
         assertTrue(dock.contains("enabled = !importing"))
-        assertTrue(dock.contains("if (pressed) 1.085f else 1f"))
+        // QA adds its own press recipe; production retains its scale and spring.
+        assertTrue(dock.contains("if (pressed) (if (coolapk) QaCoolapk.ImportPressScale else 1.085f) else 1f"))
+        assertTrue(dock.contains("if (!coolapk) androidx.compose.animation.core.spring(0.55f, 450f)"))
         assertTrue(dock.contains("spring(0.55f, 450f)"))
         assertTrue(dock.contains("testTag(\"dock-import\")"))
-        assertTrue(dock.contains("actionSlot = 2"))
+        assertTrue(tabsHaveAnExcludedImportSlot())
         assertFalse(dock.contains("LiquidGlassButton("))
         assertFalse(home.contains("HomeImportFab"))
         assertFalse(home.contains("floatingActionButton"))
@@ -80,6 +82,8 @@ class M1racleMotionContractTest {
         assertTrue(pop.contains("M1racleMotion.slow"))
         assertTrue(pop.contains("M1racleMotion.normalIn"))
     }
+
+    private fun tabsHaveAnExcludedImportSlot() = source("ui/hub/OpticalDockTabs.kt").contains("startSlot != 2")
 
     private fun source(relative: String): String =
         ProductionSource.text("com/m1racle/reader/$relative")

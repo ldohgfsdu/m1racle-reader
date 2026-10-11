@@ -41,11 +41,6 @@ data class ReaderSettings(
         const val MAX_LINE_HEIGHT_SCALE = 2.00f
         const val DEFAULT_LINE_HEIGHT_SCALE = LINE_DEFAULT
 
-        /** Legacy DataStore values from the old mild multiplier scheme. */
-        private const val LEGACY_LINE_COMPACT = 0.95f
-        private const val LEGACY_LINE_DEFAULT = 1.0f
-        private const val LEGACY_LINE_RELAXED = 1.15f
-
         val Default = ReaderSettings()
 
         fun clampFontScale(value: Float): Float {
@@ -54,17 +49,10 @@ data class ReaderSettings(
         }
 
         /**
-         * Map stored value to a current preset ratio, including migration from
-         * the previous 0.95 / 1.0 / 1.15 mild scales.
+         * Clamp current ratios; historical values are converted by DataStore migration.
          */
         fun clampLineHeightScale(value: Float): Float {
             if (!value.isFinite()) return DEFAULT_LINE_HEIGHT_SCALE
-            // Migrate legacy chip values.
-            when {
-                near(value, LEGACY_LINE_COMPACT) -> return LINE_COMPACT
-                near(value, LEGACY_LINE_DEFAULT) -> return LINE_DEFAULT
-                near(value, LEGACY_LINE_RELAXED) -> return LINE_RELAXED
-            }
             // Snap to nearest known preset if close.
             when {
                 near(value, LINE_COMPACT) -> return LINE_COMPACT

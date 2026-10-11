@@ -102,11 +102,11 @@ class ReadingRepository(
         }
     }
 
-    /** 恢复单条高亮的抽象锚点（历史行按 kind/location 合成）。 */
+    /** 恢复单条高亮的规范化锚点。 */
     suspend fun resolveHighlightAnchor(documentId: String, id: Long): DocumentAnchor? {
         val row = highlightDao.getById(documentId, id) ?: return null
         val resolver = AnnotationAnchorResolvers.forLocationKind(row.locationKind) ?: return null
-        return resolver.resolve(row.locationKind, row.location, row.anchor, row.anchorStart, row.anchorEnd)
+        return resolver.resolve(row.locationKind, row.location, row.anchor)
     }
 
     suspend fun removeHighlight(documentId: String, id: Long) {
@@ -154,7 +154,7 @@ class ReadingRepository(
     suspend fun resolveNoteAnchor(documentId: String, id: Long): DocumentAnchor? {
         val row = noteDao.getById(documentId, id) ?: return null
         val resolver = AnnotationAnchorResolvers.forLocationKind(row.locationKind) ?: return null
-        return resolver.resolve(row.locationKind, row.location, row.anchor, row.anchorStart, row.anchorEnd)
+        return resolver.resolve(row.locationKind, row.location, row.anchor)
     }
 
     suspend fun updateNoteContent(
