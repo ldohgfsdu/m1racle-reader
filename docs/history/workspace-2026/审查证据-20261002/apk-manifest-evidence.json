@@ -1,0 +1,42 @@
+{
+  "manifest": {
+    "versionCode": 23,
+    "versionName": "1.0.0",
+    "compileSdkVersion": 37,
+    "compileSdkVersionCodename": "17",
+    "package": "com.m1racle.reader",
+    "platformBuildVersionCode": 37,
+    "platformBuildVersionName": 17
+  },
+  "permissions": [
+    {
+      "name": "com.m1racle.reader.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+    }
+  ],
+  "application": {
+    "theme": 2131361801,
+    "label": 2131296259,
+    "icon": 2131230720,
+    "name": "com.m1racle.reader.M1racleReaderApplication",
+    "allowBackup": false,
+    "supportsRtl": true,
+    "extractNativeLibs": false,
+    "roundIcon": 2131230721,
+    "appComponentFactory": "androidx.core.app.CoreComponentFactory"
+  },
+  "activities": [
+    {
+      "theme": 2131361801,
+      "name": "com.m1racle.reader.MainActivity",
+      "exported": true,
+      "launchMode": 1,
+      "configChanges": 512,
+      "windowSoftInputMode": 16
+    }
+  ],
+  "sdk": {
+    "minSdkVersion": 31,
+    "targetSdkVersion": 35
+  },
+  "has_internet_permission": false
+}

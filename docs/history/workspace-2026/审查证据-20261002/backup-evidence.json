@@ -1,0 +1,41 @@
+{
+  "source/m1racle-reader-source-1.0.0-20261002.zip": {
+    "size": 2521850,
+    "sha256": "fd873c4c8f8328518d479be95161eb5f93f2f366be669a3125455a7d36e932a1",
+    "sidecar_matches": true
+  },
+  "git/m1racle-reader-git-bundle-1.0.0-20261002.bundle": {
+    "size": 85018176,
+    "sha256": "0ec2a8fb56291061a5979acbf991e7a76c3f38423a40451d503075facdf5dccb",
+    "sidecar_matches": true
+  },
+  "apk/m1racle-reader-release-latest.apk": {
+    "size": 6917909,
+    "sha256": "b4b5258fb60e40a89d7ccd9a5eedf35286af6e02241230e3cd6a0ade747927b3",
+    "sidecar_matches": true
+  },
+  "apk_integrity": {
+    "bad_entry": null,
+    "entries": 233,
+    "core_entries": {
+      "AndroidManifest.xml": 10592,
+      "resources.arsc": 258968,
+      "classes.dex": 4618172
+    }
+  },
+  "source_integrity": {
+    "bad_entry": null
+  },
+  "source_vs_bundle_head": {
+    "snapshot_files": 758,
+    "tracked_files": 758,
+    "byte_different_count": 719,
+    "newline_only_count": 718,
+    "substantive_differences": [
+      "docs/CURRENT_STATUS.md"
+    ],
+    "snapshot_only": [],
+    "head_only": []
+  },
+  "head": "a314247d9cc27f7b3adc1edb3074b65eee3afbfe"
+}

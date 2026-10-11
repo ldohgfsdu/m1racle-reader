@@ -1,0 +1,95 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preQaBuild UP-TO-DATE
+> Task :app:generateQaBuildConfig UP-TO-DATE
+> Task :app:generateQaResources UP-TO-DATE
+> Task :app:packageQaResources UP-TO-DATE
+> Task :app:processQaNavigationResources UP-TO-DATE
+> Task :app:parseQaLocalResources UP-TO-DATE
+> Task :app:generateQaRFile UP-TO-DATE
+> Task :app:kspQaKotlin UP-TO-DATE
+> Task :app:compileQaKotlin UP-TO-DATE
+> Task :app:javaPreCompileQa UP-TO-DATE
+> Task :app:compileQaJavaWithJavac UP-TO-DATE
+> Task :app:checkQaAarMetadata UP-TO-DATE
+> Task :app:mapQaSourceSetPaths UP-TO-DATE
+> Task :app:compileQaNavigationResources UP-TO-DATE
+> Task :app:mergeQaResources UP-TO-DATE
+> Task :app:createQaCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksQa UP-TO-DATE
+> Task :app:processQaMainManifest UP-TO-DATE
+> Task :app:processQaManifest UP-TO-DATE
+> Task :app:processQaManifestForPackage UP-TO-DATE
+> Task :app:processQaResources UP-TO-DATE
+> Task :app:bundleQaClassesToRuntimeJar UP-TO-DATE
+> Task :app:bundleQaClassesToCompileJar UP-TO-DATE
+> Task :app:kspQaUnitTestKotlin UP-TO-DATE
+> Task :app:preQaUnitTestBuild UP-TO-DATE
+> Task :app:compileQaUnitTestKotlin UP-TO-DATE
+> Task :app:javaPreCompileQaUnitTest UP-TO-DATE
+> Task :app:compileQaUnitTestJavaWithJavac NO-SOURCE
+> Task :app:generateQaAssets UP-TO-DATE
+> Task :app:mergeQaAssets UP-TO-DATE
+> Task :app:packageQaUnitTestForUnitTest UP-TO-DATE
+> Task :app:processQaUnitTestManifest UP-TO-DATE
+> Task :app:generateQaUnitTestConfig UP-TO-DATE
+> Task :app:processQaJavaRes UP-TO-DATE
+> Task :app:processQaUnitTestJavaRes UP-TO-DATE
+> Task :app:testQaUnitTest UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :app:generateReleaseResources UP-TO-DATE
+> Task :app:packageReleaseResources UP-TO-DATE
+> Task :app:processReleaseNavigationResources UP-TO-DATE
+> Task :app:parseReleaseLocalResources UP-TO-DATE
+> Task :app:generateReleaseRFile UP-TO-DATE
+> Task :app:kspReleaseKotlin UP-TO-DATE
+> Task :app:compileReleaseKotlin UP-TO-DATE
+> Task :app:javaPreCompileRelease UP-TO-DATE
+> Task :app:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:extractDeepLinksRelease UP-TO-DATE
+> Task :app:processReleaseMainManifest UP-TO-DATE
+> Task :app:generateReleaseLintReportModel UP-TO-DATE
+> Task :app:lintAnalyzeRelease UP-TO-DATE
+> Task :app:lintReportRelease UP-TO-DATE
+
+> Task :app:lintRelease FAILED
+Lint found 1 error, 148 warnings, 4 hints. First failure:
+
+D:\03_M1racle Reader\reader\local.properties:1: Error: Windows file separators (\) and drive letter separators (':') must be escaped (\\) in property files; use D\:/04_\\u6784\\u5efa\\u73af\\u5883/M1racle \\u4e13\\u7528\\u6784\\u5efa\\u5de5\\u5177\\uff08m1racle-build-tools\\uff09/sdk [PropertyEscape]
+
+The full lint text report is located at:
+  D:\03_M1racle Reader\reader\app\build\intermediates\lint_intermediate_text_report\release\lintReportRelease\lint-results-release.txt
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:lintRelease' (registered by plugin 'com.android.internal.application').
+> Lint found errors in the project; aborting build.
+  
+  Fix the issues identified by lint, or create a baseline to see only new errors.
+  To create a baseline, run `gradlew updateLintBaseline` after adding the following to the module's build.gradle file:
+  ```
+  android {
+      lint {
+          baseline = file("lint-baseline.xml")
+      }
+  }
+  ```
+  For more details, see https://developer.android.com/studio/write/lint#snapshot
+  
+  Lint found 1 error, 148 warnings, 4 hints. First failure:
+  
+  D:\03_M1racle Reader\reader\local.properties:1: Error: Windows file separators (\) and drive letter separators (':') must be escaped (\\) in property files; use D\:/04_\\u6784\\u5efa\\u73af\\u5883/M1racle \\u4e13\\u7528\\u6784\\u5efa\\u5de5\\u5177\\uff08m1racle-build-tools\\uff09/sdk [PropertyEscape]
+  
+  The full lint text report is located at:
+    D:\03_M1racle Reader\reader\app\build\intermediates\lint_intermediate_text_report\release\lintReportRelease\lint-results-release.txt
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+49 actionable tasks: 1 executed, 48 up-to-date
+BUILD FAILED in 4s

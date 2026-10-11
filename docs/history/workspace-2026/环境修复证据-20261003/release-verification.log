@@ -1,0 +1,80 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :app:generateReleaseResources UP-TO-DATE
+> Task :app:packageReleaseResources UP-TO-DATE
+> Task :app:processReleaseNavigationResources UP-TO-DATE
+> Task :app:parseReleaseLocalResources UP-TO-DATE
+> Task :app:generateReleaseRFile UP-TO-DATE
+> Task :app:kspReleaseKotlin UP-TO-DATE
+> Task :app:compileReleaseKotlin UP-TO-DATE
+> Task :app:javaPreCompileRelease UP-TO-DATE
+> Task :app:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:extractDeepLinksRelease UP-TO-DATE
+> Task :app:processReleaseMainManifest UP-TO-DATE
+> Task :app:generateReleaseLintReportModel UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :app:mergeReleaseNativeLibs UP-TO-DATE
+> Task :app:stripReleaseDebugSymbols UP-TO-DATE
+> Task :app:extractReleaseNativeSymbolTables UP-TO-DATE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:checkReleaseDuplicateClasses UP-TO-DATE
+> Task :app:mergeReleaseArtProfile UP-TO-DATE
+> Task :app:checkReleaseAarMetadata UP-TO-DATE
+> Task :app:mapReleaseSourceSetPaths UP-TO-DATE
+> Task :app:compileReleaseNavigationResources UP-TO-DATE
+> Task :app:mergeReleaseResources UP-TO-DATE
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:processReleaseManifest
+> Task :app:processReleaseJavaRes
+> Task :app:mergeReleaseStartupProfile UP-TO-DATE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:compressReleaseAssets
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+
+> Task :app:validatePublicReleaseConfiguration
+PUBLIC_RELEASE_IDENTITY versionCode=31 versionName=1.0.0
+
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:processReleaseManifestForPackage
+> Task :app:processReleaseResources
+> Task :app:mergeReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :app:mergeReleaseJavaResource
+> Task :app:expandReleaseArtProfileWildcards
+> Task :app:produceReleaseComposeMapping
+> Task :app:reportReleaseComposeMappingErrors
+> Task :app:lintAnalyzeRelease
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:minifyReleaseWithR8
+> Task :app:lintVitalReportRelease SKIPPED
+> Task :app:lintVitalRelease SKIPPED
+> Task :app:mergeReleaseComposeMapping
+> Task :app:convertShrunkResourcesToBinaryRelease
+> Task :app:optimizeReleaseResources
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+
+> Task :app:assembleRelease
+OUTBOX: m1racle-reader-release-v1.0.0-20261003-233349.apk (6830 KB) �� D:\03_M1racle Reader\reader\.external_outbox
+OUTBOX: m1racle-reader-release-latest.apk (latest)
+OUTBOX: pruned m1racle-reader-release-v1.0.0-20261003-163445.apk (6993769 bytes)
+
+> Task :app:lintReportRelease
+Wrote HTML report to file:///D:/03_M1racle%20Reader/reader/app/build/reports/lint-results-release.html
+
+> Task :app:lintRelease
+
+BUILD SUCCESSFUL in 4m 1s
+57 actionable tasks: 31 executed, 26 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
+* daemon not running; starting now at tcp:5037
+* daemon started successfully
+Release is in Outbox; device Download delivery pending (no unique connected device).

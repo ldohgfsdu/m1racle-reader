@@ -1,0 +1,23 @@
+{
+  "serial": "emulator-5554",
+  "api": 35,
+  "abi": "x86_64",
+  "apk_sha256": "42817bacdbb116efce2296c73af13fc8f8c444de1b5b8413bcde3b938c48d6c0",
+  "checks": {
+    "home": true,
+    "settings": true,
+    "markdown_scroll": true,
+    "markdown_toc_jump": true,
+    "epub_turn_page": true,
+    "epub_toc_jump": true,
+    "epub_restore": true,
+    "pdf_page_render": true,
+    "pdf_scroll": true,
+    "pdf_reading_menu": true,
+    "saf_import": true,
+    "markdown_search": true,
+    "artifact_identity": true,
+    "no_crash_buffer": true
+  },
+  "scope": "basic emulator smoke; not full acceptance or physical-device verification"
+}

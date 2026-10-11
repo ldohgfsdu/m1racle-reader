@@ -1,0 +1,3 @@
+-cp
+"D:/03_M1racle Reader/.build-tools/gradle/caches/9.5.0/workerMain/gradle-worker.jar"
+worker.org.gradle.process.internal.worker.GradleWorkerMain

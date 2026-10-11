@@ -1,0 +1,81 @@
+{
+  "runId": "unknown",
+  "projectId": "unknown",
+  "taskId": "unknown",
+  "mode": "unmanaged",
+  "agent": {
+    "tool": "codex",
+    "model": "unknown",
+    "version": "unknown"
+  },
+  "host": {
+    "machineId": "unknown",
+    "platform": "windows"
+  },
+  "stage": "awaiting_review",
+  "status": "source_fixes_verified",
+  "git": {
+    "head": "a314247d9cc27f7b3adc1edb3074b65eee3afbfe",
+    "branch": "codex/fix-project-audit",
+    "dirtyFingerprint": "7dc5b85ce7643c6e85157fc9934618cc5f2eaaaa941f9d90221be7d75778cd25",
+    "sourceFingerprint": "188b4cf670b02cf502f44ba0bd47902c0fd9d5009223f3f48df698c335efb676"
+  },
+  "completedVerification": [
+    "qa_unit_tests",
+    "release_compile",
+    "release_lint",
+    "public_backup_integrity",
+    "historical_apk_signature"
+  ],
+  "verification": {
+    "command": "gradlew.bat :app:testQaUnitTest :app:lintRelease --console=plain",
+    "exitCode": 0,
+    "unitTests": {
+      "tests": 1614,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 2
+    },
+    "skippedTests": [
+      {
+        "class": "com.m1racle.reader.markdown.LaoziAnchorFixtureTest",
+        "test": "laozi_fixture_anchorsAndTocPlainTitles",
+        "reason": "org.junit.AssumptionViolatedException: 老子整理排版版 fixture not mounted"
+      },
+      {
+        "class": "com.m1racle.reader.markdown.MarkdownAssetResolverSecurityTest",
+        "test": "symlink_escape_rejected_when_supported",
+        "reason": "org.junit.AssumptionViolatedException: symlink not supported in this environment"
+      }
+    ],
+    "lint": {
+      "errors": 0,
+      "warnings": 156,
+      "hints": 4
+    },
+    "time": "2026-10-02T21:35:20.388658+08:00"
+  },
+  "remaining": [
+    "production_signed_release_build_and_delivery",
+    "device_acceptance",
+    "missing_fixture_and_symlink_tests",
+    "lint_warning_review"
+  ],
+  "artifacts": [
+    {
+      "source": "working-tree source snapshot; no APK build",
+      "file": "C:\\Users\\21234\\Desktop\\M1racle Reader\\source\\m1racle-reader-source-audit-fixed-20261002.zip",
+      "size": 2516210,
+      "sha256": "c50759e9cd3db115e401674809e097a27d3ecd721b04048a3eea0458f6686742",
+      "head": "a314247d9cc27f7b3adc1edb3074b65eee3afbfe",
+      "branch": "codex/fix-project-audit",
+      "dirtyFingerprint": "7dc5b85ce7643c6e85157fc9934618cc5f2eaaaa941f9d90221be7d75778cd25",
+      "sourceFingerprint": "188b4cf670b02cf502f44ba0bd47902c0fd9d5009223f3f48df698c335efb676",
+      "deliveredTo": "C:\\Users\\21234\\Desktop\\M1racle Reader\\source\\m1racle-reader-source-audit-fixed-20261002.zip",
+      "deliveredAt": "2026-10-02T21:35:20.388658+08:00",
+      "containsSigningMaterial": false,
+      "zipRoundTripVerified": true
+    }
+  ],
+  "notes": "F1-F8 implemented. Original APK is unchanged and lacks these fixes. Signing environment absent; no device. Signing private key/password untouched."
+}

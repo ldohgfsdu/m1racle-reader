@@ -1,0 +1,15 @@
+
+------------------------------------------------------------
+Gradle 9.5.0
+------------------------------------------------------------
+
+Build time:    2026-04-28 12:05:30 UTC
+Revision:      3fe117d68f3907790f3809f121aa36303a9151f8
+
+Kotlin:        2.3.20
+Groovy:        4.0.29
+Ant:           Apache Ant(TM) version 1.10.15 compiled on August 25 2024
+Launcher JVM:  17.0.20.1 (Eclipse Adoptium 17.0.20.1+1)
+Daemon JVM:    D:\03_M1racle Reader\.build-tools\jdk (no Daemon JVM specified, using current Java home)
+OS:            Windows 11 10.0 amd64
+

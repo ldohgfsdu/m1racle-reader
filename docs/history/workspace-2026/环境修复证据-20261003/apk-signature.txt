@@ -1,0 +1,17 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=M1racle Reader, OU=Android, O=M1racle, L=China, C=CN
+Signer #1 certificate SHA-256 digest: 2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1
+Signer #1 certificate SHA-1 digest: fd5bf03bd6bc5e4072a647750666818a041fb661
+Signer #1 certificate MD5 digest: fa148567cfdae4f9aa548030af5edcd5
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 4096
+Signer #1 public key SHA-256 digest: 7125eaacbbb6f0c92665229730897cfa88215ee018ae6e67c5decf9b6ad0fc0e
+Signer #1 public key SHA-1 digest: 788eb75ab58db08d574f3c6282230e066ab5f109
+Signer #1 public key MD5 digest: 1df84dfa859b66c002aae50acf45db69
