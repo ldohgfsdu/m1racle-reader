@@ -990,9 +990,6 @@ class PdfViewerViewModel(
 
     fun onZoomScaleSettled(scale: Float, zoomTargetPage: Int? = null) = commitZoom(scale, zoomTargetPage)
 
-    /** @deprecated Prefer [onZoomScaleSettled]. */
-    fun onZoomScaleChange(scale: Float) = onZoomScaleSettled(scale)
-
     fun setZoomGestureActive(active: Boolean) {
         val wasActive = suspendPageSettled
         suspendPageSettled = active

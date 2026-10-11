@@ -233,10 +233,6 @@ object ZipPackageImporter {
         return target
     }
 
-    /** @deprecated use [resolvePackageImage] */
-    fun resolveRelativeFile(documentFile: File, relativePath: String): File? =
-        resolvePackageImage(documentFile, relativePath, null)
-
     fun isUnder(child: File, root: File): Boolean {
         val c = child.canonicalFile.path
         val r = root.canonicalFile.path

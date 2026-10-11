@@ -1064,10 +1064,8 @@ fun PdfViewerScreen(
                 content = {
                     when (state.readingMode) {
                         PdfReadingMode.VERTICAL_CONTINUOUS -> {
-                            // R7 V2 production path (the legacy PdfVerticalZoomLockArea
-                            // zoom-lock implementation was deleted in the R25 closure —
-                            // single continuous-viewport path only). Static tap toggles
-                            // the chrome (fully decoupled from scroll:
+                            // R7 V2 production path: single continuous-viewport path only.
+                            // Static tap toggles the chrome (fully decoupled from scroll:
                             // detectTapGestures consumes nothing until a stationary up, so
                             // drag/zoom/fling paths are untouched).
                             Box(

@@ -122,7 +122,6 @@ internal var SemanticsPropertyReceiver.r7TileCount by R7TileCountKey
 
 /**
  * R7 production continuous reader: a virtualized, document-wide 2D viewport.
- * The legacy R6 lock/overlay reader remains in source only for rollback comparison.
  */
 @Composable
 internal fun ContinuousDocumentViewport(
