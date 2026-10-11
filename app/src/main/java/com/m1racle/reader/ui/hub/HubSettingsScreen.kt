@@ -90,23 +90,25 @@ fun HubSettingsScreen(
                 )
                 Spacer(Modifier.height(24.dp))
                 com.m1racle.reader.ui.components.ReaderFontPicker()
-                Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.material_comparison_section),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 10.dp).semantics { heading() })
-                Surface(onClick = { comparingMaterials = true }, shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                    Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                        Text(stringResource(R.string.material_comparison_title),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
-                        Spacer(Modifier.height(8.dp))
-                        Text(stringResource(R.string.material_comparison_entry_hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (BuildConfig.QA_GLASS_VARIANTS_ENABLED) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(stringResource(R.string.material_comparison_section),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp).semantics { heading() })
+                    Surface(onClick = { comparingMaterials = true }, shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                            Text(stringResource(R.string.material_comparison_title),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
+                            Spacer(Modifier.height(8.dp))
+                            Text(stringResource(R.string.material_comparison_entry_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
-                if (onOpenGlassLab != null) {
+                if (BuildConfig.QA_GLASS_VARIANTS_ENABLED && onOpenGlassLab != null) {
                     Spacer(Modifier.height(12.dp))
                     Surface(onClick = onOpenGlassLab, shape = RoundedCornerShape(20.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerLow) {

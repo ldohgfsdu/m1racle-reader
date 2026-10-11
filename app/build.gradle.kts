@@ -83,9 +83,9 @@ android {
         buildConfigField("float", "DETAIL_TILE_OVERLAY_ALPHA", "${detailTileOverlayAlpha}f")
         // Disabled for every normal build; the qa build type overrides this below.
         buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "false")
-        // QA glass variant switch (Settings row + prefs). Only the qa build type enables it.
+        // QA-only switch: glass variant row, material comparison and glass workbench
+        // Settings entries. Only the qa build type enables it.
         buildConfigField("boolean", "QA_GLASS_VARIANTS_ENABLED", "false")
-        // The workbench uses the same Settings entry and route in every build type.
     }
 
     // Public signing: AGP applies zipalign and APK Signature Scheme signing.
@@ -128,7 +128,7 @@ android {
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.getByName("release")
-            // The workbench is available through production Settings.
+            // QA-only Settings entries stay hidden here (QA_GLASS_VARIANTS_ENABLED = false).
         }
         // Non-debuggable release-like build for Macrobenchmark / FrameTiming on device.
         create("benchmark") {
