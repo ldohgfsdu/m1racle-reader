@@ -75,7 +75,8 @@ class R31ArchitectureReleaseContractTest {
         val rules = File(projectRoot(), "app/proguard-rules.pro").readText()
         assertTrue(build.contains("isMinifyEnabled = true"))
         assertTrue(build.contains("isShrinkResources = true"))
-        assertTrue(build.contains("m1racleReaderOutboxHistoryLimit = 5"))
+        // 2026-10-11 审计 §四：outbox 每变体保留策略由 5 降为 3。
+        assertTrue(build.contains("m1racleReaderOutboxHistoryLimit = 3"))
         assertTrue(rules.contains("-assumenosideeffects class android.util.Log"))
         assertTrue(rules.contains("public static int d(...);"))
         assertTrue(rules.contains("public static int v(...);"))
