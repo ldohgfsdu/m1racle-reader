@@ -339,7 +339,7 @@ dependencies {
 //   对应 .sha256
 val m1racleReaderOutboxDir: File =
     rootProject.layout.projectDirectory.dir(".external_outbox").asFile
-val m1racleReaderOutboxHistoryLimit = 5
+val m1racleReaderOutboxHistoryLimit = 3
 
 fun pruneVariantOutboxHistory(targetDir: File, label: String) {
     val stampedPattern = Regex("^m1racle-reader-${Regex.escape(label)}-v.+\\.apk$")
