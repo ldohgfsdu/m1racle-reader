@@ -80,6 +80,10 @@ class M1racleReaderApplication : Application() {
         ReaderSettingsRepository(this)
     }
 
+    val readerFontRepository by lazy {
+        com.m1racle.reader.data.settings.ReaderFontRepository(this, applicationScope)
+    }
+
     /** H2.1 Reading Library 门面（书签/收藏；阅读位置权威在 DocumentRepository）。 */
     val readingRepository: ReadingRepository by lazy {
         ReadingRepository(

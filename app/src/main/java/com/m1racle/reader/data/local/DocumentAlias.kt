@@ -50,4 +50,8 @@ interface DocumentAliasDao {
     /** Runtime-only rebind after current bytes have been staged and verified. */
     @Update
     suspend fun updateAlias(alias: DocumentAliasEntity)
+
+    /** One-time migration cleanup; runtime code never deletes aliases. */
+    @Query("DELETE FROM document_aliases WHERE kind = :kind")
+    suspend fun deleteByKind(kind: String): Int
 }

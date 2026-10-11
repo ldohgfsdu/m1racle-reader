@@ -83,6 +83,7 @@ class ReadingRepository(
         anchor: DocumentAnchor,
         createdAt: Long,
         excerpt: String? = null,
+        style: com.m1racle.reader.data.anchor.HighlightStyle = com.m1racle.reader.data.anchor.HighlightStyle.Yellow,
     ): Long {
         val projection = AnnotationAnchorResolvers.forAnchor(anchor).project(anchor)
         val row = HighlightEntity(
@@ -91,6 +92,7 @@ class ReadingRepository(
             location = projection.location,
             anchor = projection.encoded,
             excerpt = excerpt,
+            style = style.name,
             createdAt = createdAt,
         )
         return transactionRunner.run {

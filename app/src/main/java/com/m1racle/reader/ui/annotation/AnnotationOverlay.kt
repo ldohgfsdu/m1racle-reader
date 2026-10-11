@@ -18,6 +18,7 @@ data class AnnotationOverlayItem(
     val type: AnnotationType,
     val anchor: DocumentAnchor,
     val excerpt: String?,
+    val style: com.m1racle.reader.data.anchor.HighlightStyle = com.m1racle.reader.data.anchor.HighlightStyle.Yellow,
 ) {
     /** PDF 页内归一化矩形；非 PDF 锚点返回 null。 */
     fun pdfRectsNormalized(): List<NormalizedRect> =
@@ -59,7 +60,8 @@ class RepositoryAnnotationOverlaySource(
                 val anchor = resolver.resolve(
                     row.locationKind, row.location, row.anchor, row.anchorStart, row.anchorEnd,
                 ) ?: return@mapNotNull null
-                AnnotationOverlayItem(id = row.id, type = AnnotationType.HIGHLIGHT, anchor = anchor, excerpt = row.excerpt)
+                AnnotationOverlayItem(id = row.id, type = AnnotationType.HIGHLIGHT, anchor = anchor, excerpt = row.excerpt,
+                    style = com.m1racle.reader.data.anchor.HighlightStyle.fromStorage(row.style))
             }
     }
 

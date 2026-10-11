@@ -28,7 +28,7 @@ interface BookmarkDao {
         """
         SELECT b.id AS id, b.documentId AS documentId, b.locationKind AS locationKind,
                b.location AS location, b.`offset` AS `offset`, b.title AS title,
-               b.note AS note, b.createdAt AS createdAt, d.displayName AS documentName
+               b.note AS note, b.createdAt AS createdAt, d.displayName AS documentName, b.anchor AS anchor
         FROM bookmarks b
         INNER JOIN documents d ON d.id = b.documentId
         ORDER BY b.createdAt DESC, b.id DESC

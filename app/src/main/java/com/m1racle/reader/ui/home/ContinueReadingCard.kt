@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +71,13 @@ fun ContinueReadingCard(
                 modifier = Modifier.padding(end = 40.dp),
             )
             Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+            if (document.isPdf || document.isEpub) {
+                com.m1racle.reader.image.DocumentCover(document,
+                    Modifier.width(56.dp).height(76.dp).clip(RoundedCornerShape(6.dp))) {}
+                Spacer(Modifier.width(16.dp))
+            }
+            Column(Modifier.weight(1f)) {
             Text(
                 text = titles.displayTitle,
                 style = M1racleReaderTheme.typography.title.copy(fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
@@ -76,6 +85,8 @@ fun ContinueReadingCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            }
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 text = positionLine,

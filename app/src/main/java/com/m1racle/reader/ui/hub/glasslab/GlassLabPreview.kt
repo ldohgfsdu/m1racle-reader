@@ -58,6 +58,8 @@ internal fun GlassLabPreview(
     resetToken: Int,
     modifier: Modifier = Modifier,
 ) {
+    val optical = Build.VERSION.SDK_INT >= 33 &&
+        com.m1racle.reader.ui.material.LocalGlassCapability.current == com.m1racle.reader.ui.material.GlassCapability.FULL_OPTICAL
     val backdrop = rememberLayerBackdrop()
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -117,7 +119,7 @@ internal fun GlassLabPreview(
                     effects = {
                         vibrancy()
                         if (parameters.blur > 0f) blur((parameters.blur * effectScale).dp.toPx())
-                        if (Build.VERSION.SDK_INT >= 33) {
+                        if (optical) {
                             val effectWidth = size.width
                             val effectHeight = size.height
                             val effectOffset = -padding

@@ -48,6 +48,7 @@ data class BookmarkWithDocument(
     val note: String?,
     val createdAt: Long,
     val documentName: String,
+    val anchor: String? = null,
 ) {
     val kind: BookmarkLocationKind
         get() = BookmarkLocationKind.valueOf(locationKind)

@@ -185,6 +185,7 @@ class PdfViewerViewModel(
     private val documentId: String,
     private val repository: DocumentRepository,
     private val applicationScope: CoroutineScope,
+    private val initialBookmark: com.m1racle.reader.data.anchor.BookmarkTarget? = null,
 ) : AndroidViewModel(application) {
 
     private val appContext = application.applicationContext
@@ -1936,7 +1937,7 @@ class PdfViewerViewModel(
             lastHiResPrimary = -1
 
             val entity = try {
-                repository.getDocumentById(documentId)
+                repository.getDocumentById(documentId)?.let { initialBookmark?.applyTo(it) ?: it }
             } catch (_: Exception) {
                 null
             }
@@ -1984,7 +1985,7 @@ class PdfViewerViewModel(
                     )
                     openedDocument = entity.copy(pageCount = pageCount)
                     documentUri = entity.uri
-                    readingMode = readingPrefs.getMode(documentId)
+                    readingMode = initialBookmark?.viewport?.readingMode ?: readingPrefs.getMode(documentId)
                     showPageButtons = readingPrefs.getShowPageButtons(documentId)
                     lastPersistedPage = restored
                     val persistedPosition = ReadingPosition(
@@ -2635,6 +2636,7 @@ class PdfViewerViewModel(
         private val documentId: String,
         private val repository: DocumentRepository,
         private val applicationScope: CoroutineScope,
+    private val initialBookmark: com.m1racle.reader.data.anchor.BookmarkTarget? = null,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -2644,6 +2646,7 @@ class PdfViewerViewModel(
                     documentId = documentId,
                     repository = repository,
                     applicationScope = applicationScope,
+                    initialBookmark = initialBookmark,
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")

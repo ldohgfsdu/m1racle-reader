@@ -59,7 +59,7 @@ class ReaderChromeTokensContractTest {
                 assertEquals(expectedHighlightW, spec.highlightWidth.value, 0.001f)
                 val expectedHighlightA = when (role) {
                     // Approved iOS transparency recipe (design.md, 2026-10-04).
-                    GlassMaterialRole.Dock -> if (dark) 0.28f else 0.24f
+                    GlassMaterialRole.Dock -> if (dark) 0.28f else 0.85f
                     GlassMaterialRole.SelectionLens -> 0f
                     GlassMaterialRole.Dialog -> if (dark) 0.38f else 0.30f
 
@@ -94,11 +94,11 @@ class ReaderChromeTokensContractTest {
             dark = false,
             pressed = true,
         )
-        assertEquals(0.04f, pressed.surfaceColor.alpha - rest.surfaceColor.alpha, 0.01f)
+        assertEquals(0.08f, pressed.surfaceColor.alpha - rest.surfaceColor.alpha, 0.01f)
         assertEquals(0.70f, pressed.highlightColor.alpha, 0.004f)
         assertEquals(rest.blur, pressed.blur)
         assertEquals(rest.shadow, pressed.shadow)
-        assertEquals(0.965f, pressed.scale, 0.001f)
+        assertEquals(1.085f, pressed.scale, 0.001f)
         assertEquals(GlassRenderState.IDLE, rest.renderState)
         assertEquals(GlassRenderState.INTERACTION, pressed.renderState)
     }
@@ -142,7 +142,7 @@ class ReaderChromeTokensContractTest {
         assertTrue(engine.contains("Highlight.Default.copy("))
         assertTrue(engine.contains("dropShadow("))
         assertTrue(engine.contains("shadow = null"))
-        assertTrue(engine.contains("animationSpec = GlassMaterialEngine.PressSpring"))
+        assertTrue(engine.contains("else GlassMaterialEngine.PressSpring"))
         assertTrue(engine.contains("layerBlock = if (pressLayerActive || layerBlock != null)"))
         assertTrue(engine.contains("layerBlock?.invoke(this)"))
         assertTrue(engine.contains("scaleX *= scale"))

@@ -3,6 +3,8 @@ package com.m1racle.reader.ui.viewer
 import android.os.Trace
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -163,6 +165,7 @@ fun ViewerScreen(
     /** P0-1 批注中介（与 PDF 同一实现；null = 批注编辑不可用）。 */
     noteController: com.m1racle.reader.ui.reader.ReaderNoteController? = null,
     initialAnchor: DocumentAnchor? = null,
+    initialBookmark: com.m1racle.reader.data.anchor.BookmarkTarget? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -189,7 +192,7 @@ fun ViewerScreen(
 
     when (val state = uiState) {
         is ViewerUiState.Success -> {
-            ViewerSuccessScreen(
+            com.m1racle.reader.ui.components.ReaderFontContent { ViewerSuccessScreen(
                 state = state,
                 title = title,
                 viewModel = viewModel,
@@ -198,8 +201,9 @@ fun ViewerScreen(
                 highlightController = highlightController,
                 noteController = noteController,
                 initialAnchor = initialAnchor,
+                initialBookmark = initialBookmark,
                 modifier = modifier,
-            )
+            ) }
         }
 
         ViewerUiState.Loading -> {
@@ -294,6 +298,7 @@ private fun ViewerSuccessScreen(
     highlightController: com.m1racle.reader.ui.reader.ReaderHighlightController?,
     noteController: com.m1racle.reader.ui.reader.ReaderNoteController?,
     initialAnchor: DocumentAnchor?,
+    initialBookmark: com.m1racle.reader.data.anchor.BookmarkTarget?,
     modifier: Modifier = Modifier,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -370,9 +375,23 @@ private fun ViewerSuccessScreen(
         initialFirstVisibleItemScrollOffset = restoredOffset,
         prefetchStrategy = prefetchStrategy,
     )
+    // Compose exposes the system ScrollCapture session; temporary capture scrolling must not
+    // become the user's saved reading position.
+    val systemCaptureInProgress by rememberUpdatedState(androidx.compose.ui.platform.LocalScrollCaptureInProgress.current)
+    var captureOriginalPosition by remember(state.document.id) { mutableStateOf<Triple<Int, Int, Float>?>(null) }
+    SideEffect {
+        if (systemCaptureInProgress && captureOriginalPosition == null) {
+            captureOriginalPosition = Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, readingProgressOf(listState))
+        } else if (!systemCaptureInProgress) captureOriginalPosition = null
+    }
 
     // Search navigation supplies the same canonical anchor used by annotations.
     // The existing block jump helper remains the sole Markdown positioning path.
+    LaunchedEffect(initialBookmark, state.document.id) {
+        val saved = initialBookmark ?: return@LaunchedEffect
+        val block = saved.anchor as? DocumentAnchor.MarkdownBlock ?: return@LaunchedEffect
+        listState.scrollToItem((block.blockIndex + listHeaderCount).coerceIn(0, (state.blocks.size + listHeaderCount - 1).coerceAtLeast(0)), saved.scrollOffset)
+    }
     LaunchedEffect(initialAnchor, state.document.id) {
         val target = initialAnchor as? DocumentAnchor.MarkdownBlock ?: return@LaunchedEffect
         scrollToBlockIndex(
@@ -394,7 +413,11 @@ private fun ViewerSuccessScreen(
         val controller = bookmarkController ?: return
         val index = listState.firstVisibleItemIndex
         scope.launch {
-            when (controller.toggle(index)) {
+            when (controller.toggle(index, offset = listState.firstVisibleItemScrollOffset.toLong(),
+                target = com.m1racle.reader.data.anchor.BookmarkTarget(
+                    DocumentAnchor.MarkdownBlock((index - listHeaderCount).coerceAtLeast(0)),
+                    listState.firstVisibleItemScrollOffset,
+                ))) {
                 com.m1racle.reader.ui.reader.ReaderBookmarkController.ToggleResult.Added -> {
                     bookmarkedIndexes = bookmarkedIndexes + index
                     snackbarHostState.showSnackbar(
@@ -414,6 +437,7 @@ private fun ViewerSuccessScreen(
     // ── P0-1 Markdown 标注（SCROLL_POSITION 坐标系；location = 内容块索引，
     // 与书签的绝对列表索引不同，不可混用） ──
     var annotationVersion by remember(state.document.id) { mutableStateOf(0) }
+    var pendingTextSelection by remember(state.document.id) { mutableStateOf<com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection?>(null) }
     var annotatedBlocks by remember(state.document.id) { mutableStateOf<Set<Int>>(emptySet()) }
     var showAnnotationSheet by remember(state.document.id) { mutableStateOf(false) }
     var noteTarget by remember(state.document.id) { mutableStateOf<MarkdownNoteTarget?>(null) }
@@ -440,6 +464,11 @@ private fun ViewerSuccessScreen(
         val plain = block.plainTextForAnnotation()
         if (plain.isEmpty()) return
         scope.launch {
+            val existingNote = managementNotes.firstOrNull { it.locationKind == "SCROLL_POSITION" && it.location == blockIndex }
+            if (existingNote != null) {
+                noteController.anchorOf(existingNote)?.let { anchor -> noteTarget = MarkdownNoteTarget(anchor, existingNote, returnToManagement) }
+                return@launch
+            }
             val highlight = highlights.listForDocument().firstOrNull {
                 it.locationKind == "SCROLL_POSITION" && it.location == blockIndex
             }
@@ -468,32 +497,28 @@ private fun ViewerSuccessScreen(
         val block = state.blocks.getOrNull(blockIndex) ?: return
         val plain = block.plainTextForAnnotation()
         if (plain.isEmpty()) return
-        scope.launch {
-            if (blockIndex !in annotatedBlocks) {
-                when (highlights.commitHighlight(
-                    com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection(
-                        blockIndex = blockIndex,
-                        charStart = 0,
-                        charEnd = plain.length,
-                        excerpt = plain.take(200),
-                    ),
-                )) {
-                    is com.m1racle.reader.ui.reader.ReaderHighlightController.CommitResult.Success -> {
-                        annotationVersion++
-                        snackbarHostState.showSnackbar(
-                            resources.getString(R.string.reader_highlight_added),
-                        )
-                    }
-                    is com.m1racle.reader.ui.reader.ReaderHighlightController.CommitResult.Failure -> {
-                        snackbarHostState.showSnackbar(
-                            resources.getString(R.string.reader_highlight_failed),
-                        )
+        pendingTextSelection = com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection(blockIndex, 0, plain.length, plain)
+    }
+
+    pendingTextSelection?.let { selection ->
+        com.m1racle.reader.ui.annotation.SelectionActionsDialog(selection,
+            onDismiss = { pendingTextSelection = null },
+            onHighlight = { style ->
+                pendingTextSelection = null
+                scope.launch {
+                    when (highlightController?.commitHighlight(selection, style = style)) {
+                        is com.m1racle.reader.ui.reader.ReaderHighlightController.CommitResult.Success -> annotationVersion++
+                        else -> snackbarHostState.showSnackbar(resources.getString(R.string.reader_highlight_failed))
                     }
                 }
-            } else {
-                openNoteEditorForBlock(blockIndex)
-            }
-        }
+            },
+            onNote = if (noteController != null) ({
+                pendingTextSelection = null
+                scope.launch { selection.toAnchor()?.let { anchor ->
+                    noteTarget = MarkdownNoteTarget(anchor, noteController.linkedAt(anchor), false)
+                } }
+            }) else null,
+        )
     }
 
     // Persist only from a settled list, plus leave/background flushes. Observing index/offset while
@@ -504,7 +529,7 @@ private fun ViewerSuccessScreen(
         var lastPersistedIndex = Int.MIN_VALUE
         var lastPersistedOffset = Int.MIN_VALUE
 
-        snapshotFlow { listState.isScrollInProgress }
+        snapshotFlow { listState.isScrollInProgress || systemCaptureInProgress }
             .distinctUntilChanged()
             .collect { isScrolling ->
                 if (isScrolling || listState.layoutInfo.totalItemsCount <= 0) return@collect
@@ -524,17 +549,22 @@ private fun ViewerSuccessScreen(
 
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestTotalListItems by rememberUpdatedState(totalListItems)
+    fun flushPosition() {
+        val original = captureOriginalPosition
+        if (original != null) viewModel.saveReadingPosition(original.first, original.second, original.third)
+        else flushReadingPosition(listState, latestTotalListItems, viewModel)
+    }
     // Flush on background (ON_STOP) and when leaving composition.
     DisposableEffect(state.document.id, listState, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                flushReadingPosition(listState, latestTotalListItems, viewModel)
+                flushPosition()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            flushReadingPosition(listState, latestTotalListItems, viewModel)
+            flushPosition()
             viewModel.closeSearch()
         }
     }
@@ -677,6 +707,16 @@ private fun ViewerSuccessScreen(
         },
         modifier = modifier.fillMaxSize(),
     ) {
+        CompositionLocalProvider(com.m1racle.reader.ui.reader.LocalReaderProgress provides remember(listState, scope) {
+            com.m1racle.reader.ui.reader.ReaderProgress(
+                position = { readingProgressOf(listState) },
+                seek = { fraction -> scope.launch {
+                    val last = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                    listState.scrollToItem((last * fraction).toInt().coerceIn(0, last))
+                    topBarScrollState.forceShow()
+                } },
+            )
+        }) {
         ViewerScaffold(
             title = title,
             hasContentBehindBar = {
@@ -752,6 +792,10 @@ private fun ViewerSuccessScreen(
                 tableLayoutCache = tableLayoutCache,
                 onAnchorJump = topBarScrollState::forceShow,
                 annotatedBlocks = annotatedBlocks,
+                highlights = managementHighlights,
+                noteBlocks = managementNotes.filter { it.locationKind == "SCROLL_POSITION" }.map { it.location }.toSet(),
+                onNoteTap = { openNoteEditorForBlock(it) },
+                onTextSelection = if (highlightController != null) ({ pendingTextSelection = it }) else null,
                 onBlockLongPress = if (highlightController != null) {
                     { blockIndex -> annotateBlock(blockIndex) }
                 } else {
@@ -760,6 +804,7 @@ private fun ViewerSuccessScreen(
             )
         }
 
+        }
         if (showSettings) {
             ReaderSettingsSheet(
                 settings = readerSettings,
@@ -903,6 +948,10 @@ private fun ReaderDocumentBody(
     annotatedBlocks: Set<Int> = emptySet(),
     /** null = 标注未启用，不挂长按。 */
     onBlockLongPress: ((Int) -> Unit)? = null,
+    highlights: List<com.m1racle.reader.data.local.HighlightEntity> = emptyList(),
+    noteBlocks: Set<Int> = emptySet(),
+    onNoteTap: (Int) -> Unit = {},
+    onTextSelection: ((com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -1080,6 +1129,11 @@ private fun ReaderDocumentBody(
                             activeStableKey = activeKeyForBlock,
                         )
                     }
+                    val selectionContext = remember(index, block, highlights, onTextSelection) {
+                        onTextSelection?.let { callback -> com.m1racle.reader.ui.viewer.components.MarkdownSelectionContext(
+                            index, block.plainTextForAnnotation(), highlights.filter { it.locationKind == "SCROLL_POSITION" && it.location == index }, callback) }
+                    }
+                    CompositionLocalProvider(com.m1racle.reader.ui.viewer.components.LocalMarkdownSelection provides selectionContext) {
                     MarkdownBlockView(
                         documentUri = state.document.uri,
                         block = block,
@@ -1101,7 +1155,7 @@ private fun ReaderDocumentBody(
                         })
                             // P0-1：已高亮块底色 + 长按创建/编辑标注；未启用时零修饰。
                             .then(
-                                if (annotatedBlocks.contains(index)) {
+                                if (annotatedBlocks.contains(index) && (block is MarkdownBlock.Image)) {
                                     Modifier.background(
                                         MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
                                     )
@@ -1110,16 +1164,18 @@ private fun ReaderDocumentBody(
                                 },
                             )
                             .then(
-                                if (onBlockLongPress != null) {
+                                if (onBlockLongPress != null && block is MarkdownBlock.Image) {
                                     Modifier.combinedClickable(
-                                        onClick = {},
+                                        onClick = { if (index in noteBlocks) onNoteTap(index) },
                                         onLongClick = { onBlockLongPress.invoke(index) },
                                     )
                                 } else {
-                                    Modifier
+                                    if (index in noteBlocks) Modifier.clickable { onNoteTap(index) } else Modifier
                                 },
                             ),
                     )
+                    if (index in noteBlocks) TextButton(onClick = { onNoteTap(index) }) { Text("查看笔记") }
+                    }
                 }
             }
         }
@@ -1205,6 +1261,15 @@ private fun ReaderTopBarRow(
 
     var showTitlePopup by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    val documentEditor = com.m1racle.reader.ui.documents.LocalDocumentEditor.current
+    val editingDocumentId = com.m1racle.reader.ui.documents.LocalReaderDocumentId.current
+    var showFileInformation by remember { mutableStateOf(false) }
+    val readingProgress = com.m1racle.reader.ui.reader.LocalReaderProgress.current
+    var showProgress by remember { mutableStateOf(false) }
+    if (showProgress && readingProgress != null) com.m1racle.reader.ui.reader.ReaderProgressDialog(readingProgress) { showProgress = false }
+    if (showFileInformation && editingDocumentId != null) {
+        com.m1racle.reader.ui.documents.ReaderDocumentDialog(editingDocumentId) { showFileInformation = false }
+    }
     DisposableEffect(topBarScrollState, showTitlePopup, showMore) {
         topBarScrollState?.setInteractionPinned(showTitlePopup || showMore)
         onDispose { topBarScrollState?.setInteractionPinned(false) }
@@ -1264,12 +1329,13 @@ private fun ReaderTopBarRow(
                     role = Role.Button
                     contentDescription = titlePopupCd
                 }
-                .clickable(
+                .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = ripple(bounded = true),
                     role = Role.Button,
                     onClickLabel = titlePopupCd,
                     onClick = { showTitlePopup = !showTitlePopup },
+                    onLongClick = { if (editingDocumentId != null) showFileInformation = true },
                 ),
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -1400,6 +1466,18 @@ private fun ReaderTopBarRow(
                             leadingIcon = { Icon(Icons.Filled.FormatListBulleted, null) },
                             onClick = { showMore = false; onOpenAnnotations() },
                         )
+                        if (documentEditor != null && editingDocumentId != null) DropdownMenuItem(
+                            text = { Text("编辑正文") },
+                            onClick = { showMore = false; documentEditor(editingDocumentId) },
+                        )
+                        if (editingDocumentId != null) DropdownMenuItem(
+                            text = { Text("文件信息与导出") },
+                            onClick = { showMore = false; showFileInformation = true },
+                        )
+                        if (readingProgress != null) DropdownMenuItem(
+                            text = { Text("拖动阅读进度") },
+                            onClick = { showMore = false; showProgress = true },
+                        )
                     }
                 }
             }
@@ -1432,7 +1510,7 @@ private fun ReaderTopBarIconButton(
         contentAlignment = Alignment.Center,
     ) {
         if (glassBackground) {
-            Box(Modifier.matchParentSize().padding(4.dp)
+            Box(Modifier.matchParentSize()
                 .glassMaterial(GlassMaterialRole.Control, CircleShape, pressed = pressed))
         }
         Icon(
@@ -1481,6 +1559,7 @@ private fun ViewerScaffold(
     modifier: Modifier = Modifier,
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    val systemCapturing = androidx.compose.ui.platform.LocalScrollCaptureInProgress.current
     val activeSearch = searchState?.takeIf { it.isActive }
     val readerBg = MaterialTheme.colorScheme.background
     val readerEnv = GlassEnvironment.reader(LocalReaderDarkTheme.current)
@@ -1547,7 +1626,8 @@ private fun ViewerScaffold(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
-                        .zIndex(2f),
+                        .zIndex(2f)
+                        .graphicsLayer { alpha = if (systemCapturing) 0f else 1f },
                 )
             }
             }
@@ -1779,8 +1859,8 @@ private fun MarkdownBlock.plainTextForAnnotation(): String = when (this) {
     is MarkdownBlock.Quote ->
         com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(text)
     is MarkdownBlock.CodeBlock -> code
-    is MarkdownBlock.ListBlock -> items.joinToString("\n")
-    is MarkdownBlock.Table -> (headers + rows.flatten()).joinToString(" ")
+    is MarkdownBlock.ListBlock -> items.joinToString("\n") { com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(it) }
+    is MarkdownBlock.Table -> (headers + rows.flatten()).joinToString(" ") { com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(it) }
     is MarkdownBlock.Image -> alt
     is MarkdownBlock.Divider -> ""
 }

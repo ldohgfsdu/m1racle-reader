@@ -19,6 +19,7 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.m1racle.reader.ui.material.GlassBackdropSource
@@ -88,6 +89,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val GLASS_LAB = "settings/glass-workbench"
     const val SEARCH = "search"
+    const val DOCUMENT_TOOLS = "document-tools"
 
     fun viewer(documentId: String, anchor: DocumentAnchor? = null): String =
         routeWithAnchor("viewer/$documentId", anchor)
@@ -96,6 +98,15 @@ object Routes {
         routeWithAnchor("pdf/$documentId", anchor)
 
     fun epubViewer(documentId: String): String = "epub/$documentId"
+
+    fun bookmark(document: DocumentEntity, target: com.m1racle.reader.data.anchor.BookmarkTarget): String {
+        val base = when { document.isPdf -> "pdf"; document.isEpub -> "epub"; else -> "viewer" }
+        return "$base/${document.id}?anchor=${URLEncoder.encode(target.encode(), StandardCharsets.UTF_8.name())}"
+    }
+
+    fun decodeBookmark(raw: String?): com.m1racle.reader.data.anchor.BookmarkTarget? =
+        raw?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
+            ?.takeIf { it.startsWith("{") }?.let(com.m1racle.reader.data.anchor.BookmarkTarget::decode)
 
     fun decodeAnchor(raw: String?): DocumentAnchor? = AnchorCodec.decode(
         raw?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) },
@@ -161,6 +172,10 @@ fun M1racleReaderNavGraph(
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(repository))
     val importing by homeViewModel.isImporting.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val documentOperations: com.m1racle.reader.ui.home.DocumentOperations = viewModel(
+        factory = com.m1racle.reader.ui.home.DocumentOperations.Factory(repository),
+    )
+    LaunchedEffect(documentOperations) { documentOperations.events.collect { snackbar.showSnackbar(it) } }
     val resources = androidx.compose.ui.platform.LocalResources.current
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) homeViewModel.onImportDocument(uri)
@@ -209,13 +224,29 @@ fun M1racleReaderNavGraph(
     val hubBackdrop = rememberLayerBackdrop(onDraw = drawHubBackdrop)
     val hubMenuExport = rememberLayerBackdrop()
     val hubBackdropHost = remember(hubBackdrop, hubMenuExport) { GlassBackdropHost(hubBackdrop, hubMenuExport) }
-    val showDock = HubDestination.isTopLevelRoute(currentEntry?.destination?.route)
+    val visibleEntries by navController.visibleEntries.collectAsState()
+    // Back-stack selection changes before the outgoing destination is disposed.
+    // Never sample that outgoing reader through a newly mounted hub dock.
+    val showDock = HubDestination.isTopLevelRoute(currentEntry?.destination?.route) &&
+        visibleEntries.all { HubDestination.isTopLevelRoute(it.destination.route) }
+    CompositionLocalProvider(com.m1racle.reader.ui.home.LocalDocumentOperations provides documentOperations) {
     HubDockMotionProvider(selected = selectedHub) {
         Box(modifier = modifier.fillMaxSize()) {
             GlassBackdropSource(hubBackdrop, Modifier.fillMaxSize(), enabled = showDock) {
                 NavHost(
                     navController = navController,
                     startDestination = Routes.HOME,
+                    // A reader must not remain visible behind the newly mounted hub dock.
+                    enterTransition = { androidx.compose.animation.EnterTransition.None },
+                    exitTransition = { androidx.compose.animation.ExitTransition.None },
+                    popEnterTransition = {
+                        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))
+                    },
+                    popExitTransition = {
+                        androidx.compose.animation.scaleOut(targetScale = 0.92f,
+                            animationSpec = androidx.compose.animation.core.tween(220)) +
+                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220))
+                    },
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     composable(Routes.HOME, enterTransition = hubEnter, exitTransition = hubExit) {
@@ -248,7 +279,20 @@ fun M1racleReaderNavGraph(
                         )
                     }
 
-                    composable(Routes.SEARCH) {
+                    composable(Routes.SEARCH,
+                        enterTransition = {
+                            androidx.compose.animation.scaleIn(initialScale = 0.2f,
+                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.92f, 0.04f),
+                                animationSpec = androidx.compose.animation.core.tween(280)) +
+                                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180))
+                        },
+                        popExitTransition = {
+                            androidx.compose.animation.scaleOut(targetScale = 0.2f,
+                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.92f, 0.04f),
+                                animationSpec = androidx.compose.animation.core.tween(240)) +
+                                androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180))
+                        },
+                    ) {
                         val repositoryForSearch = requireNotNull(searchRepo) {
                             "SearchRepository unavailable for SearchScreen"
                         }
@@ -289,10 +333,17 @@ fun M1racleReaderNavGraph(
                         val scope = rememberCoroutineScope()
                         BookmarksScreen(
                             viewModel = bookmarksViewModel,
-                            onOpenDocument = { documentId ->
+                            onOpenDocument = { bookmark ->
                                 scope.launch {
-                                    repository.getDocumentById(documentId)?.let { document ->
-                                        openDocument(navController, document)
+                                    repository.getDocumentById(bookmark.documentId)?.let { document ->
+                                        val target = com.m1racle.reader.data.anchor.BookmarkTarget.decode(bookmark.anchor)
+                                            ?: com.m1racle.reader.data.anchor.BookmarkTarget(
+                                                if (document.isPdf) DocumentAnchor.PdfPage(bookmark.location)
+                                                else DocumentAnchor.MarkdownBlock((bookmark.location - 1).coerceAtLeast(0)),
+                                                scrollOffset = bookmark.offset?.toInt()?.coerceAtLeast(0) ?: 0,
+                                            )
+                                        navController.popBackStack(Routes.HOME, inclusive = false)
+                                        navController.navigate(Routes.bookmark(document, target)) { launchSingleTop = true }
                                     }
                                 }
                             },
@@ -304,22 +355,22 @@ fun M1racleReaderNavGraph(
 
                     composable(Routes.SETTINGS, enterTransition = hubEnter, exitTransition = hubExit) {
                         HubSettingsScreen(
-                            onOpenGlassLab = if (BuildConfig.GLASS_LAB_ENABLED) {
-                                { navController.navigate(Routes.GLASS_LAB) { launchSingleTop = true } }
-                            } else {
-                                null
-                            },
+                            onOpenGlassLab = { navController.navigate(Routes.GLASS_LAB) { launchSingleTop = true } },
+                            onOpenDocumentTools = { navController.navigate(Routes.DOCUMENT_TOOLS) },
                             onNavigateHub = { destination ->
                                 navController.navigateToHub(destination)
                             },
                         )
                     }
 
-                    // Release builds do not register the destination at all.
-                    if (BuildConfig.GLASS_LAB_ENABLED) {
-                        composable(Routes.GLASS_LAB) {
-                            GlassLabScreen(onBack = { navController.popBackStack() })
-                        }
+                    composable(Routes.GLASS_LAB) {
+                        GlassLabScreen(onBack = { navController.popBackStack() })
+                    }
+
+                    composable(Routes.DOCUMENT_TOOLS) {
+                        com.m1racle.reader.ui.documents.DocumentToolsScreen(repository,
+                            onBack = { navController.popBackStack() },
+                            onOpen = { openDocument(navController, it) })
                     }
 
                     composable(
@@ -386,6 +437,7 @@ fun M1racleReaderNavGraph(
                                 c?.onViewerClosed(documentId, sessionId)
                             }
                         }
+                        CompositionLocalProvider(com.m1racle.reader.ui.documents.LocalReaderDocumentId provides documentId) {
                         ViewerScreen(
                             viewModel = viewerViewModel,
                             onBack = {
@@ -395,7 +447,9 @@ fun M1racleReaderNavGraph(
                             highlightController = highlightController,
                             noteController = noteController,
                             initialAnchor = initialAnchor,
+                            initialBookmark = Routes.decodeBookmark(entry.arguments?.getString("anchor")),
                         )
+                        }
                     }
 
                     composable(
@@ -504,6 +558,7 @@ fun M1racleReaderNavGraph(
                                 repository = repository,
                                 applicationScope = m1racleReaderApp?.applicationScope
                                     ?: kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
+                                initialBookmark = Routes.decodeBookmark(entry.arguments?.getString("anchor")),
                             ),
                         )
                         // Single active PDF session: open/close + final progress flush before external switch.
@@ -566,5 +621,6 @@ fun M1racleReaderNavGraph(
                 }
             }
         }
+    }
     }
 }

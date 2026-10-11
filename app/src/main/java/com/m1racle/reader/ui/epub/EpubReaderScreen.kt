@@ -3,7 +3,6 @@ package com.m1racle.reader.ui.epub
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,7 +12,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.settings.ReaderSettingsRepository
 import com.m1racle.reader.epub.EpubSavedPosition
-import com.m1racle.reader.ui.viewer.components.ReaderSettingsSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,7 +53,7 @@ fun EpubReaderScreen(
             if (readySettings == null) {
                 Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else {
-                EpubReaderContent(
+                com.m1racle.reader.ui.components.ReaderFontContent { EpubReaderContent(
                     book = state.book,
                     settings = readySettings,
                     title = state.book.metadata.title ?: state.document.displayName,
@@ -65,16 +63,23 @@ fun EpubReaderScreen(
                     onBack = onBack,
                     onSettings = { showSettings = true },
                     modifier = modifier,
+                    settingsVisible = showSettings,
+                    onDismissSettings = { showSettings = false },
+                    settingsContent = {
+                        EpubReadingSettings(
+                            settings = readySettings,
+                            onFontScale = viewModel::setFontScale,
+                            onLineHeightScale = viewModel::setLineHeightScale,
+                            onPaddingLevel = viewModel::setContentPaddingLevel,
+                            onReset = viewModel::resetReaderSettings,
+                            onFontFamily = viewModel::setEpubFontFamily,
+                            onReadingMode = viewModel::setReadingMode,
+                            fontLibrary = { com.m1racle.reader.ui.components.ReaderFontPicker() },
+                        )
+                    },
                     restoreSession = requireNotNull(viewModel.restoreSession),
-                )
-                if (showSettings) ReaderSettingsSheet(
-                    settings = readySettings,
-                    onFontScale = viewModel::setFontScale,
-                    onLineHeightScale = viewModel::setLineHeightScale,
-                    onPaddingLevel = viewModel::setContentPaddingLevel,
-                    onReset = viewModel::resetReaderSettings,
-                    onDismiss = { showSettings = false },
-                )
+                ) }
+
             }
         }
     }

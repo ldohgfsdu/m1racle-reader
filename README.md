@@ -89,7 +89,7 @@ Windows 的 `local.properties` 使用属性文件转义，例如 `sdk.dir=C\:/An
 ### arm64 本机构建说明
 
 构建使用 JDK 17、Gradle 9.5.0、AGP 9.1.1、Android SDK Platform 37.0 与 Build Tools 36.0.0。
-Windows / Linux x86_64 / macOS 默认使用 AGP 下载的原生 aapt2。只有 ARM 主机需要在本机 `~/.gradle/gradle.properties` 配置 `android.aapt2FromMavenOverride=/absolute/path/to/tools/aapt2`，经 qemu 运行仓库脚本；不要把该 override 提交到项目。Windows 使用 `gradlew.bat`，SDK 安装包名为 `platforms;android-37.0`。依赖优先使用官方仓库，镜像仅作后备。
+Windows / Linux x86_64 / macOS 默认使用 AGP 下载的原生 aapt2。只有 ARM 主机需要在本机 `~/.gradle/gradle.properties` 配置 `android.aapt2FromMavenOverride=<本机自备的 aapt2 包装脚本绝对路径>`（自行准备 qemu 包装）；不要把该 override 提交到项目。Windows 使用 `gradlew.bat`，SDK 安装包名为 `platforms;android-37.0`。依赖优先使用官方仓库，镜像仅作后备。
 
 ## 如何导入文档
 
@@ -133,7 +133,7 @@ Windows / Linux x86_64 / macOS 默认使用 AGP 下载的原生 aapt2。只有 A
 
 | 标记 | 含义 |
 |------|------|
-| **v1.0.0 candidate** | M1racle Reader 首个公开候选；新 Android/Kotlin 身份为 `com.m1racle.reader` |
+| **v1.0.0（侧载验收中）** | 当前侧载验收包 1.0.0 / versionCode 51；公开发布尚未进行，状态以 [CURRENT_STATUS](docs/CURRENT_STATUS.md) 为准；Android/Kotlin 身份为 `com.m1racle.reader` |
 | **v0.1.0** | 本地 Markdown + PDF 阅读功能完整、可日常使用；编辑、同步、正文全文索引等明确不做 |
 | release APK | minify+shrink；仅接受环境注入的独立 release signer，无 debug fallback |
 

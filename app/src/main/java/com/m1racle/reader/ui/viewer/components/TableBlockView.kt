@@ -72,7 +72,7 @@ fun TableBlockView(
     val tableBodySize = ReaderTypography.bodyFontSize.scaled(tableFontScale)
 
     val bodyStyle = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = com.m1racle.reader.ui.components.LocalReaderImportedFont.current ?: FontFamily.Default,
         fontWeight = FontWeight.Normal,
         fontSize = tableBodySize,
         lineHeight = (
@@ -111,6 +111,10 @@ fun TableBlockView(
     val normalHl = if (hasSearch) searchMatchNormalBackground() else Color.Unspecified
     val activeHl = if (hasSearch) searchMatchActiveBackground() else Color.Unspecified
     // Cell ordinal matches MarkdownSearchTextExtractor: headers then row-major body cells.
+    val annotationOffsets = remember(block) {
+        var offset = 0
+        (block.headers + block.rows.flatten()).map { cell -> offset.also { offset += InlineMarkdownParser.toPlainText(cell).length + 1 } }
+    }
     val columnCount = block.headers.size.coerceAtLeast(1)
 
     BoxWithConstraints(
@@ -280,6 +284,7 @@ fun TableBlockView(
             Column(modifier = Modifier.width(tableWidth)) {
                 TableHeaderRow(
                     cells = block.headers,
+                    annotationOffsets = annotationOffsets.take(block.headers.size),
                     alignments = block.alignments,
                     columnWidths = columnWidths,
                     resolvedHeaderTextStyle = resolvedHeaderTextStyle,
@@ -307,6 +312,7 @@ fun TableBlockView(
                     val rowBaseOrdinal = columnCount + rowIndex * columnCount
                     TableRow(
                         cells = row,
+                        annotationOffsets = annotationOffsets.drop(rowBaseOrdinal).take(row.size),
                         alignments = block.alignments,
                         columnWidths = columnWidths,
                         style = bodyStyle,
@@ -407,6 +413,7 @@ internal data class TableCellTextPlacement(
 @Composable
 private fun TableHeaderRow(
     cells: List<String>,
+    annotationOffsets: List<Int>,
     alignments: List<TableAlignment>,
     columnWidths: List<Dp>,
     resolvedHeaderTextStyle: TextStyle,
@@ -460,6 +467,7 @@ private fun TableHeaderRow(
             }
             TableAnnotatedText(
                 annotated = annotated,
+                annotationOffset = annotationOffsets.getOrElse(column) { 0 },
                 style = resolvedHeaderTextStyle,
                 textAlign = tableColumnTextAlign(alignment),
                 onLinkClick = onLinkClick,
@@ -473,6 +481,7 @@ private fun TableHeaderRow(
 @Composable
 private fun TableRow(
     cells: List<String>,
+    annotationOffsets: List<Int>,
     alignments: List<TableAlignment>,
     columnWidths: List<Dp>,
     style: TextStyle,
@@ -493,6 +502,7 @@ private fun TableRow(
         columnWidths.forEachIndexed { column, width ->
             TableCell(
                 text = cells.getOrElse(column) { "" },
+                annotationOffset = annotationOffsets.getOrElse(column) { 0 },
                 style = style,
                 inlineStyles = inlineStyles,
                 alignment = alignments.getOrElse(column) { TableAlignment.Start },
@@ -513,6 +523,7 @@ private fun TableRow(
 @Composable
 private fun TableCell(
     text: String,
+    annotationOffset: Int,
     style: TextStyle,
     inlineStyles: InlineMarkdownStyles,
     alignment: TableAlignment,
@@ -540,6 +551,7 @@ private fun TableCell(
     )
     TableAnnotatedText(
         annotated = annotated,
+        annotationOffset = annotationOffset,
         style = resolvedStyle,
         textAlign = tableColumnTextAlign(alignment),
         onLinkClick = onLinkClick,
@@ -554,12 +566,14 @@ private fun TableCell(
 @Composable
 private fun TableAnnotatedText(
     annotated: AnnotatedString,
+    annotationOffset: Int,
     style: TextStyle,
     textAlign: TextAlign,
     modifier: Modifier = Modifier,
     onLinkClick: ((String) -> Unit)? = null,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
+    val selection = rememberMarkdownSelectedText(annotated, annotationOffset)
     val hasLinks = remember(annotated, onLinkClick != null) {
         onLinkClick != null && annotated.getStringAnnotations(
             tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
@@ -571,13 +585,13 @@ private fun TableAnnotatedText(
     if (hasLinks) {
         @Suppress("DEPRECATION")
         ClickableText(
-            text = annotated,
+            text = selection.text,
             style = resolvedStyle,
             softWrap = true,
             overflow = TextOverflow.Clip,
             maxLines = Int.MAX_VALUE,
-            modifier = modifier,
-            onTextLayout = { onTextLayout?.invoke(it) },
+            modifier = modifier.then(selection.modifier),
+            onTextLayout = { selection.layout(it); onTextLayout?.invoke(it) },
             onClick = { offset ->
                 annotated.getStringAnnotations(
                     tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
@@ -588,14 +602,14 @@ private fun TableAnnotatedText(
         )
     } else {
         Text(
-            text = annotated,
-            modifier = modifier,
+            text = selection.text,
+            modifier = modifier.then(selection.modifier),
             style = resolvedStyle,
             textAlign = textAlign,
             softWrap = true,
             overflow = TextOverflow.Clip,
             maxLines = Int.MAX_VALUE,
-            onTextLayout = { onTextLayout?.invoke(it) },
+            onTextLayout = { selection.layout(it); onTextLayout?.invoke(it) },
         )
     }
 }

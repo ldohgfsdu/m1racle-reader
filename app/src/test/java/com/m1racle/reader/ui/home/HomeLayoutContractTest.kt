@@ -102,7 +102,7 @@ class HomeLayoutContractTest {
         assertFalse(row.contains(".glassMaterial("))
         val dock = ProductionSource.text("com/m1racle/reader/ui/hub/GlassDock.kt")
         assertTrue(dock.contains("Icons.Filled.Add"))
-        assertTrue(dock.contains("clickable(enabled = !importing"))
+        assertTrue(dock.contains("enabled = !importing"))
         assertTrue(home.contains("Button(onClick = onImport, enabled = !isImporting)"))
         assertFalse(home.contains("floatingActionButton ="))
     }

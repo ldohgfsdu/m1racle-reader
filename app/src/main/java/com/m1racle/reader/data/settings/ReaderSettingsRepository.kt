@@ -54,11 +54,31 @@ class ReaderSettingsRepository(
         }
     }
 
+    suspend fun updateEpubFontFamily(font: EpubFontFamily) {
+        dataStore.edit { it[KEY_EPUB_FONT] = font.name; it.remove(KEY_IMPORTED_FONT) }
+    }
+
+    suspend fun updateEpubReadingMode(mode: EpubReadingMode) {
+        dataStore.edit { it[KEY_EPUB_MODE] = mode.name }
+    }
+
+    suspend fun updateImportedFont(id: String?) {
+        require(id == null || id.matches(Regex("[0-9a-f]{64}")))
+        dataStore.edit { if (id == null) it.remove(KEY_IMPORTED_FONT) else it[KEY_IMPORTED_FONT] = id }
+    }
+
+    suspend fun clearImportedFont(id: String) {
+        dataStore.edit { if (it[KEY_IMPORTED_FONT] == id) it.remove(KEY_IMPORTED_FONT) }
+    }
+
     suspend fun resetToDefaults() {
         dataStore.edit { prefs ->
             prefs[KEY_FONT_SCALE] = ReaderSettings.DEFAULT_FONT_SCALE
             prefs[KEY_LINE_HEIGHT_SCALE] = ReaderSettings.DEFAULT_LINE_HEIGHT_SCALE
             prefs[KEY_PADDING_LEVEL] = ContentPaddingLevel.Standard.name
+            prefs[KEY_EPUB_FONT] = EpubFontFamily.Default.name
+            prefs[KEY_EPUB_MODE] = EpubReadingMode.Slide.name
+            prefs.remove(KEY_IMPORTED_FONT)
         }
     }
 
@@ -71,9 +91,13 @@ class ReaderSettingsRepository(
         )
         val padding = ContentPaddingLevel.fromStorage(this[KEY_PADDING_LEVEL])
         return ReaderSettings(
+            epubReadingMode = EpubReadingMode.entries.firstOrNull { it.name == this[KEY_EPUB_MODE] } ?: EpubReadingMode.Slide,
+            importedFontId = this[KEY_IMPORTED_FONT]?.takeIf { it.matches(Regex("[0-9a-f]{64}")) },
             fontScale = font,
             lineHeightScale = line,
             contentPaddingLevel = padding,
+            epubFontFamily = EpubFontFamily.entries.firstOrNull { it.name == this[KEY_EPUB_FONT] }
+                ?: EpubFontFamily.Default,
         )
     }
 
@@ -81,5 +105,8 @@ class ReaderSettingsRepository(
         val KEY_FONT_SCALE = floatPreferencesKey("font_scale")
         val KEY_LINE_HEIGHT_SCALE = floatPreferencesKey("line_height_scale")
         val KEY_PADDING_LEVEL = stringPreferencesKey("content_padding_level")
+        val KEY_EPUB_FONT = stringPreferencesKey("epub_font_family")
+        val KEY_EPUB_MODE = stringPreferencesKey("epub_reading_mode")
+        val KEY_IMPORTED_FONT = stringPreferencesKey("imported_font_id")
     }
 }

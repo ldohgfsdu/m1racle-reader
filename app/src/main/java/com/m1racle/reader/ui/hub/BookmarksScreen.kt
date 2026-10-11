@@ -69,7 +69,7 @@ class BookmarksViewModel(
 @Composable
 fun BookmarksScreen(
     viewModel: BookmarksViewModel,
-    onOpenDocument: (documentId: String) -> Unit,
+    onOpenDocument: (BookmarkWithDocument) -> Unit,
     onNavigateHub: (HubDestination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,7 +105,7 @@ fun BookmarksScreen(
                     items(bookmarks, key = { it.id }) { bookmark ->
                         BookmarkRow(
                             bookmark = bookmark,
-                            onClick = { onOpenDocument(bookmark.documentId) },
+                            onClick = { onOpenDocument(bookmark) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = HomeDesignTokens.CardGap),

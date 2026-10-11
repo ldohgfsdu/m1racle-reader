@@ -47,6 +47,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ScrollAxisRange
+import androidx.compose.ui.semantics.verticalScrollAxisRange
+import androidx.compose.ui.semantics.scrollByOffset
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
@@ -143,6 +146,7 @@ internal fun ContinuousDocumentViewport(
     pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val systemCaptureInProgress by rememberUpdatedState(androidx.compose.ui.platform.LocalScrollCaptureInProgress.current)
     val documentId = state.document.id
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -445,7 +449,7 @@ internal fun ContinuousDocumentViewport(
         val activeGeometry = currentGeometry
         if (!currentGeometryReady || size.width <= 0 || size.height <= 0) return
         val now = System.nanoTime()
-        currentOnViewportSessionPreview(
+        if (!systemCaptureInProgress) currentOnViewportSessionPreview(
             activeGeometry.viewportSessionAtAnchor(
                 next,
                 size.width.toFloat(),
@@ -960,6 +964,7 @@ internal fun ContinuousDocumentViewport(
             )
         }.collect { inputs ->
             inputs // emission gate only; the body below reads live state.
+            if (systemCaptureInProgress) return@collect
             // During a transformed document gesture only last-good bitmaps are moved by GPU.
             // Re-entering IDLE below is what resumes existing R3 preview/HIGH scheduling.
             if (currentEntryState.phase != ContinuousEntryPhase.READY ||
@@ -1022,7 +1027,7 @@ internal fun ContinuousDocumentViewport(
                 "flingActive=$flingActive interactionPhase=${interaction.phase} entryPhase=${currentEntryState.phase}")
         }
         if (currentEntryState.phase == ContinuousEntryPhase.READY &&
-            !documentState.gestureActive && !flingActive && !interactionActive
+            !documentState.gestureActive && !flingActive && !interactionActive && !systemCaptureInProgress
         ) {
             onPageSettled(
                 currentGeometry.readingPositionAtViewportCenter(
@@ -1058,7 +1063,24 @@ internal fun ContinuousDocumentViewport(
         modifier = modifier
             .clipToBounds()
             .testTag("r7-continuous-viewport")
-            .semantics { r7ContinuousScale = renderDocumentState.scale; r7TileCount = tileIndex.total }
+            .semantics {
+                r7ContinuousScale = renderDocumentState.scale
+                r7TileCount = tileIndex.total
+                verticalScrollAxisRange = ScrollAxisRange(
+                    value = { documentState.scrollY },
+                    maxValue = { currentGeometry.maxScrollY(documentState.scale, viewportSize.height.toFloat()) },
+                )
+                // Publish the same viewport transform to Android's system long screenshot API.
+                // No second scroll state or application screenshot/export path is needed.
+                scrollByOffset { delta ->
+                    cancelFling()
+                    val before = documentState.scrollY
+                    val next = update(documentState.copy(scrollY = before + delta.y, gestureActive = false))
+                    if (!systemCaptureInProgress) commitStableState(next)
+                    withFrameNanos { }
+                    Offset(0f, next.scrollY - before)
+                }
+            }
             .onSizeChanged {
                 viewportSize = it
                 onViewportWidthPx(it.width)
@@ -1529,6 +1551,8 @@ private fun DocumentPage(
     pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
 ) {
     val drawnTileKeys = remember(documentId, page) { mutableSetOf<com.m1racle.reader.pdf.PdfTileKey>() }
+    val paperFilter = pdfPaperFilter()
+    val paperColor = if (paperFilter != null) Color.Black else Color.White
     val diagnosticPaint = remember(showTileDiagnostics) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.MAGENTA
@@ -1551,7 +1575,7 @@ private fun DocumentPage(
         LaunchedEffect(page) { onEnsure() }
     }
     androidx.compose.material3.Surface(
-        color = Color.White,
+        color = paperColor,
         modifier = Modifier
             .fillMaxSize()
             .semantics { contentDescription = "PDF page ${page + 1} of $pageCount" },
@@ -1563,7 +1587,7 @@ private fun DocumentPage(
                     androidx.compose.material3.Text("Retry")
                 }
                 else -> {
-                    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color.White))
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(paperColor))
                 }
             }
         }
@@ -1573,6 +1597,7 @@ private fun DocumentPage(
                     image = bitmap,
                     dstSize = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1)),
                     filterQuality = FilterQuality.High,
+                    colorFilter = paperFilter,
                 )
             }
             tiles.forEach { tile ->
@@ -1585,6 +1610,7 @@ private fun DocumentPage(
                     dstOffset=IntOffset(destination.left,destination.top),
                     dstSize=IntSize(destination.width.coerceAtLeast(1),destination.height.coerceAtLeast(1)),
                     alpha=tileOverlayAlpha,
+                    colorFilter = paperFilter,
                     filterQuality = FilterQuality.High,
                 )
                 if (showTileDiagnostics) {

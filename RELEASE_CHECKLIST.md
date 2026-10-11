@@ -4,7 +4,8 @@
 
 ## Automated verification
 
-- [x] 本轮完整单测与相关回归通过，记录 HEAD、dirty fingerprint、命令和退出码。
+- [x] 本轮完整QA JVM1730项 / 0失败或错误 / 2既有跳过，记录HEAD、dirty fingerprint、命令与退出码。
+- [x] 最终4项原生设备回归全部通过，包括原书手势、私有字体实际绘制 / 重排 / 重建 / 移除、字库生命周期与根目录Locator原文恢复。
 ## Signing
 
 - [x] 正式签名由发布负责人通过四项 `M1RACLE_RELEASE_*` 环境变量安全注入；不使用 Debug、临时或未签名包。
@@ -33,6 +34,10 @@ Windows 使用 `gradlew.bat`，Unix 使用 `./gradlew`。统一 JDK 17、Android
 
 ## Known limitations
 
-本轮正式侧载验收包 1.0.0 / 31 已按用户授权签名、覆盖安装并复制至 Download。完整单测 1654 项 / 0 失败 / 0 错误 / 2 既有环境跳过，EPUB 42 项全通过；Release Lint 无错误。两处同文件目录的标题页首、双向跨节边界和阅读页恢复经 API 36 真机确认。其他书、内联字符锚点、图片、性能和 Markdown / PDF 本轮未全面实机复查；人工手感及公开发布 / tag 未完成。
+当前侧载验收包 **1.0.0 / 51**：EPUB恢复实际43版原生翻页与界面，只加字体。完整QA1730项 / 0失败或错误 / 2既有跳过、原生设备4项全过；正式签名包原书轻滑 / 纵滑、单页往返、宋体绘制 / 冷启动恢复和默认回退通过，9份文档与原文件字节及标注数据保留；Release Lint0 errors，签名 / 16KiB对齐 / 无INTERNET与五份摘要一致。43版表格投影为普通文本，旧SDK无法匹配的阅读位置会降级，手机手感与性能待验。详见 [CURRENT_STATUS](docs/CURRENT_STATUS.md) 与 [本轮报告](docs/EPUB_RESTORE43_FONT_20261007.md)。以下为历史记录。
 
-此前 EPUB 手机验收包的 Outbox、构建输出、Download 和安装包 SHA-256 `09617de1f9df60e2581bdd3b926c9d44b90549639ae70028f2528ad0c84c38c4` 一致，详情见 [章节修复报告](docs/EPUB_CHAPTERS_20261003.md)。本机环境修复后的正式重建包为 `42817bacdbb116efce2296c73af13fc8f8c444de1b5b8413bcde3b938c48d6c0`，源码与版本不变，完整单测和 Release Lint 复验通过；新包已安装到 Android 15 模拟器并通过基础阅读冒烟，模拟器 Download 与实际 base.apk 摘要一致，真实手机复制与安装待完成。当前产物以 [CURRENT_STATUS](docs/CURRENT_STATUS.md) 为准。既有签名附件保留，未写入新的源码备份。
+46 版因翻页路径未经真机验证、已知会造成触控失效而停止交付；47 版因仍等待迟到通知而停止交付。两者的修复均包含在 48 中。
+
+1.0.0/31 及更早的构建与验收记录已归档到 [历史清单](docs/history/RELEASE_CHECKLIST_31_snapshot.md)，不作为当前门禁。
+
+正式包含 `<profileable android:shell="true"/>`（Macrobenchmark 保留）：仅允许 adb shell 获取 profiling 数据，无额外运行时权限；对外发布说明中需列明。

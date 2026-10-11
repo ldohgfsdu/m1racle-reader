@@ -29,12 +29,13 @@ import com.m1racle.reader.ui.home.HomeDesignTokens
 
 /**
  * Read-only guidance stays visibly distinct from actionable settings.
- * [onOpenGlassLab] is null when the build has no Glass Lab (release); the entry is then omitted.
+ * [onOpenGlassLab] opens the Glass Lab in every build, including Release.
  */
 @Composable
 fun HubSettingsScreen(
     onNavigateHub: (HubDestination) -> Unit,
     onOpenGlassLab: (() -> Unit)?,
+    onOpenDocumentTools: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var comparingMaterials by rememberSaveable { mutableStateOf(false) }
@@ -72,6 +73,15 @@ fun HubSettingsScreen(
                     }
                 }
                 Spacer(Modifier.height(28.dp))
+                onOpenDocumentTools?.let { open ->
+                    Surface(onClick = open, shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                            Text("文件与PDF工具", style = MaterialTheme.typography.titleMedium)
+                            Text("扫描本机文档、默认查看器、创建、合并、加密与提取文字", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Spacer(Modifier.height(24.dp))
+                }
                 SettingsGuidance(
                     section = stringResource(R.string.hub_settings_reading_section),
                     icon = Icons.Outlined.Tune,
@@ -79,6 +89,8 @@ fun HubSettingsScreen(
                     description = stringResource(R.string.hub_settings_reader_appearance_hint),
                 )
                 Spacer(Modifier.height(24.dp))
+                com.m1racle.reader.ui.components.ReaderFontPicker()
+                Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.material_comparison_section),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -107,6 +119,10 @@ fun HubSettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                }
+                if (BuildConfig.QA_GLASS_VARIANTS_ENABLED) {
+                    Spacer(Modifier.height(12.dp))
+                    QaGlassVariantSettings()
                 }
                 Spacer(Modifier.height(24.dp))
                 SettingsGuidance(

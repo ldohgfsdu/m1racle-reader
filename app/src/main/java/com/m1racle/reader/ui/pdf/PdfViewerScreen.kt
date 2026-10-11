@@ -2,6 +2,8 @@ package com.m1racle.reader.ui.pdf
 
 import android.util.Log
 import android.content.pm.ApplicationInfo
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.outlined.Info
 import android.os.SystemClock
 
 import androidx.activity.compose.BackHandler
@@ -220,6 +222,11 @@ import com.m1racle.reader.ui.material.GlassEnvironment
 import com.m1racle.reader.ui.material.GlassMaterialRole
 import com.m1racle.reader.ui.material.LocalGlassBackdropHost
 import com.m1racle.reader.ui.material.LocalGlassEnvironment
+import com.m1racle.reader.ui.material.QaGlass
+import com.m1racle.reader.ui.material.coolapk
+import com.m1racle.reader.ui.material.qaGlassPrimaryText
+import com.m1racle.reader.ui.material.qaPdfChromeDark
+import com.m1racle.reader.ui.material.qaPdfPageNumberText
 import com.m1racle.reader.ui.material.glassMaterial
 import com.m1racle.reader.ui.theme.LocalReaderDarkTheme
 import com.m1racle.reader.ui.reader.ReaderBookmarkController
@@ -471,6 +478,8 @@ fun PdfViewerScreen(
     // ── R23/R26/R27 reading assets (document-scoped, UI consumes controllers only) ──
     var bookmarkedPages by remember(currentDocumentId) { mutableStateOf<Set<Int>>(emptySet()) }
     var annotationManagementVisible by remember(currentDocumentId) { mutableStateOf(false) }
+    var fileInformationVisible by remember(currentDocumentId) { mutableStateOf(false) }
+    var pendingSelection by remember(currentDocumentId) { mutableStateOf<com.m1racle.reader.ui.annotation.TextSelection.PdfSelection?>(null) }
     var managementHighlights by remember(currentDocumentId) {
         mutableStateOf<List<HighlightEntity>>(emptyList())
     }
@@ -714,6 +723,36 @@ fun PdfViewerScreen(
                 )
             }
 
+            pendingSelection?.let { selection ->
+                com.m1racle.reader.ui.annotation.SelectionActionsDialog(selection,
+                    onDismiss = { pendingSelection = null },
+                    onHighlight = { style ->
+                        pendingSelection = null
+                            scope.launch {
+                                when (highlightController!!.commitHighlight(selection, style = style)) {
+                                    is ReaderHighlightController.CommitResult.Success -> {
+                                        highlightVersion++
+                                        snackbarHostState.showSnackbar(
+                                            resources.getString(R.string.reader_highlight_added),
+                                        )
+                                    }
+                                    is ReaderHighlightController.CommitResult.Failure -> {
+                                        snackbarHostState.showSnackbar(
+                                            resources.getString(R.string.reader_highlight_failed),
+                                        )
+                                    }
+                                }
+                            }
+                    },
+                    onNote = if (noteController != null) ({
+                        pendingSelection = null
+                        scope.launch { selection.toAnchor()?.let { anchor ->
+                            noteEditorTarget = editorTargetForAnchor(anchor, selection.page, false)
+                        } }
+                    }) else null,
+                )
+            }
+
             val pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = { page ->
                 var pageItems by remember(state.document.id, page) {
                     mutableStateOf<List<AnnotationOverlayItem>>(emptyList())
@@ -740,23 +779,7 @@ fun PdfViewerScreen(
                         onSelectionUnavailable = {
                             scope.launch { snackbarHostState.showSnackbar(textError ?: textPage?.unavailableReason ?: "正在读取此页文字，请稍后长按选择") }
                         },
-                        onSelectCompleted = { selection ->
-                            scope.launch {
-                                when (highlightController.commitHighlight(selection)) {
-                                    is ReaderHighlightController.CommitResult.Success -> {
-                                        highlightVersion++
-                                        snackbarHostState.showSnackbar(
-                                            resources.getString(R.string.reader_highlight_added),
-                                        )
-                                    }
-                                    is ReaderHighlightController.CommitResult.Failure -> {
-                                        snackbarHostState.showSnackbar(
-                                            resources.getString(R.string.reader_highlight_failed),
-                                        )
-                                    }
-                                }
-                            }
-                        },
+                        onSelectCompleted = { pendingSelection = it },
                         onDeleteRequested = { itemId, _ ->
                             scope.launch {
                                 highlightController.deleteHighlight(itemId)
@@ -797,12 +820,14 @@ fun PdfViewerScreen(
                 },
                 printDetail = printLabel.takeIf { printNum != null },
             )
+            if (fileInformationVisible) com.m1racle.reader.ui.documents.ReaderDocumentDialog(state.document.id) { fileInformationVisible = false }
             // Advanced Cards are Reader overlays (like Main), not sheets:
             // the chrome keeps its normal level (the capsule retracts via
             // menuActive; the back circle stays).
             PdfChrome(
                 capsuleData = capsuleData,
                 onBack = onBack,
+                onFileInformation = { fileInformationVisible = true },
                 onCapsuleToggle = toggleCapsule,
                 chromeLevel = chromeLevel,
                 capsuleExpanded = capsuleExpanded,
@@ -917,6 +942,7 @@ fun PdfViewerScreen(
                     ),
                 ),
                 plainMenuItems = listOfNotNull(
+                    PdfChromeMenuItem(icon = Icons.Outlined.Info, label = "文件信息与导出", onClick = { fileInformationVisible = true }),
                     onEditBody?.let { edit ->
                         PdfChromeMenuItem(
                             icon = Icons.Outlined.Edit,
@@ -978,7 +1004,9 @@ fun PdfViewerScreen(
                             onClick = {
                                 val page = state.pageIndex
                                 scope.launch {
-                                    when (bookmarkController.toggle(page)) {
+                                    when (bookmarkController.toggle(page, target = com.m1racle.reader.data.anchor.BookmarkTarget(
+                                        DocumentAnchor.PdfPage(page), viewport = state.viewportSessionState,
+                                    ))) {
                                         ReaderBookmarkController.ToggleResult.Added -> {
                                             bookmarkedPages = bookmarkedPages + page
                                             snackbarHostState.showSnackbar(
@@ -1437,8 +1465,10 @@ private fun PdfChrome(
     topBarModeOptions: List<PdfChromeMenuOption> = emptyList(),
     /** Foreground Advanced Card payloads (R25). */
     nestedData: ReaderAdvancedData? = null,
+    onFileInformation: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    val systemCapturing = androidx.compose.ui.platform.LocalScrollCaptureInProgress.current
     val scheme = MaterialTheme.colorScheme
     // Four-state orthogonal derivation: capsule and the two circles are
     // independent dims. FULL=(T,T) BUTTONS_ONLY=(F,T) CAPSULE_ONLY=(T,F)
@@ -1468,9 +1498,16 @@ private fun PdfChrome(
         menuExport = parentExportBackdrop,
     )
 
+    // QA variant 1a: chrome light/dark follows the rendered PDF page (inverted = dark).
+    // Every other variant, and every non-qa build, keeps the reader theme.
+    val chromeDark = qaPdfChromeDark(
+        variant = QaGlass.selection.variant,
+        themeDark = LocalReaderDarkTheme.current,
+        pagesDark = pdfPaperFilter() != null,
+    )
     CompositionLocalProvider(
         LocalGlassBackdropHost provides backdropHost,
-        LocalGlassEnvironment provides GlassEnvironment.reader(LocalReaderDarkTheme.current),
+        LocalGlassEnvironment provides GlassEnvironment.reader(chromeDark),
     ) {
     Box(
         modifier = modifier
@@ -1484,6 +1521,7 @@ private fun PdfChrome(
         ) {
             content()
         }
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (systemCapturing) 0f else 1f }) {
         // ── Three independent, position-stable anchors (Box overlay) ──────────
         // The round buttons are FIXED screen anchors: left = TopStart, right =
         // TopEnd, fixed margins and sizes. The capsule is an independent
@@ -1651,6 +1689,7 @@ private fun PdfChrome(
                 PdfInfoCapsule(
                     data = capsuleData,
                     onClick = onCapsuleToggle,
+                    onLongClick = onFileInformation,
                     maxWidthDp = capsuleMaxWidthDp,
                     expanded = capsuleExpanded && jumpCardParams != null,
                     jumpParams = jumpCardParams,
@@ -1672,6 +1711,7 @@ private fun PdfChrome(
         // The textbook-page form lives INSIDE the morphing more container
         // (ReaderMoreHost): the menu card keeps changing into the form surface
         // — never a separate popup layer here.
+        } // Fixed chrome is omitted from system scroll captures.
     }
     } // CompositionLocalProvider (backdrop host)
 }
@@ -1688,12 +1728,11 @@ private fun FloatingChromeButton(
     contentDescription: String?,
     onClick: () -> Unit,
 ) {
-    val scheme = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(pdfChromeControlSize(48.dp))
             .glassMaterial(
                 role = GlassMaterialRole.Control,
                 shape = CircleShape,
@@ -1709,10 +1748,26 @@ private fun FloatingChromeButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = scheme.onSurface,
+            tint = pdfChromePrimaryText(),
         )
     }
 }
+
+/** QA variant 2 changes material only, so every variant keeps the [production] size. */
+@Composable
+internal fun pdfChromeControlSize(production: Dp): Dp = production
+
+/** QA glass variants pin glass text to the spec colors; baseline keeps the theme. */
+@Composable
+internal fun pdfChromePrimaryText(): Color =
+    qaGlassPrimaryText(QaGlass.selection.variant, LocalGlassEnvironment.current.isDark)
+        ?: MaterialTheme.colorScheme.onSurface
+
+/** Capsule page number: primary text in every QA variant except baseline. */
+@Composable
+private fun pdfChromePageNumberText(): Color =
+    qaPdfPageNumberText(QaGlass.selection.variant, LocalGlassEnvironment.current.isDark)
+        ?: MaterialTheme.colorScheme.onSurfaceVariant
 
 /**
  * Small frosted capsule: document title (maxLines=1, ellipsis) plus
@@ -1790,6 +1845,7 @@ private fun PdfInfoCapsule(
     expanded: Boolean = false,
     jumpParams: JumpCardParams? = null,
     imeAvailableHeightDp: Dp = Dp.Infinity,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val widthCap = maxWidthDp.dp
@@ -1815,6 +1871,10 @@ private fun PdfInfoCapsule(
     var bodyNaturalHeightPx by remember { mutableFloatStateOf(0f) }
     val bodyDensity = LocalDensity.current
     val capsuleInteraction = remember { MutableInteractionSource() }
+    // QA variant 2: the WHOLE capsule brightens and grows on press (engine press spec)
+    // instead of the local radial highlight. Production keeps the local highlight.
+    val wholeCapsulePress = QaGlass.selection.coolapk
+    val capsulePressed by capsuleInteraction.collectIsPressedAsState()
 
     Column(
         modifier = Modifier
@@ -1822,6 +1882,7 @@ private fun PdfInfoCapsule(
             .glassMaterial(
                 role = GlassMaterialRole.Capsule,
                 shape = shape,
+                pressed = wholeCapsulePress && capsulePressed,
                 interaction = expanded,
             )
             .onGloballyPositioned { coords ->
@@ -1848,18 +1909,22 @@ private fun PdfInfoCapsule(
         Box(
             modifier = Modifier
                 .width(collapsedWidth)
-                .height(44.dp)
+                .height(pdfChromeControlSize(44.dp))
                 .align(Alignment.CenterHorizontally)
                 .clip(RoundedCornerShape(CapsuleRadiusDp))
                 .then(
                     if (onClick != null) {
                         Modifier
-                            .clickable(
+                            .combinedClickable(
                                 interactionSource = capsuleInteraction,
                                 indication = null,
                                 onClick = onClick,
+                                onLongClick = onLongClick,
                             )
-                            .capsuleLocalPressHighlight(capsuleInteraction)
+                            .then(
+                                if (wholeCapsulePress) Modifier
+                                else Modifier.capsuleLocalPressHighlight(capsuleInteraction),
+                            )
                     } else {
                         Modifier
                     },
@@ -1875,7 +1940,7 @@ private fun PdfInfoCapsule(
                 Text(
                     text = data.title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = scheme.onSurface,
+                    color = pdfChromePrimaryText(),
                     maxLines = 1,
                     modifier = Modifier.capsuleTitleMarquee(),
                 )
@@ -1886,7 +1951,7 @@ private fun PdfInfoCapsule(
                     Text(
                         text = listOfNotNull(position, progress).joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onSurfaceVariant,
+                        color = pdfChromePageNumberText(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1896,7 +1961,7 @@ private fun PdfInfoCapsule(
                 Text(
                     text = data.title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = scheme.onSurface,
+                    color = pdfChromePrimaryText(),
                     maxLines = 1,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1934,7 +1999,7 @@ private fun PdfInfoCapsule(
                         Text(
                             text = listOfNotNull(position, data.printDetail).joinToString(" · "),
                             style = MaterialTheme.typography.labelMedium,
-                            color = scheme.onSurface,
+                            color = pdfChromePrimaryText(),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         )
                     }
@@ -1981,6 +2046,7 @@ private fun JumpPageBody(
     bodyMaxHeightDp: Dp,
 ) {
     var text by remember { mutableStateOf(params.currentHumanPage.toString()) }
+    var scrubPage by remember(params.currentHumanPage) { mutableFloatStateOf(params.currentHumanPage.toFloat()) }
     var error by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -2013,6 +2079,15 @@ private fun JumpPageBody(
             .verticalScroll(rememberScrollState())
             .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
     ) {
+        Text("第 ${scrubPage.toInt()} / ${params.pageCount} 页", style = MaterialTheme.typography.labelMedium)
+        com.m1racle.reader.ui.reader.ReaderProgressWheel(
+            value = (scrubPage - 1f) / (params.pageCount - 1).coerceAtLeast(1),
+            label = "第 ${scrubPage.toInt()} / ${params.pageCount} 页",
+            onValueChange = { scrubPage = 1f + kotlin.math.round(it * (params.pageCount - 1).coerceAtLeast(0)); text = scrubPage.toInt().toString(); error = null },
+            onCommit = { keyboard?.hide(); params.onConfirm(scrubPage.toInt()) },
+            enabled = params.pageCount > 1,
+            modifier = Modifier.align(Alignment.CenterHorizontally).testTag("pdf-progress-wheel"),
+        )
         // Restrained number field: 44dp tall, 11dp radius, filled only
         // slightly deeper than the capsule glass — never a solid black
         // rectangle, never a bulky form field.
@@ -2147,6 +2222,7 @@ internal fun PdfHorizontalPagedArea(
     var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val scheme = MaterialTheme.colorScheme
     val horizontalViewportBackground = M1racleReaderTheme.extra.pdfCanvas
+    val paperFilter = pdfPaperFilter()
     val viewConfig = LocalViewConfiguration.current
     val horizontalDensity = LocalDensity.current
     val horizontalContext = LocalContext.current
@@ -3411,7 +3487,7 @@ internal fun PdfHorizontalPagedArea(
                         Surface(
                             // Registered paper-sheet radius (matches the intentional paper-white exception).
                             shape = RoundedCornerShape(2.dp),
-                            color = Color.White,
+                            color = if (paperFilter != null) Color.Black else Color.White,
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
                                 scheme.outlineVariant,
@@ -3452,6 +3528,7 @@ internal fun PdfHorizontalPagedArea(
                                     ),
                                     contentScale = ContentScale.Fit,
                                     filterQuality = FilterQuality.Medium,
+                                    colorFilter = paperFilter,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                                 if (horizontalTiles.isNotEmpty()) {
@@ -3461,6 +3538,7 @@ internal fun PdfHorizontalPagedArea(
                                             val destination = tile.pageRect.roundedPixelRect()
                                             drawImage(
                                                 image = tile.bitmap,
+                                                colorFilter = paperFilter,
                                                 srcOffset = IntOffset(source.left, source.top),
                                                 srcSize = IntSize(
                                                     source.width.coerceAtLeast(1),

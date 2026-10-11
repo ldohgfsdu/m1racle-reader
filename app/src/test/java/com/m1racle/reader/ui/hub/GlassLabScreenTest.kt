@@ -57,7 +57,7 @@ class GlassLabScreenTest {
     }
 
     @Test fun settingsEntryOmittedWhenBuildHasNoGlassLab() {
-        // Release passes null (BuildConfig.GLASS_LAB_ENABLED == false): no entry is composed.
+        // A caller can omit the optional entry; production now always supplies it.
         rule.setContent {M1racleReaderTheme {HubSettingsScreen({}, null)}}
         rule.onNodeWithText("材质对比").performScrollTo().assertExists()
         rule.onNodeWithText("液态玻璃工作台").assertDoesNotExist()

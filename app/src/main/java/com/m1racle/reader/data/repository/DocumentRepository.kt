@@ -26,12 +26,13 @@ import com.m1racle.reader.epub.EpubException
 import com.m1racle.reader.epub.EpubPackageImporter
 import com.m1racle.reader.packageimport.ZipPackageImporter
 import com.m1racle.reader.pdf.TextbookOutlineResolver
-import com.m1racle.reader.identity.ContentIdentityDecision
 import com.m1racle.reader.identity.ContentIdentityInput
 import com.m1racle.reader.identity.ContentIdentityResolution
 import com.m1racle.reader.identity.ContentIdentityResolver
 import com.m1racle.reader.identity.PreparedContentIdentity
 import com.m1racle.reader.identity.DocumentAliasKeys
+import com.m1racle.reader.identity.LegacyContentHashMigrationFiles
+import com.m1racle.reader.identity.LegacyContentHashMigrationV1
 import com.m1racle.reader.identity.RoomSidecarAliasMigrationTransaction
 import com.m1racle.reader.identity.SidecarIdentityMigrationFiles
 import com.m1racle.reader.identity.SidecarIdentityMigrationV1
@@ -81,6 +82,13 @@ class DocumentRepository(
                 aliasDao = documentAliasDao,
             ),
         ),
+    internal val legacyContentHashMigration: LegacyContentHashMigrationV1 =
+        LegacyContentHashMigrationV1(
+            documentDao = documentDao,
+            aliasDao = documentAliasDao,
+            files = LegacyContentHashMigrationFiles(context.filesDir),
+            openSource = ContentIdentityResolver.defaultOpenSource(context),
+        ),
     private val importTransactionRunner: RepositoryTransactionRunner =
         RoomRepositoryTransactionRunner(db),
 ) {
@@ -98,13 +106,13 @@ class DocumentRepository(
     }
 
     /** A new immutable revision plus a Room pointer update preserves id and every child row. */
-    suspend fun savePdfEdits(id: String, expectedHash: String, candidate: File, sourceTarget: Uri? = null): DocumentEntity =
+    suspend fun saveDocumentEdits(id: String, expectedHash: String, candidate: File, sourceTarget: Uri? = null): DocumentEntity =
         withContext(Dispatchers.IO) {
             ensureIdentityRuntimeReady()
             identityCommitMutex.withLock {
                 if(sourceTarget!=null) check(pdfSourceWrites.pending().none { it.documentId == id }) { "存在未完成的源文件恢复，请先导出备份；当前修改仍可保存到书库" }
                 val before = documentDao.getById(id) ?: error("文档已移除")
-                check(before.isPdf) { "只能保存 PDF 正文" }
+                check(before.isPdf || before.type == DocumentType.MARKDOWN) { "仅支持 PDF 和独立 Markdown 正文编辑" }
                 val actual = context.contentResolver.openInputStream(Uri.parse(before.uri))?.use(PdfSourceWriteStore::sha256)
                 check(actual == expectedHash) { "书库文档已发生变化，请重新打开后编辑" }
                 val nextHash = PdfSourceWriteStore.sha256(candidate)
@@ -112,7 +120,7 @@ class DocumentRepository(
                 check(owner == null || owner.id == id) { "相同内容已在书库中，请使用另存副本" }
                 val folder = File(context.filesDir,"library/$nextHash/${UUID.randomUUID()}")
                 check(folder.mkdirs()) { "无法创建保存文件" }
-                val revision = File(folder,ExternalDocumentImporter.sanitizeFileName(before.displayName,"pdf"))
+                val revision = File(folder,ExternalDocumentImporter.sanitizeFileName(before.displayName, if (before.isPdf) "pdf" else "md"))
                 var ticket: PdfSourceWriteStore.Ticket? = null
                 var writing = false
                 var committed = false
@@ -191,8 +199,39 @@ class DocumentRepository(
             documentDao.getAll()
         }
 
+    suspend fun renameDocument(id: String, name: String): DocumentEntity = withContext(Dispatchers.IO) {
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty() && trimmed.length <= 255 && trimmed.none { it == '/' || it == '\\' || it.code < 32 }) { "文件名无效" }
+        identityCommitMutex.withLock {
+            importTransactionRunner.run {
+                val before = documentDao.getById(id) ?: error("文档已移除")
+                val extension = before.displayName.substringAfterLast('.', "")
+                val finalName = if (extension.isNotEmpty() && !trimmed.endsWith(".$extension", ignoreCase = true)) "$trimmed.$extension" else trimmed
+                before.copy(displayName = finalName).also {
+                    documentDao.updateDocument(it)
+                    searchRepository.index(it, indexedAt = System.currentTimeMillis())
+                }
+            }
+        }
+    }
+
+    /** Byte-preserving export, without re-rendering/re-encoding the source format. */
+    suspend fun exportDocument(id: String, target: Uri) = withContext(Dispatchers.IO) {
+        val document = documentDao.getById(id) ?: error("文档已移除")
+        check(target.toString() != document.uri && target.toString() != document.sourceUri) { "请选择新的导出位置，不能覆盖源文件" }
+        val sourceHash = context.contentResolver.openInputStream(Uri.parse(document.uri))?.use(PdfSourceWriteStore::sha256)
+            ?: error("无法读取文档")
+        context.contentResolver.openInputStream(Uri.parse(document.uri))?.use { input ->
+            context.contentResolver.openOutputStream(target, "wt")?.use { output -> input.copyTo(output) }
+                ?: error("无法写入导出文件")
+        } ?: error("无法读取文档")
+        val exportedHash = context.contentResolver.openInputStream(target)?.use(PdfSourceWriteStore::sha256)
+        check(sourceHash == exportedHash) { "导出文件核验失败" }
+    }
+
     internal suspend fun ensureIdentityRuntimeReady() {
         sidecarIdentityMigration.ensureCompleted()
+        legacyContentHashMigration.ensureCompleted()
     }
 
     suspend fun touchLastOpened(id: String, time: Long = System.currentTimeMillis()) {
@@ -207,16 +246,12 @@ class DocumentRepository(
      * always staged and verified before [commitResolvedImport].
      */
     internal suspend fun findBySourceAlias(
-        sourceUri: Uri,
         canonicalExternalKey: String,
     ): DocumentEntity? = withContext(Dispatchers.IO) {
         ensureIdentityRuntimeReady()
-        for (key in sourceAliasKeys(sourceUri, canonicalExternalKey)) {
-            val documentId = documentAliasDao.getByKey(key)?.documentId ?: continue
-            val document = documentDao.getById(documentId)
-            if (document != null) return@withContext document
-        }
-        null
+        val documentId = documentAliasDao.getByKey(DocumentAliasKeys.uriV1(canonicalExternalKey))?.documentId
+            ?: return@withContext null
+        documentDao.getById(documentId)
     }
 
     /** Host-test seam that keeps hashing/lookup inside ContentIdentityResolver. */
@@ -332,65 +367,21 @@ class DocumentRepository(
         freezeMarkdown: suspend (DocumentEntity) -> DocumentEntity,
     ): ResolvedImportCommit? {
         val prepared = request.content
+        // The indexed content hash is the sole reuse authority. Legacy
+        // null-hash rows were resolved by LegacyContentHashMigrationV1 before
+        // any import reached this boundary.
         val hashOwner = contentIdentityResolver.findExistingDocument(prepared.contentSha256)
-        if (hashOwner != null) {
-            // Equal bytes may come from different external files. Write back to the
-            // source the user actually opened, rather than the first imported alias.
-            val frozen = freezeMarkdown(hashOwner)
-            val opened = frozen.copy(lastOpenedAt=now,
-                sourceUri=if(hashOwner.isPdf) prepared.sourceUri.toString() else frozen.sourceUri,
-                sourceSha256=if(hashOwner.isPdf) prepared.contentSha256 else hashOwner.sourceSha256)
-            documentDao.updateDocument(opened)
-            bindVerifiedSourceAliases(request, hashOwner.id, now)
-            return ResolvedImportCommit(
-                document = opened,
-                reusedExisting = true,
-            )
-        }
-
-        val resolvedCandidate =
-            (prepared.decision as? ContentIdentityDecision.ExistingDocumentFound)?.document
-        if (resolvedCandidate != null && resolvedCandidate.contentSha256 == null) {
-            val current = documentDao.getById(resolvedCandidate.id)
-            if (current != null && current.contentSha256 == null && contentIdentityResolver.hasExactContent(current, prepared)) {
-                val updated = documentDao.assignContentSha256IfNull(
-                    id = current.id,
-                    contentSha256 = prepared.contentSha256,
-                    lastOpenedAt = now,
-                )
-                check(updated == 1) { "Verified legacy identity candidate changed during commit" }
-                val frozen = freezeMarkdown(current).copy(contentSha256 = prepared.contentSha256, lastOpenedAt = now)
-                documentDao.updateDocument(frozen)
-                bindVerifiedSourceAliases(request, current.id, now)
-                return ResolvedImportCommit(
-                    document = frozen,
-                    reusedExisting = true,
-                )
-            }
-        }
-
-        var aliasCandidate: DocumentEntity? = null
-        for (key in sourceAliasKeys(prepared.sourceUri, request.canonicalExternalKey)) {
-            val documentId = documentAliasDao.getByKey(key)?.documentId ?: continue
-            val document = documentDao.getById(documentId) ?: continue
-            if (document.contentSha256 == null && contentIdentityResolver.hasExactContent(document, prepared)) {
-                aliasCandidate = document
-                break
-            }
-        }
-        val legacyCandidate = aliasCandidate ?: return null
-
-        val updated = documentDao.assignContentSha256IfNull(
-            id = legacyCandidate.id,
-            contentSha256 = prepared.contentSha256,
-            lastOpenedAt = now,
-        )
-        check(updated == 1) { "Legacy identity candidate changed during commit" }
-        val frozen = freezeMarkdown(legacyCandidate).copy(contentSha256 = prepared.contentSha256, lastOpenedAt = now)
-        documentDao.updateDocument(frozen)
-        bindVerifiedSourceAliases(request, legacyCandidate.id, now)
+            ?: return null
+        // Equal bytes may come from different external files. Write back to the
+        // source the user actually opened, rather than the first imported alias.
+        val frozen = freezeMarkdown(hashOwner)
+        val opened = frozen.copy(lastOpenedAt=now,
+            sourceUri=if(hashOwner.isPdf) prepared.sourceUri.toString() else frozen.sourceUri,
+            sourceSha256=if(hashOwner.isPdf) prepared.contentSha256 else hashOwner.sourceSha256)
+        documentDao.updateDocument(opened)
+        bindVerifiedSourceAliases(request, hashOwner.id, now)
         return ResolvedImportCommit(
-            document = frozen,
+            document = opened,
             reusedExisting = true,
         )
     }
@@ -432,15 +423,7 @@ class DocumentRepository(
         documentId: String,
         now: Long,
     ) {
-        val primaryKey = DocumentAliasKeys.uriV1(request.canonicalExternalKey)
-        bindAlias(primaryKey, DocumentAliasKeys.URI_V1_KIND, documentId, now)
-
-        // v13 migration created this key for old Path-A ids. It remains a
-        // lookup/rebind bridge only; new imports never create legacy aliases.
-        val legacyKey = DocumentAliasKeys.legacyRawUriV1(request.content.sourceUri.toString())
-        if (documentAliasDao.getByKey(legacyKey) != null) {
-            bindAlias(legacyKey, DocumentAliasKeys.LEGACY_RAW_URI_V1_KIND, documentId, now)
-        }
+        bindAlias(DocumentAliasKeys.uriV1(request.canonicalExternalKey), DocumentAliasKeys.URI_V1_KIND, documentId, now)
     }
 
     private suspend fun bindAlias(
@@ -555,12 +538,6 @@ class DocumentRepository(
             operationOwnedPath = destinationDirectory,
         )
     }
-
-    private fun sourceAliasKeys(sourceUri: Uri, canonicalExternalKey: String): List<String> =
-        listOf(
-            DocumentAliasKeys.uriV1(canonicalExternalKey),
-            DocumentAliasKeys.legacyRawUriV1(sourceUri.toString()),
-        )
 
     suspend fun deleteById(id: String) {
         withContext(Dispatchers.IO) {
@@ -817,6 +794,11 @@ class DocumentRepository(
             throw e
         } catch (_: Exception) {
             throw EpubException.Corrupt("文件可能已损坏")
+        }
+        val converted = com.m1racle.reader.epub.rollbackEpubPosition(book, entity)
+        if (converted != entity) {
+            documentDao.updateEpubReadingPosition(id, converted.lastScrollIndex, converted.lastScrollOffset,
+                converted.readingProgress, converted.readingAnchor)
         }
         touchLastOpenedAt(id)
         updateParseMetadata(id, book.metadata.title, book.toc.size)

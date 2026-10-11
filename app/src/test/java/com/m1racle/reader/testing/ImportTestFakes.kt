@@ -40,6 +40,12 @@ class TestDocumentAliasDao(
         }
     }
 
+    override suspend fun deleteByKind(kind: String): Int {
+        val removed = aliases.values.count { it.kind == kind }
+        aliases.entries.removeAll { it.value.kind == kind }
+        return removed
+    }
+
     fun allAliases(): List<DocumentAliasEntity> = aliases.values.toList()
 }
 

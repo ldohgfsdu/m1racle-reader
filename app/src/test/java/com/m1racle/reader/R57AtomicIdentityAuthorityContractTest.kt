@@ -74,7 +74,7 @@ class R57AtomicIdentityAuthorityContractTest {
     fun `existing document navigation remains direct by Room id`() {
         val navigation = source("ui/navigation/NavGraph.kt")
         assertTrue(navigation.contains("repository.getDocumentById(result.documentId)"))
-        assertTrue(navigation.contains("repository.getDocumentById(documentId)"))
+        assertTrue(navigation.contains("repository.getDocumentById(bookmark.documentId)"))
         assertFalse(navigation.contains("ContentIdentityResolver"))
         assertFalse(navigation.contains("documentAlias"))
         assertFalse(navigation.contains("SidecarIdentity"))

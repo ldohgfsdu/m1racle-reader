@@ -194,7 +194,7 @@ class PdfBodyEditorViewModel(
     fun saveCurrent(sourceTarget: Uri? = null) = work {
         try {
             saved["pendingCommitHash"] = withContext(Dispatchers.IO) { PdfSourceWriteStore.sha256(preview) }
-            val result = repository.savePdfEdits(documentId,originHash,preview,sourceTarget)
+            val result = repository.saveDocumentEdits(documentId,originHash,preview,sourceTarget)
             saved["edits"] = "[]"
             mutable.value = mutable.value.copy(savedDocumentId=result.id,dirty=false)
         } catch (e: CancellationException) { throw e }

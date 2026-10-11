@@ -127,12 +127,17 @@ fun PdfHighlightLayer(
                     item.pdfRectsNormalized().forEachIndexed { rectIndex, r ->
                         val isSelected = item.id == selectedId
                         val arm = badgeRadiusPx * 0.45f
-                        drawRoundRect(
-                            color = if (isSelected) HighlightFillSelected else HighlightFill,
+                        val style = item.style
+                        val color = Color(style.argb)
+                        if (style == com.m1racle.reader.data.anchor.HighlightStyle.Underline || style == com.m1racle.reader.data.anchor.HighlightStyle.Strike) {
+                            val y = (r.y + r.height * if (style == com.m1racle.reader.data.anchor.HighlightStyle.Underline) .95f else .5f) * h
+                            drawLine(color, Offset(r.x * w, y), Offset((r.x + r.width) * w, y), strokeWidth = (h * .0015f).coerceAtLeast(1f))
+                        } else drawRoundRect(
+                            color = if (isSelected) color.copy(alpha = .55f) else color,
                             topLeft = Offset(r.x * w, r.y * h),
                             size = Size(r.width * w, r.height * h),
                             cornerRadius = CornerRadius(1f, 1f),
-                            blendMode = BlendMode.Multiply,
+                            blendMode = BlendMode.SrcOver,
                         )
                         if (isSelected && rectIndex == 0 && onNoteRequested != null) {
                             // 左上角 ✎ 批注角标。

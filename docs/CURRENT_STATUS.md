@@ -1,31 +1,22 @@
 # 当前状态
 
-当前功能基线 **1.0.0 / 32，Room v15**。EPUB R04 已合入 `reader` 的 `feature/epub-anchor`，正式包源码基线 `0fe7064a0c624779a28fd95e7097caa8d388dd67`。已完成自动化验证、正式签名打包和 API 35 模拟器验收；**真实手机验收待完成**。本轮未推送、未创建发布或 tag。详见 [R04 合入与验收](R04_INTEGRATION_20261005.md)。
+当前已安装侧载正式包 **1.0.0 / 55，Room v15**。55版按酷安真机采样调整底栏尺寸、按压扩张与阅读玻璃控件，保留直接跟手和独立形变弹簧。EPUB继续保留51版恢复的43版阅读行为及字体功能。
 
-## 当前实现
+## 当前产物
 
-- 本地 Markdown、PDF、有限 EPUB 阅读；无 INTERNET 权限、账号、广告或云同步。
-- EPUB 使用持久化文本锚点恢复位置，支持同章完整 quote、前 12 字匹配及章节 / 百分比兜底。非精确恢复保留原锚点，直到用户主动翻页或目录导航；章首 / 百分比兜底每次打开只提示一次。
-- EPUB 章节分页、目录真实锚点、紧凑顶栏和排版重排能力保留。Room 14 → 15 的一次性迁移见 [文本锚点第一阶段](EPUB_ANCHOR_20261004.md)。
-- Hub 底栏保留已确认的 iOS 通透度、按压放大和完整底栏边缘采样；本轮只修正过期测试断言，没有改变生产玻璃配方。
-- 液态玻璃工作台仅在 Debug / QA 开启，Release 隐藏；Release 的既有材质对比入口仍在。
+[正式签名 APK](../.external_outbox/m1racle-reader-release-latest.apk)，**27,183,175 bytes**。
+SHA-256：`a53143d8cb9a9f18db84ef8880746b945b734feabf44f7d1ecdbc0a5f02752e6`。
+快照：`m1racle-reader-release-v1.0.0-20261009-074330.apk`。
+构建输出/Outbox/手机Download摘要一致；生产签名延续`2d9daba0…bf9d1`，16KiB对齐通过，包名/版本55/min31/target35/无INTERNET通过。Release minify包，已覆盖安装，未交付QA或Debug。
 
-## 唯一交付产物
+## 验证
 
-`.external_outbox/m1racle-reader-release-latest.apk`，**7,024,976 bytes**。
+- **implemented**：底栏基础56dp、透镜48→67dp、20dp侧边距、24dp图标；按压底栏宽高扩张5%，透镜每侧延伸3dp。日间高光和主题底缘渐淡，独立控件放大8.5%、胶囊7.5%，提亮与回弹；保留蓝色及稳定命中区域。
+- **automated_verified**：55版最终源码定向QA JVM164项全部通过，无跳过。Release构建成功，完整Lint及lintVital通过，0 errors / 162 warnings / 4 hints。52版完整QA JVM1735项属于前版基线，未声称本轮完整重跑。
+- **physical_device_verified**：最终源码真机db04f865/API36原生11项全部通过，含56dp尺寸、宽高5%扩张、固定命中区、逐帧跟手及形变/回弹、两种主题控件真实像素提亮/8.5%放大与回弹。正式Release55保留数据安装、冷启动197ms；日夜模式各10次拖动、4次上下滚动及加号取消通过，截图已检查。场景P95日间18ms/夜间16ms；阅读控件材料为真机隔离场景，未声称全部阅读页面人工遍历。
 
-SHA-256：`4aae1477cee6902e13ed0a89ee45a11b2f9f542f73290f3ee0be8ac4d78097c9`。
+## 边界与工作区
 
-快照：`m1racle-reader-release-v1.0.0-20261005-001455.apk`。正式签名和 16 KiB 对齐验证通过。构建输出、Outbox、模拟器已安装包、模拟器 Download 四处摘要一致；新包已覆盖安装到 `emulator-5554`，保留原数据。尚未交付真实手机。
+2026-10-09设备恢复连接后已完成55版安装与验证。无数据库变更，未清除生产数据，现有书库可见。系统恢复自动日夜模式，QA后台启动权限恢复ignore。精确长期60/120Hz表现及人工Q弹手感仍需日常使用反馈，不能由录屏唯一反推酷安内部公式。其他既有未提交工作保留，未commit / push / 公开发布。
 
-## 验证基线
-
-- QA JVM：完整运行加修复项定向复测，去重覆盖 **1696 项，1694 通过，2 项既有跳过，0 个未解决失败**。不是一次完整运行全绿；初次错误和复测证据均在合入报告中。
-- QA 仪器测试源码编译通过；本轮没有运行 connected 仪器套件。
-- Release Lint：**0 errors / 144 warnings / 4 hints**。
-- 正式包模拟器 **13 项检查通过**：覆盖升级、既有 EPUB、大小字号重排及进程重启恢复、目录跳转后重启、Markdown / PDF 打开、Release 工作台隐藏、APK 一致性和无崩溃。
-- 真实手机、长书性能、深色 / 旋转专项及降级提示设备观感仍未完成本轮验收。此前真机结果不能作为新包真机验收证据。
-
-## 工作区与证据
-
-主工作区 `reader`；`reader-r04` 的 R04 代码已快进合入，保留该工作区供追溯。当前报告：[R04_INTEGRATION_20261005.md](R04_INTEGRATION_20261005.md)；本机证据：工作区根目录 `output/r04-integration/` 和 `output/r04-*.log`。上一状态已归档至 [历史快照](history/CURRENT_STATUS_before_r04_integration_20261005.md)。本机环境入口见 [环境修复说明](../../环境修复说明-20261003.md)。
+本轮见[复刻实现报告](COOLAPK_GLASS_REPLICA_20261008.md)，参考见[酷安采样](COOLAPK_DOCK_CAPTURE_20261008.md)。此前已装机状态见[54版历史快照](history/CURRENT_STATUS_before_coolapk_replica_20261009.md)，EPUB边界仍见[EPUB报告](EPUB_RESTORE43_FONT_20261007.md)。

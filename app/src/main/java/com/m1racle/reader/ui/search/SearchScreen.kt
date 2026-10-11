@@ -31,6 +31,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -115,6 +120,9 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) { delay(280); focus.requestFocus(); keyboard?.show() }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -143,6 +151,7 @@ fun SearchScreen(
                 onValueChange = viewModel::onQueryChange,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(focus)
                     .padding(horizontal = HomeDesignTokens.PageHorizontal, vertical = 12.dp),
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),

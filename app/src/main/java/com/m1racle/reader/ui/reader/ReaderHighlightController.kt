@@ -54,9 +54,9 @@ class ReaderHighlightController(
      * 接受任意 [TextSelection]：PDF 用 [TextSelection.PdfSelection]，
      * Markdown 用 [TextSelection.MarkdownSelection]（同一状态机，无第二实现）。
      */
-    suspend fun commitHighlight(selection: TextSelection, nowMs: Long = System.currentTimeMillis()): CommitResult {
+    suspend fun commitHighlight(selection: TextSelection, nowMs: Long = System.currentTimeMillis(), style: com.m1racle.reader.data.anchor.HighlightStyle = com.m1racle.reader.data.anchor.HighlightStyle.Yellow): CommitResult {
         flow.select(selection)
-        when (val draft = flow.prepareDraft(AnnotationType.HIGHLIGHT)) {
+        when (val draft = flow.prepareDraft(AnnotationType.HIGHLIGHT, style = style)) {
             is AnnotationCreationFlow.Stage.DraftReady -> Unit
             is AnnotationCreationFlow.Stage.Failed -> return CommitResult.Failure(draft.message)
             else -> return CommitResult.Failure("flow not in draft stage")

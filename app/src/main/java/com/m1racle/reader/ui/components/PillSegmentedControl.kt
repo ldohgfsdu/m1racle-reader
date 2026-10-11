@@ -60,7 +60,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.Constraints
 import kotlin.math.roundToInt
 
 /** Compact visual track, with a separate 48dp touch area and a spring press lens. */
@@ -79,6 +78,11 @@ fun PillSegmentedControl(
     val textSizes = labels.map { measurer.measure(it, style = style, softWrap = false).size }
     val naturalSegmentWidth = with(density) { textSizes.maxOf { it.width }.toDp() + 8.dp }
         .coerceAtLeast(56.dp)
+    // Each segment is at least its unwrapped label width. Fix the measured
+    // touch height before BoxWithConstraints so DropdownMenu can query
+    // intrinsic dimensions without asking a SubcomposeLayout for intrinsics.
+    val trackHeight = with(density) { textSizes.maxOf { it.height }.toDp() + 10.dp }.coerceAtLeast(38.dp)
+    val touchHeight = trackHeight.coerceAtLeast(48.dp)
     val interactions = remember(labels.size) { List(labels.size) { MutableInteractionSource() } }
     val pressed = interactions.map { it.collectIsPressedAsState().value }
     val pressedIndex = pressed.indexOfFirst { it }
@@ -97,18 +101,12 @@ fun PillSegmentedControl(
         label = "segmentPress",
     )
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    BoxWithConstraints(modifier) {
+    BoxWithConstraints(modifier.height(touchHeight)) {
         // Ordinary phone widths show the whole group, including its last option
         // and both rounded ends. At accessibility sizes keep full text scrollable.
         val segmentWidth = if (density.fontScale <= 1.3f && maxWidth / labels.size >= 56.dp) {
             naturalSegmentWidth.coerceAtMost(maxWidth / labels.size)
         } else naturalSegmentWidth
-        val labelWidth = with(density) { (segmentWidth - 8.dp).roundToPx() }
-        val labelHeight = labels.maxOf {
-            measurer.measure(it, style = style, constraints = Constraints(maxWidth = labelWidth)).size.height
-        }
-        val trackHeight = with(density) { labelHeight.toDp() + 10.dp }.coerceAtLeast(38.dp)
-        val touchHeight = trackHeight.coerceAtLeast(48.dp)
         val slotWidthPx = with(density) { segmentWidth.toPx() }
         val overflowing = segmentWidth * labels.size > maxWidth
         val dragModifier = Modifier.pointerInput(slotWidthPx, rtl, labels.size, overflowing) {

@@ -37,12 +37,7 @@ class ContentIdentityResolver internal constructor(
     ) : this(
         documentDao = documentDao,
         stagingDirectory = File(context.filesDir, STAGING_DIRECTORY_NAME),
-        openSource = { uri ->
-            when (uri.scheme?.lowercase(Locale.ROOT)) {
-                "file" -> uri.path?.let(::File)?.takeIf(File::isFile)?.let(::FileInputStream)
-                else -> context.contentResolver.openInputStream(uri)
-            }
-        },
+        openSource = defaultOpenSource(context),
     )
 
     suspend fun resolve(input: ContentIdentityInput): ContentIdentityResolution {
@@ -62,7 +57,6 @@ class ContentIdentityResolver internal constructor(
             }
             currentCoroutineContext().ensureActive()
             val existing = findExistingDocument(staged.contentSha256)
-                ?: findLegacyDocumentWithExactContent(staged)
             currentCoroutineContext().ensureActive()
 
             val decision = if (existing != null) {
@@ -102,67 +96,6 @@ class ContentIdentityResolver internal constructor(
             "contentSha256 must be 64 lowercase hexadecimal characters"
         }
         return documentDao.getByContentSha256(contentSha256)
-    }
-
-    /** Aliases and pre-commit candidates are locators, never proof of equal bytes. */
-    internal suspend fun hasExactContent(document: DocumentEntity, prepared: PreparedContentIdentity): Boolean =
-        runInterruptible(Dispatchers.IO) {
-            sourceHasExactContent(document.uri, StagedSource(prepared.stagedFile, prepared.byteCount, prepared.contentSha256))
-        }
-
-    /**
-     * v12 Path-A rows intentionally migrated with a null content hash. A renamed SAF URI
-     * cannot reach those rows through their old URI alias, so an indexed hash miss must
-     * verify the still-readable legacy source before deciding that the content is new.
-     *
-     * This remains resolver-owned exact-byte identity: metadata and filenames only prune
-     * impossible candidates, and no database state is changed here.
-     */
-    private suspend fun findLegacyDocumentWithExactContent(
-        staged: StagedSource,
-    ): DocumentEntity? {
-        val candidates = documentDao.getAll()
-            .asSequence()
-            .filter { it.contentSha256 == null }
-            .sortedWith(compareBy<DocumentEntity>({ it.createdAt }, { it.id }))
-            .toList()
-
-        return runInterruptible(Dispatchers.IO) {
-            candidates.firstOrNull { candidate ->
-                sourceHasExactContent(candidate.uri, staged)
-            }
-        }
-    }
-
-    private fun sourceHasExactContent(
-        uriString: String,
-        staged: StagedSource,
-    ): Boolean {
-        return try {
-            val sourceUri = Uri.parse(uriString)
-            val input = openSource(sourceUri) ?: return false
-            val digest = MessageDigest.getInstance(SHA_256)
-            var byteCount = 0L
-            input.use { source ->
-                val buffer = ByteArray(BUFFER_BYTES)
-                while (true) {
-                    if (Thread.currentThread().isInterrupted) {
-                        throw InterruptedException("Legacy identity verification interrupted")
-                    }
-                    val read = source.read(buffer)
-                    if (read < 0) break
-                    if (read == 0) continue
-                    byteCount += read
-                    if (byteCount > staged.byteCount) return false
-                    digest.update(buffer, 0, read)
-                }
-            }
-            byteCount == staged.byteCount && digest.digest().toHex() == staged.contentSha256
-        } catch (interrupted: InterruptedException) {
-            throw interrupted
-        } catch (_: Exception) {
-            false
-        }
     }
 
     private fun stageSource(sourceUri: Uri, maximumBytes: Long?): StagedSource {
@@ -233,6 +166,14 @@ class ContentIdentityResolver internal constructor(
         private const val STAGING_FILE_PREFIX = "identity-"
         private const val STAGING_FILE_SUFFIX = ".importing"
         private val CONTENT_SHA256 = Regex("^[0-9a-f]{64}$")
+
+        /** Shared source-opening policy, also used by the one-time identity migrations. */
+        internal fun defaultOpenSource(context: Context): (Uri) -> InputStream? = { uri ->
+            when (uri.scheme?.lowercase(Locale.ROOT)) {
+                "file" -> uri.path?.let(::File)?.takeIf(File::isFile)?.let(::FileInputStream)
+                else -> context.contentResolver.openInputStream(uri)
+            }
+        }
     }
 }
 
@@ -251,8 +192,8 @@ sealed interface ContentIdentityResolution {
 
 sealed interface ContentIdentityDecision {
     /**
-     * Exact content already exists. The row may be a normal hash owner or a verified
-     * legacy null-hash row that the commit layer must enrich without changing its id.
+     * Exact content already exists, proven by the indexed content hash. The
+     * commit layer must reuse the row without changing its id.
      */
     data class ExistingDocumentFound(val document: DocumentEntity) : ContentIdentityDecision
 

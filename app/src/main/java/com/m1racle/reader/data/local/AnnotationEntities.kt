@@ -44,6 +44,7 @@ data class HighlightEntity(
     val anchorEnd: Int? = null,
     val excerpt: String? = null,
     val createdAt: Long,
+    @androidx.room.ColumnInfo(defaultValue = "'Yellow'") val style: String = "Yellow",
 )
 
 /** 独立批注（可无选区，挂在位置上）。 */

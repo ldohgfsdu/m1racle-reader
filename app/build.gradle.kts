@@ -83,8 +83,9 @@ android {
         buildConfigField("float", "DETAIL_TILE_OVERLAY_ALPHA", "${detailTileOverlayAlpha}f")
         // Disabled for every normal build; the qa build type overrides this below.
         buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "false")
-        // Glass Lab workbench (Settings entry + route). Off unless a build type enables it.
-        buildConfigField("boolean", "GLASS_LAB_ENABLED", "false")
+        // QA glass variant switch (Settings row + prefs). Only the qa build type enables it.
+        buildConfigField("boolean", "QA_GLASS_VARIANTS_ENABLED", "false")
+        // The workbench uses the same Settings entry and route in every build type.
     }
 
     // Public signing: AGP applies zipalign and APK Signature Scheme signing.
@@ -105,7 +106,6 @@ android {
 
     buildTypes {
         getByName("debug") {
-            buildConfigField("boolean", "GLASS_LAB_ENABLED", "true")
         }
         create("qa") {
             initWith(getByName("debug"))
@@ -114,8 +114,8 @@ android {
             versionNameSuffix = "-qa"
             isDebuggable = true
             buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "true")
-            // QA keeps Glass Lab for internal acceptance; flip to "false" to hide it in QA too.
-            buildConfigField("boolean", "GLASS_LAB_ENABLED", "true")
+            buildConfigField("boolean", "QA_GLASS_VARIANTS_ENABLED", "true")
+            // QA has a separate application sandbox for acceptance tests.
             manifestPlaceholders["appLabel"] = "M1racle Reader QA"
         }
         release {
@@ -128,8 +128,7 @@ android {
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.getByName("release")
-            // Public release never ships Glass Lab (no Settings entry, no route).
-            buildConfigField("boolean", "GLASS_LAB_ENABLED", "false")
+            // The workbench is available through production Settings.
         }
         // Non-debuggable release-like build for Macrobenchmark / FrameTiming on device.
         create("benchmark") {
@@ -157,6 +156,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -273,6 +273,7 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     val composeBom = platform("androidx.compose:compose-bom:2026.05.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
@@ -293,6 +294,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
+
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     // Metadata / outline only — page bitmaps stay on Android PdfRenderer.
@@ -301,6 +303,9 @@ dependencies {
     // Liquid glass materials for Reader chrome only (visuals). Official Maven
     // artifact — no vendored sources. See docs/READER_CHROME_MATERIAL_REPORT.md.
     implementation("io.github.kyant0:backdrop:2.0.0")
+    implementation("io.github.oleksandrbalan:pagecurl:1.5.1")
+    // RiseDiary's continuous capsule geometry (the maintained Kyant shapes artifact).
+    implementation("io.github.kyant0:shapes:1.2.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
@@ -327,6 +332,8 @@ dependencies {
 // ── 打完包自动导出到项目 outbox（给 agent 菜单「发件箱」/人工取包）──
 // 目录：<repo>/.external_outbox/（已 gitignore，不进仓库）
 // 每次 assemble* 成功后：
+//   release（唯一交付包）→ outbox 根目录
+//   debug / qa / benchmark → .external_outbox/<variant>/ 子目录，避免与交付包混放
 //   m1racle-reader-<variant>-v<version>-yyyyMMdd-HHmmss.apk  （带时间戳）
 //   m1racle-reader-<variant>-latest.apk                     （同变体最新覆盖）
 //   对应 .sha256
@@ -334,9 +341,9 @@ val m1racleReaderOutboxDir: File =
     rootProject.layout.projectDirectory.dir(".external_outbox").asFile
 val m1racleReaderOutboxHistoryLimit = 5
 
-fun pruneVariantOutboxHistory(label: String) {
+fun pruneVariantOutboxHistory(targetDir: File, label: String) {
     val stampedPattern = Regex("^m1racle-reader-${Regex.escape(label)}-v.+\\.apk$")
-    val stampedApks = m1racleReaderOutboxDir.listFiles()
+    val stampedApks = targetDir.listFiles()
         ?.filter { it.isFile && stampedPattern.matches(it.name) }
         .orEmpty()
         .sortedWith(compareByDescending<File> { it.lastModified() }.thenByDescending { it.name })
@@ -363,7 +370,8 @@ fun exportVariantApksToOutbox(variantFolder: String, label: String) {
         logger.lifecycle("OUTBOX: skip $label (no apk in ${apkDir.path})")
         return
     }
-    m1racleReaderOutboxDir.mkdirs()
+    val targetDir = if (label == "release") m1racleReaderOutboxDir else File(m1racleReaderOutboxDir, label)
+    targetDir.mkdirs()
     val version = android.defaultConfig.versionName ?: "0"
     val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
     apks.forEach { apk ->
@@ -374,8 +382,8 @@ fun exportVariantApksToOutbox(variantFolder: String, label: String) {
                 }
             }
         }
-        val stamped = File(m1racleReaderOutboxDir, "m1racle-reader-$label-v${version}-$ts.apk")
-        val latest = File(m1racleReaderOutboxDir, "m1racle-reader-$label-latest.apk")
+        val stamped = File(targetDir, "m1racle-reader-$label-v${version}-$ts.apk")
+        val latest = File(targetDir, "m1racle-reader-$label-latest.apk")
         apk.copyTo(stamped, overwrite = true)
         apk.copyTo(latest, overwrite = true)
         fun writeSha(target: File) {
@@ -393,10 +401,10 @@ fun exportVariantApksToOutbox(variantFolder: String, label: String) {
         }
         writeSha(stamped)
         writeSha(latest)
-        logger.lifecycle("OUTBOX: ${stamped.name} (${stamped.length() / 1024} KB) → ${m1racleReaderOutboxDir.path}")
+        logger.lifecycle("OUTBOX: ${stamped.name} (${stamped.length() / 1024} KB) → ${targetDir.path}")
         logger.lifecycle("OUTBOX: ${latest.name} (latest)")
     }
-    pruneVariantOutboxHistory(label)
+    pruneVariantOutboxHistory(targetDir, label)
 }
 
 listOf(

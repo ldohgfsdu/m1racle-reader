@@ -163,6 +163,81 @@ class EpubAnchorReflowHostTest {
         rule.waitForIdle()
     }
 
+    @Test fun `drag follows the sheet and only a completed turn updates the saved position`() {
+        val emitted = mutableListOf<EpubPosition>()
+        rule.setContent {
+            M1racleReaderTheme {
+                EpubReaderContent(book, ReaderSettings(), "测试书", EpubSavedPosition.Start,
+                    onPosition = { emitted += it }, onFlush = {}, onBack = {}, onSettings = {},
+                    modifier = Modifier.size(360.dp, 560.dp), insets = WindowInsets(0, 0, 0, 0))
+            }
+        }
+        waitForPages()
+        val initialLabel = pageLabel()
+        val original = emitted.last().anchor
+        val saveCount = emitted.size
+        val pager = rule.onNodeWithTag("epub-pager")
+        val bounds = pager.fetchSemanticsNode().boundsInRoot
+        rule.mainClock.autoAdvance = false
+        pager.performTouchInput {
+            down(percentOffset(0.85f, 0.5f))
+            moveTo(percentOffset(0.43f, 0.5f), delayMillis = 600)
+        }
+        rule.mainClock.advanceTimeByFrame()
+        val front = rule.onNodeWithTag("epub-sheet-0").fetchSemanticsNode().boundsInRoot
+        val under = rule.onNodeWithTag("epub-sheet-1").fetchSemanticsNode().boundsInRoot
+        assertTrue("current sheet must move left", front.right < bounds.right - bounds.width * 0.2f)
+        assertEquals("next sheet must follow at 25 percent speed", bounds.left + (front.right - bounds.left) * 0.25f, under.left, 1f)
+        assertEquals(initialLabel, pageLabel())
+        assertEquals(saveCount, emitted.size)
+        // Reverse the same gesture before releasing; no new position may be saved.
+        pager.performTouchInput {
+            moveTo(percentOffset(0.8f, 0.5f), delayMillis = 600)
+            advanceEventTime(300)
+            up()
+        }
+        rule.mainClock.advanceTimeBy(2_000)
+        rule.waitForIdle()
+        assertEquals(initialLabel, pageLabel())
+        assertEquals(original, emitted.last().anchor)
+        assertEquals(saveCount, emitted.size)
+        // Slow release beyond the positional threshold completes exactly one page.
+        pager.performTouchInput {
+            down(percentOffset(0.85f, 0.5f))
+            moveTo(percentOffset(0.25f, 0.5f), delayMillis = 800)
+            advanceEventTime(300)
+            up()
+        }
+        rule.mainClock.advanceTimeBy(2_000)
+        rule.waitForIdle()
+        assertTrue(pageLabel().startsWith("第 2 /"))
+        assertNotEquals(original, emitted.last().anchor)
+        val second = emitted.last().anchor
+        pager.performTouchInput {
+            down(percentOffset(0.15f, 0.5f))
+            moveTo(percentOffset(0.75f, 0.5f), delayMillis = 800)
+        }
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue(pageLabel().startsWith("第 2 /"))
+        assertEquals(second, emitted.last().anchor)
+        pager.performTouchInput { advanceEventTime(300); up() }
+        rule.mainClock.advanceTimeBy(2_000)
+        rule.waitForIdle()
+        assertEquals(initialLabel, pageLabel())
+        assertEquals(original, emitted.last().anchor)
+        // A backward swipe at the first page is bounded by the book.
+        pager.performTouchInput {
+            down(percentOffset(0.15f, 0.5f))
+            moveTo(percentOffset(0.8f, 0.5f), delayMillis = 700)
+            up()
+        }
+        rule.mainClock.advanceTimeBy(2_000)
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertEquals(initialLabel, pageLabel())
+        assertEquals(original, emitted.last().anchor)
+    }
+
     @Test fun `cold start after typography changes reopens on the same text with an unchanged anchor`() {
         val shown = mutableStateOf(true)
         val settings = mutableStateOf(ReaderSettings(fontScale = ReaderSettings.FONT_LARGE))

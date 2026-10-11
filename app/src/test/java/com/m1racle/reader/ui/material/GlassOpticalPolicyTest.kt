@@ -10,7 +10,7 @@ class GlassOpticalPolicyTest {
     fun `production uses promoted liquid authority`() {
         // User requested promotion of the settings liquid material on 2026-09-25.
         val expectedLight = mapOf(
-            GlassMaterialRole.Control to 0.60f,
+            GlassMaterialRole.Control to 0.32f,
             GlassMaterialRole.SelectionLens to 0.10f,
             GlassMaterialRole.Menu to 0.60f,
             GlassMaterialRole.ExpandedMenu to 0.90f,
@@ -24,7 +24,7 @@ class GlassOpticalPolicyTest {
         }
         // Shared liquid role colors also apply in dark mode.
         val expectedDark = mapOf(
-            GlassMaterialRole.Control to 0.64f,
+            GlassMaterialRole.Control to 0.22f,
             GlassMaterialRole.SelectionLens to 0.10f,
             GlassMaterialRole.Menu to 0.64f,
             GlassMaterialRole.ExpandedMenu to 0.90f,

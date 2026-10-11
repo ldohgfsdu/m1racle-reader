@@ -64,6 +64,8 @@ class EpubTextLayoutTest {
             assertTrue(headings.all { it.text.spanStyles.isEmpty() }) // row style must control the heading weight
             assertEquals(com.m1racle.reader.ui.viewer.components.ReaderTypography.bodyLineHeight(
                 ReaderSettings(fontScale = scale)), rows[6].style.lineHeight)
+            assertEquals(androidx.compose.ui.text.style.TextIndent.None, rows[6].style.textIndent)
+            assertEquals(androidx.compose.ui.text.font.FontWeight.Normal, rows[6].style.fontWeight)
             assertTrue(rows[7].style.fontSize.value <= com.m1racle.reader.ui.viewer.components.ReaderTypography.CODE_BLOCK_MAX_SP)
         }
     }

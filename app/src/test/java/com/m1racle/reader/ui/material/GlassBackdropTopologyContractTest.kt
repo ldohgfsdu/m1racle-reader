@@ -49,25 +49,15 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
-    fun `dock selection samples a complete isolated glass bar with icons and rim`() {
-        val dock = appSource("ui/hub/GlassDock.kt").readText()
-        assertTrue(dock.contains("sourceBackdrop = selectionBackdrop"))
-        assertFalse(dock.contains("surfaceExport = barExport"))
-        assertFalse(dock.contains("rememberCombinedBackdrop(barExport, iconBackdrop)"))
-        assertTrue(dock.contains("val sampledBarMaterial = Modifier.glassMaterial(GlassMaterialRole.Dock, barShape)"))
-        assertTrue(dock.contains("GlassMaterialRole.SelectionLens"))
-        val capture = dock.substringAfter("GlassBackdropSource(selectionBackdrop,")
-            .substringBefore("\n                Row(")
-        assertTrue(capture.contains("DockTabVisual("))
-        assertFalse(capture.contains("glassMaterial("))
-        assertTrue(capture.contains(".then(sampledBarMaterial)"))
-        assertTrue(capture.contains(".height(lensHeight)"))
-        assertTrue(dock.contains(".alpha(0f).clearAndSetSemantics {}"))
-        assertTrue(dock.contains("blendMode = BlendMode.Clear"))
-        assertFalse(dock.contains("sampleBackdrop = false"))
-        assertFalse(dock.contains(".background(MaterialTheme.colorScheme.background"))
-        assertTrue(dock.contains("layerBlock = lensTransform"))
-        assertTrue(dock.contains("selectableGroup()"))
+    fun `dock lens captures only its isolated sampling bar and never itself`() {
+        val tabs = appSource("ui/hub/RiseDiaryBottomTabs.kt").readText()
+        val capture = trailingLambda(tabs, "GlassBackdropSource(")
+        assertTrue(capture.body.contains("content = content"))
+        assertTrue(capture.body.contains("backdrop = backdrop"))
+        assertFalse(capture.body.contains("combinedSelectionBackdrop"))
+        assertTrue(tabs.indexOf("rememberCombinedBackdrop(backdrop, tabsBackdrop)", capture.closeBrace) > capture.closeBrace)
+        assertTrue(tabs.contains("LocalLiquidBottomTabSampling provides true"))
+        assertTrue(tabs.contains("Modifier.clearAndSetSemantics {}.alpha(0f)"))
     }
 
     @Test

@@ -1,5 +1,7 @@
 # EPUB 支持架构调查与 MVP 设计
 
+> 历史调查。用户2026-10-07明确要求EPUB翻页与界面恢复43版，仅增加字体支持；当前已恢复原生块分页，不保留Readium运行路径。实现与验收见 [43版恢复与字体](EPUB_RESTORE43_FONT_20261007.md)，范围见PRD和design.md。下文仍是2026-09阶段记录。
+
 > **范围状态（2026-09-19，用户明确授权）**：EPUB 有限阅读已立项（active object `EPUB_REFLOWABLE_MVP`），
 > 本文档从只读调查转为实施依据，路线 B（XHTML → 中间模型 → Compose）为主路径。
 > 有限范围：reflowable 文字章节连续阅读；DRM/fixed-layout/音视频/复杂排版明确不做。

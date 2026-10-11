@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <activity android:name=".ui.epub.EpubQaHostActivity" android:exported="false"
+            android:theme="@style/Theme.M1racleReader" />
         <provider
             android:name=".ui.pdf.H1QaPdfFixtureProvider"
             android:authorities="com.m1racle.reader.qa.h1fixture"

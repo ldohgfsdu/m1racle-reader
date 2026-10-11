@@ -37,6 +37,7 @@ class AnnotationCreationFlow(
             val anchor: DocumentAnchor,
             val content: String?,
             val excerpt: String?,
+            val style: com.m1racle.reader.data.anchor.HighlightStyle = com.m1racle.reader.data.anchor.HighlightStyle.Yellow,
         ) : Stage()
 
         data class Committed(val id: Long, val type: AnnotationType) : Stage()
@@ -70,7 +71,7 @@ class AnnotationCreationFlow(
      * 准备草稿。HIGHLIGHT 只需类型；NOTE 要求非空 content，
      * 否则 Failed(EMPTY_NOTE_CONTENT)。
      */
-    fun prepareDraft(type: AnnotationType, content: String? = null): Stage {
+    fun prepareDraft(type: AnnotationType, content: String? = null, style: com.m1racle.reader.data.anchor.HighlightStyle = com.m1racle.reader.data.anchor.HighlightStyle.Yellow): Stage {
         val ready = stage as? Stage.SelectionReady ?: return failNotSelectable()
         return when (type) {
             AnnotationType.HIGHLIGHT -> {
@@ -79,6 +80,7 @@ class AnnotationCreationFlow(
                     anchor = ready.anchor,
                     content = null,
                     excerpt = ready.selection.excerpt,
+                    style = style,
                 ).also { stage = it }
             }
             AnnotationType.NOTE -> {
@@ -113,6 +115,7 @@ class AnnotationCreationFlow(
                 anchor = draft.anchor,
                 createdAt = nowMs,
                 excerpt = draft.excerpt,
+                style = draft.style,
             )
             AnnotationType.NOTE -> readingRepository.addNote(
                 documentId = documentId,

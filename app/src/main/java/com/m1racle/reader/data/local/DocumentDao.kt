@@ -97,7 +97,7 @@ interface DocumentDao {
         lastScrollIndex: Int,
         lastScrollOffset: Int,
         readingProgress: Float,
-        readingAnchor: String,
+        readingAnchor: String?,
     )
 
     /**

@@ -18,33 +18,20 @@ class M1racleMotionContractTest {
         assertTrue(nav.contains("HubTabTransitions.enter"))
         assertTrue(nav.contains("HubTabTransitions.exit"))
         assertFalse(motion.contains("spring("))
-        assertFalse(nav.contains("EnterTransition.None"))
+        assertTrue(nav.contains("enterTransition = { androidx.compose.animation.EnterTransition.None }"))
     }
 
     @Test
-    fun `dock indicator and press opacity use tokens without scale bounce`() {
+    fun `dock uses RiseDiary animation while navigation owns selection`() {
         val dock = source("ui/hub/GlassDock.kt")
         val motion = source("ui/hub/DockMotion.kt")
-        val shared = source("ui/theme/M1racleMotion.kt")
-        assertTrue(dock.contains("M1racleMotion.fast"))
-        // The dock is the one surface that moves a real object under the finger, so
-        // its two springs live in the shared motion language. Feature code must
-        // reference them, never declare its own.
-        assertTrue(dock.contains("M1racleMotion.dockPickup"))
-        assertTrue(motion.contains("M1racleMotion.dockSelection"))
-        assertFalse(dock.contains("spring("))
-        assertFalse(motion.contains("spring("))
-        assertEquals(2, Regex("= spring\\(").findAll(shared).count())
-        assertTrue(dock.contains("alpha = contentAlpha"))
-        // Press feedback may scale the capsule, but only as a bounded lift driven by
-        // the shared pickup state. Unbounded or spring-driven scaling is a bounce.
-        assertTrue(dock.contains("pickup.value"))
-        for (match in Regex("scale[XY]\\s*=\\s*1f\\s*\\+\\s*([0-9.]+)f").findAll(dock)) {
-            assertTrue(
-                "dock press scale ${match.groupValues[1]} exceeds the bounded lift",
-                match.groupValues[1].toDouble() <= 0.25,
-            )
-        }
+        val tabs = source("ui/hub/RiseDiaryBottomTabs.kt")
+        assertTrue(dock.contains("LiquidBottomTabs("))
+        assertTrue(dock.contains("selectedTabIndex = { dockSlotForDestination(motion.selected.ordinal) }"))
+        assertTrue(tabs.contains("DampedDragAnimation("))
+        assertTrue(tabs.contains("onDragCancelled ="))
+        assertFalse(motion.contains("Animatable"))
+        assertFalse(motion.contains("preview"))
     }
 
     @Test
@@ -62,27 +49,19 @@ class M1racleMotionContractTest {
     }
 
     @Test
-    fun `hub import uses a bounded shared press spring without a floating entry animation`() {
+    fun `hub import occupies the central capsule slot with a small press expansion`() {
         val home = source("ui/home/HomeScreen.kt")
         val dock = source("ui/hub/GlassDock.kt")
-        val importControl = dock.substringAfter("val importInteraction")
-        val nav = source("ui/navigation/NavGraph.kt")
-        assertTrue(importControl.contains(".clickable(enabled = !importing"))
-        assertTrue(importControl.contains("onClick = onImportDocument"))
-        assertTrue(importControl.contains("Icon(Icons.Filled.Add"))
-        assertTrue(importControl.contains(".testTag(\"dock-import\")"))
-        assertTrue(nav.contains("onImportDocument = launchImport"))
-        assertTrue(importControl.contains("animationSpec = M1racleMotion.dockPickup"))
-        assertTrue(importControl.contains("importPickup.value.coerceIn(0f, 1f)"))
-        assertTrue(importControl.contains("layerBlock = importTransform"))
-        assertTrue(importControl.contains(".graphicsLayer(importTransform)"))
-        assertFalse(importControl.contains("spring("))
-        assertFalse(importControl.contains("scaleIn("))
-        assertFalse(importControl.contains("scaleOut("))
+
+        assertTrue(dock.contains("if (index == 2) DockImportAction(onImportDocument, enabled = !importing)"))
+        assertTrue(dock.contains("enabled = !importing"))
+        assertTrue(dock.contains("if (pressed) 1.085f else 1f"))
+        assertTrue(dock.contains("spring(0.55f, 450f)"))
+        assertTrue(dock.contains("testTag(\"dock-import\")"))
+        assertTrue(dock.contains("actionSlot = 2"))
+        assertFalse(dock.contains("LiquidGlassButton("))
         assertFalse(home.contains("HomeImportFab"))
         assertFalse(home.contains("floatingActionButton"))
-        assertFalse(home.contains("scaleX"))
-        assertFalse(home.contains("scaleY"))
     }
 
     @Test

@@ -14,6 +14,9 @@ data class ReaderSettings(
     val fontScale: Float = DEFAULT_FONT_SCALE,
     val lineHeightScale: Float = DEFAULT_LINE_HEIGHT_SCALE,
     val contentPaddingLevel: ContentPaddingLevel = ContentPaddingLevel.Standard,
+    val epubFontFamily: EpubFontFamily = EpubFontFamily.Default,
+    val importedFontId: String? = null,
+    val epubReadingMode: EpubReadingMode = EpubReadingMode.Slide,
 ) {
     companion object {
         const val MIN_FONT_SCALE = 0.9f
@@ -75,6 +78,9 @@ data class ReaderSettings(
             abs(a - b) < eps
     }
 }
+
+enum class EpubFontFamily { Default, Serif, Sans }
+enum class EpubReadingMode { Slide, Continuous, Curl }
 
 enum class ContentPaddingLevel {
     Compact,

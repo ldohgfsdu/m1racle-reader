@@ -22,23 +22,30 @@ internal fun liquidGlassStyle(role: GlassMaterialRole, dark: Boolean): LiquidGla
     when (role) {
         GlassMaterialRole.Dock -> LiquidGlassStyle(
             blur = 8.dp,
-            tint = if (dark) Color(0xFF242424).copy(alpha = 0.26f) else Color.White.copy(alpha = 0.18f),
-            lensHeight = 12.dp,
-            lensAmount = 16.dp,
+            tint = if (dark) Color(0xFF121212).copy(alpha = 0.30f) else Color(0xFFFAFAFA).copy(alpha = 0.36f),
+            lensHeight = 20.dp,
+            lensAmount = 24.dp,
             shadow = 10.dp,
             shadowAlpha = if (dark) 0.20f else 0.08f,
-            highlightAlpha = if (dark) 0.28f else 0.24f,
+            highlightAlpha = if (dark) 0.28f else 0.85f,
         )
         GlassMaterialRole.SelectionLens -> LiquidGlassStyle(
             blur = 0.dp,
-            tint = if (dark) Color(0xFF242424).copy(alpha = 0.10f) else Color.White.copy(alpha = 0.10f),
+            tint = if (dark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.10f),
             lensHeight = 0.dp,
             lensAmount = 0.dp,
             shadow = 0.dp,
             shadowAlpha = if (dark) 0.24f else 0.12f,
             highlightAlpha = 0f,
         )
-        GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard -> LiquidGlassStyle(
+        GlassMaterialRole.Control, GlassMaterialRole.Capsule -> LiquidGlassStyle(
+            blur = 4.dp,
+            tint = if (dark) Color(0xFF242424).copy(alpha = 0.22f) else Color.White.copy(alpha = 0.32f),
+            lensHeight = 8.dp,
+            lensAmount = 24.dp,
+            shadowAlpha = if (dark) 0.24f else 0.12f,
+        )
+        GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard -> LiquidGlassStyle(
             blur = 4.dp,
             tint = if (dark) Color(0xFF242424).copy(alpha = 0.64f) else Color.White.copy(alpha = 0.60f),
             lensHeight = 8.dp,

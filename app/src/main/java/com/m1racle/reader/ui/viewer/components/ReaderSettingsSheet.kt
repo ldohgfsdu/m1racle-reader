@@ -63,76 +63,92 @@ fun ReaderSettingsSheet(
                 .navigationBarsPadding()
                 .padding(bottom = 16.dp),
         ) {
+            ReaderDisplaySettings(settings, onFontScale, onLineHeightScale, onPaddingLevel, onReset)
+            com.m1racle.reader.ui.components.ReaderFontPicker()
+        }
+    }
+}
+
+/** Display choices shared by the sheet and EPUB's anchored menu. The host owns scrolling/insets. */
+@Composable
+fun ReaderDisplaySettings(
+    settings: ReaderSettings,
+    onFontScale: (Float) -> Unit,
+    onLineHeightScale: (Float) -> Unit,
+    onPaddingLevel: (ContentPaddingLevel) -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Text(
+            text = stringResource(R.string.reader_settings_title),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+
+        SettingSectionLabel(stringResource(R.string.reader_settings_font_size))
+        PillSegmentedControl(
+            labels = listOf(
+                stringResource(R.string.reader_settings_font_small),
+                stringResource(R.string.reader_settings_font_default),
+                stringResource(R.string.reader_settings_font_large),
+            ),
+            selectedIndex = listOf(near(settings.fontScale, ReaderSettings.FONT_SMALL), near(settings.fontScale, ReaderSettings.FONT_DEFAULT), near(settings.fontScale, ReaderSettings.FONT_LARGE)).indexOf(true),
+            onSelect = { index ->
+                when (index) {
+                    0 -> onFontScale(ReaderSettings.FONT_SMALL)
+                    1 -> onFontScale(ReaderSettings.FONT_DEFAULT)
+                    2 -> onFontScale(ReaderSettings.FONT_LARGE)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+        SettingSectionLabel(stringResource(R.string.reader_settings_line_height))
+        PillSegmentedControl(
+            labels = listOf(
+                stringResource(R.string.reader_settings_line_compact),
+                stringResource(R.string.reader_settings_line_default),
+                stringResource(R.string.reader_settings_line_relaxed),
+            ),
+            selectedIndex = listOf(near(settings.lineHeightScale, ReaderSettings.LINE_COMPACT), near(settings.lineHeightScale, ReaderSettings.LINE_DEFAULT), near(settings.lineHeightScale, ReaderSettings.LINE_RELAXED)).indexOf(true),
+            onSelect = { index ->
+                when (index) {
+                    0 -> onLineHeightScale(ReaderSettings.LINE_COMPACT)
+                    1 -> onLineHeightScale(ReaderSettings.LINE_DEFAULT)
+                    2 -> onLineHeightScale(ReaderSettings.LINE_RELAXED)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+        SettingSectionLabel(stringResource(R.string.reader_settings_padding))
+        PillSegmentedControl(
+            labels = listOf(
+                stringResource(R.string.reader_settings_padding_compact),
+                stringResource(R.string.reader_settings_padding_standard),
+                stringResource(R.string.reader_settings_padding_relaxed),
+            ),
+            selectedIndex = listOf(settings.contentPaddingLevel == ContentPaddingLevel.Compact, settings.contentPaddingLevel == ContentPaddingLevel.Standard, settings.contentPaddingLevel == ContentPaddingLevel.Relaxed).indexOf(true),
+            onSelect = { index ->
+                when (index) {
+                    0 -> onPaddingLevel(ContentPaddingLevel.Compact)
+                    1 -> onPaddingLevel(ContentPaddingLevel.Standard)
+                    2 -> onPaddingLevel(ContentPaddingLevel.Relaxed)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(modifier = Modifier.height(2.dp))
+        TextButton(onClick = onReset) {
             Text(
-                text = stringResource(R.string.reader_settings_title),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
+                text = stringResource(R.string.reader_settings_reset),
+                fontWeight = FontWeight.Normal,
             )
-            Spacer(modifier = Modifier.height(14.dp))
-
-            SettingSectionLabel(stringResource(R.string.reader_settings_font_size))
-            PillSegmentedControl(
-                labels = listOf(
-                    stringResource(R.string.reader_settings_font_small),
-                    stringResource(R.string.reader_settings_font_default),
-                    stringResource(R.string.reader_settings_font_large),
-                ),
-                selectedIndex = listOf(near(settings.fontScale, ReaderSettings.FONT_SMALL), near(settings.fontScale, ReaderSettings.FONT_DEFAULT), near(settings.fontScale, ReaderSettings.FONT_LARGE)).indexOf(true),
-                onSelect = { index ->
-                    when (index) {
-                        0 -> onFontScale(ReaderSettings.FONT_SMALL)
-                        1 -> onFontScale(ReaderSettings.FONT_DEFAULT)
-                        2 -> onFontScale(ReaderSettings.FONT_LARGE)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            SettingSectionLabel(stringResource(R.string.reader_settings_line_height))
-            PillSegmentedControl(
-                labels = listOf(
-                    stringResource(R.string.reader_settings_line_compact),
-                    stringResource(R.string.reader_settings_line_default),
-                    stringResource(R.string.reader_settings_line_relaxed),
-                ),
-                selectedIndex = listOf(near(settings.lineHeightScale, ReaderSettings.LINE_COMPACT), near(settings.lineHeightScale, ReaderSettings.LINE_DEFAULT), near(settings.lineHeightScale, ReaderSettings.LINE_RELAXED)).indexOf(true),
-                onSelect = { index ->
-                    when (index) {
-                        0 -> onLineHeightScale(ReaderSettings.LINE_COMPACT)
-                        1 -> onLineHeightScale(ReaderSettings.LINE_DEFAULT)
-                        2 -> onLineHeightScale(ReaderSettings.LINE_RELAXED)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            SettingSectionLabel(stringResource(R.string.reader_settings_padding))
-            PillSegmentedControl(
-                labels = listOf(
-                    stringResource(R.string.reader_settings_padding_compact),
-                    stringResource(R.string.reader_settings_padding_standard),
-                    stringResource(R.string.reader_settings_padding_relaxed),
-                ),
-                selectedIndex = listOf(settings.contentPaddingLevel == ContentPaddingLevel.Compact, settings.contentPaddingLevel == ContentPaddingLevel.Standard, settings.contentPaddingLevel == ContentPaddingLevel.Relaxed).indexOf(true),
-                onSelect = { index ->
-                    when (index) {
-                        0 -> onPaddingLevel(ContentPaddingLevel.Compact)
-                        1 -> onPaddingLevel(ContentPaddingLevel.Standard)
-                        2 -> onPaddingLevel(ContentPaddingLevel.Relaxed)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(modifier = Modifier.height(2.dp))
-            TextButton(onClick = onReset) {
-                Text(
-                    text = stringResource(R.string.reader_settings_reset),
-                    fontWeight = FontWeight.Normal,
-                )
-            }
         }
     }
 }

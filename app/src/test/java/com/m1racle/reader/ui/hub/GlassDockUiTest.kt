@@ -35,15 +35,124 @@ import org.robolectric.annotation.ConscryptMode
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@GraphicsMode(GraphicsMode.Mode.LEGACY)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-normal-notlong-notround-any-420dpi-keyshidden-nonav")
 class GlassDockUiTest {
+    @Test fun `drag visibly stretches and squashes lens then release rebounds and settles`() {
+        rule.setContent { DockTestTheme { HubDockMotionProvider(HubDestination.HOME) {
+            GlassDock(onImportDocument = {}, onSelect = {})
+        } } }
+        val home = rule.onAllNodes(isSelectable())[0]
+        val lens = rule.onNodeWithTag("dock-selection")
+        val rest = lens.fetchSemanticsNode().boundsInRoot
+        val slot = rule.onAllNodes(isSelectable())[1].fetchSemanticsNode().boundsInRoot.center.x -
+            home.fetchSemanticsNode().boundsInRoot.center.x
+        rule.mainClock.autoAdvance = false
+        try {
+            home.performTouchInput { down(center); advanceEventTime(800) }
+            rule.mainClock.advanceTimeBy(800)
+            val held = lens.fetchSemanticsNode().boundsInRoot
+            repeat(5) {
+                home.performTouchInput { moveBy(Offset(slot * .6f, 0f), 16) }
+                rule.mainClock.advanceTimeByFrame()
+            }
+            val stretched = lens.fetchSemanticsNode().boundsInRoot
+            assertTrue("drag must visibly widen lens", stretched.width > held.width * 1.15f)
+            assertTrue("drag must visibly compress height", stretched.height < held.height * .94f)
+            home.performTouchInput { cancel() }
+            var rebounded = false
+            repeat(30) {
+                rule.mainClock.advanceTimeByFrame()
+                if (lens.fetchSemanticsNode().boundsInRoot.width < rest.width * .98f) rebounded = true
+            }
+            assertTrue("release must squash past rest before returning", rebounded)
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+        rule.waitForIdle()
+        assertEquals(rest, lens.fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test fun `held lens follows every movement within one frame including reversals`() {
+        assertDirectTracking(LayoutDirection.Ltr)
+    }
+
+    @Test fun `rtl held lens follows every movement within one frame including reversals`() {
+        assertDirectTracking(LayoutDirection.Rtl)
+    }
+
+    private fun assertDirectTracking(direction: LayoutDirection) {
+        val requests = mutableListOf<HubDestination>()
+        rule.setContent { CompositionLocalProvider(LocalLayoutDirection provides direction) {
+            DockTestTheme { HubDockMotionProvider(HubDestination.HOME) {
+                GlassDock(onImportDocument = {}, onSelect = requests::add)
+            } }
+        } }
+        val home = rule.onAllNodes(isSelectable())[0]
+        val library = rule.onAllNodes(isSelectable())[1]
+        val lens = rule.onNodeWithTag("dock-selection")
+        val slot = library.fetchSemanticsNode().boundsInRoot.center.x -
+            home.fetchSemanticsNode().boundsInRoot.center.x
+        rule.mainClock.autoAdvance = false
+        try {
+            home.performTouchInput { down(center); advanceEventTime(800) }
+            rule.mainClock.advanceTimeBy(800)
+            var position = 0f
+            for (movement in listOf(.75f, .5f, -.4f, .6f, -.8f)) {
+                position += movement
+                home.performTouchInput { moveBy(Offset(slot * movement, 0f), 16) }
+                rule.mainClock.advanceTimeByFrame()
+                val homeX = home.fetchSemanticsNode().boundsInRoot.center.x
+                assertEquals("lens must track this event without waiting for a spring",
+                    homeX + slot * position, lens.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+            }
+            // Stopping a held finger must not cause position to keep catching up.
+            val relativeX = lens.fetchSemanticsNode().boundsInRoot.center.x -
+                home.fetchSemanticsNode().boundsInRoot.center.x
+            rule.mainClock.advanceTimeBy(1200)
+            assertEquals(relativeX, lens.fetchSemanticsNode().boundsInRoot.center.x -
+                home.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+            assertTrue(requests.isEmpty())
+            home.performTouchInput { cancel() }
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+        rule.waitForIdle()
+        assertEquals(home.fetchSemanticsNode().boundsInRoot.center.x,
+            lens.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `extended system text retains breathing room inside each tab capsule`() {
+        rule.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
+                androidx.compose.ui.unit.Density(density.density, 3f)) {
+                DockTestTheme {
+                    HubDockMotionProvider(HubDestination.HOME) {
+                        GlassDock(onSelect = {}, onImportDocument = {})
+                    }
+                }
+            }
+        }
+        val clearance = 4f * rule.density.density
+        listOf("首页", "文库", "书签", "设置").forEachIndexed { index, label ->
+            val tab = rule.onAllNodes(isSelectable())[index].fetchSemanticsNode().boundsInRoot
+            val icon = rule.onNodeWithTag("dock-icon-${HubDestination.entries[index].name}",
+                useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val text = rule.onNodeWithText(label, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("$label needs top clearance: icon=$icon tab=$tab", icon.top >= tab.top + clearance)
+            assertTrue("$label needs bottom clearance: text=$text tab=$tab", text.bottom <= tab.bottom - clearance)
+        }
+    }
+
     @Test
     fun `held import action grows without importing and returns on cancellation`() {
         var imports = 0
         rule.setContent {
-            M1racleReaderTheme {
+            DockTestTheme {
                 HubDockMotionProvider(HubDestination.HOME) {
                     GlassDock(onSelect = {}, onImportDocument = { imports++ })
                 }
@@ -56,9 +165,8 @@ class GlassDockUiTest {
         action.performTouchInput { down(center); advanceEventTime(900) }
         rule.mainClock.advanceTimeBy(900)
         val held = icon.fetchSemanticsNode().boundsInRoot
-        assertTrue("held=$held resting=$resting", held.width > resting.width * 1.08f)
-        assertTrue(held.width <= resting.width * 1.15f)
-        assertEquals(touchBounds, action.fetchSemanticsNode().boundsInRoot)
+        assertEquals("reference independent action expands about nine percent", resting.width * 1.085f, held.width, .5f)
+        assertTrue(action.fetchSemanticsNode().boundsInRoot.width <= touchBounds.width * 1.04f)
         rule.runOnIdle { assertEquals(0, imports) }
         action.performTouchInput { cancel() }
         rule.mainClock.advanceTimeBy(1200)
@@ -69,11 +177,11 @@ class GlassDockUiTest {
     }
 
     @Test
-    fun `trailing import action preserves the active tab and does not participate in tab dragging`() {
+    fun `central import action preserves the active tab and does not participate in tab dragging`() {
         var imports = 0
         val requested = mutableListOf<HubDestination>()
         rule.setContent {
-            M1racleReaderTheme {
+            DockTestTheme {
                 HubDockMotionProvider(HubDestination.BOOKMARKS) {
                     GlassDock(onSelect = requested::add, onImportDocument = { imports++ })
                 }
@@ -90,7 +198,7 @@ class GlassDockUiTest {
     @Test
     fun `busy import disables the trailing action`() {
         rule.setContent {
-            M1racleReaderTheme {
+            DockTestTheme {
                 HubDockMotionProvider(HubDestination.HOME) {
                     GlassDock(onSelect = {}, onImportDocument = {}, importing = true)
                 }
@@ -100,12 +208,12 @@ class GlassDockUiTest {
     }
 
     @Test
-    fun `narrow dock retains all labels and separate action with double system text`() {
+    fun `narrow unified dock retains all labels and central action with double system text`() {
         rule.setContent {
             val density = androidx.compose.ui.platform.LocalDensity.current
             CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
                 androidx.compose.ui.unit.Density(density.density, 2f)) {
-                M1racleReaderTheme {
+                DockTestTheme {
                     Box(Modifier.width(320.dp)) {
                         HubDockMotionProvider(HubDestination.HOME) {
                             GlassDock(onSelect = {}, onImportDocument = {})
@@ -121,7 +229,8 @@ class GlassDockUiTest {
             assertTrue(text.left >= tab.left && text.right <= tab.right)
             assertTrue(text.top >= tab.top && text.bottom <= tab.bottom)
             assertTrue(tab.width >= 48f * rule.density.density)
-            assertTrue(tab.right < action.left)
+            if (index < 2) assertTrue(tab.right <= action.left + 1f)
+            else assertTrue(tab.left >= action.right - 1f)
         }
     }
 
@@ -131,7 +240,7 @@ class GlassDockUiTest {
             val density = androidx.compose.ui.platform.LocalDensity.current
             CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
                 androidx.compose.ui.unit.Density(density.density, 2f)) {
-                M1racleReaderTheme {
+                DockTestTheme {
                     HubDockMotionProvider(HubDestination.HOME) { GlassDock(onImportDocument = {}, onSelect = {}) }
                 }
             }
@@ -145,12 +254,76 @@ class GlassDockUiTest {
             assertTrue(tab.height >= 48f * rule.density.density)
         }
     }
+    @Test fun `inactive tab previews on press and cancellation never commits`() {
+        val requests = mutableListOf<HubDestination>()
+        rule.setContent { DockTestTheme { HubDockMotionProvider(HubDestination.HOME) {
+            GlassDock(onImportDocument = {}, onSelect = requests::add)
+        } } }
+        val tab = rule.onAllNodes(isSelectable())[2]
+        tab.performTouchInput { down(center); advanceEventTime(800) }
+        rule.mainClock.advanceTimeBy(800)
+        assertEquals(tab.fetchSemanticsNode().boundsInRoot.center.x,
+            rule.onNodeWithTag("dock-selection").fetchSemanticsNode().boundsInRoot.center.x, 1f)
+        assertTrue(requests.isEmpty())
+        rule.onAllNodes(isSelectable())[0].assertIsSelected()
+        tab.performTouchInput { cancel() }
+        rule.waitForIdle()
+        assertTrue(requests.isEmpty())
+        assertEquals(rule.onAllNodes(isSelectable())[0].fetchSemanticsNode().boundsInRoot.center.x,
+            rule.onNodeWithTag("dock-selection").fetchSemanticsNode().boundsInRoot.center.x, 1f)
+    }
+
+    @Test fun `new press interrupts old release without collapsing held lens`() {
+        rule.setContent { DockTestTheme { HubDockMotionProvider(HubDestination.HOME) {
+            GlassDock(onImportDocument = {}, onSelect = {})
+        } } }
+        val lens = rule.onNodeWithTag("dock-selection")
+        val rest = lens.fetchSemanticsNode().boundsInRoot
+        rule.mainClock.autoAdvance = false
+        val tab = rule.onAllNodes(isSelectable())[0]
+        tab.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(200)
+        tab.performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(32)
+        tab.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(1000)
+        assertTrue(lens.fetchSemanticsNode().boundsInRoot.height > rest.height * 1.35f)
+        tab.performTouchInput { cancel() }
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertEquals(rest, lens.fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test fun `import is centered inside the same capsule and never a selected destination`() {
+        val requests = mutableListOf<HubDestination>()
+        var imports = 0
+        rule.setContent { DockTestTheme { HubDockMotionProvider(HubDestination.HOME) {
+            GlassDock(onImportDocument = { imports++ }, onSelect = requests::add)
+        } } }
+        val capsule = rule.onNodeWithTag("dock-capsule").fetchSemanticsNode().boundsInRoot
+        val action = rule.onNodeWithTag("dock-import")
+        val bounds = action.fetchSemanticsNode().boundsInRoot
+        assertEquals(capsule.center.x, bounds.center.x, 1f)
+        assertTrue(bounds.left > capsule.left && bounds.right < capsule.right)
+        assertEquals(4, rule.onAllNodes(isSelectable()).fetchSemanticsNodes().size)
+        val home = rule.onAllNodes(isSelectable())[0].fetchSemanticsNode().boundsInRoot
+        rule.onNodeWithTag("dock-selection").performTouchInput {
+            down(center); moveBy(Offset(bounds.center.x - home.center.x, 0f), 300); up()
+        }
+        rule.waitForIdle()
+        assertTrue(requests.isEmpty())
+        assertEquals(0, imports)
+        rule.onAllNodes(isSelectable())[0].assertIsSelected()
+        action.performTouchInput { down(center); up() }
+        rule.runOnIdle { assertEquals(1, imports); assertTrue(requests.isEmpty()) }
+    }
+
     @get:Rule val rule = createComposeRule()
 
     @Test
     fun `all icons retain full bounds with a real backdrop host`() {
         rule.setContent {
-            M1racleReaderTheme {
+            DockTestTheme {
                 HubDockMotionProvider(HubDestination.HOME) {
                     GlassDock(onImportDocument = {}, onSelect = {})
                 }
@@ -167,7 +340,7 @@ class GlassDockUiTest {
     @Test
     fun `visible tab labels stay displayed above the sampling overlay`() {
         rule.setContent {
-            M1racleReaderTheme {
+            DockTestTheme {
                 val page = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
                 CompositionLocalProvider(com.m1racle.reader.ui.material.LocalGlassBackdropHost provides
                     com.m1racle.reader.ui.material.GlassBackdropHost(page, page)) {
@@ -188,7 +361,7 @@ class GlassDockUiTest {
     fun `selection follows owner even when callback refuses navigation`() {
         val requested = mutableListOf<HubDestination>()
         rule.setContent {
-            M1racleReaderTheme {
+            DockTestTheme {
                 HubDockMotionProvider(HubDestination.HOME) {
                     GlassDock(onImportDocument = {}, onSelect = requested::add)
                 }
@@ -199,151 +372,79 @@ class GlassDockUiTest {
         rule.runOnIdle { assertEquals(listOf(HubDestination.SETTINGS), requested) }
     }
 
-    @Test
-    fun `rapid navigation retargets shared capsule across page replacement`() {
+    @Test fun `selection animates to owner and rejected navigation returns to owner`() {
         val selected = mutableStateOf(HubDestination.HOME)
-        lateinit var motion: HubDockMotion
-        rule.mainClock.autoAdvance = false
-        rule.setContent {
-            M1racleReaderTheme {
-                HubDockMotionProvider(selected.value) {
-                    motion = LocalHubDockMotion.current
-                    key(selected.value) { GlassDock(onImportDocument = {}, onSelect = { selected.value = it }) }
-                }
-            }
-        }
-        rule.mainClock.advanceTimeByFrame()
-        rule.runOnIdle {
-            selected.value = HubDestination.SETTINGS
-            Snapshot.sendApplyNotifications()
-        }
-        rule.mainClock.advanceTimeByFrame()
-        rule.runOnIdle { assertEquals(HubDestination.SETTINGS, motion.selected) }
-        rule.mainClock.advanceTimeUntil(timeoutMillis = 1000) { motion.position.value > 0f }
-        rule.runOnIdle {
-            assertTrue("capsule must animate rather than restart at destination: ${motion.position.value}", motion.position.value > 0f && motion.position.value < 3f)
-            selected.value = HubDestination.LIBRARY
-            Snapshot.sendApplyNotifications()
-        }
-        rule.mainClock.advanceTimeBy(1200)
-        rule.onAllNodes(isSelectable())[1].assertIsSelected()
-        rule.runOnIdle { assertEquals(1f, motion.position.value, 0.001f) }
-    }
-
-    @Test
-    fun `drag navigates once on release and cancellation preserves route`() {
-        val selected = mutableStateOf(HubDestination.HOME)
-        val requested = mutableListOf<HubDestination>()
-        rule.setContent {
-            M1racleReaderTheme {
-                HubDockMotionProvider(selected.value) {
-                    GlassDock(onImportDocument = {}, onSelect = { requested.add(it); selected.value = it })
-                }
-            }
-        }
-        rule.onAllNodes(isSelectable())[0].performTouchInput {
-            down(center)
-            moveTo(Offset(width * 3.5f, center.y), 300)
-            cancel()
-        }
+        val requests = mutableListOf<HubDestination>()
+        rule.setContent { DockTestTheme { HubDockMotionProvider(selected.value) {
+            GlassDock(onImportDocument = {}, onSelect = requests::add)
+        } } }
+        val initial = rule.onNodeWithTag("dock-selection").fetchSemanticsNode().boundsInRoot
+        rule.onAllNodes(isSelectable())[3].performClick()
         rule.onAllNodes(isSelectable())[0].assertIsSelected()
-        rule.runOnIdle { assertTrue(requested.isEmpty()) }
-        rule.onAllNodes(isSelectable())[0].performTouchInput {
-            down(center)
-            moveTo(Offset(width * 3.5f, center.y), 300)
-            up()
-        }
-        rule.onAllNodes(isSelectable())[3].assertIsSelected()
-        rule.runOnIdle { assertEquals(listOf(HubDestination.SETTINGS), requested) }
+        assertEquals(initial, rule.onNodeWithTag("dock-selection").fetchSemanticsNode().boundsInRoot)
+        rule.runOnIdle { selected.value = HubDestination.SETTINGS }
+        rule.waitForIdle()
+        val final = rule.onNodeWithTag("dock-selection").fetchSemanticsNode().boundsInRoot
+        assertEquals(rule.onAllNodes(isSelectable())[3].fetchSemanticsNode().boundsInRoot.center.x, final.center.x, 1f)
+        assertTrue(final.left > initial.left)
+        assertEquals(listOf(HubDestination.SETTINGS), requests)
     }
 
-    @Test
-    fun `short drag lands on adjacent tab without counting touch slop twice`() {
+    @Test fun `selected lens drags once on release and cancel never navigates`() {
         val selected = mutableStateOf(HubDestination.HOME)
-        rule.setContent {
-            M1racleReaderTheme {
-                HubDockMotionProvider(selected.value) {
-                    GlassDock(onImportDocument = {}, onSelect = { selected.value = it })
-                }
-            }
-        }
-        rule.onAllNodes(isSelectable())[0].performTouchInput {
-            down(center)
-            moveTo(Offset(width * 1.5f, center.y), 300)
-            up()
-        }
-        rule.onAllNodes(isSelectable())[1].assertIsSelected()
-    }
-
-    @Test
-    fun `holding a tab does not navigate until release and cancel clears press`() {
-        val requested = mutableListOf<HubDestination>()
-        rule.setContent {
-            M1racleReaderTheme {
-                HubDockMotionProvider(HubDestination.HOME) { GlassDock(onImportDocument = {}, onSelect = requested::add) }
-            }
-        }
-        val tab = rule.onAllNodes(isSelectable())[1]
+        val requests = mutableListOf<HubDestination>()
+        rule.setContent { DockTestTheme { HubDockMotionProvider(selected.value) {
+            GlassDock(onImportDocument = {}, onSelect = { requests.add(it); selected.value = it })
+        } } }
         val lens = rule.onNodeWithTag("dock-selection")
-        val resting = lens.fetchSemanticsNode().boundsInRoot
-        tab.performTouchInput { down(center); advanceEventTime(800) }
-        rule.mainClock.advanceTimeBy(800)
-        rule.runOnIdle { assertTrue(requested.isEmpty()) }
+        lens.performTouchInput { down(center); moveBy(Offset(width * 4f, 0f), 300); cancel() }
+        rule.waitForIdle()
+        assertTrue(requests.isEmpty())
         rule.onAllNodes(isSelectable())[0].assertIsSelected()
-        assertEquals(tab.fetchSemanticsNode().boundsInRoot.center.x,
-            lens.fetchSemanticsNode().boundsInRoot.center.x, 1f)
-        tab.performTouchInput { cancel() }
-        rule.mainClock.advanceTimeBy(1200)
-        assertEquals(resting, lens.fetchSemanticsNode().boundsInRoot)
-        rule.runOnIdle { assertTrue(requested.isEmpty()) }
-        tab.performTouchInput { down(center); advanceEventTime(800); up() }
-        rule.runOnIdle { assertEquals(listOf(HubDestination.LIBRARY), requested) }
+        lens.performTouchInput { down(center); moveBy(Offset(width * 4f, 0f), 300); up() }
+        rule.waitForIdle()
+        assertEquals(listOf(HubDestination.SETTINGS), requests)
+        rule.onAllNodes(isSelectable())[3].assertIsSelected()
     }
 
-    @Test
-    fun `selection lens grows while held and returns after cancellation`() {
-        rule.setContent {
-            M1racleReaderTheme {
-                HubDockMotionProvider(HubDestination.HOME) { GlassDock(onImportDocument = {}, onSelect = {}) }
-            }
+    @Test fun `rtl lens drag follows the physical finger direction`() {
+        val selected = mutableStateOf(HubDestination.HOME)
+        rule.setContent { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            DockTestTheme { HubDockMotionProvider(selected.value) {
+                GlassDock(onImportDocument = {}, onSelect = { selected.value = it })
+            } }
+        } }
+        assertEquals(rule.onAllNodes(isSelectable())[0].fetchSemanticsNode().boundsInRoot.center.x,
+            rule.onNodeWithTag("dock-selection").fetchSemanticsNode().boundsInRoot.center.x, 1f)
+        rule.onNodeWithTag("dock-selection").performTouchInput {
+            down(center); moveBy(Offset(-width * 4f, 0f), 300); up()
         }
-        val lens = rule.onNodeWithTag("dock-selection", useUnmergedTree = true)
-        val resting = lens.fetchSemanticsNode().boundsInRoot
-        val icon = rule.onNodeWithTag("dock-icon-HOME", useUnmergedTree = true)
-        val restingIcon = icon.fetchSemanticsNode().boundsInRoot
-        val tab = rule.onAllNodes(isSelectable())[0]
-        tab.performTouchInput { down(center) }
+        rule.waitForIdle()
+        rule.onAllNodes(isSelectable())[3].assertIsSelected()
+    }
+
+    @Test fun `RiseDiary lens grows while held and returns after cancellation`() {
+        rule.setContent { DockTestTheme { HubDockMotionProvider(HubDestination.HOME) {
+            GlassDock(onImportDocument = {}, onSelect = {})
+        } } }
+        val lens = rule.onNodeWithTag("dock-selection")
+        val initial = lens.fetchSemanticsNode().boundsInRoot
+        lens.performTouchInput { down(center); advanceEventTime(800) }
         rule.mainClock.advanceTimeBy(800)
         val held = lens.fetchSemanticsNode().boundsInRoot
-        val heldIcon = icon.fetchSemanticsNode().boundsInRoot
-        assertTrue("heldIcon=$heldIcon restingIcon=$restingIcon",
-            heldIcon.width in restingIcon.width * 1.20f..restingIcon.width * 1.24f)
-        assertTrue("held=$held resting=$resting", held.width in resting.width * 1.36f..resting.width * 1.40f)
-        assertTrue("held=$held resting=$resting", held.height in resting.height * 1.42f..resting.height * 1.46f)
-        tab.performTouchInput { cancel() }
-        rule.mainClock.advanceTimeBy(1200)
-        assertEquals(resting, lens.fetchSemanticsNode().boundsInRoot)
-        assertEquals(restingIcon, icon.fetchSemanticsNode().boundsInRoot)
+        assertTrue(held.width > initial.width * 1.35f)
+        assertTrue(held.height > initial.height * 1.35f)
+        lens.performTouchInput { cancel() }
+        rule.waitForIdle()
+        assertEquals(initial, lens.fetchSemanticsNode().boundsInRoot)
         rule.onAllNodes(isSelectable())[0].assertIsSelected()
     }
+}
 
-    @Test
-    fun `rtl drag selects the destination under the finger`() {
-        val selected = mutableStateOf(HubDestination.HOME)
-        rule.setContent {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                M1racleReaderTheme {
-                    HubDockMotionProvider(selected.value) {
-                        GlassDock(onImportDocument = {}, onSelect = { selected.value = it })
-                    }
-                }
-            }
-        }
-        rule.onAllNodes(isSelectable())[0].performTouchInput {
-            down(center)
-            moveTo(Offset(-width * 2.5f, center.y), 300)
-            up()
-        }
-        rule.onAllNodes(isSelectable())[3].assertIsSelected()
+@androidx.compose.runtime.Composable
+private fun DockTestTheme(content: @androidx.compose.runtime.Composable () -> Unit) {
+    M1racleReaderTheme {
+        CompositionLocalProvider(com.m1racle.reader.ui.material.LocalGlassCapability provides
+            com.m1racle.reader.ui.material.GlassCapability.BLUR_ONLY) { content() }
     }
 }

@@ -122,6 +122,11 @@ object EpubReadingAnchors {
                 legacyPixelOffset = saved.lastScrollOffset,
             )
         }
+        // A failed Locator conversion has percentage only, never an SDK index
+        // interpreted as a native paragraph number.
+        if (saved.readingProgress > 0f) {
+            return EpubRestoreResult(EpubRestoreTier.Progress, progress = saved.readingProgress.coerceIn(0f, 1f))
+        }
         return EpubRestoreResult(EpubRestoreTier.BookStart)
     }
 

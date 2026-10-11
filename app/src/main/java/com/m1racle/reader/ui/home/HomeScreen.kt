@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -90,6 +90,7 @@ fun HomeScreen(
 }
 
 /** Fixed header and system insets; list content scrolls behind the floating glass. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun HomeContent(
     uiState: HomeUiState,
@@ -99,7 +100,9 @@ internal fun HomeContent(
     onOpen: (DocumentEntity) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
-    statusTop: Dp = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+    // A reader pop mounts Home before SystemUI finishes revealing the status bar.
+    // Reserve its full area from the first frame so the entire page stays still.
+    statusTop: Dp = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
     navBottom: Dp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
 ) {
     Column(

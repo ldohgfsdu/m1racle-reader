@@ -59,6 +59,7 @@ internal data class EpubTextRow(
     val sourceTextStart: Int = 0,
     val continuation: Boolean = sourceTextStart > 0,
     val blockIndex: Int = 0,
+    val keepWithNext: Boolean = false,
 )
 
 /**
@@ -122,7 +123,7 @@ internal class EpubTextLayout(
         )
     }
 
-    // A navigation section can start inside one spine XHTML, not just at its file boundary.
+    // Reading chapters follow spine boundaries and h1, independently of TOC targets.
     private val sectionStarts = pages.indices.filter { index ->
         val first = pages[index].slices.first()
         first.start == 0 && rows[first.row].chapterStart
@@ -172,6 +173,16 @@ internal class EpubTextLayout(
         }
         return Triple(row.sourceRow, kotlin.math.ceil(top).toInt(), row.sourceTextStart + slice.start)
     }
+
+    fun pagePixelForText(sourceRow: Int, offset: Int): Pair<Int, Int> {
+        val page = pageForText(sourceRow, offset)
+        val row = rows.indexOfLast { it.sourceRow == sourceRow && it.sourceTextStart <= offset }.coerceAtLeast(0)
+        val local = (offset - rows[row].sourceTextStart).coerceAtLeast(0)
+        val slice = pages[page].slices.firstOrNull { it.row == row && local >= it.start && local < it.end }
+            ?: return page to 0
+        val line = rowMetrics[row].lines.firstOrNull { local < it.end && it.start >= slice.start }
+        return page to kotlin.math.floor(slice.pageTop + (line?.top ?: slice.sourceTop) - slice.sourceTop).toInt().coerceAtLeast(0)
+    }
 }
 
 /**
@@ -190,7 +201,7 @@ internal fun epubTocPages(book: EpubBook, layout: EpubTextLayout): Map<String, I
 
 internal fun tocKey(node: EpubTocNode): String = "${node.spineIndex ?: -1}#${node.href}"
 
-/** Shared target resolution for page breaks and TOC jumps; invalid fragments never mean chapter start. */
+/** TOC target resolution; a navigation anchor does not imply a page break. */
 private fun epubTocBlock(chapter: com.m1racle.reader.epub.EpubChapter, node: EpubTocNode): Int? {
     if (chapter.spineIndex != node.spineIndex) return null
     val fragment = node.href.substringAfter('#', "")
@@ -202,29 +213,15 @@ internal fun epubTextRows(book: EpubBook, settings: ReaderSettings, base: TextSt
     val bodySize = ReaderTypography.bodyFontSize.scaled(settings.fontScale)
     val body = base.copy(fontSize = bodySize, lineHeight = ReaderTypography.bodyLineHeight(settings),
         fontWeight = ReaderTypography.bodyWeight, lineBreak = LineBreak.Paragraph)
-    val chapters = book.readingOrder.associateBy { it.spineIndex }
-    val sectionTitles = mutableMapOf<Pair<Int, Int>, String>()
-    fun visit(nodes: List<EpubTocNode>) {
-        nodes.forEach { node ->
-            checkpoint()
-            val chapter = chapters[node.spineIndex]
-            if (chapter != null) epubTocBlock(chapter, node)?.let { block ->
-                sectionTitles.putIfAbsent(chapter.spineIndex to block, node.title)
-            }
-            visit(node.children)
-        }
-    }
-    visit(book.toc)
     return buildList {
         var sourceRow = 0
         book.readingOrder.forEach { chapter ->
             var title = chapter.title ?: "第 ${chapter.spineIndex + 1} 章"
             chapter.blocks.forEachIndexed { index, block ->
                 checkpoint()
-                val sectionTitle = sectionTitles[chapter.spineIndex to index]
-                    ?: (block as? EpubBlock.Heading)?.takeIf { it.level == 1 }?.text
+                val sectionTitle = (block as? EpubBlock.Heading)?.takeIf { it.level == 1 }?.text
                 if (sectionTitle != null) title = sectionTitle
-                val startsSection = index == 0 || sectionTitle != null
+                val startsSection = index == 0 || (block is EpubBlock.Heading && block.level == 1)
                 val style = when (block) {
                     is EpubBlock.Heading -> {
                         val size = ReaderTypography.headingSize(block.level, settings.fontScale)
@@ -234,7 +231,7 @@ internal fun epubTextRows(book: EpubBook, settings: ReaderSettings, base: TextSt
                     is EpubBlock.Code -> body.copy(fontFamily = FontFamily.Monospace,
                         fontSize = ReaderTypography.codeBlockSize(settings.fontScale),
                         lineHeight = ReaderTypography.codeBlockLine(settings.fontScale))
-                    is EpubBlock.Paragraph -> body.copy(textIndent = TextIndent(firstLine = bodySize * 2))
+                    is EpubBlock.Paragraph -> body.copy(textIndent = TextIndent.None)
                     else -> body
                 }
                 val imagePath = (block as? EpubBlock.Image)?.resolvedPath
@@ -272,7 +269,8 @@ internal fun epubTextRows(book: EpubBook, settings: ReaderSettings, base: TextSt
                                 textIndent = TextIndent(firstLine = restIndent, restLine = restIndent)),
                             shaded = block is EpubBlock.Quote || block is EpubBlock.Code,
                             imagePath = imagePath, sourceRow = sourceRow, sourceTextStart = start,
-                            continuation = start > sectionStart, blockIndex = index))
+                            continuation = start > sectionStart, blockIndex = index,
+                            keepWithNext = block is EpubBlock.Heading))
                         start = end
                     } while (start < sectionEnd)
                 }
@@ -361,7 +359,7 @@ internal suspend fun measureEpub(
                 EpubLine(layout.getLineTop(line), layout.getLineBottom(line),
                     layout.getLineStart(line), layout.getLineEnd(line))
             }
-        }, continuation = row.continuation))
+        }, continuation = row.continuation, keepWithNext = row.keepWithNext))
         cache.put(index, layout)
     }
     return EpubTextLayout(

@@ -10,6 +10,7 @@ internal data class EpubRowMetrics(
     val chapterStart: Boolean,
     val lines: List<EpubLine>,
     val continuation: Boolean = false,
+    val keepWithNext: Boolean = false,
 )
 
 internal data class EpubPageSlice(
@@ -32,6 +33,19 @@ internal fun paginateEpub(rows: List<EpubRowMetrics>, pageHeight: Float, paragra
     var slices = mutableListOf<EpubPageSlice>()
     var used = 0f
     var spine = rows.firstOrNull()?.spineIndex ?: 0
+    // Keep a heading chain with the first following body line when it can fit.
+    // Compute backwards once; long runs of headings must not make pagination quadratic.
+    val keepHeight = FloatArray(rows.size)
+    for (index in rows.indices.reversed()) {
+        val row = rows[index]
+        val ownHeight = row.lines.sumOf { (it.bottom - it.top).toDouble() }.toFloat()
+        val next = rows.getOrNull(index + 1)
+        keepHeight[index] = if (row.keepWithNext) {
+            ownHeight + if (next != null && !next.chapterStart && next.spineIndex == row.spineIndex) {
+                (if (next.continuation) 0f else paragraphGap) + keepHeight[index + 1]
+            } else 0f
+        } else row.lines.firstOrNull()?.let { it.bottom - it.top } ?: 0f
+    }
     fun finish() {
         if (slices.isNotEmpty()) pages.add(EpubPage(spine, slices.toList()))
         slices = mutableListOf()
@@ -40,6 +54,12 @@ internal fun paginateEpub(rows: List<EpubRowMetrics>, pageHeight: Float, paragra
     rows.forEachIndexed { rowIndex, row ->
         if (row.chapterStart || row.spineIndex != spine) finish()
         spine = row.spineIndex
+        if (row.keepWithNext && slices.isNotEmpty()) {
+            val ownHeight = row.lines.sumOf { (it.bottom - it.top).toDouble() }.toFloat()
+            val required = keepHeight[rowIndex].takeIf { it <= pageHeight } ?: ownHeight
+            val gap = if (row.continuation) 0f else paragraphGap
+            if (required <= pageHeight && used + gap + required > pageHeight) finish()
+        }
         row.lines.forEach { line ->
             val height = line.bottom - line.top
             val previous = slices.lastOrNull()
@@ -98,38 +118,42 @@ internal fun epubFitImage(intrinsicWidth: Int, intrinsicHeight: Int, maxWidth: I
 }
 
 /**
- * Cover page-turn on top of HorizontalPager's default dual-slide.
- * The leaving page stays put; the incoming page slides over it.
- * That is 微信读书/掌阅「覆盖」, not a carousel/roller translation of both pages.
+ * Apple Books slide: the lower numbered sheet is always on top.
+ * Forward turns slide it away; backward turns bring it back over the next sheet.
+ * HorizontalPager owns the gesture/settling; the sheet underneath follows at 25% speed.
  */
 internal data class EpubPageTurnLayer(
     val translationX: Float,
     val zIndex: Float,
     val edgeShadow: Float,
+    val paperLift: Float = 0f,
 )
 
 internal fun epubPageTurnLayer(
     pageOffset: Float,
     currentPageOffsetFraction: Float,
     currentPage: Int,
-    settledPage: Int,
+    readingPage: Int,
     width: Float,
 ): EpubPageTurnLayer {
-    val scrollFromSettledPage = currentPage - settledPage + currentPageOffsetFraction
-    // Direction is relative to settledPage, which stays stable through the half-page crossing.
-    // At rest, and for fully off-screen pages, keep HorizontalPager's layout.
-    // Pinning every offset<=0 page pulled the previous page onto the current one
-    // and flipped whenever currentPageOffsetFraction jittered around 0.
-    if (kotlin.math.abs(scrollFromSettledPage) < 0.002f || kotlin.math.abs(pageOffset) >= 0.999f) {
-        return EpubPageTurnLayer(0f, 0f, 0f)
-    }
-    val goingForward = scrollFromSettledPage > 0f
-    val pinned = if (goingForward) pageOffset < 0f else pageOffset > 0f
-    val progress = (1f - kotlin.math.abs(pageOffset)).coerceIn(0f, 1f)
+    val scrollFromReadingPage = currentPage - readingPage + currentPageOffsetFraction
+    // The committed reading page stays stable through the half-page crossing
+    // and the drag -> fling handoff; Pager's settledPage does not.
+    // The same geometry applies all the way to exact rest. Switching branches
+    // within .002/.999 pages snapped the under-sheet and its corner at handoff.
+    val underneath = pageOffset > 0f
+    val distance = kotlin.math.abs(scrollFromReadingPage).coerceIn(0f, 1f)
+    val lift = minOf(distance / 0.06f, (1f - distance) / 0.06f, 1f).coerceAtLeast(0f)
+    val relativePage = pageOffset + currentPageOffsetFraction + currentPage - readingPage
     return EpubPageTurnLayer(
-        translationX = if (pinned) -pageOffset * width else 0f,
-        zIndex = if (pinned) 0f else 1f,
-        edgeShadow = if (pinned) 0f else progress,
+        translationX = if (underneath) -0.75f * pageOffset * width else 0f,
+        // Preloaded sheets overlap after parallax. Keep the nearest under-sheet
+        // above later sheets, otherwise a second neighbour covers its paper.
+        zIndex = if (underneath) -pageOffset else 1f,
+        edgeShadow = if (underneath) 0f else lift,
+        // Feedback follows the distance from the committed page, including
+        // fling and cancellation. Crossing half a page never changes identity.
+        paperLift = if (kotlin.math.abs(relativePage) < 0.01f) (1f - (1f - distance) * (1f - distance)) else 0f,
     )
 }
 

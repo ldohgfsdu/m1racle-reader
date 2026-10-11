@@ -45,6 +45,9 @@ internal fun Modifier.readerGradient(
     val statusHeightPx = with(LocalDensity.current) { statusBarHeight.toPx() }
     val minimumFadePx = with(LocalDensity.current) { 16.dp.toPx() }
     val fullFadePx = with(LocalDensity.current) { 48.dp.toPx() }
+    val progressive = remember(capability) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && capability == GlassCapability.FULL_OPTICAL) ProgressiveChromeBlur() else null
+    }
     return graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
@@ -74,7 +77,8 @@ internal fun Modifier.readerGradient(
                 shape = { RectangleShape },
                 effects = {
                     if (spec.vibrancy) vibrancy()
-                    blur(blurPx)
+                    if (android.os.Build.VERSION.SDK_INT >= 33 && progressive != null) progressive.apply(this, blurPx)
+                    else blur(blurPx)
                 },
             ),
         )

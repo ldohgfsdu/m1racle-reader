@@ -135,7 +135,7 @@ object EpubXhtmlParser {
                         out.add(EpubBlock.Code(el.textContent.orEmpty()))
                     }
                     "hr" -> out.add(EpubBlock.Divider)
-                    "br" -> Unit // line break inside paragraphs is whitespace
+                    "br" -> Unit // Inline breaks are handled by paragraphKids/collectInline.
                     "img", "image" -> addImage(el, out)
                     "svg" -> addSvgImages(el, out)
                     "figure", "aside" -> paragraphKids(el, out, anchors)
@@ -189,7 +189,7 @@ object EpubXhtmlParser {
                 Node.ELEMENT_NODE -> {
                     val tag = (kid as Element).tagName.substringAfter(":").lowercase()
                     if (tag == "br") {
-                        pending.add(EpubInline(" "))
+                        pending.add(EpubInline("\n", hardBreak = true))
                     } else if (tag == "img" || tag == "image" || tag == "svg") {
                         flush()
                         blockFor(kid, out, anchors)
@@ -219,6 +219,12 @@ object EpubXhtmlParser {
         var space: EpubInline? = null
         var hasText = false
         runs.forEach { run ->
+            if (run.hardBreak) {
+                result.add(run)
+                space = null
+                hasText = false
+                return@forEach
+            }
             val text = StringBuilder()
             fun flush() {
                 if (text.isNotEmpty()) {
@@ -316,7 +322,7 @@ object EpubXhtmlParser {
                 val tag = el.tagName.substringAfter(":").lowercase()
                 if (tag == "script" || tag == "style") return
                 if (tag == "br") {
-                    out.add(EpubInline(" "))
+                    out.add(EpubInline("\n", hardBreak = true))
                     return
                 }
                 if (tag == "img") return // images are block-level placeholders

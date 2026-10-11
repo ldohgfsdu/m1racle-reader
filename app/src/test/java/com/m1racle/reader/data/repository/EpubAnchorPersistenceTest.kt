@@ -47,6 +47,33 @@ class EpubAnchorPersistenceTest {
 
     @After fun close() { db.close() }
 
+    @Test fun openingSavedLocatorConvertsItsOwnRoomRecordOnceAndPreservesOtherBooks() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val source = java.io.File("src/test/resources/fixtures/epub/sample-epub2.epub")
+            .takeIf { it.isFile } ?: java.io.File("app/src/test/resources/fixtures/epub/sample-epub2.epub")
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(source.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        val parsed = com.m1racle.reader.epub.EpubPackageImporter.openCached(source,
+            java.io.File(context.cacheDir, "rollback-source-fixture"), digest)
+        val chapter = parsed.readingOrder.first { it.blocks.isNotEmpty() }
+        val expected = requireNotNull(com.m1racle.reader.epub.EpubReadingAnchors.anchorAt(parsed,
+            com.m1racle.reader.epub.EpubLocation(chapter.spineIndex, 0, 0)))
+        val stored = "epub-locator:" + org.json.JSONObject().put("href", chapter.href)
+            .put("text", org.json.JSONObject().put("highlight", expected.quote))
+            .put("locations", org.json.JSONObject().put("position", 99).put("totalProgression", .4)).toString()
+        val old = requireNotNull(db.documentDao().getById("epub"))
+        db.documentDao().insertDocument(old.copy(id = "rollback", uri = source.toURI().toString(),
+            readingAnchor = stored, contentSha256 = digest, lastScrollIndex = 98))
+        repository.openEpubBook("rollback")
+        val converted = requireNotNull(db.documentDao().getById("rollback"))
+        assertEquals(expected, AnchorCodec.decode(converted.readingAnchor))
+        assertEquals(0, converted.lastScrollIndex)
+        assertEquals(.4f, converted.readingProgress, 0f)
+        assertEquals(old.readingAnchor, db.documentDao().getById("epub")!!.readingAnchor)
+        repository.openEpubBook("rollback")
+        assertEquals(converted.readingAnchor, db.documentDao().getById("rollback")!!.readingAnchor)
+    }
+
     @Test fun automaticSavesPreserveStoredAnchorUntilUserNavigation() = runBlocking {
         for (tier in listOf(EpubRestoreTier.Quote, EpubRestoreTier.QuotePrefix,
             EpubRestoreTier.ChapterStart, EpubRestoreTier.Progress)) {

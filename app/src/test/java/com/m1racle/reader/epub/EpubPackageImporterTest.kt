@@ -240,6 +240,9 @@ class EpubPackageImporterTest {
         val text = blocks.filterIsInstance<EpubBlock.Paragraph>()
             .flatMap { it.inlines }.joinToString("") { it.text }
         assertTrue(text.contains("a b"))
+        assertTrue("hard break renders as newline: $text", text.contains("a b\n第一行\n第二行"))
+        assertTrue(blocks.filterIsInstance<EpubBlock.Paragraph>()
+            .flatMap { it.inlines }.any { it.hardBreak })
         assertFalse(text.contains(" "))
         val image = blocks.filterIsInstance<EpubBlock.Image>().single()
         assertEquals("x.png", image.src)

@@ -314,7 +314,7 @@ internal fun ReaderMoreHost(
 ) {
     val active = state != ReaderMoreState.CLOSED
     val density = LocalDensity.current
-    val circlePx = with(density) { MoreCircleSize.toPx() }
+    val circlePx = with(density) { pdfChromeControlSize(MoreCircleSize).toPx() }
     val menuWidthPx = with(density) { MoreMenuWidth.toPx() }
     // Expose preparing callback without unstable remember of lambda identity issues
     // (parent passes stable lambda).
@@ -557,7 +557,7 @@ internal fun ReaderMoreHost(
                 contentDescription = contentDescription,
                 onClick = onToggleOpen,
                 modifier = Modifier
-                    .size(MoreCircleSize)
+                    .size(pdfChromeControlSize(MoreCircleSize))
                     .align(Alignment.TopEnd),
             )
         } else {
@@ -614,7 +614,7 @@ internal fun ReaderMoreHost(
                         )
                         Box(
                             modifier = Modifier
-                                .size(MoreCircleSize)
+                                .size(pdfChromeControlSize(MoreCircleSize))
                                 .align(Alignment.TopEnd)
                                 .graphicsLayer { alpha = iconAlpha },
                             contentAlignment = Alignment.Center,
@@ -673,7 +673,6 @@ private fun MoreCircleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val scheme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     Box(
@@ -697,7 +696,7 @@ private fun MoreCircleButton(
             imageVector = Icons.Filled.MoreVert,
             contentDescription = null,
             modifier = Modifier.size(MenuIconSize),
-            tint = scheme.onSurface,
+            tint = pdfChromePrimaryText(),
         )
     }
 }

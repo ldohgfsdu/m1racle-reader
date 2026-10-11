@@ -102,6 +102,8 @@ fun QuoteBlockView(
                 Spacer(modifier = Modifier.height(16.dp))
                 InlineMarkdownText(
                     text = attribution,
+                    annotationOffset = com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(block.text)
+                        .lastIndexOf(com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(attribution)).coerceAtLeast(0),
                     settings = settings,
                     style = attributionStyle,
                     strongColor = strongColor,

@@ -12,6 +12,8 @@
 | 界面设计规范 | [../design.md](../design.md) | 页面职责、主题排版、阅读 / 搜索 / 编辑交互、Liquid Glass、历史冲突裁决与验收边界；阶段报告仅保留来源和证据 |
 | 工程规则 | [../AGENTS.md](../AGENTS.md) | 分层、验收纪律、构建与交付规则 |
 | 发布门禁 | [../RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) | 公开产物前的硬门禁，含未勾选项 |
+| 全清单实现 | [FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md) | 用户当前范围与每项验证状态；Markdown 编辑等待 M1racle Note |
+| 功能分层和验证入口 | [FEATURE_LAYERS_AND_VERIFICATION.md](FEATURE_LAYERS_AND_VERIFICATION.md) | 模块职责、开发检查和正式发布流程 |
 
 以上入口冲突时，以用户当前指令优先，PRD 定范围、AGENTS.md 定工程规则、design.md 定设计要求、CURRENT_STATUS 定已验证现状。
 
@@ -20,7 +22,10 @@
 | 主题 | 文件 |
 |---|---|
 | 本机开发环境与最新工作树备份 | [环境修复说明](../../环境修复说明-20261003.md)；工作区根目录 `Reader构建.cmd` |
-| 构建与交付 APK | [APK_DELIVERY.md](APK_DELIVERY.md)；本轮 [按压玻璃完整底栏采样](DOCK_SAMPLED_RIM_20261004.md)；[底栏 iOS 通透度与按压放大](DOCK_IOS_TRANSPARENCY_20261004.md)；此前 [底栏视频参考动效](DOCK_VIDEO_MOTION_20261004.md)、[EPUB 章节与目录签名验收包](EPUB_CHAPTERS_20261003.md) 与 [签名记录](RELEASE_SIGNING_20261003.md) |
+| Dock 拖动跟手与弹性形变 | 当前 [54版弹性与回弹](DOCK_ELASTIC_20261008.md)；[53版直接跟手](DOCK_DIRECT_DRAG_20261008.md) |
+| 酷安底栏真实参考数据 | [真机尺寸、按压/拖动录屏与帧统计](COOLAPK_DOCK_CAPTURE_20261008.md) |
+| 酷安玻璃复刻 | [底栏、阅读控件与独立动作反馈实现及验证](COOLAPK_GLASS_REPLICA_20261008.md) |
+| 构建与交付 APK | [APK_DELIVERY.md](APK_DELIVERY.md)；本轮 [一体式蓝色玻璃Dock](OPTICAL_DOCK_20261008.md)；此前 [EPUB恢复43版与字体](EPUB_RESTORE43_FONT_20261007.md)；此前 [EPUB滑动与页边界修复](EPUB_SLIDE_BOUNDARIES_20261007.md)；此前 [EPUB 原书排版与正式包闭环](EPUB_PUBLISHER_LAYOUT_20261006.md)、[EPUB 返回闪帧与阅读器研究](EPUB_RETURN_RESEARCH_20261006.md)、[RiseDiary 底栏与阅读工具栏](RISEDIARY_TOOLBAR_20261006.md)；[签名记录](RELEASE_SIGNING_20261003.md) |
 | 真机安装与 ADB 测试 | [DEVICE_INSTALL_AND_ADB_TEST.md](DEVICE_INSTALL_AND_ADB_TEST.md) |
 | 验收清单 | [ACCEPTANCE.md](ACCEPTANCE.md) · [../CHANGELOG.md](../CHANGELOG.md) |
 | 测试数据安全 | [ANDROID_TEST_DATA_SAFETY.md](ANDROID_TEST_DATA_SAFETY.md) |
@@ -33,7 +38,7 @@
 | 主题 | 文件 |
 |---|---|
 | PDF 阅读器技术交接（仍在演进的核心子系统） | [PDF_VIEWER_HANDOFF.md](PDF_VIEWER_HANDOFF.md) |
-| EPUB 有限阅读架构与范围 | [EPUB_SUPPORT_ARCHITECTURE_DESIGN.md](EPUB_SUPPORT_ARCHITECTURE_DESIGN.md)；阅读位置文本锚点见 [EPUB_ANCHOR_20261004.md](EPUB_ANCHOR_20261004.md) |
+| EPUB 当前核心与范围 | 当前 [恢复43版原生翻页与字体](EPUB_RESTORE43_FONT_20261007.md)；45–50版研究与实现为历史：[滑动与页边界修复](EPUB_SLIDE_BOUNDARIES_20261007.md)；[翻页看门狗](EPUB_TOUCH_WATCHDOG_20261007.md)；[外部字体](EPUB_FONT_TURN_20261006.md)；原书核心基线 [EPUB_PUBLISHER_LAYOUT_20261006.md](EPUB_PUBLISHER_LAYOUT_20261006.md)；当前设计见根目录design.md / PRD补充。早期方案见 [EPUB_SUPPORT_ARCHITECTURE_DESIGN.md](EPUB_SUPPORT_ARCHITECTURE_DESIGN.md)，旧锚点背景见 [EPUB_ANCHOR_20261004.md](EPUB_ANCHOR_20261004.md) |
 | PDF 正文编辑 | [PDF_BODY_EDITING_DESIGN.md](PDF_BODY_EDITING_DESIGN.md) |
 | 全项目设计规范（含来源索引） | [../design.md](../design.md) |
 | 设置二级页液态玻璃调参工作台 | [GLASS_WORKBENCH_20261004.md](GLASS_WORKBENCH_20261004.md) |
@@ -46,6 +51,14 @@
 | 主题 | 文件 |
 |---|---|
 | EPUB R04 合入、完整测试与正式包模拟器验收 | [R04_INTEGRATION_20261005.md](R04_INTEGRATION_20261005.md) |
+| Apple Books 视频滑动翻页复刻 | [EPUB_APPLEBOOK_SLIDE_20261005.md](EPUB_APPLEBOOK_SLIDE_20261005.md) |
+| EPUB 实机反馈：沉浸系统栏与全屏纸页圆角 | [EPUB_IMMERSIVE_CORNERS_20261005.md](EPUB_IMMERSIVE_CORNERS_20261005.md) |
+| EPUB 固定设备圆角：去除手势半径形变 | [EPUB_FIXED_CORNERS_20261005.md](EPUB_FIXED_CORNERS_20261005.md) |
+| EPUB 静止页全窗口填充、固定尺寸菜单与全屏遮罩 | [EPUB_FILL_MENU_20261005.md](EPUB_FILL_MENU_20261005.md) |
+| EPUB 侧边贴合、深色高光与统一目录 / 设置菜单 | [EPUB_CARD_POLISH_20261005.md](EPUB_CARD_POLISH_20261005.md) |
+| EPUB 六项细节：下层跟随 / 渐变提亮 / 设备圆角 / 小白条 / 单标题 / 锚定设置 | [EPUB_REFERENCE_FIDELITY_20261005.md](EPUB_REFERENCE_FIDELITY_20261005.md) |
+| EPUB 长按拖动松手闪烁与 Apple Books 滑动细节 | [EPUB_RELEASE_HANDOFF_20261005.md](EPUB_RELEASE_HANDOFF_20261005.md) |
+| EPUB 原书换行、目录空白页与缩进修复 | [EPUB_LAYOUT_20261005.md](EPUB_LAYOUT_20261005.md) |
 | 2026-10-02 Windows 备份审查修复 | [PROJECT_AUDIT_FIXES_20261002_WINDOWS.md](PROJECT_AUDIT_FIXES_20261002_WINDOWS.md) |
 | 首页底栏采样与加号长按反馈 | [DOCK_GLASS_FEEDBACK_20261003.md](DOCK_GLASS_FEEDBACK_20261003.md) |
 | 基于 design.md 的当前界面优化 | [UI_DESIGN_POLISH_20261003.md](UI_DESIGN_POLISH_20261003.md) |

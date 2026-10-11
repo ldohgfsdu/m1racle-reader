@@ -17,6 +17,8 @@ import com.m1racle.reader.data.local.TextbookOutlineNodeDao
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.identity.ContentIdentityResolver
 import com.m1racle.reader.identity.DocumentAliasKeys
+import com.m1racle.reader.identity.LegacyContentHashMigrationFiles
+import com.m1racle.reader.identity.LegacyContentHashMigrationV1
 import com.m1racle.reader.identity.SidecarAliasMigrationStore
 import com.m1racle.reader.identity.SidecarAliasMigrationTransaction
 import com.m1racle.reader.identity.SidecarIdentityMigrationFiles
@@ -218,7 +220,7 @@ class ContentIdentityImportWiringTest {
         fixture.seedLegacyPathA("editable",Uri.fromFile(source))
         val before=fixture.documentDao.getById("editable")!!
         val candidate=fixture.localPdf("edited PDF bytes")
-        val saved=fixture.repository.savePdfEdits(before.id,com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),candidate)
+        val saved=fixture.repository.saveDocumentEdits(before.id,com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),candidate)
         assertEquals(before.id,saved.id); assertEquals(before.lastScrollIndex,saved.lastScrollIndex)
         assertEquals(before.readingProgress,saved.readingProgress)
         assertEquals(1,fixture.documentDao.rows.size); assertEquals(0,fixture.documentDao.replaceCalls)
@@ -234,9 +236,9 @@ class ContentIdentityImportWiringTest {
         val source=fixture.localPdf("original PDF bytes")
         fixture.seedLegacyPathA("editable",Uri.fromFile(source))
         val first=fixture.localPdf("first revision")
-        val local=fixture.repository.savePdfEdits("editable",com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),first)
+        val local=fixture.repository.saveDocumentEdits("editable",com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),first)
         val next=fixture.localPdf("second revision")
-        val saved=fixture.repository.savePdfEdits(local.id,local.contentSha256!!,next,Uri.fromFile(source))
+        val saved=fixture.repository.saveDocumentEdits(local.id,local.contentSha256!!,next,Uri.fromFile(source))
         assertEquals("second revision",source.readText())
         assertEquals(local.id,saved.id); assertEquals(saved.contentSha256,saved.sourceSha256)
         assertEquals(Uri.fromFile(source).toString(),saved.sourceUri)
@@ -251,7 +253,7 @@ class ContentIdentityImportWiringTest {
         val candidate=fixture.localPdf("replacement PDF bytes")
         fixture.documentDao.rejectUpdates=true
         var failed=false
-        try { fixture.repository.savePdfEdits("editable",com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),candidate,Uri.fromFile(source)) }
+        try { fixture.repository.saveDocumentEdits("editable",com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),candidate,Uri.fromFile(source)) }
         catch (_: IllegalStateException) { failed=true }
         assertTrue(failed); assertEquals("original PDF bytes",source.readText())
         assertEquals(Uri.fromFile(source).toString(),fixture.documentDao.getById("editable")!!.uri)
@@ -264,7 +266,7 @@ class ContentIdentityImportWiringTest {
         fixture.seedLegacyPathA("editable",Uri.fromFile(source))
         val candidate=fixture.localPdf("new revision")
         var failed=false
-        try { fixture.repository.savePdfEdits("editable","stale hash",candidate) }
+        try { fixture.repository.saveDocumentEdits("editable","stale hash",candidate) }
         catch (_: IllegalStateException) { failed=true }
         assertTrue(failed); assertEquals("original PDF bytes",source.readText())
         assertEquals(1,fixture.documentDao.rows.size)
@@ -332,16 +334,22 @@ class ContentIdentityImportWiringTest {
     }
 
     @Test
-    fun legacyPayloadChangedAfterPrepareIsNotPromoted() = runBlocking {
-        val old = fixture.source("content://r37.test/old.pdf")
+    fun legacyPromotionBindsIdentityToBytesVerifiedAtMigrationTime() = runBlocking {
+        val legacyBytes = "legacy bytes".toByteArray()
+        val old = fixture.source("content://r37.test/old.pdf", legacyBytes)
         fixture.seedLegacyPathA("old", old)
         val incoming = fixture.source("content://r37.test/new.pdf")
-        val importer = fixture.importer()
-        val prepared = importer.prepare(incoming, "application/pdf") as PrepareOutcome.Success
-        fixture.source(old.toString(), "different bytes".toByteArray())
-        val result = importer.commitPrepared(prepared.prepared) as CommitOutcome.Success
-        assertNotEquals("old", result.documentId)
-        assertEquals(null, fixture.documentDao.getById("old")!!.contentSha256)
+
+        val document = (fixture.repository.importDocument(incoming) as ImportResult.Success).document
+
+        // The legacy row is promoted from the bytes its source served while the
+        // one-time migration ran; incoming bytes that differ stay a new book.
+        assertNotEquals("old", document.id)
+        assertEquals(
+            com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(legacyBytes.inputStream()),
+            fixture.documentDao.getById("old")!!.contentSha256,
+        )
+        assertEquals(2, fixture.documentDao.rows.size)
     }
 
     @Test
@@ -404,6 +412,17 @@ class ContentIdentityImportWiringTest {
             documentAliasDao = aliasDao,
             contentIdentityResolver = resolver,
             sidecarIdentityMigration = sidecarMigration,
+            legacyContentHashMigration = LegacyContentHashMigrationV1(
+                documentDao = documentDao,
+                aliasDao = aliasDao,
+                files = LegacyContentHashMigrationFiles(
+                    File(context.cacheDir, "legacy-hash-${System.nanoTime()}"),
+                ),
+                openSource = { uri ->
+                    sources[uri.toString()]?.let(::ByteArrayInputStream)
+                        ?: uri.path?.let(::File)?.takeIf(File::isFile)?.inputStream()
+                },
+            ),
             importTransactionRunner = ImmediateRepositoryTransactionRunner(),
         )
         private val externalImporter = ExternalDocumentImporter(
@@ -595,7 +614,7 @@ class ContentIdentityImportWiringTest {
             lastScrollIndex: Int,
             lastScrollOffset: Int,
             readingProgress: Float,
-            readingAnchor: String,
+            readingAnchor: String?,
         ) = Unit
         override suspend fun updatePdfReadingPosition(
             id: String,

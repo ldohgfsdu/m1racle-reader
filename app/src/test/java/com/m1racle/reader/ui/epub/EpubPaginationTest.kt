@@ -5,6 +5,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class EpubPaginationTest {
+    @Test fun `consecutive headings move with following text instead of leaving an orphan`() {
+        val rows = listOf(row(count = 3), row(count = 1).copy(keepWithNext = true),
+            row(count = 1).copy(keepWithNext = true), row(count = 4))
+        val pages = paginateEpub(rows, 100f, 10f)
+        assertEquals(listOf(0), pages.first().slices.map { it.row })
+        assertEquals(listOf(1, 2, 3), pages[1].slices.map { it.row })
+        assertTrue(pages.all { it.height <= 100f })
+        rows.indices.forEach { r ->
+            assertEquals(rows[r].lines.last().end,
+                pages.flatMap { it.slices }.filter { it.row == r }.sumOf { it.end - it.start })
+        }
+    }
+
+    @Test fun `oversized heading chains remain readable without empty pages or overflow`() {
+        val rows = List(12) { row(count = 2).copy(keepWithNext = true) } + row(count = 5)
+        val pages = paginateEpub(rows, 100f, 10f)
+        assertTrue(pages.all { it.slices.isNotEmpty() && it.height <= 100f })
+        assertEquals(290, pages.flatMap { it.slices }.sumOf { it.end - it.start })
+    }
+
     private fun row(spine: Int = 0, count: Int, chapter: Boolean = false, lineHeight: Float = 20f) =
         EpubRowMetrics(spine, chapter, List(count) { EpubLine(it * lineHeight, (it + 1) * lineHeight, it * 10, (it + 1) * 10) })
 
@@ -66,30 +86,50 @@ class EpubPaginationTest {
         assertEquals(EpubPageTap.Next, epubPageTap(90f, 100f))
     }
 
-    @Test fun `cover turn pins the leaving page and slides the incoming page over it`() {
+    @Test fun `forward slides the current sheet away while backward brings the previous sheet over it`() {
         val current = epubPageTurnLayer(-0.3f, 0.3f, 0, 0, 100f)
         val next = epubPageTurnLayer(0.7f, 0.3f, 0, 0, 100f)
-        assertEquals(30f, current.translationX, 0.01f)
-        assertEquals(0f, current.zIndex, 0f)
-        assertEquals(0f, next.translationX, 0.01f)
-        assertEquals(1f, next.zIndex, 0f)
-        assertTrue(next.edgeShadow > 0f)
+        assertEquals(0f, current.translationX, 0.01f)
+        assertEquals(1f, current.zIndex, 0f)
+        assertEquals(-52.5f, next.translationX, 0.01f)
+        assertEquals(-0.7f, next.zIndex, 0f)
+        assertTrue(current.edgeShadow > 0f)
 
         val staying = epubPageTurnLayer(0.3f, -0.3f, 0, 0, 100f)
         val previous = epubPageTurnLayer(-0.7f, -0.3f, 0, 0, 100f)
-        assertEquals(-30f, staying.translationX, 0.01f)
+        assertEquals(-22.5f, staying.translationX, 0.01f)
         assertEquals(0f, previous.translationX, 0.01f)
         assertEquals(1f, previous.zIndex, 0f)
     }
 
-    @Test fun `settled pager does not pull neighboring pages onto the current page`() {
+    @Test fun `settled top sheet covers its following sheet without a shadow`() {
         listOf(-1f, 0f, 1f).forEach { offset ->
             val layer = epubPageTurnLayer(offset, 0f, 0, 0, 100f)
-            assertEquals(0f, layer.translationX, 0.01f)
+            assertEquals(if (offset > 0) -75f else 0f, layer.translationX, 0f)
             assertEquals(0f, layer.edgeShadow, 0.01f)
         }
         val offscreenPrev = epubPageTurnLayer(-1.2f, 0.3f, 0, 0, 100f)
         assertEquals(0f, offscreenPrev.translationX, 0.01f)
+    }
+
+    @Test fun `underlying page does not jump at the first or last two pixels of a turn`() {
+        val width = 1080f
+        for (progress in listOf(0f, .0005f, .001f, .002f, .998f, .999f, .9995f, 1f)) {
+            val current = if (progress < .5f) 0 else 1
+            val offset = 1f - progress
+            val next = epubPageTurnLayer(offset, progress-current, current, 0, width)
+            // Native pager location plus compensation must remain at quarter speed,
+            // including both old early-return thresholds.
+            assertEquals(offset * width * .25f, offset * width + next.translationX, .0001f)
+        }
+    }
+
+    @Test fun `preloaded second neighbour cannot cover the original under sheet during backward drag`() {
+        val original = epubPageTurnLayer(.62f, .38f, 0, 1, 1080f)
+        val later = epubPageTurnLayer(1.62f, .38f, 0, 1, 1080f)
+        assertTrue(original.zIndex > later.zIndex)
+        assertTrue(original.paperLift > 0f)
+        assertEquals(0f, later.paperLift, 0f)
     }
 
     @Test fun `viewport ignores one pixel jitter that would reflow the book`() {
@@ -100,32 +140,48 @@ class EpubPaginationTest {
         assertFalse(epubViewportSettled(base, IntSize(1080, 1800)))
     }
 
-    @Test fun `cover keeps paper undimmed throughout forward and backward drags`() {
+    @Test fun `only the original paper lifts while text and target sheet keep their own colors`() {
         for (progress in listOf(0.1f, 0.49f, 0.51f, 0.9f)) {
             val forwardCurrent = if (progress < 0.5f) 0 else 1
             val backwardCurrent = if (progress < 0.5f) 1 else 0
-            assertEquals(EpubPageTurnLayer(progress * 100f, 0f, 0f),
-                epubPageTurnLayer(-progress, progress - forwardCurrent, forwardCurrent, 0, 100f))
-            assertEquals(EpubPageTurnLayer(-progress * 100f, 0f, 0f),
-                epubPageTurnLayer(progress, 1 - progress - backwardCurrent, backwardCurrent, 1, 100f))
+            val leaving = epubPageTurnLayer(-progress, progress - forwardCurrent, forwardCurrent, 0, 100f)
+            val next = epubPageTurnLayer(1 - progress, progress - forwardCurrent, forwardCurrent, 0, 100f)
+            val staying = epubPageTurnLayer(progress, 1 - progress - backwardCurrent, backwardCurrent, 1, 100f)
+            val previous = epubPageTurnLayer(progress - 1, 1 - progress - backwardCurrent, backwardCurrent, 1, 100f)
+            assertEquals(1f - (1f-progress)*(1f-progress), leaving.paperLift, 0.001f)
+            assertEquals(1f - (1f-progress)*(1f-progress), staying.paperLift, 0.001f)
+            assertEquals(0f, next.paperLift, 0.001f)
+            assertEquals(0f, previous.paperLift, 0.001f)
         }
     }
 
-    @Test fun `forward cover stays pinned across current page half way switch`() {
+    @Test fun `forward moving sheet and following next sheet stay continuous across the half way switch`() {
         // The pager changes currentPage from 0 to 1, fraction from +0.49 to -0.49.
         val before = epubPageTurnLayer(-0.49f, 0.49f, 0, 0, 100f)
         val after = epubPageTurnLayer(-0.51f, -0.49f, 1, 0, 100f)
-        assertEquals(0f, before.zIndex, 0f)
-        assertEquals(0f, after.zIndex, 0f)
-        assertEquals(51f, after.translationX, 0.001f)
-        assertEquals(1f, epubPageTurnLayer(0.49f, 0.51f, 0, 0, 100f).zIndex, 0f)
+        assertEquals(1f, before.zIndex, 0f)
+        assertEquals(1f, after.zIndex, 0f)
+        assertEquals(0f, before.translationX, 0.001f)
+        assertEquals(0f, after.translationX, 0.001f)
+        val next = epubPageTurnLayer(0.49f, -0.49f, 1, 0, 100f)
+        assertEquals(-0.49f, next.zIndex, 0f)
+        assertEquals(12.25f, 49f + next.translationX, 0.001f)
     }
 
-    @Test fun `backward cover stays pinned across current page half way switch`() {
+    @Test fun `backward cover follows across current page half way switch`() {
         val before = epubPageTurnLayer(0.49f, -0.49f, 1, 1, 100f)
         val after = epubPageTurnLayer(0.51f, 0.49f, 0, 1, 100f)
-        assertEquals(0f, before.zIndex, 0f)
-        assertEquals(0f, after.zIndex, 0f)
-        assertEquals(-51f, after.translationX, 0.001f)
+        assertEquals(-0.49f, before.zIndex, 0f)
+        assertEquals(-0.51f, after.zIndex, 0f)
+        assertEquals(-38.25f, after.translationX, 0.001f)
+    }
+
+    @Test fun `cancelled turn returns to a flat resting sheet without a remaining shadow`() {
+        val dragging = epubPageTurnLayer(-0.25f, 0.25f, 8, 8, 100f)
+        assertTrue(dragging.edgeShadow > 0f)
+        assertEquals(EpubPageTurnLayer(0f, 1f, 0f), epubPageTurnLayer(0f, 0f, 8, 8, 100f))
+        val almostResting = epubPageTurnLayer(-0.01f, 0.01f, 8, 8, 100f)
+        assertTrue(almostResting.paperLift < dragging.paperLift)
+        assertTrue(almostResting.edgeShadow < dragging.edgeShadow)
     }
 }

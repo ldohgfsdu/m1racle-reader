@@ -31,6 +31,8 @@ data class EpubInline(
     val bold: Boolean = false,
     val italic: Boolean = false,
     val code: Boolean = false,
+    /** Authored br, distinct from collapsible whitespace in the XHTML source. */
+    val hardBreak: Boolean = false,
 )
 
 sealed interface EpubBlock {

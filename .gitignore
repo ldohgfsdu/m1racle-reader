@@ -22,6 +22,9 @@ keystore.properties
 .shared_inbox/
 .local-backups/
 .memory/
+/output/
+hs_err_pid*.log
+replay_pid*.log
 
 # Tooling / IDE / agent noise
 .kotlin/

@@ -176,7 +176,7 @@ class DeleteByIdTransactionTest {
             lastScrollIndex: Int,
             lastScrollOffset: Int,
             readingProgress: Float,
-            readingAnchor: String,
+            readingAnchor: String?,
         ) = real.updateEpubReadingPosition(id, lastScrollIndex, lastScrollOffset, readingProgress, readingAnchor)
         override suspend fun updatePdfReadingPosition(
             id: String,

@@ -19,9 +19,11 @@
 
 | 变体 | 构建输出 | 自动导出（每次 assemble 成功） |
 |------|----------|--------------------------------|
-| release / qa / debug / benchmark | `app/build/outputs/apk/<variant>/` | **`.external_outbox/m1racle-reader-<variant>-…apk`** + `latest` + `.sha256` |
+| release（唯一交付包） | `app/build/outputs/apk/release/` | **`.external_outbox/m1racle-reader-release-…apk`** + `latest` + `.sha256` |
+| qa / debug / benchmark | `app/build/outputs/apk/<variant>/` | `.external_outbox/<variant>/m1racle-reader-<variant>-…apk` + `latest` + `.sha256` |
 
-每个变体只保留最近 **5** 份带时间戳 APK（及对应 SHA-256）；`latest` 始终覆盖更新，防止长期构建
+release 是唯一交付包，位于 outbox 根目录；测试变体（qa / debug / benchmark）分别落在各自子目录，不与交付包混放。
+每个变体目录只保留最近 **5** 份带时间戳 APK（及对应 SHA-256）；`latest` 始终覆盖更新，防止长期构建
 无限占用工作区。该策略只清理由构建生成、且已被 `.gitignore` 排除的 outbox 历史产物。
 
 仅导出不重编：
@@ -34,7 +36,7 @@
 
 | 场景 | 用哪个 |
 |------|--------|
-| 给人安装 / 日常验收 | **`.external_outbox/m1racle-reader-release-latest.apk`（~10–11MB）** |
+| 给人安装 / 日常验收 | **`.external_outbox/m1racle-reader-release-latest.apk`**；体积以CURRENT_STATUS实测为准（52版一体蓝色Dock，保留43阅读及中文宋体，约27.2MB） |
 | 仪器测试 | QA 包 `com.m1racle.reader.qa` |
 | Debug | 禁止主动构建或交付，不替代 Release 验证 |
 

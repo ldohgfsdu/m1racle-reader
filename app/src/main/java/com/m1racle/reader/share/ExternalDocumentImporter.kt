@@ -169,7 +169,7 @@ open class ExternalDocumentImporter(
             sourceUri.toString(),
             provider.lastPathSegment,
         )
-        val candidate = repository.findBySourceAlias(sourceUri, externalKey)
+        val candidate = repository.findBySourceAlias(externalKey)
         val resolvedType = DocumentType.resolve(
             resolved.mimeType,
             resolved.displayName,

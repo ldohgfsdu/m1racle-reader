@@ -26,14 +26,10 @@ class ReleaseHygieneHostTest {
     }
 
     @Test
-    fun glassLab_onlyEnabledOnDebugAndQaBuildTypes() {
-        // defaultConfig and release are false; debug and qa opt in (release check: src/testRelease).
-        val expected = BuildConfig.BUILD_TYPE == "debug" || BuildConfig.BUILD_TYPE == "qa"
-        assertEquals(
-            "Glass Lab must be enabled only for buildType debug / qa",
-            expected,
-            BuildConfig.GLASS_LAB_ENABLED,
-        )
+    fun glassLabAvailableWithoutVariantGate() {
+        assertTrue(Class.forName("com.m1racle.reader.ui.hub.glasslab.GlassLabScreenKt")
+            .declaredMethods.any { it.name == "GlassLabScreen" })
+        assertFalse(BuildConfig::class.java.declaredFields.any { it.name == "GLASS_LAB_ENABLED" })
     }
 
     @Test
@@ -45,7 +41,8 @@ class ReleaseHygieneHostTest {
         assertFalse(
             text.contains("android.permission.INTERNET"),
         )
-        assertTrue(text.contains("no INTERNET") || !text.contains("uses-permission"))
+        val permissions = Regex("<uses-permission\\s+android:name=\"([^\"]+)\"").findAll(text).map { it.groupValues[1] }.toSet()
+        assertEquals(setOf("android.permission.MANAGE_EXTERNAL_STORAGE"), permissions)
     }
 
     @Test

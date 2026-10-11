@@ -44,6 +44,7 @@ class ReaderBookmarkController(
         title: String? = null,
         note: String? = null,
         offset: Long? = null,
+        target: com.m1racle.reader.data.anchor.BookmarkTarget? = null,
     ): ToggleResult {
         val existing = readingRepository.findBookmarkAt(
             documentId = documentId,
@@ -60,6 +61,7 @@ class ReaderBookmarkController(
                     locationKind = locationKind.name,
                     location = location,
                     offset = offset,
+                    anchor = target?.encode(),
                     title = title,
                     note = note,
                     createdAt = nowMs,

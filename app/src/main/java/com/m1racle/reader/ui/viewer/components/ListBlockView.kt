@@ -28,6 +28,10 @@ fun ListBlockView(
     modifier: Modifier = Modifier,
     onLinkClick: ((String) -> Unit)? = null,
 ) {
+    val annotationOffsets = androidx.compose.runtime.remember(block.items) {
+        var offset = 0
+        block.items.map { item -> offset.also { offset += com.m1racle.reader.markdown.InlineMarkdownParser.toPlainText(item).length + 1 } }
+    }
     val itemStyle = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
@@ -57,6 +61,7 @@ fun ListBlockView(
                 )
                 InlineMarkdownText(
                     text = item,
+                    annotationOffset = annotationOffsets[index],
                     settings = settings,
                     style = itemStyle,
                     modifier = Modifier.weight(1f),

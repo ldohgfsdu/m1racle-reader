@@ -1,6 +1,7 @@
 package com.m1racle.reader.ui.epub
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -67,7 +68,7 @@ class EpubReaderUiTest {
         }
         val before = pageLabel()
         val visible = rule.onAllNodes(hasText("word", substring = true)).fetchSemanticsNodes()
-            .first { it.boundsInRoot.overlaps(rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot) }
+            .first { it.boundsInRoot.overlaps(rule.onNodeWithTag("epub-reading-area").fetchSemanticsNode().boundsInRoot) }
             .config[SemanticsProperties.Text].joinToString { it.text }
         val anchor = Regex("word\\d{4}").find(visible)!!.value
         assertFalse(before.startsWith("第 1 /"))
@@ -128,7 +129,7 @@ class EpubReaderUiTest {
             }
         }
         waitForPages()
-        val before = rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot
+        val before = rule.onNodeWithTag("epub-reading-area").fetchSemanticsNode().boundsInRoot
         val label = pageLabel()
         val footer = rule.onNodeWithTag("epub-page-number").fetchSemanticsNode().boundsInRoot
         assertTrue("reading=$before footer=$footer", before.bottom <= footer.top)
@@ -140,7 +141,7 @@ class EpubReaderUiTest {
             val control = rule.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInRoot
             assertTrue("$description=$control must be above reading=$before", control.bottom <= before.top)
         }
-        assertEquals(before, rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot)
+        assertEquals(before, rule.onNodeWithTag("epub-reading-area").fetchSemanticsNode().boundsInRoot)
         assertEquals(label, pageLabel())
     }
 
@@ -156,7 +157,7 @@ class EpubReaderUiTest {
             }
         }
         waitForPages()
-        val reading = rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot
+        val reading = rule.onNodeWithTag("epub-reading-area").fetchSemanticsNode().boundsInRoot
         val label = pageLabel()
         val text = rule.onNodeWithText("第一章段落 0", substring = true).fetchSemanticsNode()
             .config[SemanticsProperties.Text]
@@ -167,7 +168,7 @@ class EpubReaderUiTest {
                 val control = rule.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInRoot
                 assertTrue("$description=$control reading=$reading", control.bottom <= reading.top)
             }
-            assertEquals(reading, rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot)
+            assertEquals(reading, rule.onNodeWithTag("epub-reading-area").fetchSemanticsNode().boundsInRoot)
             assertEquals(label, pageLabel())
             assertEquals(text, rule.onNodeWithText("第一章段落 0", substring = true).fetchSemanticsNode()
                 .config[SemanticsProperties.Text])
@@ -176,7 +177,7 @@ class EpubReaderUiTest {
             rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
             rule.waitForIdle()
             rule.onNodeWithContentDescription("设置").assertDoesNotExist()
-            assertEquals(reading, rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot)
+            assertEquals(reading, rule.onNodeWithTag("epub-reading-area").fetchSemanticsNode().boundsInRoot)
         }
         rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
         rule.onNodeWithContentDescription("返回").performClick()
@@ -221,7 +222,7 @@ class EpubReaderUiTest {
         rule.onNodeWithTag("epub-pager").performTouchInput { swipeRight() }
         rule.waitForIdle()
         assertTrue(pageLabel().startsWith("第 1 /"))
-        rule.onNodeWithText("关闭").assertIsNotDisplayed()
+        rule.onNodeWithText("关闭").assertDoesNotExist()
         rule.onNodeWithTag("epub-pager").performTouchInput { click(percentOffset(0.88f, 0.5f)) }
         rule.waitForIdle()
         assertEquals(secondPage, pageLabel())
@@ -260,7 +261,7 @@ class EpubReaderUiTest {
         }
         waitForPages()
         fun visibleText(): String {
-            val bounds = rule.onNodeWithTag("epub-pager").fetchSemanticsNode().boundsInRoot
+            val bounds = rule.onNodeWithTag("epub-reading-area").fetchSemanticsNode().boundsInRoot
             return rule.onAllNodes(hasText("同文件", substring = true)).fetchSemanticsNodes()
                 .first { it.boundsInRoot.overlaps(bounds) }.config[SemanticsProperties.Text].joinToString { it.text }
         }
@@ -285,12 +286,24 @@ class EpubReaderUiTest {
         assertFalse(visibleText().contains("上一章结尾"))
     }
 
+    @Test fun `long directory opens at the active chapter instead of the first entry`() {
+        val toc = List(80) { EpubTocNode("目录条目 $it", "chapter-$it.xhtml", it, emptyList()) }
+        rule.setContent {
+            M1racleReaderTheme {
+                EpubTocPanel("测试书", toc, toc.associate { tocKey(it) to it.spineIndex!! }, 75, {},
+                    modifier = Modifier.size(340.dp, 400.dp))
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText("目录条目 75").assertIsDisplayed()
+        rule.onNodeWithText("目录条目 0").assertDoesNotExist()
+    }
+
     @Test fun `directory header and list stay within status and navigation safe regions`() {
         rule.setContent {
             M1racleReaderTheme {
-                EpubTocDrawer("测试书", book.toc, mapOf(tocKey(book.toc[0]) to 0, tocKey(book.toc[1]) to 5), {},
-                    {},
-                    insets = WindowInsets(top = 32.dp, bottom = 24.dp))
+                EpubTocPanel("测试书", book.toc, mapOf(tocKey(book.toc[0]) to 0, tocKey(book.toc[1]) to 5), 0, {},
+                    modifier = Modifier.windowInsetsPadding(WindowInsets(top = 32.dp, bottom = 24.dp)))
             }
         }
         val content = rule.onNodeWithTag("epub-toc-safe-content").fetchSemanticsNode().boundsInRoot

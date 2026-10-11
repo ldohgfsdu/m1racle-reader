@@ -40,6 +40,26 @@ class EpubPaginationHostTest {
     @get:Rule val rule = createComposeRule()
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun `pandoc style heading sections and explicit directory lines flow together`() {
+        val (blocks, anchors) = com.m1racle.reader.epub.EpubXhtmlParser.parse("""
+            <html><body><section id="toc"><h2>Contents</h2></section>
+            <section id="part"><h2>Part one</h2><p>01 First / 2<br/>02 Second / 7<br/>03 Third / 19</p></section>
+            <section id="number"><h2>01</h2></section><section id="name"><h2>First chapter</h2></section>
+            <section id="sub"><h2>Opening</h2><p>Ordinary body text.</p></section></body></html>
+        """.toByteArray())
+        val toc = anchors.keys.map { EpubTocNode(it, "0.xhtml#$it", 0, emptyList()) }
+        val book = EpubBook(EpubMetadata(null, emptyList(), null, null, null, false, false),
+            listOf(EpubSpineItem("0", "0.xhtml", true, 0)), toc,
+            listOf(EpubChapter(0, "0.xhtml", null, blocks, anchors)))
+        val layout = measure(book, MEASURE_SLICE_NANOS).single()
+        assertEquals(1, layout.pages.size)
+        assertEquals(3, layout.layoutFor(2).lineCount)
+        assertEquals(androidx.compose.ui.text.font.FontWeight.Normal, layout.rows.last().style.fontWeight)
+        assertTrue(layout.rows.last().text.spanStyles.isEmpty())
+        assertTrue(toc.all { layout.pageForToc(book, it) == 0 })
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test fun `list item gaps and hanging lines preserve page position and section anchors`() {
         val book = EpubBook(EpubMetadata(null, emptyList(), null, null, null, false, false),
             listOf(EpubSpineItem("0", "0.xhtml", true, 0)), emptyList(),
@@ -85,7 +105,7 @@ class EpubPaginationHostTest {
         assertEquals(layout.pages.pageForText(targetRow, 0), layout.pageForToc(book, toc))
     }
 
-    @Test fun `nested TOC chapters in one XHTML start at page top instead of sharing the preceding page`() {
+    @Test fun `nested TOC targets share flowing pages while remaining independently navigable`() {
         val second = EpubTocNode("第二章", "0.xhtml#second", 0, listOf(
             EpubTocNode("小节", "0.xhtml#nested", 0, emptyList())))
         val first = EpubTocNode("第一章", "0.xhtml#first", 0, listOf(second))
@@ -97,14 +117,12 @@ class EpubPaginationHostTest {
                 EpubBlock.Heading(3, "小节"), EpubBlock.Paragraph(listOf(EpubInline("小节正文"))),
             ), mapOf("first" to 0, "second" to 2, "nested" to 4))))
         val layout = measure(book, MEASURE_SLICE_NANOS).single()
-        assertEquals(3, layout.pages.size)
-        assertEquals(listOf(0, 2, 4), layout.pages.map { it.slices.first().row })
-        assertEquals(listOf("第一章", "第二章", "小节"), layout.pages.map { layout.rows[it.slices.first().row].chapterTitle })
-        for ((index, toc) in listOf(first, second, second.children.single()).withIndex()) {
-            assertEquals(index, layout.pageForToc(book, toc))
-            assertEquals(index..index, layout.sectionPages(index))
-            assertEquals(0f, layout.pages[index].slices.first().pageTop, 0f)
-            assertEquals(0, layout.pages[index].slices.first().start)
+        assertEquals(1, layout.pages.size)
+        assertEquals(listOf(0, 1, 2, 3, 4, 5), layout.pages.single().slices.map { it.row })
+        assertEquals(listOf(true, false, false, false, false, false), layout.rows.map { it.chapterStart })
+        for (toc in listOf(first, second, second.children.single())) {
+            assertEquals(0, layout.pageForToc(book, toc))
+            assertEquals(0..0, layout.sectionPages(0))
         }
     }
 

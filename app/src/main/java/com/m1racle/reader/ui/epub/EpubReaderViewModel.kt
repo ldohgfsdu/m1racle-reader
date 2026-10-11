@@ -81,6 +81,14 @@ class EpubReaderViewModel(
         }
     }
 
+    fun setEpubFontFamily(font: com.m1racle.reader.data.settings.EpubFontFamily) {
+        viewModelScope.launch { readerSettingsRepository.updateEpubFontFamily(font) }
+    }
+
+    fun setReadingMode(mode: com.m1racle.reader.data.settings.EpubReadingMode) {
+        viewModelScope.launch { readerSettingsRepository.updateEpubReadingMode(mode) }
+    }
+
     private val positionSaver = ReadingPositionSaver<EpubPosition>(viewModelScope) { position ->
         repository.updateEpubReadingPosition(
             id = documentId,

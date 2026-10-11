@@ -5,6 +5,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -99,6 +101,8 @@ class GlassMaterialSpec internal constructor(
     internal val renderState: GlassRenderState,
     internal val backdropLayer: GlassBackdropLayer,
     internal val exportsForSettingsCard: Boolean,
+    /** QA 档 3: run vibrancy before colorControls so compression is the last color step. */
+    val compressAfterVibrancy: Boolean = false,
 )
 
 @Immutable
@@ -111,6 +115,9 @@ private data class GlassRecipe(
     val darkTint: Color = Color(0xFF121212),
     val lightBrightness: Float = 0f,
     val darkBrightness: Float = 0f,
+    val lightContrast: Float = 1f,
+    val darkContrast: Float = 1f,
+    val compressAfterVibrancy: Boolean = false,
     val saturation: Float = 1f,
     val lightSurfaceAlpha: Float,
     val darkSurfaceAlpha: Float,
@@ -133,7 +140,11 @@ private data class GlassRecipe(
     val pressedLensAmount: Dp? = null,
     val pressedInnerShadow: Dp? = null,
     val pressedSurfaceAlpha: Float? = null,
+    val pressedDarkTint: Color? = null,
     val pressedHighlightAlpha: Float? = null,
+    /** Press boosts; production defaults. QA variant 2 overrides them. */
+    val pressedSurfaceAlphaBoost: Float = 0.04f,
+    val pressedHighlightAlphaBoost: Float = 0.10f,
     val lensEnabled: Boolean = false,
     val backdropLayer: GlassBackdropLayer = GlassBackdropLayer.Root,
     val exportsForSettingsCard: Boolean = false,
@@ -149,8 +160,7 @@ private data class GlassRecipe(
  * a separate platform window and cannot safely sample the app backdrop.
  */
 object GlassMaterialEngine {
-    private const val PressedSurfaceAlphaBoost = 0.04f
-    private const val PressedHighlightAlphaBoost = 0.10f
+    // Press boosts (production +0.04 surface / +0.10 rim) live on GlassRecipe.
     private const val LightPressedContentOverlayAlpha = 0.04f
     private const val DarkPressedContentOverlayAlpha = 0.05f
 
@@ -236,8 +246,15 @@ object GlassMaterialEngine {
         GlassMaterialRole.Dock to liquidRecipe(GlassMaterialRole.Dock).copy(pressedScale = 1f),
         GlassMaterialRole.Control to liquidRecipe(GlassMaterialRole.Control).copy(
             family = GlassOpticalFamily.INTERACTIVE,
+            pressedScale = 1.085f,
+            pressedSurfaceAlpha = 0.40f,
+            pressedDarkTint = Color(0xFFAAAAAA),
         ),
-        GlassMaterialRole.Capsule to liquidRecipe(GlassMaterialRole.Capsule),
+        GlassMaterialRole.Capsule to liquidRecipe(GlassMaterialRole.Capsule).copy(
+            pressedScale = 1.075f,
+            pressedSurfaceAlpha = 0.40f,
+            pressedDarkTint = Color(0xFFAAAAAA),
+        ),
         GlassMaterialRole.SelectionLens to liquidRecipe(GlassMaterialRole.SelectionLens).copy(
             lensEnabled = true,
             pressedScale = 1f, // Dock owns the pickup transform, including drag preview.
@@ -269,6 +286,7 @@ object GlassMaterialEngine {
         dark: Boolean,
         pressed: Boolean = false,
         interaction: Boolean = false,
+        qa: QaGlassSelection = QaGlass.selection,
     ): GlassMaterialSpec = resolve(
         role = role,
         environment = GlassEnvironment.app(dark),
@@ -278,6 +296,7 @@ object GlassMaterialEngine {
             interaction -> GlassInteractionState.EXPANDED
             else -> GlassInteractionState.IDLE
         },
+        qa = qa,
     )
 
     fun resolve(
@@ -285,8 +304,11 @@ object GlassMaterialEngine {
         environment: GlassEnvironment,
         capability: GlassCapability = GlassCapability.FULL_OPTICAL,
         interaction: GlassInteractionState = GlassInteractionState.IDLE,
+        qa: QaGlassSelection = QaGlass.selection,
     ): GlassMaterialSpec {
+        // QA-only experiment; BASELINE (and every non-qa build) returns null here.
         val roleRecipe = checkNotNull(recipes[role]) { "Missing glass recipe for $role" }
+            .withQaOverride(qaGlassOverride(role, qa))
         val recipe = if (capability == GlassCapability.SOLID_FALLBACK &&
             roleRecipe.family != GlassOpticalFamily.FALLBACK
         ) {
@@ -300,6 +322,8 @@ object GlassMaterialEngine {
                 highlightWidth = plate.highlightWidth,
                 lightHighlightAlpha = plate.lightHighlightAlpha,
                 darkHighlightAlpha = plate.darkHighlightAlpha,
+                pressedSurfaceAlpha = null,
+                pressedDarkTint = null,
             )
         } else {
             roleRecipe
@@ -309,11 +333,11 @@ object GlassMaterialEngine {
             interaction == GlassInteractionState.DRAGGING
         val idleSurfaceAlpha = if (dark) recipe.darkSurfaceAlpha else recipe.lightSurfaceAlpha
         val surfaceAlpha = if (pressed) {
-            recipe.pressedSurfaceAlpha ?: (idleSurfaceAlpha + PressedSurfaceAlphaBoost)
+            recipe.pressedSurfaceAlpha ?: (idleSurfaceAlpha + recipe.pressedSurfaceAlphaBoost)
         } else {
             idleSurfaceAlpha
         }
-        val highlightBoost = if (pressed && recipe.highlightWidth > 0.dp) PressedHighlightAlphaBoost else 0f
+        val highlightBoost = if (pressed && recipe.highlightWidth > 0.dp) recipe.pressedHighlightAlphaBoost else 0f
         val highlightAlpha = if (pressed && recipe.pressedHighlightAlpha != null) recipe.pressedHighlightAlpha else (
             if (dark) recipe.darkHighlightAlpha else recipe.lightHighlightAlpha
             ) + highlightBoost
@@ -323,7 +347,9 @@ object GlassMaterialEngine {
         val blur = if (capability == GlassCapability.SOLID_FALLBACK) 0.dp else recipe.blur
         return GlassMaterialSpec(
             family = recipe.family,
-            surfaceColor = (if (dark) recipe.darkTint else recipe.lightTint).copy(
+            surfaceColor = (if (dark) {
+                if (pressed) recipe.pressedDarkTint ?: recipe.darkTint else recipe.darkTint
+            } else recipe.lightTint).copy(
                 alpha = surfaceAlpha.coerceIn(0f, 0.98f),
             ),
             blur = blur,
@@ -351,7 +377,7 @@ object GlassMaterialEngine {
                 mutedAlpha = muted,
             ),
             brightness = brightness,
-            contrast = 1f,
+            contrast = if (dark) recipe.darkContrast else recipe.lightContrast,
             saturation = recipe.saturation,
             depthEffect = recipe.depthEffect && lensOn,
             scale = if (pressed) recipe.pressedScale else 1f,
@@ -379,9 +405,36 @@ object GlassMaterialEngine {
             },
             backdropLayer = recipe.backdropLayer,
             exportsForSettingsCard = recipe.exportsForSettingsCard,
+            compressAfterVibrancy = recipe.compressAfterVibrancy,
         )
     }
 }
+
+private fun GlassRecipe.withQaOverride(o: QaGlassOverride?): GlassRecipe = if (o == null) this else copy(
+    lightTint = o.lightTint ?: lightTint,
+    lightSurfaceAlpha = o.lightAlpha ?: lightSurfaceAlpha,
+    darkTint = o.darkTint ?: darkTint,
+    darkSurfaceAlpha = o.darkAlpha ?: darkSurfaceAlpha,
+    blur = o.blur ?: blur,
+    highlightWidth = o.highlightWidth ?: highlightWidth,
+    lightHighlightAlpha = o.lightHighlightAlpha ?: lightHighlightAlpha,
+    darkHighlightAlpha = o.darkHighlightAlpha ?: darkHighlightAlpha,
+    shadow = o.shadow ?: shadow,
+    lightShadowAlpha = o.lightShadowAlpha ?: lightShadowAlpha,
+    darkShadowAlpha = o.darkShadowAlpha ?: darkShadowAlpha,
+    pressedSurfaceAlpha = if (o.clearPressedTint) null else pressedSurfaceAlpha,
+    pressedDarkTint = if (o.clearPressedTint) null else pressedDarkTint,
+    pressedScale = o.pressedScale ?: pressedScale,
+    pressedSurfaceAlphaBoost = o.pressedSurfaceAlphaBoost ?: pressedSurfaceAlphaBoost,
+    pressedHighlightAlphaBoost = o.pressedHighlightAlphaBoost ?: pressedHighlightAlphaBoost,
+    lightBrightness = o.lightBrightness ?: lightBrightness,
+    darkBrightness = o.darkBrightness ?: darkBrightness,
+    lightContrast = o.lightContrast ?: lightContrast,
+    darkContrast = o.darkContrast ?: darkContrast,
+    lightContentMutedAlpha = o.mutedAlpha ?: lightContentMutedAlpha,
+    darkContentMutedAlpha = o.mutedAlpha ?: darkContentMutedAlpha,
+    compressAfterVibrancy = o.compressAfterVibrancy ?: compressAfterVibrancy,
+)
 
 /** Theme-aware secondary content alpha from the selected material recipe. */
 @Composable
@@ -439,30 +492,44 @@ fun Modifier.glassMaterial(
     }
     // Stable endpoint specs prevent unrelated parent recompositions from
     // replacing the renderer's effect lambdas and invalidating its draw cache.
-    val idleSpec = remember(role, environment, capability, interactionState) {
+    // QA glass selection is a key so a QA switch re-resolves live; constant elsewhere.
+    val qa = QaGlass.selection
+    val idleSpec = remember(role, environment, capability, interactionState, qa) {
         GlassMaterialEngine.resolve(
             role = role,
             environment = environment,
             capability = capability,
             interaction = interactionState,
+            qa = qa,
         )
     }
-    val pressedSpec = remember(role, environment, capability) {
+    val pressedSpec = remember(role, environment, capability, qa) {
         GlassMaterialEngine.resolve(
             role = role,
             environment = environment,
             capability = capability,
             interaction = GlassInteractionState.PRESSED,
+            qa = qa,
         )
     }
+    val floatingControl = role == GlassMaterialRole.Control || role == GlassMaterialRole.Capsule
     val pressProgress = animateFloatAsState(
         targetValue = if (pressed) 1f else 0f,
-        animationSpec = GlassMaterialEngine.PressSpring,
+        animationSpec = when {
+            // QA variant 2: 120ms decelerate in, spring 0.7 / 500 out.
+            floatingControl && qa.coolapk -> if (pressed) {
+                tween(QaCoolapk.PressInMillis, easing = LinearOutSlowInEasing)
+            } else {
+                spring(QaCoolapk.ReleaseDampingRatio, QaCoolapk.ReleaseStiffness, .001f)
+            }
+            floatingControl -> spring(dampingRatio = .55f, stiffness = 450f, visibilityThreshold = .001f)
+            else -> GlassMaterialEngine.PressSpring
+        },
         label = "glassMaterialPress",
     )
     // Reading the progress here keeps the temporary scale layer alive through
     // the release spring. It does not replace the remembered effect modifier.
-    val pressLayerActive = pressed || pressProgress.value > 0.001f
+    val pressLayerActive = pressed || kotlin.math.abs(pressProgress.value) > 0.001f
     val canSample = sampleBackdrop &&
         host != null &&
         capability != GlassCapability.SOLID_FALLBACK
@@ -520,7 +587,8 @@ private fun softGlassPlate(
 ) {
     val scaleModifier = if (pressLayerActive) {
         Modifier.graphicsLayer {
-            val progress = pressProgress.value.coerceIn(0f, 1f)
+            val progress = if (pressedSpec.scale > idleSpec.scale)
+                pressProgress.value.coerceIn(-.3f, 1.3f) else pressProgress.value.coerceIn(0f, 1f)
             val scale = idleSpec.scale + (pressedSpec.scale - idleSpec.scale) * progress
             scaleX = scale
             scaleY = scale
@@ -612,18 +680,23 @@ private fun drawGlassMaterial(
             effects = {
                 // Kyant LiquidBottomTabs does not lift, crush, or oversaturate
                 // the sampled backdrop. Skip identity colorControls.
-                if (idleSpec.brightness != 0f ||
-                    idleSpec.contrast != 1f ||
-                    idleSpec.saturation != 1f
-                ) {
-                    colorControls(
+                val colorStep = glassColorStep(idleSpec)
+                // QA 档 3 (spec §3.1): vibrancy first, compression last, so the
+                // backdrop always ends inside the compressed luminance band.
+                if (idleSpec.compressAfterVibrancy) {
+                    if (idleSpec.vibrancy) vibrancy()
+                    if (colorStep) colorControls(
                         brightness = idleSpec.brightness,
                         contrast = idleSpec.contrast,
                         saturation = idleSpec.saturation,
                     )
-                }
-                if (idleSpec.vibrancy) {
-                    vibrancy()
+                } else {
+                    if (colorStep) colorControls(
+                        brightness = idleSpec.brightness,
+                        contrast = idleSpec.contrast,
+                        saturation = idleSpec.saturation,
+                    )
+                    if (idleSpec.vibrancy) vibrancy()
                 }
                 if (prefilterBlurPx > 0f) blur(prefilterBlurPx)
                 blur(blurPx)
@@ -646,7 +719,8 @@ private fun drawGlassMaterial(
             layerBlock = if (pressLayerActive || layerBlock != null) {
                 {
                     layerBlock?.invoke(this)
-                    val progress = pressProgress.value.coerceIn(0f, 1f)
+                    val progress = if (pressedSpec.scale > idleSpec.scale)
+                        pressProgress.value.coerceIn(-.3f, 1.3f) else pressProgress.value.coerceIn(0f, 1f)
                     val scale = idleSpec.scale +
                         (pressedSpec.scale - idleSpec.scale) * progress
                     scaleX *= scale
@@ -689,6 +763,17 @@ private fun drawGlassMaterial(
         )
     }
     return modifier.then(resourceModifier)
+}
+
+/** Whether colorControls runs; identity brightness / contrast / saturation is skipped. */
+internal fun glassColorStep(spec: GlassMaterialSpec): Boolean =
+    spec.brightness != 0f || spec.contrast != 1f || spec.saturation != 1f
+
+/** Effect order the renderer uses, for tests: "vibrancy" / "colorControls". */
+internal fun glassColorEffectOrder(spec: GlassMaterialSpec): List<String> {
+    val v = if (spec.vibrancy) listOf("vibrancy") else emptyList()
+    val c = if (glassColorStep(spec)) listOf("colorControls") else emptyList()
+    return if (spec.compressAfterVibrancy) v + c else c + v
 }
 
 /** Lens supports Compose corner shapes and Kyant's rounded rectangle only. */

@@ -548,7 +548,7 @@ private class RecordingDocumentDao : DocumentDao {
         lastScrollIndex: Int,
         lastScrollOffset: Int,
         readingProgress: Float,
-        readingAnchor: String,
+        readingAnchor: String?,
     ) = Unit
     override suspend fun updatePdfReadingPosition(
         id: String,

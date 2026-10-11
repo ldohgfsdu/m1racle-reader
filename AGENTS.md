@@ -1,5 +1,7 @@
 # M1racle Reader
 
+2026-10-09用户明确要求实现全部积压清单，当前范围以[全清单授权与验收](docs/FULL_BACKLOG_20261009.md)为补充；以下旧范围的Markdown编辑/更多阅读方式限制不阻止本轮已授权工作。
+
 Android 本地优先文档阅读器：Markdown + PDF。
 
 ## Scope

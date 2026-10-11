@@ -111,26 +111,30 @@ class ContentIdentityResolverTest {
         }
     }
 
+    /**
+     * Null-hash rows are frozen historical rows: the resolver must not reuse
+     * them and must not re-hash their sources on every import. Reclaiming them
+     * is LegacyContentHashMigrationV1's job, which runs once.
+     */
     @Test
-    fun nullHashDocument_withSameBytesAtDifferentUri_isVerifiedAndReused() = runBlocking {
+    fun nullHashDocument_isInvisibleToResolveAndIsNotByteProbed() = runBlocking {
         val bytes = "legacy content".toByteArray()
         val oldUri = Uri.parse("content://provider/original/legacy.md")
         val newUri = Uri.parse("content://provider/renamed/legacy-copy.md")
+        var sourceOpens = 0
         val resolver = resolver(
             dao = ResolverDocumentDao(
                 listOf(
                     document("legacy-null", null).copy(
                         uri = oldUri.toString(),
                         // Stored provider metadata is not content identity.
-                        fileSize = 1L,
+                        fileSize = bytes.size.toLong(),
                     ),
                 ),
             ),
             openSource = { uri ->
-                when (uri) {
-                    oldUri, newUri -> ByteArrayInputStream(bytes)
-                    else -> null
-                }
+                sourceOpens += 1
+                if (uri == newUri) ByteArrayInputStream(bytes) else null
             },
         )
 
@@ -138,42 +142,8 @@ class ContentIdentityResolverTest {
             input(newUri, "legacy-copy.md", bytes.size.toLong()),
         ).resolved()
         try {
-            val decision = resolved.decision as ContentIdentityDecision.ExistingDocumentFound
-            assertEquals("legacy-null", decision.document.id)
-        } finally {
-            resolved.close()
-        }
-    }
-
-    @Test
-    fun nullHashDocument_withDifferentBytes_isNotReused() = runBlocking {
-        val incoming = "incoming content".toByteArray()
-        val legacy = "different legacy".toByteArray()
-        val oldUri = Uri.parse("content://provider/original/legacy.md")
-        val newUri = Uri.parse("content://provider/renamed/legacy-copy.md")
-        val resolver = resolver(
-            dao = ResolverDocumentDao(
-                listOf(
-                    document("legacy-null", null).copy(
-                        uri = oldUri.toString(),
-                        fileSize = incoming.size.toLong(),
-                    ),
-                ),
-            ),
-            openSource = { uri ->
-                when (uri) {
-                    oldUri -> ByteArrayInputStream(legacy)
-                    newUri -> ByteArrayInputStream(incoming)
-                    else -> null
-                }
-            },
-        )
-
-        val resolved = resolver.resolve(
-            input(newUri, "legacy-copy.md", incoming.size.toLong()),
-        ).resolved()
-        try {
             assertTrue(resolved.decision is ContentIdentityDecision.NoExistingDocument)
+            assertEquals("only the incoming source may be read", 1, sourceOpens)
         } finally {
             resolved.close()
         }
@@ -363,7 +333,7 @@ private class ResolverDocumentDao(
         lastScrollIndex: Int,
         lastScrollOffset: Int,
         readingProgress: Float,
-        readingAnchor: String,
+        readingAnchor: String?,
     ) = Unit
     override suspend fun updatePdfReadingPosition(
         id: String,

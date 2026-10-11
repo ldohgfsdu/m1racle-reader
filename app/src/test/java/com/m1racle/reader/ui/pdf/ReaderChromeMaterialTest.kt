@@ -49,8 +49,8 @@ class ReaderChromeMaterialTest {
         val settings = GlassMaterialEngine.resolve(GlassMaterialRole.SettingsCard, dark = false)
         val dialog = GlassMaterialEngine.resolve(GlassMaterialRole.Dialog, dark = false)
 
-        assertEquals(0.60f, control.surfaceColor.alpha, 0.01f)
-        assertEquals(0.60f, capsule.surfaceColor.alpha, 0.01f)
+        assertEquals(0.32f, control.surfaceColor.alpha, 0.01f)
+        assertEquals(0.32f, capsule.surfaceColor.alpha, 0.01f)
         assertEquals(0.90f, menu.surfaceColor.alpha, 0.01f)
         assertEquals(0.60f, settings.surfaceColor.alpha, 0.01f)
         assertEquals(0.97f, dialog.surfaceColor.alpha, 0.01f)
@@ -63,8 +63,8 @@ class ReaderChromeMaterialTest {
     @Test
     fun `night frost remains translucent and uses one palette`() {
         val expected = mapOf(
-            GlassMaterialRole.Control to (0.64f to 0.60f),
-            GlassMaterialRole.Capsule to (0.64f to 0.60f),
+            GlassMaterialRole.Control to (0.22f to 0.60f),
+            GlassMaterialRole.Capsule to (0.22f to 0.60f),
             GlassMaterialRole.ExpandedMenu to (0.90f to 0.60f),
             GlassMaterialRole.SettingsCard to (0.64f to 0.60f),
             GlassMaterialRole.Dialog to (0.97f to 0.38f),
@@ -152,10 +152,11 @@ class ReaderChromeMaterialTest {
         assertTrue(start >= 0 && end > start)
         val capsule = screen.substring(start, end)
         val headerIdx = capsule.indexOf(".height(44.dp)")
-        val clickableIdx = capsule.indexOf("clickable(")
+        val clickableIdx = capsule.indexOf("combinedClickable(")
         assertTrue(headerIdx >= 0)
         assertTrue(clickableIdx > headerIdx)
-        assertFalse(capsule.substring(0, headerIdx).contains("clickable("))
+        assertFalse(capsule.substring(0, headerIdx).contains("combinedClickable("))
+        assertTrue(capsule.contains("onLongClick = onLongClick"))
         assertTrue(capsule.contains("indication = null"))
         assertTrue(capsule.contains("capsuleLocalPressHighlight"))
     }

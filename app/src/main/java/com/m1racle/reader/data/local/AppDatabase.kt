@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SearchIndexEntity::class,
         DocumentAliasEntity::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -410,6 +410,11 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        internal const val MIGRATION_15_16_HIGHLIGHT_STYLE_SQL = "ALTER TABLE highlights ADD COLUMN style TEXT NOT NULL DEFAULT 'Yellow'"
+        val MIGRATION_15_16: Migration = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) { db.execSQL(MIGRATION_15_16_HIGHLIGHT_STYLE_SQL) }
+        }
+
         val MIGRATION_12_13: Migration = object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(MIGRATION_12_13_CREATE_ALIASES_SQL)
@@ -550,6 +555,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_12_13,
                         MIGRATION_13_14,
                         MIGRATION_14_15,
+                        MIGRATION_15_16,
                     )
                     .build()
                     .also { instance = it }

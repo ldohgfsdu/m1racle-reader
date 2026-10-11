@@ -51,6 +51,8 @@ class MainActivity : ComponentActivity() {
         applyEdgeToEdge()
         requestHighestRefreshRate()
         ReaderPerformanceExperiments.configure(intent)
+        // QA build only; a no-op elsewhere.
+        com.m1racle.reader.ui.material.QaGlass.load(this)
 
         val app = application as M1racleReaderApplication
         val coordinator = app.externalOpenCoordinator

@@ -7,6 +7,17 @@ import androidx.compose.foundation.text.ClickableText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -35,6 +46,7 @@ fun InlineMarkdownText(
     strongColor: Color? = null,
     onLinkClick: ((String) -> Unit)? = null,
     searchRanges: List<SearchHighlightRange> = BlockSearchHighlights.EmptyRanges,
+    annotationOffset: Int? = null,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val codeSize = ReaderTypography.inlineCodeFontSize.scaled(settings.fontScale)
@@ -75,7 +87,7 @@ fun InlineMarkdownText(
     } else {
         null
     }
-    val annotated = if (!hasSearch) {
+    val searched = if (!hasSearch) {
         baseAnnotated
     } else {
         val withNormals = remember(baseAnnotated, normalKey, normalHl) {
@@ -99,9 +111,13 @@ fun InlineMarkdownText(
             }
         }
     }
-    val resolvedStyle = remember(style) {
+    val selection = rememberMarkdownSelectedText(searched, annotationOffset ?: LocalMarkdownInlineOffset.current)
+    val annotated = selection.text
+    val selectionModifier = selection.modifier
+    val importedFont = com.m1racle.reader.ui.components.LocalReaderImportedFont.current
+    val resolvedStyle = remember(style, importedFont) {
         style.copy(
-            fontFamily = style.fontFamily ?: FontFamily.Default,
+            fontFamily = importedFont ?: style.fontFamily ?: FontFamily.Default,
             fontWeight = style.fontWeight ?: FontWeight.Normal,
         )
     }
@@ -119,7 +135,8 @@ fun InlineMarkdownText(
             ClickableText(
                 text = annotated,
                 style = resolvedStyle,
-                modifier = modifier,
+                modifier = modifier.then(selectionModifier),
+                onTextLayout = selection.layout,
                 onClick = { offset ->
                     annotated.getStringAnnotations(
                         tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
@@ -132,7 +149,8 @@ fun InlineMarkdownText(
             Text(
                 text = annotated,
                 style = resolvedStyle,
-                modifier = modifier,
+                modifier = modifier.then(selectionModifier),
+                onTextLayout = selection.layout,
             )
         }
     }
