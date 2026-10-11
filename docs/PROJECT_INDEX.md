@@ -22,6 +22,8 @@
 | 主题 | 文件 |
 |---|---|
 | 本机开发环境与最新工作树备份 | [环境修复说明](../../环境修复说明-20261003.md)；工作区根目录 `Reader构建.cmd` |
+| 本机入口等价关系（2026-10-11 标注） | `Reader构建.cmd` ≡ `reader-build-local.ps1`；`Reader模拟调试.cmd` ≡ `reader-emulator-local.ps1`（两者均为参数透传的薄包装） |
+| QA 连接测试唯一入口 | `scripts/run-qa-connected-tests.ps1`：先调用 `reader-emulator-local.ps1` 完成设备准备与 QA 构建，再执行 `:app:connectedQaAndroidTest` |
 | Dock 拖动跟手与弹性形变 | 当前 [54版弹性与回弹](DOCK_ELASTIC_20261008.md)；[53版直接跟手](DOCK_DIRECT_DRAG_20261008.md) |
 | 酷安底栏真实参考数据 | [真机尺寸、按压/拖动录屏与帧统计](COOLAPK_DOCK_CAPTURE_20261008.md) |
 | 酷安玻璃复刻 | [底栏、阅读控件与独立动作反馈实现及验证](COOLAPK_GLASS_REPLICA_20261008.md) |
