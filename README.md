@@ -63,6 +63,8 @@
 - **选字与标注** — 文字复制、高亮、笔记，以及有限的正文编辑能力。
 - **本地处理** — 创建、合并、加密 PDF，导出章节或带标注的 PDF，并将可提取的文字转为 Markdown。
 
+**自主实现的阅读层**：项目自行实现连续页面布局与视口坐标、缩放焦点与拖动边界、高清瓦片调度和缓存、阅读位置与书签恢复。底图与细节瓦片分层显示，调度优先覆盖当前阅读区域；文档切换或视口变化后，过期渲染结果会被校验拦截。底层页面绘制使用 Android `PdfRenderer`，文本、大纲及文档处理使用 PDFBox Android。具体分工见 [PDF 子系统](docs/code-wiki/06-pdf.md)。
+
 > PDF 转 Markdown 不包含 OCR，也不保留复杂版式；正文编辑是有限能力。文档工具及完整操作流程的验收边界见[功能验收矩阵](docs/STABILIZATION_20261013.md#核心功能验收矩阵)。
 
 ### EPUB：本地书籍与阅读排版
@@ -125,7 +127,8 @@
 | 状态与异步 | ViewModel · Kotlin Coroutines · Flow |
 | 本地数据 | Room · DataStore · Android Storage Access Framework |
 | Markdown | 块与行内解析、文本投影、代码高亮、表格和本地图加载 |
-| PDF | Android `PdfRenderer` 页面与图块渲染 · PDFBox Android 文字、标注与文档工具 |
+| PDF 阅读层 | 自主实现连续视口、页面几何、缩放与拖动控制、瓦片调度与缓存、位置恢复 |
+| PDF 底层能力 | Android `PdfRenderer` 页面与图块绘制 · PDFBox Android 文本、大纲与文档处理 |
 | EPUB | 原生文本排版与分页 · 私有字体库 · PageCurl 卷页组件 |
 | 玻璃材质 | Kyant Backdrop / AndroidLiquidGlass · 统一材质与动效参数 |
 | 验证 | JVM 单测 · Robolectric · Android 仪器测试 · Macrobenchmark 模块 |
