@@ -1,6 +1,6 @@
 # 功能分层与验证入口
 
-当前交付版本、摘要和真机结论只看[CURRENT_STATUS.md](CURRENT_STATUS.md)；本轮各项证据看[FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md)。本表说明职责，不代表所有新功能已经验收。
+当前交付版本、摘要和真机结论只看[CURRENT_STATUS.md](CURRENT_STATUS.md)；本轮证据见[稳定性矩阵](STABILIZATION_20261013.md)，授权范围见[FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md)。本表说明职责，不代表所有新功能已经验收。
 
 | 层级 | 职责与唯一状态 | 实际入口 |
 |---|---|---|
@@ -20,15 +20,16 @@
 
 ## 开发与发布
 
-Windows 本机统一入口 `scripts/verify-reader.ps1`，复用仓库外已配置的运行环境和正式签名注入，不复制签名材料。
+Windows 统一入口 `scripts/verify-reader.ps1`，直接执行仓库 Gradle Wrapper。调用前配置 JDK 17、Android SDK；Release 由调用方安全注入四项签名环境变量。独立 clone 不再依赖仓库外 helper，也不读取签名秘密文件。
 
 | 模式 | 使用时机 | 检查 |
 |---|---|---|
 | `-Mode Reading` | 阅读定位、标注、顶栏和进度的小改动 | 对应快速回归；不能替代发布门禁 |
-| `-Mode Full` | 跨层变更、迁移或真机测试准备 | 全量 QA 单测、Release Lint、隔离 QA 及设备测试包 |
-| `-Mode Release` | 全部实现已冻结、真机场景已通过 | 全量 QA 单测、Release Lint、正式签名/混淆构建；成功后自动导出并向唯一在线设备 Download 交付 |
+| `-Mode Full` | 跨层变更或迁移 | 全量 QA / Release 单测、Release Lint；不构建 APK |
+| `-Mode Full -PrepareDeviceTests` | 确需隔离设备测试 | Full 检查 + QA 应用和 instrumentation 包 |
+| `-Mode Release` | 全部实现已冻结、相应场景已通过 | Full 检查 + 正式签名/混淆构建；核对 Outbox 后自动向唯一在线设备 Download 交付 |
 
-脚本将输出保存到工作区 `output/verification/`，遇到错误立即失败。单进程/单工作线程控制内存，同入口文件锁避免重复启动；编译期间冻结参与编译的源码。增量检查通过后，只有新变更或新问题才重复相应检查。
+脚本将输出保存到仓库 `output/verification/`，遇到错误立即失败。单进程/单工作线程控制内存，同入口文件锁避免重复启动；编译期间冻结参与编译的源码。可通过 `-GradleArguments` 数组传入本轮资源限制，不必改全仓默认 heap。增量检查通过后，只有新变更或新问题才重复相应检查。
 
 设备检查必须先确认 `adb devices` 状态，并核对 QA 包名 `com.m1racle.reader.qa`。生产包只允许 `install -r`，不卸载、不清库。仪器测试结果不能借用上一次 APK；迁移及所有新增 UI 必须分别记录实现、自动验证和真机验证。发布前仍需核对正式证书、16KiB 对齐、Manifest、版本、实际体积和构建/Outbox/设备三份摘要。
 

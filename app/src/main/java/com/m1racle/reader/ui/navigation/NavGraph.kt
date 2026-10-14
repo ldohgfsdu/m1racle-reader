@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -63,7 +64,6 @@ import com.m1racle.reader.ui.hub.HubTabTransitions
 import com.m1racle.reader.ui.hub.LibraryScreen
 import com.m1racle.reader.ui.hub.LibraryViewModel
 import com.m1racle.reader.ui.hub.HubSettingsScreen
-import com.m1racle.reader.ui.hub.QaGlassLabScreen
 import com.m1racle.reader.ui.pdf.PdfViewerScreen
 import com.m1racle.reader.ui.pdf.PdfViewerViewModel
 import com.m1racle.reader.ui.search.SearchScreen
@@ -87,7 +87,6 @@ object Routes {
     const val LIBRARY = "library"
     const val BOOKMARKS = "bookmarks"
     const val SETTINGS = "settings"
-    const val GLASS_LAB = "settings/glass-workbench"
     const val SEARCH = "search"
     const val DOCUMENT_TOOLS = "document-tools"
 
@@ -251,6 +250,7 @@ fun M1racleReaderNavGraph(
                 ) {
                     composable(Routes.HOME, enterTransition = hubEnter, exitTransition = hubExit) {
                         HomeScreen(
+                            modifier = Modifier.testTag("hub-page-home"),
                             viewModel = homeViewModel,
                             onImport = launchImport,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
@@ -268,6 +268,7 @@ fun M1racleReaderNavGraph(
                             factory = LibraryViewModel.Factory(repository),
                         )
                         LibraryScreen(
+                            modifier = Modifier.testTag("hub-page-library"),
                             viewModel = libraryViewModel,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onOpenDocument = { document ->
@@ -332,6 +333,7 @@ fun M1racleReaderNavGraph(
                         )
                         val scope = rememberCoroutineScope()
                         BookmarksScreen(
+                            modifier = Modifier.testTag("hub-page-bookmarks"),
                             viewModel = bookmarksViewModel,
                             onOpenDocument = { bookmark ->
                                 scope.launch {
@@ -355,18 +357,12 @@ fun M1racleReaderNavGraph(
 
                     composable(Routes.SETTINGS, enterTransition = hubEnter, exitTransition = hubExit) {
                         HubSettingsScreen(
-                            onOpenGlassLab = { navController.navigate(Routes.GLASS_LAB) { launchSingleTop = true } },
+                            modifier = Modifier.testTag("hub-page-settings"),
                             onOpenDocumentTools = { navController.navigate(Routes.DOCUMENT_TOOLS) },
                             onNavigateHub = { destination ->
                                 navController.navigateToHub(destination)
                             },
                         )
-                    }
-
-                    if (com.m1racle.reader.BuildConfig.QA_GLASS_VARIANTS_ENABLED) {
-                        composable(Routes.GLASS_LAB) {
-                            QaGlassLabScreen(onBack = { navController.popBackStack() })
-                        }
                     }
 
                     composable(Routes.DOCUMENT_TOOLS) {

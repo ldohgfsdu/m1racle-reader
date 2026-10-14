@@ -101,7 +101,15 @@ class HomeLayoutContractTest {
         assertTrue(row.contains("GlassCapability.SOLID_FALLBACK"))
         assertFalse(row.contains(".glassMaterial("))
         val dock = ProductionSource.text("com/m1racle/reader/ui/hub/GlassDock.kt")
-        assertTrue(dock.contains("Icons.Filled.Add"))
+        // The approved rounded plus is drawn once, with two strokes, rather
+        // than the previous Material icon. Keep its action and accessibility.
+        val importAction = dock.substring(dock.indexOf("private fun androidx.compose.foundation.layout.RowScope.DockImportAction("),
+            dock.indexOf("private fun DockTabVisual("))
+        assertTrue(importAction.contains("Canvas(Modifier.size(24.dp).semantics { contentDescription = description })"))
+        assertEquals(2, Regex("drawLine\\(").findAll(importAction).count())
+        assertEquals(2, Regex("cap = StrokeCap.Round").findAll(importAction).count())
+        assertTrue(importAction.contains("Role.Button, onClick = onClick"))
+        assertTrue(importAction.contains("clickable(enabled = enabled"))
         assertTrue(dock.contains("enabled = !importing"))
         assertTrue(home.contains("Button(onClick = onImport, enabled = !isImporting)"))
         assertFalse(home.contains("floatingActionButton ="))

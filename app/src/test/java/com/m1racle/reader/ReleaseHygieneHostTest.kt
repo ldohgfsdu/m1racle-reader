@@ -3,6 +3,7 @@ package com.m1racle.reader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.File
 
@@ -26,9 +27,12 @@ class ReleaseHygieneHostTest {
     }
 
     @Test
-    fun glassLabAvailableWithoutVariantGate() {
-        assertTrue(Class.forName("com.m1racle.reader.ui.hub.glasslab.GlassLabScreenKt")
-            .declaredMethods.any { it.name == "GlassLabScreen" })
+    fun cancelledGlassWorkbench_isAbsentFromEveryBuildType() {
+        for (type in listOf("GlassLabScreenKt", "GlassLabPreviewKt", "GlassLabParameters", "GlassLabShaderKt")) {
+            assertThrows(ClassNotFoundException::class.java) {
+                Class.forName("com.m1racle.reader.ui.hub.glasslab.$type")
+            }
+        }
         assertFalse(BuildConfig::class.java.declaredFields.any { it.name == "GLASS_LAB_ENABLED" })
     }
 

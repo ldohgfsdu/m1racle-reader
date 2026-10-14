@@ -19,7 +19,7 @@ class GlassAuthorityContractTest {
                     assertEquals(1f, spec.foreground.contentAlpha, 0f)
                     assertEquals(spec.foreground.mutedAlpha, spec.contentMutedAlpha, 0f)
                     assertTrue(spec.surfaceColor.alpha in 0f..1f)
-                    val expectLens = role in listOf(GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.SelectionLens, GlassMaterialRole.Dock, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard) &&
+                    val expectLens = role in listOf(GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.SelectionLens, GlassMaterialRole.DockLens, GlassMaterialRole.Dock, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard) &&
                         cap == GlassCapability.FULL_OPTICAL
                     assertEquals(expectLens, spec.lensEnabled)
                 }

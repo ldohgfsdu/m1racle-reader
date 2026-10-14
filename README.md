@@ -14,7 +14,7 @@
 
 - **不申请 `INTERNET` 权限**，不发起网络请求
 - **无账号、无广告、无统计 SDK、无云同步**
-- 文件仅在你主动通过系统选择器或系统「打开方式 / 分享」授权后可读
+- 常规导入通过系统选择器、系统「打开方式 / 分享」授权；共享存储扫描需用户在系统设置显式授予所有文件访问权限（MANAGE_EXTERNAL_STORAGE），不会进入其他应用私有目录
 - 删除「最近阅读」记录**永不删除你的源文件**；仅当记录对应的是 App 自管的私有副本（外部打开暂存的 `files/library`、`.zip` 包解压的 `files/packages`、EPUB 解压的 `files/epubs`）且无其他记录引用时，才会一并清理该副本
 
 ## 当前已支持
@@ -84,7 +84,7 @@ Windows 的 `local.properties` 使用属性文件转义，例如 `sdk.dir=C\:/An
 
 - **最低系统：** Android 12（API 31）
 - **包名：** `com.m1racle.reader`
-- Android Studio：打开仓库根目录 → Run `app`
+- Android Studio：打开仓库根目录，配置正式签名后选择 release；不以默认 Debug 代替用户交付
 
 ### arm64 本机构建说明
 
@@ -93,7 +93,7 @@ Windows / Linux x86_64 / macOS 默认使用 AGP 下载的原生 aapt2。只有 A
 
 ## 如何导入文档
 
-1. 打开 App → 点右下角 **导入** FAB；或从系统文件管理器 / 分享面板选择「M1racle Reader」打开。
+1. 打开 App → 点底栏中央 **导入** 加号；或从系统文件管理器 / 分享面板选择「M1racle Reader」打开。
 2. 选择 `.md` / `.markdown` / `.txt` / `.pdf` / `.epub` / `.zip` 文件。
 3. 导入成功后直接进入阅读页；返回主页可见「最近阅读」。
 
@@ -120,12 +120,13 @@ Windows / Linux x86_64 / macOS 默认使用 AGP 下载的原生 aapt2。只有 A
 - Navigation Compose · Room · DataStore
 - Coroutines / Flow · SAF
 - 自研 Markdown 块解析 / Inline / 轻量代码高亮 / 表格 / 本地图加载（含安全相对路径解析）
-- PDF：Android `PdfRenderer` 渲染 + Apache PDFBox（元数据/大纲）+ `backdrop` 液态玻璃 chrome
+- PDF：Android `PdfRenderer` 位图渲染 + PDFBox Android（文字/大纲、有限正文编辑、标注导出和文档工具）+ `backdrop` 液态玻璃 chrome
 - 测试：JVM 单测（Robolectric Compose 规则，QA 沙箱变体）+ 仪器测试 + Macrobenchmark 模块
 
 ## 文档
 
 - [产品 PRD](docs/PRD.md)
+- [Code Wiki](CODE_WIKI.md) · [构建与验证入口](docs/FEATURE_LAYERS_AND_VERIFICATION.md)
 - [验收清单 ACCEPTANCE](docs/ACCEPTANCE.md)
 - [测试样例](docs/sample-large.md)
 
@@ -133,7 +134,7 @@ Windows / Linux x86_64 / macOS 默认使用 AGP 下载的原生 aapt2。只有 A
 
 | 标记 | 含义 |
 |------|------|
-| **v1.0.0（侧载验收中）** | 当前侧载验收包 1.0.0 / versionCode 51；公开发布尚未进行，状态以 [CURRENT_STATUS](docs/CURRENT_STATUS.md) 为准；Android/Kotlin 身份为 `com.m1racle.reader` |
+| **v1.0.0（侧载验收中）** | 候选版本、摘要和验收结论以 [CURRENT_STATUS](docs/CURRENT_STATUS.md) 为准；Android/Kotlin 身份为 `com.m1racle.reader` |
 | **v0.1.0** | 本地 Markdown + PDF 阅读功能完整、可日常使用；编辑、同步、正文全文索引等明确不做 |
 | release APK | minify+shrink；仅接受环境注入的独立 release signer，无 debug fallback |
 

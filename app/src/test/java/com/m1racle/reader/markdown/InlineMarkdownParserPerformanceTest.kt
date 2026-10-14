@@ -1,9 +1,11 @@
 package com.m1racle.reader.markdown
 
 import androidx.compose.ui.text.AnnotatedString
+import com.m1racle.reader.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -15,6 +17,8 @@ import java.nio.file.Paths
  * first-entry paragraph rendering — not a reimplementation of the parser.
  */
 class InlineMarkdownParserPerformanceTest {
+    private val recordsDiagnostics = BuildConfig.BUILD_TYPE == "qa"
+    private fun recorded(count: Long): Long = if (recordsDiagnostics) count else 0L
 
     @Before
     fun resetCounters() {
@@ -46,8 +50,8 @@ class InlineMarkdownParserPerformanceTest {
         assertEquals(plain, result.text)
         assertTrue(result.spanStyles.isEmpty())
         val snap = MarkdownPerformance.snapshot()
-        assertEquals(1, snap.inlineParseCount)
-        assertEquals(1, snap.inlineParseFastPathCount)
+        assertEquals(recorded(1), snap.inlineParseCount)
+        assertEquals(recorded(1), snap.inlineParseFastPathCount)
     }
 
     @Test
@@ -63,7 +67,7 @@ class InlineMarkdownParserPerformanceTest {
             ).isNotEmpty(),
         )
         val snap = MarkdownPerformance.snapshot()
-        assertEquals(1, snap.inlineParseCount)
+        assertEquals(recorded(1), snap.inlineParseCount)
         assertEquals(0, snap.inlineParseFastPathCount)
     }
 
@@ -104,8 +108,8 @@ class InlineMarkdownParserPerformanceTest {
         }
         val snap = MarkdownPerformance.snapshot()
         assertTrue("plain body should dominate first-entry text", plainParses > markupParses)
-        assertTrue(snap.inlineParseFastPathCount > 0)
-        assertEquals(snap.inlineParseCount, snap.inlineParseFastPathCount + (snap.inlineParseCount - snap.inlineParseFastPathCount))
+        assertEquals(recorded(plainParses.toLong()), snap.inlineParseFastPathCount)
+        assertEquals(recorded((plainParses + markupParses).toLong()), snap.inlineParseCount)
         // Paragraph + heading text work is the dominant population for this fixture.
         val contentBlocks = (typeCounts["paragraph"] ?: 0) + (typeCounts["heading"] ?: 0)
         assertTrue(contentBlocks > (typeCounts["table"] ?: 0) * 10)
@@ -130,13 +134,21 @@ class InlineMarkdownParserPerformanceTest {
             }
         }
         val snap = MarkdownPerformance.snapshot()
-        assertEquals(2, snap.blockCompose.first { it.type == "paragraph" }.count)
-        assertEquals(1, snap.blockCompose.first { it.type == "heading" }.count)
-        assertEquals(1, snap.blockCompose.first { it.type == "table" }.count)
-        assertNotNull(snap.dominantBlockType())
+        assertEquals(recorded(23), snap.inlineParseCount)
         val summary = MarkdownPerformance.formatBlockComposeSummary()
-        assertTrue(summary.contains("dominant="))
-        assertTrue(summary.contains("paragraph:"))
+        if (recordsDiagnostics) {
+            assertEquals(2, snap.blockCompose.first { it.type == "paragraph" }.count)
+            assertEquals(1, snap.blockCompose.first { it.type == "heading" }.count)
+            assertEquals(1, snap.blockCompose.first { it.type == "table" }.count)
+            assertNotNull(snap.dominantBlockType())
+            assertTrue(summary.contains("dominant="))
+            assertTrue(summary.contains("paragraph:"))
+        } else {
+            assertTrue(snap.blockCompose.isEmpty())
+            assertNull(snap.dominantBlockType())
+            assertTrue(summary.contains("dominant=null"))
+            assertTrue(summary.contains("blocks=[]"))
+        }
     }
 
     private fun loadPlainFixture(): String {

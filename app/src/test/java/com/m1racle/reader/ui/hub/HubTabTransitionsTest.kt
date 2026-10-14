@@ -37,7 +37,7 @@ class HubTabTransitionsTest {
         val text = source.readText()
         assertTrue(text.contains("SlideFraction = 0.08f"))
         assertTrue(text.contains("M1racleMotion.NormalMs"))
-        assertTrue(text.contains("M1racleMotion.FastMs"))
+        assertTrue(text.contains("M1racleMotion.SlowMs"))
         assertTrue(text.contains("M1racleMotion.easeOut"))
         assertTrue(text.contains("M1racleMotion.easeIn"))
         assertFalse(text.contains("spring("))

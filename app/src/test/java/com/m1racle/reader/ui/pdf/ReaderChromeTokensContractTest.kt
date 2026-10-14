@@ -27,7 +27,7 @@ class ReaderChromeTokensContractTest {
 
     @Test
     fun `every product role has a complete bounded recipe`() {
-        assertEquals(9, GlassMaterialRole.entries.size)
+        assertEquals(10, GlassMaterialRole.entries.size)
         assertFalse(GlassMaterialRole.entries.any { it.name.startsWith("Preview") })
         GlassMaterialRole.entries.forEach { role ->
             listOf(false, true).forEach { dark ->
@@ -37,16 +37,16 @@ class ReaderChromeTokensContractTest {
                 assertEquals(spec.contentMutedAlpha, spec.foreground.mutedAlpha, 0f)
                 val expectedBlur = when (role) {
                     GlassMaterialRole.Dock -> 4f
-                    GlassMaterialRole.SelectionLens -> 0f
+                    GlassMaterialRole.SelectionLens, GlassMaterialRole.DockLens -> 0f
                     GlassMaterialRole.ExpandedMenu -> 24f
                     GlassMaterialRole.Dialog -> 18f
-                    GlassMaterialRole.ProgressiveChrome -> 16f
+                    GlassMaterialRole.ProgressiveChrome -> 24f
                     else -> 4f
                 }
                 assertEquals("$role blur", expectedBlur, spec.blur.value, 0f)
                 val expectedShadow = when (role) {
                     GlassMaterialRole.Dock -> 8f
-                    GlassMaterialRole.SelectionLens, GlassMaterialRole.ProgressiveChrome -> 0f
+                    GlassMaterialRole.SelectionLens, GlassMaterialRole.DockLens, GlassMaterialRole.ProgressiveChrome -> 0f
                     GlassMaterialRole.Dialog -> 18f
                     else -> 8f
                 }
@@ -58,9 +58,9 @@ class ReaderChromeTokensContractTest {
                 }
                 assertEquals(expectedHighlightW, spec.highlightWidth.value, 0.001f)
                 val expectedHighlightA = when (role) {
-                    // User requested the current PDF control recipe on 2026-10-11.
-                    GlassMaterialRole.Dock -> 0.60f
-                    GlassMaterialRole.SelectionLens -> 0f
+                    // The new day/night Dock reference owns its actual rail contour.
+                    GlassMaterialRole.Dock -> if (dark) 0.60f else 0.90f
+                    GlassMaterialRole.SelectionLens, GlassMaterialRole.DockLens -> 0f
                     GlassMaterialRole.Dialog -> if (dark) 0.38f else 0.30f
 
                     GlassMaterialRole.ProgressiveChrome -> 0f

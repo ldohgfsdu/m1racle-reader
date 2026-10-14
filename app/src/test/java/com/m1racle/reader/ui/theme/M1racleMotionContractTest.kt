@@ -14,7 +14,7 @@ class M1racleMotionContractTest {
         val motion = source("ui/hub/HubTabTransitions.kt")
         val nav = source("ui/navigation/NavGraph.kt")
         assertTrue(motion.contains("M1racleMotion.NormalMs"))
-        assertTrue(motion.contains("M1racleMotion.FastMs"))
+        assertTrue(motion.contains("M1racleMotion.SlowMs"))
         assertTrue(nav.contains("HubTabTransitions.enter"))
         assertTrue(nav.contains("HubTabTransitions.exit"))
         assertFalse(motion.contains("spring("))
@@ -53,7 +53,7 @@ class M1racleMotionContractTest {
         val home = source("ui/home/HomeScreen.kt")
         val dock = source("ui/hub/GlassDock.kt")
 
-        assertTrue(dock.contains("if (index == 2) DockImportAction(onImportDocument, enabled = !importing)"))
+        assertTrue(dock.contains("if (index == 2) DockImportAction(onImportDocument, enabled = !importing, backdrop = importBackdrop)"))
         assertTrue(dock.contains("enabled = !importing"))
         // QA adds its own press recipe; production retains its scale and spring.
         assertTrue(dock.contains("if (pressed) (if (coolapk) QaCoolapk.ImportPressScale else 1.085f) else 1f"))

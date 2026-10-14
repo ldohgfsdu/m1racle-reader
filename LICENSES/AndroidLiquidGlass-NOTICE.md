@@ -3,7 +3,7 @@
 Upstream: https://github.com/Kyant0/AndroidLiquidGlass
 Copyright 2025 Kyant. License: Apache-2.0 (see Apache-2.0.txt).
 
-The app directly links io.github.kyant0:backdrop:2.0.0. The upstream library supplies backdrop recording, blur and optical lens effects. Product components, gestures and material recipes consume these APIs; the app does not vendor or modify the library.
+The app directly links io.github.kyant0:backdrop:2.0.0. The upstream library supplies backdrop recording, blur and optical lens effects. Product components, gestures and material recipes consume these APIs; the dependency itself is not modified. Reader vendors the attributed rounded-rectangle refraction shader in ui/material/DockRefraction.kt, removing the x*y angular dispersion attenuation for continuous Dock rims. SDF, ray mapping and seven-band reconstruction remain upstream-derived.
 
 License verified against upstream kmp/LICENSE on 2026-10-11. This notice covers this library, not a complete audit of every app dependency.
 

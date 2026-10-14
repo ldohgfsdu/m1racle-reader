@@ -197,7 +197,7 @@ fun qaGlassOverride(role: GlassMaterialRole, selection: QaGlassSelection): QaGla
     val floating = role == GlassMaterialRole.Control ||
         role == GlassMaterialRole.Capsule ||
         role == GlassMaterialRole.Dock
-    if (role == GlassMaterialRole.SelectionLens) {
+    if (role == GlassMaterialRole.SelectionLens || role == GlassMaterialRole.DockLens) {
         return if (selection.dockNightLens == QaDockNightLens.BLACK_12_STROKE) {
             QaGlassOverride(darkTint = Color.Black, darkAlpha = 0.12f)
         } else {

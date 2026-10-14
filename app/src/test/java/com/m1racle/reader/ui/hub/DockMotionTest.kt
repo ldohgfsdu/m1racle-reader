@@ -31,8 +31,8 @@ class DockMotionTest {
     @Test fun `reference pickup lifts lens above rail with bounded rebound`() {
         assertEquals(1f, dockLensPickupX(0f), 0f)
         assertEquals(1f, dockLensPickupY(0f), 0f)
-        assertEquals(78f / 56f, dockLensPickupX(1f), .001f)
-        assertEquals(48f * 78f / 56f, 48f * dockLensPickupY(1f), .001f)
+        assertEquals(1.5f, dockLensPickupX(1f), .001f)
+        assertEquals(68f, 48f * dockLensPickupY(1f), .001f)
         assertTrue(dockLensPickupY(-.2f) < 1f)
         assertEquals(dockLensPickupY(1.3f), dockLensPickupY(100f), 0f)
         assertEquals(dockLensPickupX(-.3f), dockLensPickupX(-100f), 0f)

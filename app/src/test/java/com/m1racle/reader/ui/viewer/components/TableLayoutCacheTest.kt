@@ -1,6 +1,7 @@
 package com.m1racle.reader.ui.viewer.components
 
 import com.m1racle.reader.markdown.MarkdownPerformance
+import com.m1racle.reader.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -23,8 +24,9 @@ class TableLayoutCacheTest {
 
         val counters = MarkdownPerformance.snapshot()
         assertEquals(1, solves)
-        assertEquals(1, counters.tableSolveCount)
-        assertEquals(2, counters.cacheHitCount)
+        val recordsDiagnostics = BuildConfig.BUILD_TYPE == "qa"
+        assertEquals(if (recordsDiagnostics) 1L else 0L, counters.tableSolveCount)
+        assertEquals(if (recordsDiagnostics) 2L else 0L, counters.cacheHitCount)
         assertEquals(1, cache.entryCount())
     }
 

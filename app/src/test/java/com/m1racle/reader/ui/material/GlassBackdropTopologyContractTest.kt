@@ -49,18 +49,36 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
-    fun `dock lens captures only its isolated sampling bar and never itself`() {
+    fun `dock lens captures the visible rail and foreground exactly once and never itself`() {
         val tabs = appSource("ui/hub/OpticalDockTabs.kt").readText()
         val capture = trailingLambda(tabs, "GlassBackdropSource(")
-        assertTrue(capture.body.contains("LocalDockSampling provides true"))
-        assertTrue(capture.body.contains("content = content"))
+        assertTrue(capture.body.contains("Box(dockMaterial.testTag(\"dock-material\")"))
+        assertFalse(capture.body.contains("Row("))
+        assertFalse(capture.body.contains("content("))
+        assertEquals(1, Regex("Row\\(").findAll(tabs).count())
         assertFalse(capture.body.contains("glassMaterial("))
         assertFalse(capture.body.contains("opticalSource"))
-        assertTrue(tabs.contains("rememberCombinedBackdrop(dockSurface, foreground)"))
-        assertTrue(tabs.indexOf("exportBackdrop = dockSurface") < tabs.indexOf("GlassBackdropSource("))
-        assertFalse(tabs.contains("rememberCombinedBackdrop(root, foreground)"))
+        assertTrue(tabs.contains("listOfNotNull(root, sampledRail, importBackdrop) + tintedTabs"))
+        assertTrue(tabs.contains("rememberBackdrop(dockBackdrop, sampleRail)"))
+        assertTrue(tabs.indexOf("content(tabBackdrops, importBackdrop)", capture.closeBrace) > capture.closeBrace)
+        assertTrue(tabs.contains("rememberBackdrop(source, tintPixels)"))
+        assertTrue(tabs.contains("ColorFilter.tint(accent)"))
+        val dock = appSource("ui/hub/GlassDock.kt").readText()
+        assertTrue(dock.contains("GlassBackdropSource(backdrop,"))
+        assertTrue(dock.contains("backdrop = tabBackdrops[index]"))
+        assertTrue(dock.contains("backdrop = importBackdrop"))
+        assertFalse(dock.contains("activeSlot"))
+        assertTrue(tabs.indexOf("val dockMaterial = Modifier.fillMaxSize().glassMaterial(") < tabs.indexOf("GlassBackdropSource("))
+        assertTrue(tabs.contains("Modifier.requiredSize(dockWidth + 32.dp, containerHeight + 32.dp)"))
+        assertTrue(capture.body.contains(".size(dockWidth, containerHeight)"))
+        assertFalse(tabs.contains("LocalDockSampling"))
+        assertFalse(tabs.contains("LocalDockSampleScale"))
+        assertFalse(tabs.contains("innerRailMaterial"))
+        assertFalse(tabs.contains(".alpha(0f)"))
+        assertTrue(tabs.contains("sourceBackdrop = root"))
+        assertFalse(tabs.contains("exportBackdrop = dockSurface"))
+        assertFalse(tabs.contains("sourceBackdrop = dockBackdrop"))
         assertTrue(tabs.indexOf("sourceBackdrop = opticalSource", capture.closeBrace) > capture.closeBrace)
-        assertTrue(tabs.contains("Modifier.fillMaxSize().clearAndSetSemantics {}.alpha(0f)"))
 
     }
 
@@ -155,7 +173,7 @@ class GlassBackdropTopologyContractTest {
         val tabs = appSource("ui/hub/OpticalDockTabs.kt").readText()
         assertFalse(tabs.contains("com.m1racle.reader.ui.hub.liquidglass"))
         assertFalse(tabs.contains("drawBackdrop("))
-        assertTrue(tabs.contains("GlassMaterialRole.SelectionLens, capsule"))
+        assertTrue(tabs.contains("GlassMaterialRole.DockLens, capsule"))
         assertTrue(tabs.contains("dockLensPickupX(pickupX.value)"))
         assertTrue(tabs.contains("dockLensPickupY(pickupY.value)"))
         assertFalse(tabs.contains("GlassMaterialRole.Control, LocalGlassEnvironment.current"))

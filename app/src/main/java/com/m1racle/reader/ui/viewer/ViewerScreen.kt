@@ -1636,9 +1636,9 @@ private fun ViewerScaffold(
 }
 
 /**
- * Soft scroll edge follows the controls, retaining separation for system status icons.
+ * Soft scroll edge keeps a fixed depth profile while the controls appear/disappear.
  *
- * - Backdrop bounds stay fixed; its falloff contracts as the controls disappear.
+ * - Backdrop bounds and falloff stay fixed, independently of the foreground controls.
  * - Search replaces the reading row in place so the body does not jump.
  * - LazyColumn contentPadding reserves status+bar once; body never reads offset.
  */
@@ -1683,14 +1683,13 @@ internal fun ReaderTopBarOverlay(
     val toolbarHeight = readerTopBarHeight()
     val host = remember(backdrop) { GlassBackdropHost(backdrop, backdrop) }
     CompositionLocalProvider(LocalGlassBackdropHost provides host) {
-    Box(modifier.height(statusHeight + toolbarHeight + 48.dp)) {
+    Box(modifier.height(statusHeight + toolbarHeight + ReaderChromeFadeHeight)) {
         Box(
             Modifier.fillMaxSize()
                 .graphicsLayer { alpha = edgeOpacity.value }
                 .readerGradient(
                 backdrop,
                 statusBarHeight = statusHeight,
-                controlsVisibility = { 1f - (scrollState?.collapseFraction ?: 0f) },
             ),
         )
         if (controlsVisible) Column(

@@ -22,9 +22,9 @@ internal object HubTabTransitions {
     fun enter(fromRoute: String?, toRoute: String?): EnterTransition? {
         val direction = direction(fromRoute, toRoute) ?: return null
         if (direction == 0) return EnterTransition.None
-        return fadeIn(tween(M1racleMotion.NormalMs, easing = M1racleMotion.easeOut)) +
+        return fadeIn(tween(M1racleMotion.SlowMs, easing = M1racleMotion.easeOut)) +
             slideInHorizontally(
-                animationSpec = tween(M1racleMotion.NormalMs, easing = M1racleMotion.easeOut),
+                animationSpec = tween(M1racleMotion.SlowMs, easing = M1racleMotion.easeOut),
                 initialOffsetX = { full -> (full * SlideFraction * direction).roundToInt() },
             )
     }
@@ -32,9 +32,9 @@ internal object HubTabTransitions {
     fun exit(fromRoute: String?, toRoute: String?): ExitTransition? {
         val direction = direction(fromRoute, toRoute) ?: return null
         if (direction == 0) return ExitTransition.None
-        return fadeOut(tween(M1racleMotion.FastMs, easing = M1racleMotion.easeIn)) +
+        return fadeOut(tween(M1racleMotion.NormalMs, easing = M1racleMotion.easeIn)) +
             slideOutHorizontally(
-                animationSpec = tween<IntOffset>(M1racleMotion.FastMs, easing = M1racleMotion.easeIn),
+                animationSpec = tween<IntOffset>(M1racleMotion.NormalMs, easing = M1racleMotion.easeIn),
                 targetOffsetX = { full -> (full * SlideFraction * -direction).roundToInt() },
             )
     }

@@ -29,12 +29,10 @@ import com.m1racle.reader.ui.home.HomeDesignTokens
 
 /**
  * Read-only guidance stays visibly distinct from actionable settings.
- * [onOpenGlassLab] opens the QA-only Glass Lab.
  */
 @Composable
 fun HubSettingsScreen(
     onNavigateHub: (HubDestination) -> Unit,
-    onOpenGlassLab: (() -> Unit)?,
     onOpenDocumentTools: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -103,20 +101,6 @@ fun HubSettingsScreen(
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
                             Spacer(Modifier.height(8.dp))
                             Text(stringResource(R.string.material_comparison_entry_hint),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                if (BuildConfig.QA_GLASS_VARIANTS_ENABLED && onOpenGlassLab != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Surface(onClick = onOpenGlassLab, shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                            Text(stringResource(R.string.glass_lab_title),
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
-                            Spacer(Modifier.height(8.dp))
-                            Text(stringResource(R.string.glass_lab_entry_hint),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

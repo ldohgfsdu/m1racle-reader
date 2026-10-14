@@ -231,7 +231,7 @@ class DeleteByIdTransactionTest {
     }
 
     @Test
-    fun success_deletesManagedLibraryCopy_butNeverUserOwnedSource() = runBlocking {
+    fun success_deletesManagedLibraryCopy_butNeverUserOwnedSource(): Unit = runBlocking {
         val managedDir = File(context.filesDir, "library/test-content").apply { mkdirs() }
         val managedCopy = File(managedDir, "managed.pdf").apply { writeBytes(byteArrayOf(1)) }
         seedDocument("doc-managed", managedCopy.toURI().toString())

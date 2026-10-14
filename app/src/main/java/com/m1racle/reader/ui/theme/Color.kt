@@ -29,7 +29,7 @@ val PaperOnSurfaceVariant = Color(0xFF5D5D5D)
 val PaperPrimary = Color(0xFF171717)
 /** Navigation accent stays local to the iOS-inspired glass dock. */
 val DockSelectedLight = Color(0xFF007AFF)
-val DockSelectedDark = Color(0xFF64A8FF)
+val DockSelectedDark = Color(0xFF0A9FFF)
 val PaperOnPrimary = Color(0xFFFFFFFF)
 val PaperPrimaryContainer = Color(0xFFF2F2F2)
 val PaperOnPrimaryContainer = Color(0xFF0D0D0D)

@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp as lerpFloat
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.asAndroidRuntimeShader
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -49,13 +51,15 @@ enum class GlassMaterialRole {
     Control,
     Dock,
     Capsule,
-    /** Selected lens over dock icons and segmented labels. */
+    /** Compact selected lens over segmented labels. */
     SelectionLens,
+    /** Navigation pickup with room to refract the captured rail outline. */
+    DockLens,
     Menu,
     ExpandedMenu,
     SettingsCard,
     Dialog,
-    /** Markdown top chrome. Legacy 16dp + 0.62 plate; optical rewrite deferred. */
+    /** Fixed, progressively diffused Markdown scroll edge. */
     ProgressiveChrome,
 }
 
@@ -94,6 +98,7 @@ class GlassMaterialSpec internal constructor(
     val contentPressedOverlayAlpha: Float,
     val vibrancy: Boolean,
     val chromaticAberration: Boolean,
+    val chromaticAberrationStrength: Float,
     val innerShadow: Dp,
     val environment: GlassEnvironment,
     val capability: GlassCapability,
@@ -135,6 +140,7 @@ private data class GlassRecipe(
     val pressedScale: Float = 0.965f,
     val vibrancy: Boolean = false,
     val chromaticAberration: Boolean = false,
+    val chromaticAberrationStrength: Float = 1f,
     val innerShadow: Dp = 0.dp,
     val pressedLensHeight: Dp? = null,
     val pressedLensAmount: Dp? = null,
@@ -214,11 +220,12 @@ object GlassMaterialEngine {
         )
     }
 
-    // Readable Markdown chrome; the renderer matches its tint to the page.
+    // iOS Settings scroll edge: diffuse content colors rather than an opaque bar.
+    // The renderer fades this page-colored tint together with the blur depth.
     private val progressiveChrome = regularFrost.copy(
-        lightSurfaceAlpha = 0.90f,
-        darkSurfaceAlpha = 0.90f,
-        blur = 16.dp,
+        lightSurfaceAlpha = 0.24f,
+        darkSurfaceAlpha = 0.52f,
+        blur = 24.dp,
         shadow = 0.dp,
         vibrancy = false,
     )
@@ -242,8 +249,26 @@ object GlassMaterialEngine {
         lensEnabled = false,
     )
 
+    private val selectionLens = liquidRecipe(GlassMaterialRole.SelectionLens).copy(
+        vibrancy = false,
+        lensEnabled = true,
+        pressedScale = 1f,
+        pressedLensHeight = 4.dp,
+        pressedLensAmount = 6.dp,
+        pressedSurfaceAlpha = 0f,
+        pressedHighlightAlpha = 1f,
+        pressedInnerShadow = 3.dp,
+        chromaticAberration = true,
+    )
+
     private val recipes = mapOf(
-        GlassMaterialRole.Dock to liquidRecipe(GlassMaterialRole.Dock).copy(pressedScale = 1f),
+        GlassMaterialRole.Dock to liquidRecipe(GlassMaterialRole.Dock).copy(
+            pressedScale = 1f,
+            // Use the PDF control material without its whole-surface press
+            // boost. Dock motion and the optical pickup have their own owners.
+            pressedSurfaceAlphaBoost = 0f,
+            pressedHighlightAlphaBoost = 0f,
+        ),
         GlassMaterialRole.Control to liquidRecipe(GlassMaterialRole.Control).copy(
             family = GlassOpticalFamily.INTERACTIVE,
             pressedScale = 1.085f,
@@ -255,15 +280,17 @@ object GlassMaterialEngine {
             pressedSurfaceAlpha = 0.40f,
             pressedDarkTint = Color(0xFFAAAAAA),
         ),
-        GlassMaterialRole.SelectionLens to liquidRecipe(GlassMaterialRole.SelectionLens).copy(
-            lensEnabled = true,
-            pressedScale = 1f, // Dock owns the pickup transform, including drag preview.
-            pressedLensHeight = 10.dp,
-            pressedLensAmount = 14.dp,
-            pressedSurfaceAlpha = 0f,
-            pressedHighlightAlpha = 1f,
-            pressedInnerShadow = 8.dp,
-            chromaticAberration = true,
+        GlassMaterialRole.SelectionLens to selectionLens,
+        GlassMaterialRole.DockLens to selectionLens.copy(
+            darkSurfaceAlpha = liquidGlassStyle(GlassMaterialRole.DockLens, true).tint.alpha,
+            // Reach the real inset contour at the outer rim instead of
+            // refracting only the clear gap around the captured rail.
+            pressedLensHeight = 16.dp,
+            pressedLensAmount = 8.dp,
+            // Continuous edge dispersion; its ray separation stays sub-dp.
+            chromaticAberrationStrength = .05f,
+            pressedInnerShadow = 4.dp,
+            pressedHighlightAlpha = .7f,
         ),
         GlassMaterialRole.Menu to liquidRecipe(GlassMaterialRole.Menu).copy(
             exportsForSettingsCard = true,
@@ -388,6 +415,8 @@ object GlassMaterialEngine {
             },
             vibrancy = recipe.vibrancy && capability != GlassCapability.SOLID_FALLBACK,
             chromaticAberration = recipe.chromaticAberration && lensOn,
+            chromaticAberrationStrength = if (recipe.chromaticAberration && lensOn)
+                recipe.chromaticAberrationStrength else 0f,
             innerShadow = if (pressed) {
                 recipe.pressedInnerShadow ?: recipe.innerShadow
             } else {
@@ -427,6 +456,7 @@ private fun GlassRecipe.withQaOverride(o: QaGlassOverride?): GlassRecipe = if (o
     pressedScale = o.pressedScale ?: pressedScale,
     pressedSurfaceAlphaBoost = o.pressedSurfaceAlphaBoost ?: pressedSurfaceAlphaBoost,
     pressedHighlightAlphaBoost = o.pressedHighlightAlphaBoost ?: pressedHighlightAlphaBoost,
+    pressedHighlightAlpha = if (o.pressedHighlightAlphaBoost != null) null else pressedHighlightAlpha,
     lightBrightness = o.lightBrightness ?: lightBrightness,
     darkBrightness = o.darkBrightness ?: darkBrightness,
     lightContrast = o.lightContrast ?: lightContrast,
@@ -526,7 +556,8 @@ fun Modifier.glassMaterial(
             }
             // Match the dock pickup spring: refraction and rim must settle with
             // the silhouette rather than fading out before its elastic rebound.
-            role == GlassMaterialRole.SelectionLens -> spring(.55f, 450f, visibilityThreshold = .001f)
+            role == GlassMaterialRole.SelectionLens || role == GlassMaterialRole.DockLens ->
+                spring(.55f, 450f, visibilityThreshold = .001f)
             floatingControl -> spring(dampingRatio = .55f, stiffness = 450f, visibilityThreshold = .001f)
             else -> GlassMaterialEngine.PressSpring
         },
@@ -664,6 +695,7 @@ private fun drawGlassMaterial(
     // RenderEffect alive across idle recompositions. A real material/state or
     // geometry change updates the node once; detach releases its owned layers.
     val resourceModifier = remember(
+        role,
         backdrop,
         exportedBackdrop,
         shape,
@@ -710,13 +742,37 @@ private fun drawGlassMaterial(
                     val refractionHeight = lerpFloat(lensHeightPx, pressedLensHeightPx, progress)
                     val refractionAmount = lerpFloat(lensAmountPx, pressedLensAmountPx, progress)
                     if (refractionHeight > 0f || refractionAmount > 0f) {
-                        lens(
-                            refractionHeight = refractionHeight,
-                            refractionAmount = refractionAmount,
-                            depthEffect = idleSpec.depthEffect,
-                            chromaticAberration = idleSpec.chromaticAberration,
-                        )
+                        if (role == GlassMaterialRole.DockLens) {
+                            dockRefraction(refractionHeight, refractionAmount,
+                                idleSpec.chromaticAberrationStrength)
+                        } else {
+                            val precedingEffect = renderEffect
+                            lens(
+                                refractionHeight = refractionHeight,
+                                refractionAmount = refractionAmount,
+                                depthEffect = idleSpec.depthEffect,
+                                chromaticAberration = idleSpec.chromaticAberration,
+                            )
+                            if (idleSpec.chromaticAberration) {
+                                // Backdrop 2.0 lens() creates this cached shader
+                                // above but hardcodes its dispersion uniform to 1.
+                                // Reuse that same shader and its SDF/refraction;
+                                // no second pass or decorative rainbow overlay.
+                                val shader = obtainRuntimeShader("RefractionWithDispersion", "")
+                                shader.setFloatUniform("chromaticAberration", idleSpec.chromaticAberrationStrength)
+                                // Android snapshots uniforms when constructing an
+                                // effect. Replace lens()'s effect after setting the
+                                // strength, retaining the preceding blur/color chain.
+                                val opticalEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(
+                                    shader.asAndroidRuntimeShader(), "content")
+                                renderEffect = (if (precedingEffect != null)
+                                    android.graphics.RenderEffect.createChainEffect(
+                                        opticalEffect, precedingEffect.asAndroidRenderEffect())
+                                else opticalEffect).asComposeRenderEffect()
+                            }
+                        }
                     }
+
                 }
             },
             // Backdrop applies the inverse of this transform while sampling.

@@ -83,7 +83,7 @@ android {
         buildConfigField("float", "DETAIL_TILE_OVERLAY_ALPHA", "${detailTileOverlayAlpha}f")
         // Disabled for every normal build; the qa build type overrides this below.
         buildConfigField("boolean", "READER_PERFORMANCE_EXPERIMENTS_ENABLED", "false")
-        // QA-only switch: glass variant row, material comparison and glass workbench
+        // QA-only switch: glass variant row and material comparison
         // Settings entries. Only the qa build type enables it.
         buildConfigField("boolean", "QA_GLASS_VARIANTS_ENABLED", "false")
     }
@@ -194,6 +194,14 @@ android {
             manifest.srcFile("src/qa/AndroidManifest.xml")
         }
         getByName("androidTest").assets.srcDirs("schemas")
+    }
+}
+
+// AGP 9 defaults host tests to testBuildType (QA). Explicitly include Release
+// so src/testRelease contracts actually run against production BuildConfig.
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { variant ->
+        (variant as com.android.build.api.variant.HasUnitTestBuilder).enableUnitTest = true
     }
 }
 

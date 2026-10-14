@@ -1,0 +1,11 @@
+{
+  "status": "pass",
+  "checked_at": "2026-10-14T07:07:53+08:00",
+  "markdown_files": 20,
+  "relative_links": 3142,
+  "source_links": 3041,
+  "curated_api_names": 116,
+  "input_sha256": "13280503be106798d2f6cb836260d7ae1065c1a8aa16127ecbe86371ea5446fe",
+  "scope": "Static documentation checks only; no build, tests, lint, install or device verification.",
+  "errors": []
+}

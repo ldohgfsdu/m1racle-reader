@@ -16,8 +16,13 @@ class R32ReleaseHardeningContractTest {
         val version = Properties().apply {
             File(projectRoot(), "app/version.properties").inputStream().use(::load)
         }
-        assertEquals("57", version.getProperty("versionCode"))
-        assertEquals("1.0.0", version.getProperty("versionName"))
+        val code = version.getProperty("versionCode").toInt()
+        val name = version.getProperty("versionName")
+        assertTrue("public versionCode must be positive", code > 0)
+        assertTrue("public versionName must be SemVer",
+            name.matches(Regex("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$")))
+        assertEquals("compiled identity must come from version.properties", code, BuildConfig.VERSION_CODE)
+        assertEquals(name + if (BuildConfig.BUILD_TYPE == "qa") "-qa" else "", BuildConfig.VERSION_NAME)
 
         val build = buildScript()
         assertTrue(build.contains("versionCode = releaseVersionCode"))
@@ -51,7 +56,7 @@ class R32ReleaseHardeningContractTest {
     }
 
     @Test
-    fun `v12 public baseline upgrades explicitly through every data preserving migration to v16`() {
+    fun `v12 public baseline upgrades explicitly through every data preserving migration to v17`() {
         val database = source("data/local/AppDatabase.kt")
         assertTrue(database.contains("version = 17"))
         assertTrue(database.contains("MIGRATION_12_13"))
@@ -60,6 +65,7 @@ class R32ReleaseHardeningContractTest {
         assertTrue(database.contains("MIGRATION_15_16"))
         assertTrue(database.contains("MIGRATION_16_17"))
         assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/16.json").isFile)
+        assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/17.json").isFile)
         assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/14.json").isFile)
         assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/15.json").isFile)
         assertTrue(
@@ -75,21 +81,23 @@ class R32ReleaseHardeningContractTest {
             ).isFile,
         )
         val checklist = File(projectRoot(), "RELEASE_CHECKLIST.md").readText()
-        assertTrue(checklist.contains("v12 is the first public database baseline"))
-        assertTrue(checklist.contains("Do not fabricate v1-v5 schema snapshots"))
+        assertTrue(checklist.contains("公开基线自 12 起"))
+        assertTrue(checklist.contains("不编造早期 schema"))
     }
 
     @Test
     fun `release checklist records every mandatory release evidence group`() {
         val checklist = File(projectRoot(), "RELEASE_CHECKLIST.md").readText()
         listOf(
-            "Signing",
-            "Version",
-            "Pre-migration R32 APK identity and hash (historical evidence)",
-            "Automated verification",
-            "Room migration policy",
-            "Known limitations",
+            "源码与版本",
+            "自动验证",
+            "数据与迁移",
+            "签名、产物与交付",
+            "人工验收与结论",
         ).forEach { assertTrue("missing checklist section $it", checklist.contains("## $it")) }
+        assertTrue(checklist.contains("历史版本通过不能自动继承"))
+        assertTrue(checklist.contains("禁止卸载或清库"))
+        assertTrue(checklist.contains("不放宽断言"))
     }
 
     private fun projectRoot(): File = ProductionSource.repositoryRoot()

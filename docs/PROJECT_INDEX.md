@@ -12,8 +12,11 @@
 | 界面设计规范 | [../design.md](../design.md) | 页面职责、主题排版、阅读 / 搜索 / 编辑交互、Liquid Glass、历史冲突裁决与验收边界；阶段报告仅保留来源和证据 |
 | 工程规则 | [../AGENTS.md](../AGENTS.md) | 分层、验收纪律、构建与交付规则 |
 | 发布门禁 | [../RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) | 公开产物前的硬门禁，含未勾选项 |
+| 首轮稳定性基线与验收矩阵 | [STABILIZATION_20261013.md](STABILIZATION_20261013.md) | 原始源码检查点与核心能力验收矩阵；当前复验结果见下列工作台取消报告 |
+| 工作台取消与正式版复验 | [WORKBENCH_REMOVAL_20261013.md](WORKBENCH_REMOVAL_20261013.md) | 按用户最新决定彻底删除工作台；保留当前 iOS 参考材质，复验 QA / Release |
 | 全清单实现 | [FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md) | 用户当前范围与每项验证状态；Markdown 编辑等待 M1racle Note |
 | 功能分层和验证入口 | [FEATURE_LAYERS_AND_VERIFICATION.md](FEATURE_LAYERS_AND_VERIFICATION.md) | 模块职责、开发检查和正式发布流程 |
+| Code Wiki | [代码百科入口](../CODE_WIKI.md) · [分篇目录](code-wiki/README.md) | 74工作树的架构与模块索引；77顶栏最新差异见下列连续过渡报告，不替代当前状态 |
 
 以上入口冲突时，以用户当前指令优先，PRD 定范围、AGENTS.md 定工程规则、design.md 定设计要求、CURRENT_STATUS 定已验证现状。
 
@@ -24,8 +27,10 @@
 | 本机开发环境与最新工作树备份 | [环境修复说明](history/workspace-2026/环境修复说明-20261003.md)（2026-10-11 归档）；工作区根目录 `Reader构建.cmd` |
 | 本机入口等价关系（2026-10-11 标注） | `Reader构建.cmd` ≡ `reader-build-local.ps1`；`Reader模拟调试.cmd` ≡ `reader-emulator-local.ps1`（两者均为参数透传的薄包装） |
 | QA 连接测试唯一入口 | `scripts/run-qa-connected-tests.ps1`：先调用 `reader-emulator-local.ps1` 完成设备准备与 QA 构建，再执行 `:app:connectedQaAndroidTest` |
-| 玻璃材质与来源（当前） | [PDF 材质统一与 RiseDiary 来源移除](OPTICAL_GLASS_20261011.md)；覆盖历史底栏材质和扩张参数 |
-| Dock 拖动跟手与弹性形变 | 当前 [54版弹性与回弹](DOCK_ELASTIC_20261008.md)；[53版直接跟手](DOCK_DIRECT_DRAG_20261008.md) |
+| 玻璃材质与来源（阅读控件） | [PDF 材质统一与 RiseDiary 来源移除](OPTICAL_GLASS_20261011.md)；阅读控件统一基准；Dock以当前独立报告为准 |
+| Dock 材质与拖动（当前） | [折射、细色散与点击动画修正](DOCK_OPTICS_20261013.md)；72 色阶 / 端帽为阶段证据，最新光学、点击转场与验收边界见本报告 |
+| Markdown 顶栏（当前） | [77原生高斯连续过渡](MARKDOWN_TOPBAR_NATIVE_TRANSITION_20261014.md)；全量与52项原生、正式日夜模拟器滚动/搜索通过；用户否定76，77手机安装和最终观感待验。75/76为历史证据 |
+| Dock 视觉新标准 | [iOS App Store 日间 / 夜间原录屏与逐状态标准](IOS_MATERIAL_STANDARD_20261013.md)；2026-10-13 用户指定，优先于旧参考；用户对72的光学与点击动画补充见最新修正报告 |
 | 酷安底栏真实参考数据 | [真机尺寸、按压/拖动录屏与帧统计](COOLAPK_DOCK_CAPTURE_20261008.md) |
 | 酷安玻璃复刻 | [底栏、阅读控件与独立动作反馈实现及验证](COOLAPK_GLASS_REPLICA_20261008.md) |
 | 构建与交付 APK | [APK_DELIVERY.md](APK_DELIVERY.md)；本轮 [一体式蓝色玻璃Dock](OPTICAL_DOCK_20261008.md)；此前 [EPUB恢复43版与字体](EPUB_RESTORE43_FONT_20261007.md)；此前 [EPUB滑动与页边界修复](EPUB_SLIDE_BOUNDARIES_20261007.md)；此前 [EPUB 原书排版与正式包闭环](EPUB_PUBLISHER_LAYOUT_20261006.md)、[EPUB 返回闪帧与阅读器研究](EPUB_RETURN_RESEARCH_20261006.md)、[RiseDiary 底栏与阅读工具栏](RISEDIARY_TOOLBAR_20261006.md)；[签名记录](RELEASE_SIGNING_20261003.md) |
@@ -44,7 +49,7 @@
 | EPUB 当前核心与范围 | 当前 [恢复43版原生翻页与字体](EPUB_RESTORE43_FONT_20261007.md)；45–50版研究与实现为历史：[滑动与页边界修复](EPUB_SLIDE_BOUNDARIES_20261007.md)；[翻页看门狗](EPUB_TOUCH_WATCHDOG_20261007.md)；[外部字体](EPUB_FONT_TURN_20261006.md)；原书核心基线 [EPUB_PUBLISHER_LAYOUT_20261006.md](EPUB_PUBLISHER_LAYOUT_20261006.md)；当前设计见根目录design.md / PRD补充。早期方案见 [EPUB_SUPPORT_ARCHITECTURE_DESIGN.md](EPUB_SUPPORT_ARCHITECTURE_DESIGN.md)，旧锚点背景见 [EPUB_ANCHOR_20261004.md](EPUB_ANCHOR_20261004.md) |
 | PDF 正文编辑 | [PDF_BODY_EDITING_DESIGN.md](PDF_BODY_EDITING_DESIGN.md) |
 | 全项目设计规范（含来源索引） | [../design.md](../design.md) |
-| 设置二级页液态玻璃调参工作台 | [GLASS_WORKBENCH_20261004.md](GLASS_WORKBENCH_20261004.md) |
+| 已取消的液态玻璃工作台（历史） | [GLASS_WORKBENCH_20261004.md](GLASS_WORKBENCH_20261004.md)；2026-10-13 用户取消，当前要求见根目录 design.md |
 | 液态玻璃实现与阶段证据 | [视频复刻与底栏随动验收](DOCK_VIDEO_REPLICA_20261011.md)； [按压玻璃完整底栏采样](DOCK_SAMPLED_RIM_20261004.md)；[底栏 iOS 通透度与按压放大](DOCK_IOS_TRANSPARENCY_20261004.md)；[底栏视频参考动效](DOCK_VIDEO_MOTION_20261004.md)；[底栏折射与缩放恢复](DOCK_GLASS_RESTORE_20261004.md)；[DOCK_CAPTURE_CONSISTENCY_20261003.md](DOCK_CAPTURE_CONSISTENCY_20261003.md)；历史审计：[R36_GLASS_GROUND_TRUTH_AUDIT.md](R36_GLASS_GROUND_TRUTH_AUDIT.md) · [R36_2_OPTICAL_MATERIAL_REPORT.md](R36_2_OPTICAL_MATERIAL_REPORT.md) |
 | 滚动与手势物理 | [APP_WIDE_SCROLL_AND_MAIN_THREAD_STALL_ISOLATION_REPORT.md](APP_WIDE_SCROLL_AND_MAIN_THREAD_STALL_ISOLATION_REPORT.md) |
 | 导入身份权威 | [D1_1_IDENTITY_ARCHITECTURE_DECISION.md](D1_1_IDENTITY_ARCHITECTURE_DECISION.md) · [D1_ZIP_IDENTITY_AUDIT.md](D1_ZIP_IDENTITY_AUDIT.md) |

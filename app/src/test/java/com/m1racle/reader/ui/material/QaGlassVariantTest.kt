@@ -142,7 +142,7 @@ class QaGlassVariantTest {
             listOf(dock, pdf, tokens).forEach { assertTrue("QaCoolapk.$name still used", !it.contains("QaCoolapk.$name")) }
         }
         assertTrue(pdf.contains("internal fun pdfChromeControlSize(production: Dp): Dp = production"))
-        assertTrue(dock.contains("Box(Modifier.size(width = 49.dp, height = 48.dp)"))
+        assertTrue(dock.contains("Box(Modifier.size(width = 50.dp, height = 36.dp)"))
     }
     @Test
     fun textColorsAndPdfChromeDarkness() {

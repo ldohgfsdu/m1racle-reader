@@ -1,43 +1,45 @@
-# M1racle Reader 发布检查清单
+# M1racle Reader 发布门禁
 
-本清单用于下一份 Release。旧 R32/R33 勾选项是历史证据，已归档到 [历史清单](docs/history/RELEASE_CHECKLIST_R32_R33_snapshot.md)，不能继承为本轮通过。当前状态见 [CURRENT_STATUS](docs/CURRENT_STATUS.md)。
+当前产物和验证结论唯一入口为 [CURRENT_STATUS](docs/CURRENT_STATUS.md)。本清单定义每个新候选必须重新满足的条件；历史版本通过不能自动继承。[本轮稳定性证据与验收矩阵](docs/STABILIZATION_20261013.md)记录执行结果。旧清单已[归档](docs/history/RELEASE_CHECKLIST_before_stabilization_20261013.md)。
 
-## Automated verification
+## 源码与版本
 
-- [x] 本轮完整QA JVM1730项 / 0失败或错误 / 2既有跳过，记录HEAD、dirty fingerprint、命令与退出码。
-- [x] 最终4项原生设备回归全部通过，包括原书手势、私有字体实际绘制 / 重排 / 重建 / 移除、字库生命周期与根目录Locator原文恢复。
-## Signing
+- [ ] 保存 HEAD、未提交状态、完整源码检查点及 SHA-256；测试、构建与交付须绑定同一候选源码。
+- [ ] 核对 app/version.properties；每次分发新产物单调增加 versionCode，不能覆盖同版本身份的新二进制。
+- [ ] 核对 CHANGELOG、版本说明与实际用户可见行为，明确未验收事项。
 
-- [x] 正式签名由发布负责人通过四项 `M1RACLE_RELEASE_*` 环境变量安全注入；不使用 Debug、临时或未签名包。
-- [x] `:app:assembleRelease` 成功；归档本轮源码、版本、APK 字节数及 SHA-256。
-- [x] `apksigner verify --verbose --print-certs` 通过，并与现有正式证书一致。
-- [x] Manifest 无 INTERNET；包名 `com.m1racle.reader`，minSdk 31 / targetSdk 35。
-## Version
+## 自动验证
 
-- [x] 使用 `app/version.properties` 中的明确版本；实际发布前单调升级 versionCode。
-## Room migration policy
+- [ ] 全量 :app:testQaUnitTest，记录实际执行数、失败、错误、跳过、命令、退出码与源码摘要。
+- [ ] :app:testReleaseUnitTest 覆盖生产变体契约；QA 专有代码不代替生产约束。
+- [ ] :app:lintRelease 无错误；警告须保留实际数量与报告，不禁用检查制造通过。
+- [ ] 相关原生回归通过。底栏光学包括日夜主题、左右端帽、细色散、图文局部变色、真实来源、拖动/释放/取消；不放宽断言。
+- [ ] 核心阅读回归覆盖 Markdown / PDF / EPUB、书签与位置恢复、批注/搜索、导入/文件操作、PDF 工具、字体/重排、系统滚动截图。
 
-v12 is the first public database baseline. Do not fabricate v1-v5 schema snapshots. 已公开基线的升级必须经过真实的 12 → 13 → 14 migration。
+所有 instrumentation 仅针对 com.m1racle.reader.qa；禁止 connectedDebug 或其他生产包连接测试。仅任务确需时构建 QA；禁止主动构建/交付 Debug。
 
-- [x] Room 当前 v15（14 → 15 只加 `documents.readingAnchor`、`bookmarks.anchor` 两个可空列，见 MigrationV14ToV15Test），后续 schema 变更必须补 migration 和对应测试。
-- [x] CHANGELOG 与 `docs/releases/vX.Y.Z.md` 描述本轮用户可见变更及限制。
-- [ ] 真机安装、升级保留数据、Markdown/PDF/EPUB 打开与位置恢复通过。
-- [ ] EPUB 超长段落翻页、TOC、字号重排和图片通过真机性能/视觉验收。
-- [x] Outbox、实际交付文件摘要一致，设备端交付名为 `m1racle-reader-release-latest.apk`。
-- [ ] 在仓库外安全备份正式签名材料；不把秘密、临时 QA 包写入发布目录。
+## 数据与迁移
 
-Windows 使用 `gradlew.bat`，Unix 使用 `./gradlew`。统一 JDK 17、Android Platform 37.0、Build Tools 36.0.0；ARM 的 aapt2 override 只配置在本机。QA 单测可用 `:app:testQaUnitTest`，不向用户交付 QA APK。
+当前 Room **17**，以源码 AppDatabase 与 app/schemas 为准；公开基线自 12 起，现有迁移链为 12 → 13 → 14 → 15 → 16 → 17。后续修改 schema 必须补必要迁移与回归，不编造早期 schema。
 
-## Pre-migration R32 APK identity and hash (historical evidence)
+- [ ] 当前迁移及历史数据回填回归通过。
+- [ ] 正式包只 adb install -r；升级前后核对文档、标注、字体和阅读位置，禁止卸载或清库。
+- [ ] 物理手机验证打开/恢复 Markdown、PDF、有限 EPUB；模拟器结果须明确标注。
 
-历史包名、临时证书和 R32 摘要只存于 [历史清单](docs/history/RELEASE_CHECKLIST_R32_R33_snapshot.md)，不作为当前发布门禁的通过证据。
+## 签名、产物与交付
 
-## Known limitations
+- [ ] 四项 M1RACLE_RELEASE_* 环境变量安全注入，正式 :app:assembleRelease 成功；不使用临时签名或未签名包。
+- [ ] apksigner verify --verbose --print-certs 通过，与现有正式证书一致，native 库满足 16 KiB 对齐。
+- [ ] Manifest：包名 com.m1racle.reader、minSdk 31 / targetSdk 35、无 INTERNET；保留 profileable android:shell=true 并在发布说明中说明。
+- [ ] 本次构建 APK、Outbox 和交付文件的实际字节数与 SHA-256 一致；旧包不能作为本轮产物。
+- [ ] 每次成功 assembleRelease 后自动复制到唯一在线设备 /storage/emulated/0/Download/m1racle-reader-release-latest.apk；设备缺失须记录交付 pending。
+- [ ] 正式签名材料在仓库外安全备份，不写入源码或报告。
 
-当前侧载验收包 **1.0.0 / 51**：EPUB恢复实际43版原生翻页与界面，只加字体。完整QA1730项 / 0失败或错误 / 2既有跳过、原生设备4项全过；正式签名包原书轻滑 / 纵滑、单页往返、宋体绘制 / 冷启动恢复和默认回退通过，9份文档与原文件字节及标注数据保留；Release Lint0 errors，签名 / 16KiB对齐 / 无INTERNET与五份摘要一致。43版表格投影为普通文本，旧SDK无法匹配的阅读位置会降级，手机手感与性能待验。详见 [CURRENT_STATUS](docs/CURRENT_STATUS.md) 与 [本轮报告](docs/EPUB_RESTORE43_FONT_20261007.md)。以下为历史记录。
+## 人工验收与结论
 
-46 版因翻页路径未经真机验证、已知会造成触控失效而停止交付；47 版因仍等待迟到通知而停止交付。两者的修复均包含在 48 中。
+- [ ] 物理手机按参考媒体核对底栏整栏颜色/透色、左右留白、文字可读性、连续拖动与取消回弹。
+- [ ] 物理手机核对 EPUB 长段落、目录、字号重排/字体/图片、PDF 两种阅读模式与编辑返回。
+- [ ] 资源、滚动性能和系统厂商长截图面板流程通过；单次截图不能证明动态手感。
+- [ ] 报告分别记录 implemented / automated_verified / device_verified / pending；模拟器和物理手机证据分列，所有硬门禁通过后才宣布验收完成。
 
-1.0.0/31 及更早的构建与验收记录已归档到 [历史清单](docs/history/RELEASE_CHECKLIST_31_snapshot.md)，不作为当前门禁。
-
-正式包含 `<profileable android:shell="true"/>`（Macrobenchmark 保留）：仅允许 adb shell 获取 profiling 数据，无额外运行时权限；对外发布说明中需列明。
+构建环境：JDK 17、Gradle Wrapper 9.5.0、Android Platform 37、Build Tools 36.0.0。运行方法见 [Code Wiki](docs/code-wiki/README.md)。

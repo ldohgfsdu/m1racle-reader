@@ -2,6 +2,11 @@ package com.m1racle.reader.ui.hub
 
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.m1racle.reader.ui.material.LocalGlassBackdropHost
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,7 +33,6 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,14 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,8 +91,6 @@ private val dockEntries = listOf(
     DockEntry(HubDestination.SETTINGS, Icons.Filled.Settings, R.string.hub_nav_settings),
 )
 
-private val DockTabIconSize = 24.dp
-
 /** One continuous glass capsule: two tabs, the import action, then two tabs. */
 @Composable
 fun GlassDock(
@@ -104,21 +100,11 @@ fun GlassDock(
     modifier: Modifier = Modifier,
 ) {
     val motion = LocalHubDockMotion.current
-    val fadeColor = MaterialTheme.colorScheme.background
     // QA variant 2 (Coolapk) changes material only; geometry is always production.
     val dockHeight = HomeDesignTokens.DockHeight
     val dockBottomGap = HomeDesignTokens.DockBottomGap
     val dockMargin = HomeDesignTokens.DockHorizontalMargin
-    val fadeHeight = dockHeight + dockBottomGap +
-        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp
     Box(modifier.fillMaxSize()) {
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(fadeHeight)
-            .drawBehind {
-                drawRect(Brush.verticalGradient(
-                    0f to fadeColor.copy(alpha = 0f),
-                    .7f to fadeColor.copy(alpha = .28f),
-                    1f to fadeColor.copy(alpha = .85f)))
-            }.clearAndSetSemantics {})
         OpticalDockTabs(
             selectedSlot = dockSlotForDestination(motion.selected.ordinal),
             onTabSelected = { slot -> dockDestinationForSlot(slot)?.let { onSelect(HubDestination.entries[it]) } },
@@ -128,15 +114,15 @@ fun GlassDock(
                 .padding(bottom = dockBottomGap)
                 .widthIn(max = HomeDesignTokens.DockMaxWidth).fillMaxWidth().selectableGroup()
                 .testTag("dock-capsule"),
-        ) {
+        ) { tabBackdrops, importBackdrop ->
             dockEntries.forEachIndexed { index, entry ->
-                if (index == 2) DockImportAction(onImportDocument, enabled = !importing)
+                if (index == 2) DockImportAction(onImportDocument, enabled = !importing, backdrop = importBackdrop)
                 OpticalDockTab(
                     onClick = { if (entry.destination != motion.selected) onSelect(entry.destination) },
                     selected = entry.destination == motion.selected,
                 ) {
-                    DockTabVisual(entry, selected = LocalDockSampling.current,
-                        sampled = LocalDockSampling.current)
+                    DockTabVisual(entry, selected = entry.destination == motion.selected,
+                        backdrop = tabBackdrops[index])
                 }
             }
         }
@@ -167,8 +153,9 @@ internal fun dockDestinationForSlot(slot: Int): Int? = when (slot) {
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.DockImportAction(onClick: () -> Unit, enabled: Boolean) {
-    val sampled = LocalDockSampling.current
+private fun androidx.compose.foundation.layout.RowScope.DockImportAction(
+    onClick: () -> Unit, enabled: Boolean, backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
+) {
     val visualTranslation = LocalDockVisualTranslation.current
     val interaction = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -181,39 +168,46 @@ private fun androidx.compose.foundation.layout.RowScope.DockImportAction(onClick
         else androidx.compose.animation.core.spring(QaCoolapk.ReleaseDampingRatio, QaCoolapk.ReleaseStiffness),
         label = "dock-import-press")
     val dark = LocalGlassEnvironment.current.isDark
-    val colors = if (dark) listOf(DockSelectedDark, DockSelectedLight)
-        else listOf(DockSelectedLight, Color(0xFF0064D6))
+    val colors = listOf(if (dark) DockSelectedDark else Color(0xFF6DB5FF), DockSelectedLight)
     Box(
         Modifier.weight(1f).fillMaxHeight()
-            .then(if (sampled) Modifier.clearAndSetSemantics {} else Modifier
                 .testTag("dock-import")
                 .clickable(enabled = enabled, interactionSource = interaction, indication = null,
-                    role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)),
+                    role = androidx.compose.ui.semantics.Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(width = 49.dp, height = 48.dp)
-            .testTag(if (sampled) "dock-import-sample" else "dock-import-surface")
-            .graphicsLayer { translationX = visualTranslation(); scaleX = scale; scaleY = scale }
-            .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(dockImportBrush(enabled, coolapk, dark, colors), androidx.compose.foundation.shape.CircleShape)
-            .then(if (enabled) Modifier.border(
-                if (coolapk) QaCoolapkImport.RimWidth else .5.dp,
-                if (coolapk) qaCoolapkImportRim(dark) else Color.White.copy(alpha = .28f),
-                androidx.compose.foundation.shape.CircleShape) else Modifier)
+        val importShape = RoundedCornerShape(50)
+        com.m1racle.reader.ui.material.GlassBackdropSource(backdrop,
+            Modifier.graphicsLayer { translationX = visualTranslation() }) {
+        Box(Modifier.size(width = 50.dp, height = 36.dp)
+            .testTag("dock-import-surface")
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(importShape)
+            .background(dockImportBrush(enabled, coolapk, dark, colors), importShape)
+            .then(if (enabled && coolapk) Modifier.border(
+                QaCoolapkImport.RimWidth,
+                qaCoolapkImportRim(dark),
+                importShape) else Modifier)
             .drawBehind {
                 if (enabled && !coolapk) {
-                    // Tinted glass keeps the processed rail visible underneath.
-                    // A top glint and animated wash share the pickup spring.
-                    drawRect(Brush.verticalGradient(listOf(
-                        Color.White.copy(alpha = .22f), Color.White.copy(alpha = 0f)),
-                        endY = size.height * .65f))
+                    // The reference action has a horizontal tint, with light
+                    // appearing on pickup rather than a permanent top bevel.
                     val pickup = ((scale - 1f) / .085f).coerceIn(0f, 1f)
                     drawRect(Color.White.copy(alpha = .20f * pickup))
                 } else if (pressed) drawRect(Color.White.copy(
                     alpha = QaCoolapk.ImportPressOverlayAlpha))
             }, contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Add, if (sampled) null else stringResource(R.string.import_file),
-                tint = if (coolapk && enabled) qaCoolapkImportGlyph(dark) else Color.White, modifier = Modifier.size(28.dp))
+            val description = stringResource(R.string.import_file)
+            val glyphColor = if (coolapk && enabled) qaCoolapkImportGlyph(dark) else Color.White
+            Canvas(Modifier.size(24.dp).semantics { contentDescription = description }) {
+                val arm = 7.dp.toPx()
+                val stroke = 2.5.dp.toPx()
+                drawLine(glyphColor, center.copy(x = center.x - arm), center.copy(x = center.x + arm),
+                    strokeWidth = stroke, cap = StrokeCap.Round)
+                drawLine(glyphColor, center.copy(y = center.y - arm), center.copy(y = center.y + arm),
+                    strokeWidth = stroke, cap = StrokeCap.Round)
+            }
+        }
         }
     }
 }
@@ -222,48 +216,50 @@ private fun androidx.compose.foundation.layout.RowScope.DockImportAction(onClick
 private fun DockTabVisual(
     entry: DockEntry,
     selected: Boolean,
+    backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     modifier: Modifier = Modifier,
-    sampled: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val visualTranslation = LocalDockVisualTranslation.current
-    val sampledScale = LocalDockSampleScale.current
     val dark = LocalGlassEnvironment.current.isDark
     val qa = QaGlass.selection
     // QA-only: night lens B uses white bold selected labels; variants pin unselected text.
     val qaSelected = if (selected) qaDockSelectedText(qa.dockNightLens, dark) else null
-    val color = if (selected) {
-        qaSelected ?: if (dark) DockSelectedDark else DockSelectedLight
-    } else qaGlassPrimaryText(qa.variant, dark) ?: scheme.onSurface
+    // The visible foreground is neutral. Only pixels passing through the
+    // moving optical lens are tinted, regardless of navigation selection.
+    val color = qaGlassPrimaryText(qa.variant, dark) ?: scheme.onSurface
     // QA 档 3: selected label is pure black / white bold (blue only on the icon);
     // every label is Medium so it holds up over blurred content.
     val unified = qa.variant == com.m1racle.reader.ui.material.QaGlassVariant.UNIFIED
     val labelColor = if (unified && selected) qaGlassPrimaryText(qa.variant, dark) ?: color else color
-    Column(
+    com.m1racle.reader.ui.material.GlassBackdropSource(backdrop,
         modifier = modifier.graphicsLayer {
             translationX = visualTranslation()
-            if (sampled) { scaleX = sampledScale(); scaleY = sampledScale() }
-        },
+        }) {
+    Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        // CJK font padding leaves extra visible space below the icon. Match
+        // the reference's ink spacing while keeping the glyphs near the center
+        // of the broad optical rim, where they remain legible on pickup.
+        verticalArrangement = Arrangement.spacedBy((-1).dp),
     ) {
         Icon(
             imageVector = entry.selectedIcon,
             contentDescription = null,
             tint = color,
             modifier = Modifier
-                .size(DockTabIconSize)
-                .then(if (sampled) Modifier else Modifier.testTag("dock-icon-${entry.destination.name}")),
+                .size(HomeDesignTokens.DockIconSize)
+                .testTag("dock-icon-${entry.destination.name}"),
         )
         Text(
             text = stringResource(entry.labelRes),
-            modifier = if (sampled) Modifier.clearAndSetSemantics {} else Modifier,
             style = HomeDesignTokens.DockLabelStyle.let { base ->
                 // Night lens B: bold selected label. Label size is production in every variant.
                 val sized = base
                 when {
                     qaSelected != null || (unified && selected) -> sized.copy(fontWeight = FontWeight.Bold)
                     unified -> sized.copy(fontWeight = FontWeight.Medium)
+                    selected -> sized.copy(fontWeight = FontWeight.SemiBold)
                     else -> sized
                 }
             },
@@ -271,6 +267,7 @@ private fun DockTabVisual(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
     }
 }
 
