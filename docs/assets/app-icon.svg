@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108" role="img" aria-label="M1racle Reader">
+  <!-- Uses the current Android launcher background and ic_reader_mark vector paths. -->
+  <rect width="108" height="108" rx="24" fill="#142C48"/>
+  <path fill="#243B60" d="M21,33 Q37,25 54,35 Q71,25 87,33 L87,78 Q70,72 54,82 Q38,72 21,78 Z"/>
+  <path fill="#94DCFA" d="M25,30 Q41,26 52,36 L52,75 Q38,65 25,69 Z"/>
+  <path fill="#ECF7FF" d="M56,36 Q68,26 83,30 L83,69 Q69,65 56,75 Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.65" d="M25,30 Q41,26 52,36 L52,40 Q39,31 25,35 Z"/>
+  <path stroke="#0D3B64" stroke-width="2.8" stroke-linecap="round" fill="none" d="M33,45 L33,59 M33,45 L39,53 L45,45 L45,62"/>
+  <path stroke="#41678A" stroke-width="2.3" stroke-linecap="round" fill="none" d="M64,43 L75,40 M64,51 L75,48 M64,59 L72,57"/>
+</svg>
