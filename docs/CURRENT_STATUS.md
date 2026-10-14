@@ -25,4 +25,4 @@ SHA-256：`aa175ffd155856f075cc1c94896bb85ae5de8c12fb35d7527c49d6247dc46bfa`。
 ## 未完成项
 
 - 77的物理手机安装、Download同步、屏幕颜色、实际触摸滚动及用户最终视觉认可待验。最近确认手机为76，且用户否定其过渡观感；76像素检查不能作为77手机验收。
-- 全功能实机边界仍见[原始矩阵](STABILIZATION_20261013.md)。本轮新路径实际证据为API35，不扩大到API31–32或API36。未commit/push，不代表公开发布或全积压清单完成。
+- 全功能实机边界仍见[原始矩阵](STABILIZATION_20261013.md)。本轮新路径实际证据为API35，不扩大到API31–32或API36。当前源码已提交并推送至[私有GitHub仓库](https://github.com/ldohgfsdu/m1racle-reader/tree/master)，不代表公开发布或全积压清单完成。
