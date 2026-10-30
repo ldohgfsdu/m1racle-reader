@@ -1,6 +1,6 @@
 # M1racle Reader 发布门禁
 
-当前产物和验证结论唯一入口为 [CURRENT_STATUS](docs/CURRENT_STATUS.md)。本清单定义每个新候选必须重新满足的条件；历史版本通过不能自动继承。[本轮稳定性证据与验收矩阵](docs/STABILIZATION_20261013.md)记录执行结果。旧清单已[归档](docs/history/RELEASE_CHECKLIST_before_stabilization_20261013.md)。
+当前产物和验证结论唯一入口为 [CURRENT_STATUS](docs/CURRENT_STATUS.md)。本清单定义每个新候选必须重新满足的条件；历史版本通过不能自动继承。[本轮稳定性证据与验收边界](docs/STABILITY_FIXES_20261030.md)记录执行结果，[首轮验收矩阵](docs/STABILIZATION_20261013.md)保留历史基线。旧清单已[归档](docs/history/RELEASE_CHECKLIST_before_stabilization_20261013.md)。
 
 ## 源码与版本
 

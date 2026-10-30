@@ -1,4 +1,12 @@
-# 阅读页滚动性能（本轮）
+# 阅读页滚动性能
+
+当前验证与设备边界见 [稳定性修复报告](STABILITY_FIXES_20261030.md)。下文根因和优化为历史实现记录，不能作为当前正式版已完成真机性能验收的证据。
+
+## 89 版采集状态
+
+已补齐 QA 专用 MarkdownScrollBenchmarkActivity 的清单注册，正式包不包含该入口。API35 x86_64 模拟器在合成 Markdown 页执行 6 次向前和 6 次向后 300ms 滑动，gfxinfo 记录 176 帧、99 帧 janky（56.25%），P50 44ms、P90 105ms。PSS 从 127227KB 到 138946KB。原始 gfxinfo、framestats、meminfo、页面截图和采集后主机环境保存在 D:/03_M1racle Reader/output/stability-fixes-20261030/v89/markdown-performance。
+
+采集入口已验证可用，帧耗时偏高，性能验收仍 pending。该记录没有修改前对照，也没有物理手机证据，不能据此声称性能达标、确认本轮回退或诊断内存泄漏。
 
 ## 根因（修改前）
 
@@ -30,26 +38,23 @@
 ## 构建与真机 benchmark
 
 ```bash
-# 功能验证（产物仅工程内 / dist/performance/，不进手机 Download）
-./gradlew :app:assembleDebug :app:testDebugUnitTest
+# 功能验证；先加载 reader-env-local.ps1 的本机环境
+./gradlew :app:testQaUnitTest :app:testReleaseUnitTest :app:lintRelease
 
-# 人工验收交付：Release only → dist/m1racle-reader-release.apk
-./gradlew :app:assembleRelease
+# 正式签名交付：工作区 reader-build-local.ps1 -Release :app:assembleRelease
+# Outbox: .external_outbox/m1racle-reader-release-latest.apk
 
-# Macrobenchmark（benchmark variant，脚本不变）
-./gradlew :app:assembleBenchmark :benchmark:assembleBenchmark
-# 真机（需已导入 docs/sample-stress.md 并打开过一次）
-# benchmark 包名: com.m1racle.reader.benchmark
-./gradlew :app:installBenchmark :benchmark:connectedBenchmarkAndroidTest
+# 隔离 QA 的合成 Markdown 滚动遥测
+./scripts/run-markdown-scroll-benchmark.ps1 -Serial <serial> -OutputRoot <output-directory>
 ```
 
-**APK 交付规则**见 `dist/APK_DELIVERY.md`：`/storage/emulated/0/Download/` 仅放 `m1racle-reader-release.apk`。
+**APK 交付规则**见 [APK_DELIVERY.md](APK_DELIVERY.md)：设备 Download 只交付 `m1racle-reader-release-latest.apk`。所有 instrumentation 只针对 QA，禁止在正式包清库或卸载。
 
 FrameTiming 关注 `frameDurationCpuMs` P50/P90/P99 与 `frameOverrunMs`。
 
-### 指标说明（本环境）
+### 真机指标要求
 
-当前构建环境无已连接物理设备 / adb，**无法在本轮产出 before/after 数值表**。
+没有连接物理设备时，**不能产出真机 before/after 数值表**。模拟器或 QA 合成页面的数字只用于相应环境诊断，不能写成正式版真机性能结论。
 请在真机上对同一文档（`sample-stress.md`）各跑 5 iterations：
 
 | 场景 | 指标 |

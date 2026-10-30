@@ -7,10 +7,11 @@
 | 主题 | 文件 | 说明 |
 |---|---|---|
 | 当前状态 | [CURRENT_STATUS.md](CURRENT_STATUS.md) | 版本、验证基线、已交付产物、设备验收状态、未决项 |
+| 当前稳定性修复 | [STABILITY_FIXES_20261030.md](STABILITY_FIXES_20261030.md) | 原子书签、EPUB 命名锚点、PDF 像素及恢复链路、源码基线与当前验收边界 |
 | 87 界面与品牌基线 | [HOME_POLISH_20261029.md](HOME_POLISH_20261029.md) | 首页、五条预览、Radix、Note 图标占比及同源正式包 |
-| 当前 88 交付 | [PDF_RENDER_METADATA_20261030.md](PDF_RENDER_METADATA_20261030.md) | PDF 重复开页优化、BOM、忙碌反馈及最终同源验证 |
+| 88 渲染优化与历史交付 | [PDF_RENDER_METADATA_20261030.md](PDF_RENDER_METADATA_20261030.md) | PDF 重复开页优化、BOM、忙碌反馈及当时同源验证 |
 | 85 旋转修复基线 | [EDITOR_ROTATION_20261029.md](EDITOR_ROTATION_20261029.md) | 编辑器选区 / 历史及 PDF 阅读锚点、既有验收边界 |
-| 83 界面基线与历史交付 | [UI_RELEASE_20261025.md](UI_RELEASE_20261025.md) | 82 完整基线合入界面整理、原图标、完整回归；当前正式包见 88 报告 |
+| 83 界面基线与历史交付 | [UI_RELEASE_20261025.md](UI_RELEASE_20261025.md) | 82 完整基线合入界面整理、原图标、完整回归；当前 89 正式包见 CURRENT_STATUS 与稳定性修复报告 |
 | 设置品牌头与首页文件菜单（81历史） | [SETTINGS_MENU_20261024.md](SETTINGS_MENU_20261024.md) | 81 正式包、品牌头滚动折叠、实色菜单、取消路径、模拟器证据与源码冻结 |
 | 设置页纯母标品牌区（当前） | [SETTINGS_BRAND_20261025.md](SETTINGS_BRAND_20261025.md) | 82 正式包、纯母标 M、单次 Reader、深浅反色、折叠回顶与源码冻结 |
 | 会话对象 | [.memory/active_object.yaml](../.memory/active_object.yaml) | 当前 active object 的 id / status / scope |

@@ -21,7 +21,8 @@ keystore.properties
 .external_outbox/
 .shared_inbox/
 .local-backups/
-.memory/
+.memory/*
+!.memory/active_object.yaml
 /output/
 hs_err_pid*.log
 replay_pid*.log

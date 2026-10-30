@@ -1,0 +1,24 @@
+id: READER_STABILITY_20261030
+priority: P1
+status: automated_verified
+scope:
+  - Atomic bookmark toggles and EPUB named anchors
+  - PDF native regression failures and render-to-position integration
+  - Isolated QA and signed Release verification
+  - Recoverable source baseline and current documentation
+constraints:
+  - Preserve existing reader and reader-audit-fixes-20261024 worktrees
+  - Never clear or uninstall com.m1racle.reader
+  - Physical-phone and human acceptance require a connected physical device
+verification:
+  release_version_code: 89
+  qa_unit_tests: 1853
+  release_unit_tests: 1696
+  existing_environment_skips_per_variant: 2
+  native_tests_passed: 40
+  emulator_release_smoke: verified
+  physical_phone: pending
+  human_acceptance: pending
+  performance_acceptance: pending
+state_source: docs/CURRENT_STATUS.md
+evidence: D:/03_M1racle Reader/output/stability-fixes-20261030/v89
