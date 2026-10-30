@@ -5,16 +5,16 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Phase 1 R36 tokens: authority only, no UI migration. */
+/** Shared UI role contracts for the Radix visual system. */
 class M1racleTokensContractTest {
 
     @Test
-    fun `typography has exactly the five reading styles`() {
+    fun `product typography keeps its roles within three UI sizes`() {
         val type = DefaultM1racleTypography
-        assertEquals(28f, type.display.fontSize.value)
-        assertEquals(17f, type.title.fontSize.value)
-        assertEquals(15f, type.section.fontSize.value)
-        assertEquals(15f, type.body.fontSize.value)
+        assertEquals(18f, type.display.fontSize.value)
+        assertEquals(14f, type.title.fontSize.value)
+        assertEquals(14f, type.section.fontSize.value)
+        assertEquals(14f, type.body.fontSize.value)
         assertEquals(12f, type.caption.fontSize.value)
         val names = M1racleTypography::class.java.declaredFields
             .map { it.name }
@@ -37,10 +37,10 @@ class M1racleTokensContractTest {
     }
 
     @Test
-    fun `corner radii are 14 24 32`() {
-        assertEquals(14f, M1racleCornerRadius.control.value)
-        assertEquals(24f, M1racleCornerRadius.card.value)
-        assertEquals(32f, M1racleCornerRadius.container.value)
+    fun `corner radii use nested 4dp increments`() {
+        assertEquals(8f, M1racleCornerRadius.control.value)
+        assertEquals(12f, M1racleCornerRadius.card.value)
+        assertEquals(16f, M1racleCornerRadius.container.value)
     }
 
     @Test
@@ -67,13 +67,13 @@ class M1racleTokensContractTest {
     }
 
     @Test
-    fun `motion has fast normal slow with one easing pair`() {
-        assertEquals(120, M1racleMotion.FastMs)
-        assertEquals(180, M1racleMotion.NormalMs)
-        assertEquals(220, M1racleMotion.SlowMs)
-        assertEquals(120, M1racleMotion.fast.durationMillis)
-        assertEquals(180, M1racleMotion.normal.durationMillis)
-        assertEquals(220, M1racleMotion.slow.durationMillis)
+    fun `necessary motion shares 250ms ease out`() {
+        assertEquals(250, M1racleMotion.FastMs)
+        assertEquals(250, M1racleMotion.NormalMs)
+        assertEquals(250, M1racleMotion.SlowMs)
+        assertEquals(250, M1racleMotion.fast.durationMillis)
+        assertEquals(250, M1racleMotion.normal.durationMillis)
+        assertEquals(250, M1racleMotion.slow.durationMillis)
         assertEquals(M1racleMotion.easeOut, M1racleMotion.fast.easing)
         assertEquals(M1racleMotion.easeOut, M1racleMotion.normal.easing)
         assertEquals(M1racleMotion.easeOut, M1racleMotion.slow.easing)
@@ -82,14 +82,14 @@ class M1racleTokensContractTest {
         assertEquals(0f, M1racleMotion.easeOut.transform(0f), 0f)
         assertEquals(1f, M1racleMotion.easeOut.transform(1f), 0f)
         assertTrue(M1racleMotion.easeOut.transform(0.5f) > 0.5f)
-        assertTrue(M1racleMotion.easeIn.transform(0.5f) < 0.5f)
+        assertTrue(M1racleMotion.easeIn.transform(0.5f) > 0.5f)
     }
 
     @Test
-    fun `theme still publishes the live material typography unchanged`() {
+    fun `material typography shares the three UI sizes`() {
         val live = M1racleReaderTypography
-        assertEquals(22f, live.headlineSmall.fontSize.value)
-        assertEquals(16f, live.bodyLarge.fontSize.value)
+        assertEquals(18f, live.headlineSmall.fontSize.value)
+        assertEquals(14f, live.bodyLarge.fontSize.value)
         assertEquals(12f, live.bodySmall.fontSize.value)
     }
 }

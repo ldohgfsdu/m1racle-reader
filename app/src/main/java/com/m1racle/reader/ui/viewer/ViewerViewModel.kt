@@ -37,6 +37,7 @@ sealed class ViewerUiState {
         val toc: List<TocItem>,
         val anchorRegistry: AnchorRegistry,
         val blockIds: List<String>,
+        val blockStartLines: List<Int> = emptyList(),
         /** True when parser failed and content is a raw-text fallback block. */
         val isParseFallback: Boolean = false,
     ) : ViewerUiState()
@@ -126,6 +127,9 @@ class ViewerViewModel(
     fun retry() {
         load()
     }
+
+    /** Refresh content without unmounting the current reader or its scroll state. */
+    fun refreshAfterEdit() { load(keepContent = true) }
 
     fun openSearch() {
         searchJob?.cancel()
@@ -303,9 +307,9 @@ class ViewerViewModel(
         positionSaver.save(ScrollPosition(lastScrollIndex, lastScrollOffset, readingProgress))
     }
 
-    private fun load() {
+    private fun load(keepContent: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = ViewerUiState.Loading
+            if (!keepContent) _uiState.value = ViewerUiState.Loading
 
             val entity = try {
                 repository.getDocumentById(documentId)
@@ -389,6 +393,7 @@ class ViewerViewModel(
                         toc = parseResult.toc,
                         anchorRegistry = parseResult.anchorRegistry,
                         blockIds = parseResult.blockIds,
+                        blockStartLines = parseResult.blockStartLines,
                         isParseFallback = parseFallback,
                     )
                     // Re-run search if user is already in search mode (rare race after reload).

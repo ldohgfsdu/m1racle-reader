@@ -36,7 +36,7 @@ class HubSettingsScreenTest {
                 HubSettingsScreen(onNavigateHub = {}, onOpenDocumentTools = { opened = true })
             }
         }
-        rule.onNodeWithText("文件与PDF工具").performScrollTo().performClick()
+        rule.onNodeWithText("文件与 PDF 工具").performScrollTo().performClick()
         assertTrue(opened)
     }
 }

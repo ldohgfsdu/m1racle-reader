@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.epub
 
+import com.m1racle.reader.design.RadixColors
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
@@ -212,6 +213,11 @@ internal fun EpubReaderContent(
     val mode = settings.epubReadingMode
     val continuousList = rememberLazyListState()
     val curl = rememberPageCurlState()
+    val curlPageCommit = remember(curl) { EpubCurlPageCommit(curl.current) }
+    var curlGestureEpoch by remember(curl) { mutableIntStateOf(0) }
+    LaunchedEffect(systemCaptureInProgress) {
+        if (systemCaptureInProgress) curlPageCommit.reset(curl.current)
+    }
     val curlConfig = rememberPageCurlConfig(backPageColor = background,
         backPageContentAlpha = .08f, tapForwardEnabled = false, tapBackwardEnabled = false,
         tapCustomEnabled = true, onCustomTap = { _, _ -> chromeVisible = !chromeVisible; true })
@@ -228,8 +234,9 @@ internal fun EpubReaderContent(
     fun navigateTo(page: Int, animated: Boolean) {
         val currentLayout = ready ?: return
         if (page !in currentLayout.pages.indices) return
-        // Even selecting the current TOC page is deliberate navigation.
+        // TOC and tap navigation are explicit user actions, including the current page.
         restoreSession.onUserNavigation()
+        curlPageCommit.reset(curl.current)
         val position = currentLayout.positionAt(currentLayout.pages[page].slices.first())
         if (page == readingPage) {
             anchorRow = position.first
@@ -270,18 +277,29 @@ internal fun EpubReaderContent(
         val target = ready.pageForText(anchorRow, anchorText).coerceIn(0, pages.lastIndex)
         when (mode) {
             EpubReadingMode.Continuous -> continuousList.scrollToItem(target, ready.pagePixelForText(anchorRow, anchorText).second)
-            EpubReadingMode.Curl -> { curl.snapTo(target) }
+            EpubReadingMode.Curl -> {
+                curlPageCommit.reset(target)
+                curl.snapTo(target)
+            }
             EpubReadingMode.Slide -> if (pager.currentPage != target) pager.scrollToPage(target)
         }
         readingPage = target
         snapshotFlow {
             if (systemCaptureInProgress) null else when (mode) {
-                EpubReadingMode.Slide -> if (!pager.isScrollInProgress && pager.currentPageOffsetFraction == 0f) pager.currentPage to 0 else null
-                EpubReadingMode.Curl -> if (curl.progress == 0f) curl.current to 0 else null
-                EpubReadingMode.Continuous -> if (!continuousList.isScrollInProgress) continuousList.firstVisibleItemIndex to continuousList.firstVisibleItemScrollOffset else null
+                EpubReadingMode.Slide -> if (!pager.isScrollInProgress && pager.currentPageOffsetFraction == 0f) Triple(pager.currentPage, 0, 0) else null
+                EpubReadingMode.Curl -> if (curl.progress == 0f) Triple(curl.current, 0, curlGestureEpoch) else null
+                EpubReadingMode.Continuous -> if (!continuousList.isScrollInProgress) Triple(continuousList.firstVisibleItemIndex, continuousList.firstVisibleItemScrollOffset, 0) else null
             }
-        }.filterNotNull().distinctUntilChanged().collect { (index, pixelOffset) ->
+        }.filterNotNull().distinctUntilChanged().collect { (index, pixelOffset, _) ->
             val page = ready.pages.getOrNull(index) ?: return@collect
+            if (mode == EpubReadingMode.Curl) {
+                val committed = curlPageCommit.observe(index, curl.progress)
+                if (committed != null) {
+                    restoreSession.onUserNavigation()
+                } else if (curl.progress != 0f) {
+                    return@collect
+                }
+            }
             val first = if (mode == EpubReadingMode.Continuous) {
                 val y = pixelOffset.toFloat()
                 val slice = page.slices.lastOrNull { it.pageTop <= y } ?: page.slices.first()
@@ -320,7 +338,7 @@ internal fun EpubReaderContent(
                 // so their glass never samples itself or duplicates its icons.
                 val scrollFromReading = if (mode == EpubReadingMode.Slide) pager.currentPage - readingPage + pager.currentPageOffsetFraction else 0f
                 val backingPaper = if (scrollFromReading < 0f) lerp(background,
-                    if (LocalReaderDarkTheme.current) Color(0xFF202022) else Color(0xFFF7F7F7),
+                    if (LocalReaderDarkTheme.current) RadixColors.GrayDark3 else RadixColors.Gray2,
                     1f - (1f - kotlin.math.abs(scrollFromReading).coerceIn(0f, 1f)).let { it * it }) else background
                 GlassBackdropSource(backdrop, Modifier.fillMaxSize().background(backingPaper)) {
                     Box(Modifier.fillMaxSize().onSizeChanged { sheetWidth = it.width }) {
@@ -345,7 +363,7 @@ internal fun EpubReaderContent(
                                     pager.currentPage, readingPage, sheetWidth.toFloat(),
                                 ) else EpubPageTurnLayer(0f, 0f, 0f)
                                 val paper = lerp(background,
-                                    if (LocalReaderDarkTheme.current) Color(0xFF202022) else Color(0xFFF7F7F7),
+                                    if (LocalReaderDarkTheme.current) RadixColors.GrayDark3 else RadixColors.Gray2,
                                     turn.paperLift)
                                 Box(
                                     Modifier.fillMaxSize()
@@ -408,7 +426,14 @@ internal fun EpubReaderContent(
                                     modifier = Modifier.fillMaxSize().testTag("epub-pager"),
                                 ) { pageContent(it) }
                                 EpubReadingMode.Curl -> PageCurl(count = ready.pages.size, state = curl,
-                                    config = curlConfig, modifier = Modifier.fillMaxSize().testTag("epub-curl"), content = pageContent)
+                                    config = curlConfig, modifier = Modifier.fillMaxSize()
+                                        .observeEpubCurlPointer(
+                                            curlPageCommit::onPointerDown,
+                                            curlPageCommit::onPointerConsumedMove,
+                                            { curlPageCommit.onPointerUp(); curlGestureEpoch++ },
+                                            { curlPageCommit.onPointerCancelled(); curlGestureEpoch++ },
+                                        )
+                                        .testTag("epub-curl"), content = pageContent)
                                 EpubReadingMode.Continuous -> {
                                     LaunchedEffect(continuousList.isScrollInProgress) {
                                         if (continuousList.isScrollInProgress && !systemCaptureInProgress) { chromeVisible = false; restoreSession.onUserNavigation() }
@@ -485,7 +510,7 @@ private fun EpubPageFooter(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            if (page != null) "$chapterTitle · ${chapterPages.indexOf(index) + 1}/${chapterPages.count()}" else "章节 · 1/1",
+            if (page != null) "$chapterTitle  ${chapterPages.indexOf(index) + 1}/${chapterPages.count()}" else "章节  1/1",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = chromeProgress),
             maxLines = 1, overflow = TextOverflow.Ellipsis,

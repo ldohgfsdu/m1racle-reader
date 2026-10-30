@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.pdf
 
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -234,7 +235,7 @@ internal fun AnchoredNestedPopover(
             ) {
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = MenuRowHPad),
-                    thickness = 0.5.dp,
+                    thickness = M1racleReaderTheme.hairline,
                     color = MaterialTheme.colorScheme.onSurface.copy(
                         alpha = GlassMaterialEngine.resolve(
                             role = GlassMaterialRole.SettingsCard,

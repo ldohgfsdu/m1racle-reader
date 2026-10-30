@@ -2,7 +2,7 @@ package com.m1racle.reader.ui.hub
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import com.m1racle.reader.ui.theme.M1racleMotion
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -99,7 +99,7 @@ internal fun OpticalDockTabs(
     var strain by remember { mutableFloatStateOf(0f) }
     var lastMovement by remember { mutableLongStateOf(0L) }
     val press = animateFloatAsState(if (held) 1f else 0f,
-        spring(1f, 1000f, visibilityThreshold = .001f), label = "dock-lens-press")
+        M1racleMotion.normal, label = "dock-lens-press")
     // A tap picks up the current lens and carries it to the pressed tab.
     // Once pickup finishes, dragging follows the finger without extra lag.
     val logicalPosition = remember { derivedStateOf {
@@ -107,18 +107,18 @@ internal fun OpticalDockTabs(
         else settleFrom ?: position.value
     } }
     val pickupX = animateFloatAsState(if (held) 1f else 0f,
-        spring(.6f, 250f, visibilityThreshold = .001f), label = "dock-pickup-x")
+        M1racleMotion.normal, label = "dock-pickup-x")
     val pickupY = animateFloatAsState(if (held) 1f else 0f,
-        spring(.7f, 250f, visibilityThreshold = .001f), label = "dock-pickup-y")
+        M1racleMotion.normal, label = "dock-pickup-y")
     val panelReturn = remember { Animatable(0f) }
     LaunchedEffect(held) {
         if (!held) {
-            panelReturn.animateTo(0f, spring(1f, 300f, .5f))
+            panelReturn.animateTo(0f, M1racleMotion.normal)
         }
     }
     val scope = rememberCoroutineScope()
     val deformation = animateFloatAsState(strain,
-        spring(.5f, 600f, visibilityThreshold = .001f), label = "dock-lens-velocity")
+        M1racleMotion.normal, label = "dock-lens-velocity")
     LaunchedEffect(lastMovement, held) {
         if (held) { delay(80); strain = 0f }
     }
@@ -136,10 +136,10 @@ internal fun OpticalDockTabs(
     // Capture the visible dock once. The lens is a sibling and can never be
     // recorded into its own source; there is no substitute rail or foreground.
     val capsule = remember { RoundedCornerShape(50) }
-    LaunchedEffect(selectedSlot, held, settleFrom) {
+    LaunchedEffect(selectedSlot, held) {
         if (!held) {
             settleFrom?.let { position.snapTo(it); settleFrom = null }
-            position.animateTo(selectedSlot.toFloat(), spring(.8f, 450f))
+            position.animateTo(selectedSlot.toFloat(), M1racleMotion.normal)
         }
     }
     BoxWithConstraints(modifier.height(containerHeight).pointerInput(rtl) {

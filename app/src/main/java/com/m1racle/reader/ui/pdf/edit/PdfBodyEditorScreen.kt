@@ -1,5 +1,9 @@
 package com.m1racle.reader.ui.pdf.edit
 
+import com.m1racle.reader.ui.components.readerHairlineBorder
+import com.m1racle.reader.ui.components.ReaderOutlinedTextField
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
+import com.m1racle.reader.design.RadixColors
 import com.m1racle.reader.pdf.edit.PdfEditableText
 
 import androidx.activity.compose.BackHandler
@@ -8,7 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -108,7 +111,7 @@ fun PdfBodyEditorScreen(viewModel: PdfBodyEditorViewModel, onBack: () -> Unit, o
             TextButton(onClick={ viewModel.saveCurrent() },enabled=state.dirty&&!state.busy) { Text("保存") }
             IconButton(onClick={ saveOptions=true },enabled=!state.busy) { Icon(Icons.Outlined.MoreVert,"保存方式") }
         }
-        if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth()) else HorizontalDivider()
+        if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth()) else HorizontalDivider( thickness = M1racleReaderTheme.hairline)
         Box(Modifier.weight(1f).fillMaxWidth().background(colors.surfaceContainerLow)) {
             val image = state.image
             val page = state.page
@@ -118,12 +121,12 @@ fun PdfBodyEditorScreen(viewModel: PdfBodyEditorViewModel, onBack: () -> Unit, o
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val width = maxWidth
                         val height = width * image.height.toFloat()/image.width.toFloat()
-                        Image(image,"PDF 第 ${page.index+1} 页预览",Modifier.fillMaxWidth().height(height).background(Color.White))
+                        Image(image,"PDF 第 ${page.index+1} 页预览",Modifier.fillMaxWidth().height(height).background(RadixColors.White))
                         if (page.reason == null) page.runs.forEach { run ->
                             if (run.reason == null) Box(
                                 Modifier.offset(x=width*run.left,y=height*run.top)
                                     .size(width*(run.right-run.left),height*(run.bottom-run.top))
-                                    .border(1.dp,colors.primary.copy(alpha=0.55f),RoundedCornerShape(2.dp))
+                                    .readerHairlineBorder(colors.primary.copy(alpha=0.55f),RoundedCornerShape(2.dp))
                                     .background(colors.primary.copy(alpha=0.07f))
                                     .semantics { contentDescription="编辑文字：${run.text}" }
                                     .clickable(enabled=!state.busy) { select(run) },
@@ -139,7 +142,7 @@ fun PdfBodyEditorScreen(viewModel: PdfBodyEditorViewModel, onBack: () -> Unit, o
                                 Text(run.text,style=MaterialTheme.typography.bodyMedium)
                                 run.reason?.let { Text(it,style=MaterialTheme.typography.labelSmall,color=colors.onSurfaceVariant) }
                             }
-                            HorizontalDivider()
+                            HorizontalDivider( thickness = M1racleReaderTheme.hairline)
                         }
                     }
                 }
@@ -168,7 +171,7 @@ fun PdfBodyEditorScreen(viewModel: PdfBodyEditorViewModel, onBack: () -> Unit, o
             text={ Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(run.reason ?: "保留原字体与字号，新内容须在原有宽度内。",style=MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(value=draft,onValueChange={ if(it.text.length<=2048) { draft=it; viewModel.clearMessage() } },
+                ReaderOutlinedTextField(value=draft,onValueChange={ if(it.text.length<=2048) { draft=it; viewModel.clearMessage() } },
                     enabled=!state.busy&&run.reason==null,singleLine=true,label={ Text("正文") },modifier=Modifier.fillMaxWidth(),isError=state.error!=null)
                 state.error?.let { Text(it,color=colors.error,style=MaterialTheme.typography.bodySmall,modifier=Modifier.padding(top=8.dp)) }
             } },

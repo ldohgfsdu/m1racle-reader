@@ -49,7 +49,7 @@ class PdfPageRenderer(
     }
 
     sealed class RenderResult {
-        data class Success(val image: ImageBitmap, val widthPx: Int, val heightPx: Int) : RenderResult()
+        data class Success(val image: ImageBitmap, val widthPx: Int, val heightPx: Int, val pageSize: PdfPageSize) : RenderResult()
         data object Closed : RenderResult()
         data object InvalidPage : RenderResult()
         data object OutOfMemory : RenderResult()
@@ -232,6 +232,7 @@ class PdfPageRenderer(
                                 image = bitmap.asImageBitmap(),
                                 widthPx = outW,
                                 heightPx = outH,
+                                pageSize = PdfPageSize(pageW, pageH),
                             )
                         },
                     )

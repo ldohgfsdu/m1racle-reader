@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.annotation
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -128,7 +129,7 @@ fun PdfHighlightLayer(
                         val isSelected = item.id == selectedId
                         val arm = badgeRadiusPx * 0.45f
                         val style = item.style
-                        val color = Color(style.argb)
+                        val color = readerHighlightColor(style)
                         if (style == com.m1racle.reader.data.anchor.HighlightStyle.Underline || style == com.m1racle.reader.data.anchor.HighlightStyle.Strike) {
                             val y = (r.y + r.height * if (style == com.m1racle.reader.data.anchor.HighlightStyle.Underline) .95f else .5f) * h
                             drawLine(color, Offset(r.x * w, y), Offset((r.x + r.width) * w, y), strokeWidth = (h * .0015f).coerceAtLeast(1f))
@@ -142,25 +143,25 @@ fun PdfHighlightLayer(
                         if (isSelected && rectIndex == 0 && onNoteRequested != null) {
                             // 左上角 ✎ 批注角标。
                             val (cx,cy) = PdfHighlightGeometry.badgeCenter(r,w,h,badgeRadiusPx,false)
-                            drawCircle(color = Color.White, radius = badgeRadiusPx, center = Offset(cx, cy))
-                            drawCircle(color = Color(0xFF1976D2), radius = badgeRadiusPx, center = Offset(cx, cy))
+                            drawCircle(color = RadixColors.White, radius = badgeRadiusPx, center = Offset(cx, cy))
+                            drawCircle(color = RadixColors.Blue9, radius = badgeRadiusPx, center = Offset(cx, cy))
                             // 简化笔形：斜杆 + 底点。
                             drawLine(
-                                Color.White,
+                                RadixColors.White,
                                 Offset(cx - arm, cy + arm),
                                 Offset(cx + arm * 0.4f, cy - arm),
                                 strokeWidth = 4f,
                             )
-                            drawCircle(Color.White, radius = 2.5f, center = Offset(cx - arm * 1.1f, cy + arm * 1.1f))
+                            drawCircle(RadixColors.White, radius = 2.5f, center = Offset(cx - arm * 1.1f, cy + arm * 1.1f))
                         }
                         if (isSelected && rectIndex == 0 && onDeleteRequested != null) {
                             // 右上角 ✕ 角标（与 deleteBadgeHit 同心同半径）。
                             val (cx,cy) = PdfHighlightGeometry.badgeCenter(r,w,h,badgeRadiusPx,true)
-                            drawCircle(color = Color.White, radius = badgeRadiusPx, center = Offset(cx, cy))
-                            drawCircle(color = Color(0xFFE53935), radius = badgeRadiusPx, center = Offset(cx, cy))
+                            drawCircle(color = RadixColors.White, radius = badgeRadiusPx, center = Offset(cx, cy))
+                            drawCircle(color = RadixColors.Red9, radius = badgeRadiusPx, center = Offset(cx, cy))
                             val arm = badgeRadiusPx * 0.45f
-                            drawLine(Color.White, Offset(cx - arm, cy - arm), Offset(cx + arm, cy + arm), 4f)
-                            drawLine(Color.White, Offset(cx - arm, cy + arm), Offset(cx + arm, cy - arm), 4f)
+                            drawLine(RadixColors.White, Offset(cx - arm, cy - arm), Offset(cx + arm, cy + arm), 4f)
+                            drawLine(RadixColors.White, Offset(cx - arm, cy + arm), Offset(cx + arm, cy - arm), 4f)
                         }
                     }
                 }
@@ -176,6 +177,6 @@ fun PdfHighlightLayer(
     )
 }
 
-private val HighlightFill = Color(0x55FFD54F)
-private val HighlightFillSelected = Color(0x77FFB300)
-private val SelectionPreview = Color(0x334FC3F7)
+private val HighlightFill = RadixColors.Amber9.copy(alpha = 0.33f)
+private val HighlightFillSelected = RadixColors.Amber9.copy(alpha = 0.47f)
+private val SelectionPreview = RadixColors.Blue9.copy(alpha = 0.20f)

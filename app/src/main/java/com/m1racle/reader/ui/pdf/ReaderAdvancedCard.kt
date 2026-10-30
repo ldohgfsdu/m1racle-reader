@@ -1,11 +1,13 @@
 package com.m1racle.reader.ui.pdf
 
+import com.m1racle.reader.ui.components.readerHairlineBorder
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -178,7 +180,7 @@ internal fun TextbookPageAdvancedContent(
         params.isExact -> stringResource(R.string.pdf_print_exact, params.currentPrint)
         else -> stringResource(R.string.pdf_print_inferred, params.currentPrint)
     }
-    val summary = stringResource(R.string.pdf_set_print_hint, params.currentPdfHumanPage) + " · " + stateLabel
+    val summary = stringResource(R.string.pdf_set_print_hint, params.currentPdfHumanPage) + "  " + stateLabel
 
     // NEVER auto-focus / auto-show the IME on open. Only an explicit tap on
     // the field requests focus (BasicTextField does that natively). Close path
@@ -217,13 +219,11 @@ internal fun TextbookPageAdvancedContent(
                 .fillMaxWidth()
                 .height(AdvancedChildLayoutSpec.ControlHeightDp.dp)
                 .clip(RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp))
-                .background(scheme.onSurface.copy(alpha = 0.05f))
-                .border(
-                    width = 1.dp,
-                    color = if (error != null) {
+                .background(scheme.surfaceContainer)
+                .readerHairlineBorder(color = if (error != null) {
                         scheme.error.copy(alpha = 0.55f)
                     } else {
-                        scheme.onSurface.copy(alpha = 0.08f)
+                        scheme.outline
                     },
                     shape = RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp),
                 )
@@ -579,7 +579,7 @@ internal fun ThumbCell(
     val borderColor = if (selected) {
         scheme.primary.copy(alpha = 0.85f)
     } else {
-        scheme.onSurface.copy(alpha = 0.08f)
+        scheme.outline
     }
     Box(
         modifier = Modifier
@@ -588,9 +588,7 @@ internal fun ThumbCell(
             .clip(RoundedCornerShape(AdvancedChildLayoutSpec.CardCornerDp.dp))
             .background(scheme.surfaceContainerHigh)
             .clickable(enabled = ui is ThumbCellUi.Ready, onClick = onClick)
-            .border(
-                width = if (selected) 2.dp else 0.5.dp,
-                color = borderColor,
+            .readerHairlineBorder(color = borderColor,
                 shape = RoundedCornerShape(AdvancedChildLayoutSpec.CardCornerDp.dp),
             ),
     ) {
@@ -620,12 +618,12 @@ internal fun ThumbCell(
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.SemiBold,
             ),
-            color = Color.White,
+            color = RadixColors.White,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(4.dp)
                 .clip(RoundedCornerShape(AdvancedChildLayoutSpec.CardCornerDp.dp))
-                .background(Color.Black.copy(alpha = 0.45f))
+                .background(RadixColors.Black.copy(alpha = 0.45f))
                 .padding(horizontal = 4.dp, vertical = 1.dp),
         )
     }
@@ -706,7 +704,7 @@ internal fun ExportAdvancedContent(
             return@Column
         }
         val summary = plan.pathTitles.joinToString(" / ").ifBlank { plan.node.title } +
-            " · PDF ${plan.pdfPageStart1Based}–${plan.pdfPageEnd1Based}"
+            "  PDF ${plan.pdfPageStart1Based}–${plan.pdfPageEnd1Based}"
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -920,10 +918,8 @@ private fun ExportCompactField(
                 .fillMaxWidth()
                 .height(AdvancedChildLayoutSpec.ControlHeightDp.dp)
                 .clip(RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp))
-                .background(scheme.onSurface.copy(alpha = 0.05f))
-                .border(
-                    width = 1.dp,
-                    color = scheme.onSurface.copy(alpha = 0.08f),
+                .background(scheme.surfaceContainer)
+                .readerHairlineBorder(color = scheme.outline,
                     shape = RoundedCornerShape(AdvancedChildLayoutSpec.InputCornerDp.dp),
                 )
                 .padding(horizontal = AdvancedChildLayoutSpec.Space12Dp.dp),

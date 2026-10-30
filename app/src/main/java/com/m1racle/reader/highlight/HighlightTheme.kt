@@ -1,10 +1,11 @@
 package com.m1racle.reader.highlight
 
 import androidx.compose.ui.graphics.Color
+import com.m1racle.reader.design.RadixColors
 
 /**
  * Soft syntax colors for light / dark reading themes.
- * Centralized hard-coded palette (no network / no dynamic download).
+ * Official Radix text steps, bundled for offline use.
  */
 data class HighlightTheme(
     val keyword: Color,
@@ -17,28 +18,28 @@ data class HighlightTheme(
     val plain: Color,
 ) {
     companion object {
-        /** GPT-style light code well — low-sat tokens on pale gray. */
+        /** Radix text colors on the light code surface. */
         val Light = HighlightTheme(
-            keyword = Color(0xFF1677A3),
-            string = Color(0xFF275D8C),
-            number = Color(0xFFA13D63),
-            comment = Color(0xFF8A8A8A),
-            typeOrTag = Color(0xFFB5485D),
-            attribute = Color(0xFFB5485D),
-            punctuation = Color(0xFF666666),
-            plain = Color(0xFF1F1F1F),
+            keyword = RadixColors.Blue11,
+            string = RadixColors.Blue11,
+            number = RadixColors.Pink11,
+            comment = RadixColors.Gray11,
+            typeOrTag = RadixColors.Red11,
+            attribute = RadixColors.Red11,
+            punctuation = RadixColors.Gray11,
+            plain = RadixColors.Gray12,
         )
 
         /** Soft / low-sat colors for dark code wells. */
         val Dark = HighlightTheme(
-            keyword = Color(0xFF8AB4E8),
-            string = Color(0xFF9ECBFF),
-            number = Color(0xFF8AB4E8),
-            comment = Color(0xFF8B949E),
-            typeOrTag = Color(0xFF8FDB9A),
-            attribute = Color(0xFFE0B07A),
-            punctuation = Color(0xFFD4D4D4),
-            plain = Color(0xFFD4D4D4),
+            keyword = RadixColors.BlueDark11,
+            string = RadixColors.BlueDark11,
+            number = RadixColors.BlueDark11,
+            comment = RadixColors.GrayDark11,
+            typeOrTag = RadixColors.GreenDark11,
+            attribute = RadixColors.AmberDark11,
+            punctuation = RadixColors.GrayDark12,
+            plain = RadixColors.GrayDark12,
         )
 
         fun forTheme(isDark: Boolean): HighlightTheme =

@@ -22,7 +22,11 @@ class DocumentOperations(private val repository: DocumentRepository) : ViewModel
         catch (e: Exception) { messages.send(e.message ?: "重命名失败") }
     }
     fun export(id: String, target: Uri) = viewModelScope.launch {
-        try { repository.exportDocument(id, target); messages.send("文件已导出并核验") }
+        try {
+            val kind = repository.exportDocument(id, target)
+            messages.send(if (kind == com.m1racle.reader.data.repository.DocumentExportKind.REPACKAGED)
+                "教材包已重新打包并核验（未保留原始 ZIP）" else "文件已导出并核验")
+        }
         catch (e: CancellationException) { throw e }
         catch (e: Exception) { messages.send(e.message ?: "导出失败") }
     }

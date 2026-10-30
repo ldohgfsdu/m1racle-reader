@@ -34,6 +34,33 @@ Follow `docs/PRD.md`（含 2026-09-07 用户授权的 PDF 正文编辑范围补�
 7. 评审方案时：会主动把“为了兼容旧东西”“以后可能会用”“先糊一下以后重构”视为负面信号。
 8. 交互/UI 问题：先看 Android、iOS、Chrome、Acrobat、微信读书、成熟阅读器等现成范式，再决定 M1racle Reader 应该怎么做，而不是凭空设计。
 
+## 界面禁止项（2026-10-30）
+
+界面按成熟阅读器的克制来做。下面这些 AI slop 一律不做。通用词汇用本机用户级技能 `/impeccable`（[pbakaus/impeccable](https://github.com/pbakaus/impeccable) 4.8.0，不在本仓库）。Reader 是 Android Compose，网页检测器扫不到 Kotlin。本节的下拉小图标禁令以这里为准，该检测目录不覆盖这一条。
+
+最严重的一条：下拉菜单按钮不要画下拉小图标。选择器、菜单按钮、`ExposedDropdownMenu`、`Spinner` 不要加 `arrow_drop_down`、`ExposedDropdownMenuDefaults.TrailingIcon` 或同类小箭头。控件本身已经是下拉，这个图标必须去掉。国内产品普遍留着它，Reader 不留。
+
+同时禁止：
+
+- 到处贴标签和斜体
+- Instrument Serif、Space Grotesk、Bricolage Grotesque
+- 滥用等宽字体
+- 过度细节：分割线、多层阴影、半透明叠色、带边框的容器
+- 过细的图表
+- 口语化、自造词、比苹果官网更做作的文案
+- 代码面包屑、章节编号、标题上方的小眉标
+- 紫色渐变
+- 全大写小标题
+- 用中圆点当分隔符
+- 正文里的 Emoji，以及堆砌的无用文字
+- 大得离谱的 hero 字号
+- 画蛇添足的解释性描述
+- 嵌套圆角不同心
+- 线条和边框粗细不统一；发丝线用 0.5px，不用 1px 充数
+- 滚动时动效过多，过渡不收敛、发硬
+- 字号超过 4 种，或最小字号低于 12px
+- 卡片左边缘的彩色竖线
+
 ## 变更与验收纪律
 
 1. 先读后改：修改前必须定位真实调用链、现有实现、相关测试和依赖，禁止仅凭文件名、截图或局部代码猜架构，修 bug 必须先确认根因，不能只压表象。

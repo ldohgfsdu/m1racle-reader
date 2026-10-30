@@ -25,12 +25,12 @@ data class M1racleSurface(
 )
 
 object M1racleCornerRadius {
-    val control = 14.dp
-    val card = 24.dp
-    val container = 32.dp
+    val control = 8.dp
+    val card = 12.dp
+    val container = 16.dp
 }
 
-/** Overlay elevation is ~30% of the current 6.dp frost shadow. */
+/** Elevation is reserved for floating menus that overlap other content. */
 object M1racleElevation {
     val none = 0.dp
     val overlay = 2.dp

@@ -89,8 +89,42 @@ class HomeViewModelTest {
             source = listOf(doc("gone", lastOpenedAt = 500L), doc("kept", lastOpenedAt = 100L)),
             pendingDeleteIds = setOf("gone"),
         )
-        assertEquals(listOf("kept"), state.documents.map { it.id })
+        assertEquals(emptyList<String>(), state.documents.map { it.id })
         assertEquals("kept", state.continueReading?.id)
+        assertEquals(false, state.isEmpty)
+    }
+
+    @Test
+    fun `home previews five recent documents while library source stays complete`() {
+        val source = (20 downTo 1).map { doc("$it", lastOpenedAt = it.toLong()) }
+        val state = homeUiState(source, emptySet())
+        assertEquals("20", state.continueReading?.id)
+        assertEquals(listOf("19", "18", "17", "16", "15"), state.documents.map { it.id })
+        assertEquals(true, state.hasMoreDocuments)
+        assertEquals(20, source.size)
+        assertEquals(20, LibraryFilters.apply(source, LibraryFilter.ALL).size)
+    }
+
+    @Test
+    fun `view all appears only after the five row preview overflows`() {
+        for (count in 0..8) {
+            val state = homeUiState((count downTo 1).map { doc("$it", lastOpenedAt = it.toLong()) }, emptySet())
+            assertEquals("count=$count", count > 6, state.hasMoreDocuments)
+            assertEquals("count=$count", (count - 1).coerceIn(0, 5), state.documents.size)
+        }
+    }
+
+    @Test
+    fun `optimistic removal refills the preview and failed removal restores order`() {
+        val source = (8 downTo 1).map { doc("$it", lastOpenedAt = it.toLong()) }
+        val pending = homeUiState(source, setOf("8", "6"))
+        assertEquals("7", pending.continueReading?.id)
+        assertEquals(listOf("5", "4", "3", "2", "1"), pending.documents.map { it.id })
+        assertEquals(false, pending.hasMoreDocuments)
+        val restored = homeUiState(source, emptySet())
+        assertEquals("8", restored.continueReading?.id)
+        assertEquals(listOf("7", "6", "5", "4", "3"), restored.documents.map { it.id })
+        assertEquals(true, restored.hasMoreDocuments)
     }
 
     // ── 位置行 / 进度 ───────────────────────────────────────────────────────

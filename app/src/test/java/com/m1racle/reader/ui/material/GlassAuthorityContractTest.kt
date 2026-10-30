@@ -71,12 +71,17 @@ class GlassAuthorityContractTest {
     }
 
     @Test
-    fun `cross-window surfaces resolve through the engine`() {
+    fun `dialogs and file menus stay outside the glass topology`() {
         val dialog = appSource("ui/material/GlassAlertDialog.kt")
         assertTrue(dialog.contains("GlassMaterialRole.Dialog"))
         assertTrue(dialog.contains("sampleBackdrop = false"))
         val row = appSource("ui/home/DocumentListRow.kt")
-        assertTrue(row.contains("GlassCapability.SOLID_FALLBACK"))
+        assertTrue(row.contains("DropdownMenu("))
+        assertTrue(row.contains("containerColor = scheme.surfaceContainerHigh.copy(alpha = 1f)"))
+        assertTrue(isOpaqueOutlinedMenu(row))
+        assertFalse(row.contains("GlassMaterialEngine"))
+        assertFalse(row.contains("GlassMaterialRole.Dock"))
+        assertFalse(row.contains(".glassMaterial("))
         val viewer = appSource("ui/viewer/ViewerScreen.kt")
         assertTrue(viewer.contains("sampleBackdrop = false"))
         assertTrue(viewer.contains("GlassMaterialRole.ExpandedMenu"))
@@ -100,6 +105,13 @@ class GlassAuthorityContractTest {
         }
         val body = pdf.substring(open + 1, i - 1)
         assertEquals("content()", body.trim())
+    }
+
+    private fun isOpaqueOutlinedMenu(source: String): Boolean {
+        val outlinedIcons = Regex("leadingIcon\\s*=\\s*\\{ Icon\\(Icons\\.Outlined\\.").findAll(source).count()
+        val divider = source.indexOf("HorizontalDivider(")
+        val remove = source.indexOf("Icons.Outlined.RemoveCircleOutline")
+        return outlinedIcons >= 5 && divider >= 0 && remove > divider
     }
 
     private fun appSource(relative: String): String =

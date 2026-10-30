@@ -167,7 +167,7 @@ class ReaderReturnHostTest {
         rule.runOnIdle {
             assertThrows(IllegalArgumentException::class.java) { nav.navigate("settings/glass-workbench") }
         }
-        rule.onNodeWithText("文件与PDF工具").performScrollTo().performClick()
+        rule.onNodeWithText("文件与 PDF 工具").performScrollTo().performClick()
         rule.waitForIdle()
         assertEquals(Routes.DOCUMENT_TOOLS, nav.currentDestination?.route)
         rule.onNodeWithTag("dock-import").assertDoesNotExist()

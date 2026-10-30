@@ -27,7 +27,7 @@ class GlassOpticalPolicyTest {
         val expectedDark = mapOf(
             GlassMaterialRole.Control to 0.22f,
             GlassMaterialRole.SelectionLens to 0.06f,
-            GlassMaterialRole.DockLens to 0.12f,
+            GlassMaterialRole.DockLens to 0.08f,
             GlassMaterialRole.Menu to 0.64f,
             GlassMaterialRole.ExpandedMenu to 0.90f,
             GlassMaterialRole.SettingsCard to 0.64f,

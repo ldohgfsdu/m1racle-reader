@@ -1,8 +1,9 @@
 package com.m1racle.reader.ui.viewer.components
 
+import com.m1racle.reader.ui.components.readerHairlineBorder
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -144,7 +145,7 @@ fun ImageBlockView(
                         .height(FailHeight)
                         .clip(shape)
                         .background(failBg)
-                        .border(1.dp, failBorder, shape)
+                        .readerHairlineBorder(failBorder, shape)
                         .padding(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -210,7 +211,7 @@ private fun buildCaption(alt: String, title: String?): String? {
     val a = alt.trim()
     val t = title?.trim().orEmpty()
     return when {
-        a.isNotEmpty() && t.isNotEmpty() -> "$a · $t"
+        a.isNotEmpty() && t.isNotEmpty() -> "$a  $t"
         a.isNotEmpty() -> a
         t.isNotEmpty() -> t
         else -> null

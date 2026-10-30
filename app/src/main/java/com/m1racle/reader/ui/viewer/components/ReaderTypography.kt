@@ -3,6 +3,7 @@ package com.m1racle.reader.ui.viewer.components
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 import com.m1racle.reader.data.settings.ReaderSettings
 
 /**
@@ -10,7 +11,7 @@ import com.m1racle.reader.data.settings.ReaderSettings
  *
  * Font size uses [ReaderSettings.fontScale].
  * Line height uses [ReaderSettings.lineHeightScale] as **lh / fontSize ratio**
- * (Compact 1.35 · Default 1.55 · Relaxed 1.75), not a mild multiplier of a fixed sp.
+ * (Compact 1.35  Default 1.55  Relaxed 1.75), not a mild multiplier of a fixed sp.
  */
 object ReaderTypography {
     /** Body ~16.5sp Regular */
@@ -31,11 +32,13 @@ object ReaderTypography {
     val h4Size = 17.sp
     val h56Size = 16.sp
 
-    val tocH1Size = 15.sp
+    val tocH1Size = 14.sp
     val tocH2Size = 14.sp
     val tocH3Size = 14.sp
 
-    val topBarTitleSize = 16.sp
+    val topBarTitleSize = 14.sp
+    val topBarHeight = 56.dp
+    val contentTopGap = 10.dp
 
     fun headingSize(level: Int, fontScale: Float): TextUnit = when (level) {
         1 -> h1Size
@@ -53,7 +56,7 @@ object ReaderTypography {
 
     /**
      * Body / list / quote / table cell line height from settings.
-     * Example at fontScale=1: 16.5×1.35≈22.3sp · 16.5×1.55≈25.6sp · 16.5×1.75≈28.9sp
+     * Example at fontScale=1: 16.5×1.35≈22.3sp  16.5×1.55≈25.6sp  16.5×1.75≈28.9sp
      * (clear step between presets; ~6.6sp Compact→Relaxed).
      */
     fun bodyLineHeight(settings: ReaderSettings): TextUnit {

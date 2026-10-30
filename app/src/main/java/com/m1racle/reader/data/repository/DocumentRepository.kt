@@ -25,6 +25,9 @@ import com.m1racle.reader.epub.EpubBook
 import com.m1racle.reader.epub.EpubException
 import com.m1racle.reader.epub.EpubPackageImporter
 import com.m1racle.reader.packageimport.ZipPackageImporter
+import com.m1racle.reader.packageimport.rebuildMarkdownPackage
+import com.m1racle.reader.documents.DocumentOutputSave
+import android.provider.DocumentsContract
 import com.m1racle.reader.pdf.TextbookOutlineResolver
 import com.m1racle.reader.identity.ContentIdentityInput
 import com.m1racle.reader.identity.ContentIdentityResolution
@@ -215,18 +218,55 @@ class DocumentRepository(
         }
     }
 
-    /** Byte-preserving export, without re-rendering/re-encoding the source format. */
-    suspend fun exportDocument(id: String, target: Uri) = withContext(Dispatchers.IO) {
+    /** Original bytes where retained; older extracted packages are explicitly rebuilt as ZIPs. */
+    suspend fun exportDocument(id: String, target: Uri): DocumentExportKind = withContext(Dispatchers.IO) {
         val document = documentDao.getById(id) ?: error("文档已移除")
         check(target.toString() != document.uri && target.toString() != document.sourceUri) { "请选择新的导出位置，不能覆盖源文件" }
-        val sourceHash = context.contentResolver.openInputStream(Uri.parse(document.uri))?.use(PdfSourceWriteStore::sha256)
-            ?: error("无法读取文档")
-        context.contentResolver.openInputStream(Uri.parse(document.uri))?.use { input ->
-            context.contentResolver.openOutputStream(target, "wt")?.use { output -> input.copyTo(output) }
-                ?: error("无法写入导出文件")
-        } ?: error("无法读取文档")
-        val exportedHash = context.contentResolver.openInputStream(target)?.use(PdfSourceWriteStore::sha256)
-        check(sourceHash == exportedHash) { "导出文件核验失败" }
+        val targetKey = ExternalUriMetadata.canonicalExternalKey(target.scheme, target.authority,
+            target.toString(), target.lastPathSegment)
+        check(documentAliasDao.getByKey(DocumentAliasKeys.uriV1(targetKey)) == null) { "不能覆盖已导入文档的源文件" }
+        var temporary: File? = null
+        try {
+            val source = if (document.type == DocumentType.MARKDOWN_PACKAGE) {
+                val archive = File(packageArchiveDirectory(id), "original.zip")
+                if (archive.isFile) {
+                    check(PdfSourceWriteStore.sha256(archive) == document.contentSha256) { "保留的原始教材包已损坏，未导出" }
+                    Uri.fromFile(archive)
+                } else {
+                    val packages = File(context.filesDir, "packages").canonicalFile
+                    val root = File(packages, id).canonicalFile
+                    require(root.parentFile == packages) { "Invalid document id" }
+                    val entry = uriToFile(document.uri) ?: error("教材包入口不可用")
+                    val rebuilt = File.createTempFile("package-export-", ".zip", context.cacheDir).also { temporary = it }
+                    rebuildMarkdownPackage(root, entry, rebuilt)
+                    Uri.fromFile(rebuilt)
+                }
+            } else Uri.parse(document.uri)
+            check(target != source) { "请选择新的导出位置，不能覆盖源文件" }
+            val resolver = context.contentResolver
+            val sourceHash = resolver.openInputStream(source)?.use(PdfSourceWriteStore::sha256)
+                ?: error("无法读取文档")
+            val save = DocumentOutputSave(
+                openSource = { resolver.openInputStream(source) },
+                openOutput = { resolver.openOutputStream(target, "wt") },
+                openVerification = { resolver.openInputStream(target) },
+                deleteDestination = {
+                    if (target.scheme == "file") target.path?.let { File(it).delete() } == true
+                    else DocumentsContract.deleteDocument(resolver, target)
+                }, expectedSha256 = sourceHash)
+            try { save.write() }
+            catch (failure: Exception) {
+                if (save.partialOutputRemains && failure !is CancellationException)
+                    throw java.io.IOException("导出失败，部分文件未能删除，请在导出位置删除", failure)
+                throw failure
+            }
+            if (temporary == null) DocumentExportKind.ORIGINAL else DocumentExportKind.REPACKAGED
+        } finally { temporary?.delete() }
+    }
+
+    private fun packageArchiveDirectory(id: String): File {
+        val root = File(context.filesDir, "package-archives").canonicalFile
+        return File(root, id).canonicalFile.also { require(it.parentFile == root) { "Invalid document id" } }
     }
 
     internal suspend fun ensureIdentityRuntimeReady() {
@@ -376,7 +416,7 @@ class DocumentRepository(
         // source the user actually opened, rather than the first imported alias.
         val frozen = freezeManagedDocument(hashOwner)
         val opened = frozen.copy(lastOpenedAt=now,
-            sourceUri=if(hashOwner.isPdf) prepared.sourceUri.toString() else frozen.sourceUri,
+            sourceUri=if(hashOwner.isPdf || hashOwner.isMarkdownPackage) prepared.sourceUri.toString() else frozen.sourceUri,
             sourceSha256=if(hashOwner.isPdf) prepared.contentSha256 else hashOwner.sourceSha256)
         documentDao.updateDocument(opened)
         bindVerifiedSourceAliases(request, hashOwner.id, now)
@@ -409,7 +449,8 @@ class DocumentRepository(
             documentType = request.documentType.name,
             pageCount = 0,
             contentSha256 = prepared.contentSha256,
-            sourceUri = if (request.documentType == DocumentType.PDF || request.documentType == DocumentType.MARKDOWN) prepared.sourceUri.toString() else null,
+            sourceUri = if (request.documentType == DocumentType.PDF || request.documentType == DocumentType.MARKDOWN ||
+                request.documentType == DocumentType.MARKDOWN_PACKAGE) prepared.sourceUri.toString() else null,
             sourceSha256 = if (request.documentType == DocumentType.PDF) prepared.contentSha256 else null,
         )
         documentDao.insertDocument(entity)
@@ -488,7 +529,7 @@ class DocumentRepository(
                 mimeType = prepared.metadata.mimeType,
                 fileSize = prepared.byteCount,
                 title = null,
-                operationOwnedPath = destinationDirectory,
+                operationOwnedPaths = listOf(destinationDirectory),
             )
         } catch (error: Exception) {
             destinationDirectory.deleteRecursively()
@@ -514,6 +555,19 @@ class DocumentRepository(
         }
 
         val entry = extracted.entryFile
+        val archiveDirectory = packageArchiveDirectory(documentId)
+        var archiveOwned = false
+        try {
+            check(archiveDirectory.mkdirs()) { "无法保留原始教材包" }
+            archiveOwned = true
+            val archive = File(archiveDirectory, "original.zip")
+            prepared.stagedFile.copyTo(archive, overwrite = false)
+            check(PdfSourceWriteStore.sha256(archive) == prepared.contentSha256) { "原始教材包核验失败" }
+        } catch (error: Exception) {
+            destinationDirectory.deleteRecursively()
+            if (archiveOwned) archiveDirectory.deleteRecursively()
+            throw ResolvedImportCommitException.Failed(error)
+        }
         val title = runCatching {
             ZipPackageImporter.extractFirstH1(entry)
         }.getOrNull()
@@ -532,10 +586,10 @@ class DocumentRepository(
         return MaterializedImportPayload(
             uri = Uri.fromFile(entry).toString(),
             displayName = zipLabel ?: entry.name.takeIf(String::isNotBlank) ?: "Markdown 教材包",
-            mimeType = prepared.metadata.mimeType ?: "application/zip",
+            mimeType = "application/zip",
             fileSize = extractedSize,
             title = title,
-            operationOwnedPath = destinationDirectory,
+            operationOwnedPaths = listOf(destinationDirectory, archiveDirectory),
         )
     }
 
@@ -1128,12 +1182,14 @@ private data class MaterializedImportPayload(
     val fileSize: Long,
     val title: String?,
     /** Unique path created by this operation; never points at an existing document payload. */
-    val operationOwnedPath: File?,
+    val operationOwnedPaths: List<File>,
 ) {
     fun deleteOperationOwnedFiles() {
-        operationOwnedPath?.deleteRecursively()
+        operationOwnedPaths.forEach { it.deleteRecursively() }
     }
 }
+
+enum class DocumentExportKind { ORIGINAL, REPACKAGED }
 
 
 sealed class ImportResult {

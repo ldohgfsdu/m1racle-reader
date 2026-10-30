@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.viewer.components
 
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -65,6 +66,7 @@ fun TableBlockView(
     onLinkClick: ((String) -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val linkColor = M1racleReaderTheme.extra.link
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val tokens = MarkdownTableLayoutEngine.Tokens
@@ -82,12 +84,13 @@ fun TableBlockView(
     )
     val resolvedHeaderTextStyle = resolveTableHeaderTextStyle(bodyStyle)
     val inlineStyles = remember(
+        linkColor,
         scheme.primary,
         scheme.surfaceContainerHighest,
         settings.fontScale,
     ) {
         InlineMarkdownStyles.themed(
-            primary = scheme.primary,
+            primary = linkColor,
             codeBackground = scheme.surfaceContainerHighest,
             codeFontSize = ReaderTypography.inlineCodeFontSize.scaled(tableFontScale),
         )
@@ -306,7 +309,7 @@ fun TableBlockView(
                 HorizontalDivider(
                     modifier = Modifier.testTag("markdown-table-header-divider"),
                     color = dividerColor,
-                    thickness = 0.75.dp,
+                    thickness = M1racleReaderTheme.hairline,
                 )
                 block.rows.forEachIndexed { rowIndex, row ->
                     val rowBaseOrdinal = columnCount + rowIndex * columnCount
@@ -332,7 +335,7 @@ fun TableBlockView(
                         activeHl = activeHl,
                     )
                     if (rowIndex < block.rows.lastIndex) {
-                        HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                        HorizontalDivider(color = dividerColor, thickness = M1racleReaderTheme.hairline)
                     }
                 }
             }

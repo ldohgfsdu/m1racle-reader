@@ -1,5 +1,7 @@
 package com.m1racle.reader.ui.material
 
+import com.m1racle.reader.design.RadixColors
+import com.m1racle.reader.ui.theme.ReaderUiHairlinePx
 import android.os.Build
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
@@ -113,11 +115,11 @@ class GlassMaterialSpec internal constructor(
 @Immutable
 private data class GlassRecipe(
     val family: GlassOpticalFamily,
-    val lightTint: Color = Color(0xFFFAFAFA),
+    val lightTint: Color = RadixColors.Gray2,
     val lightShadowAlpha: Float = 0.10f,
     val darkShadowAlpha: Float = 0.46f,
     // Optical night plate. Neutral near-black.
-    val darkTint: Color = Color(0xFF121212),
+    val darkTint: Color = RadixColors.GrayDark1,
     val lightBrightness: Float = 0f,
     val darkBrightness: Float = 0f,
     val lightContrast: Float = 1f,
@@ -181,10 +183,10 @@ object GlassMaterialEngine {
     // Floating consumers derive their material from liquidGlassStyle below.
     private val regularFrost = GlassRecipe(
         family = GlassOpticalFamily.CONTENT,
-        lightTint = Color(0xFFF5F5F5),
+        lightTint = RadixColors.Gray3,
         lightShadowAlpha = 0.14f,
         darkShadowAlpha = 0.28f,
-        darkTint = Color.Black,
+        darkTint = RadixColors.Black,
         lightSurfaceAlpha = 0.62f,
         darkSurfaceAlpha = 0.58f,
         blur = 18.dp,
@@ -273,12 +275,12 @@ object GlassMaterialEngine {
             family = GlassOpticalFamily.INTERACTIVE,
             pressedScale = 1.085f,
             pressedSurfaceAlpha = 0.40f,
-            pressedDarkTint = Color(0xFFAAAAAA),
+            pressedDarkTint = RadixColors.GrayDark11,
         ),
         GlassMaterialRole.Capsule to liquidRecipe(GlassMaterialRole.Capsule).copy(
             pressedScale = 1.075f,
             pressedSurfaceAlpha = 0.40f,
-            pressedDarkTint = Color(0xFFAAAAAA),
+            pressedDarkTint = RadixColors.GrayDark11,
         ),
         GlassMaterialRole.SelectionLens to selectionLens,
         GlassMaterialRole.DockLens to selectionLens.copy(
@@ -392,11 +394,11 @@ object GlassMaterialEngine {
                 0.dp
             },
             shadow = recipe.shadow,
-            shadowColor = Color.Black.copy(
+            shadowColor = RadixColors.Black.copy(
                 alpha = if (dark) recipe.darkShadowAlpha else recipe.lightShadowAlpha,
             ),
             highlightWidth = recipe.highlightWidth,
-            highlightColor = Color.White.copy(alpha = highlightAlpha.coerceIn(0f, 1f)),
+            highlightColor = RadixColors.White.copy(alpha = highlightAlpha.coerceIn(0f, 1f)),
             contentDividerAlpha = recipe.contentDividerAlpha,
             contentMutedAlpha = muted,
             foreground = GlassForegroundPolicy(
@@ -649,7 +651,7 @@ private fun softGlassPlate(
                 drawOutline(
                     outline = outline,
                     color = lerp(idleSpec.highlightColor, pressedSpec.highlightColor, progress),
-                    style = Stroke(width = idleSpec.highlightWidth.toPx()),
+                    style = Stroke(width = ReaderUiHairlinePx),
                 )
             }
         }
@@ -703,6 +705,7 @@ private fun drawGlassMaterial(
         pressedSpec,
         pressProgress,
         pressLayerActive,
+        density,
         blurPx,
         lensHeightPx,
         lensAmountPx,
@@ -793,7 +796,7 @@ private fun drawGlassMaterial(
             highlight = if (idleSpec.highlightWidth > 0.dp) ({
                 val progress = pressProgress.value.coerceIn(0f, 1f)
                 Highlight.Default.copy(
-                    width = idleSpec.highlightWidth,
+                    width = with(density) { ReaderUiHairlinePx.toDp() },
                     alpha = idleSpec.highlightColor.alpha +
                         (pressedSpec.highlightColor.alpha - idleSpec.highlightColor.alpha) * progress,
                 )

@@ -40,6 +40,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 class EpubReferenceFidelityHostTest {
     @get:Rule val rule = createComposeRule()
+    private val paperRed get() = Color.red(com.m1racle.reader.ui.theme.InkBackground.toArgb())
     private lateinit var view: View
     private val book = EpubBook(
         EpubMetadata("唯一书名", emptyList(), "zh", null, "3.0", false, false),
@@ -91,12 +92,12 @@ class EpubReferenceFidelityHostTest {
         val y = (bounds.top + bounds.height / 2).toInt()
         val baseline = image()
         for (x in listOf(bounds.left.toInt(), bounds.right.toInt()-1)) {
-            assertEquals("resting side must be paper, not an inset card outline", 15, Color.red(baseline.getPixel(x,y)))
+            assertEquals("resting side must be paper, not an inset card outline", paperRed, Color.red(baseline.getPixel(x,y)))
         }
-        assertEquals("inner paper is not a raised side gap", 15, Color.red(baseline.getPixel(bounds.left.toInt()+2,y)))
+        assertEquals("inner paper is not a raised side gap", paperRed, Color.red(baseline.getPixel(bounds.left.toInt()+2,y)))
         for ((x, row) in listOf(bounds.left.toInt() to bounds.top.toInt(),
             (bounds.right.toInt()-1) to (bounds.bottom.toInt()-1))) {
-            assertEquals("window corner must be filled by paper background", 15, Color.red(baseline.getPixel(x,row)))
+            assertEquals("window corner must be filled by paper background", paperRed, Color.red(baseline.getPixel(x,row)))
         }
         rule.mainClock.autoAdvance = false
         pager.performTouchInput {
@@ -120,7 +121,7 @@ class EpubReferenceFidelityHostTest {
         val bounds = pager.fetchSemanticsNode().boundsInRoot
         rule.mainClock.autoAdvance = false
         pager.performTouchInput { down(percentOffset(0.88f, 0.5f)) }
-        var previousRed = 15
+        var previousRed = paperRed
         var previousUnderLeft = bounds.right
         for (distance in listOf(0.12f, 0.3f, 0.5f, 0.65f)) {
             pager.performTouchInput { moveTo(percentOffset(0.88f - distance, 0.5f), delayMillis = 400) }
@@ -132,7 +133,7 @@ class EpubReferenceFidelityHostTest {
             previousUnderLeft = under.left
             val actualDistance = 1f - (front.right - bounds.left) / bounds.width
             val expected = Color.red(androidx.compose.ui.graphics.lerp(com.m1racle.reader.ui.theme.InkBackground,
-                androidx.compose.ui.graphics.Color(0xFF202022), 1 - (1 - actualDistance) * (1 - actualDistance)).toArgb())
+                com.m1racle.reader.design.RadixColors.GrayDark3, 1 - (1 - actualDistance) * (1 - actualDistance)).toArgb())
             val bitmap = image()
             val red = Color.red(bitmap.getPixel((bounds.left + 24 * rule.density.density).toInt(),
                 (bounds.top + 40 * rule.density.density).toInt()))
@@ -147,7 +148,7 @@ class EpubReferenceFidelityHostTest {
         rule.mainClock.autoAdvance = true
         rule.waitForIdle()
         val bitmap = image()
-        assertEquals(15, Color.red(bitmap.getPixel(24, 40)))
+        assertEquals(paperRed, Color.red(bitmap.getPixel(24, 40)))
         bitmap.recycle()
     }
 
@@ -184,9 +185,9 @@ class EpubReferenceFidelityHostTest {
             val bitmap = image()
             val x = (front.right - 15*density).toInt()
             assertTrue("top corner must already have full radius at distance $distance",
-                Color.red(bitmap.getPixel(x, (front.top + 3*density).toInt())) <= 15)
+                Color.red(bitmap.getPixel(x, (front.top + 3*density).toInt())) <= paperRed)
             assertTrue("bottom corner must keep the same radius at distance $distance",
-                Color.red(bitmap.getPixel(x, (front.bottom - 3*density).toInt())) <= 15)
+                Color.red(bitmap.getPixel(x, (front.bottom - 3*density).toInt())) <= paperRed)
             bitmap.recycle()
         }
         pager.performTouchInput { moveTo(percentOffset(0.88f, 0.5f), 800); advanceEventTime(800); up() }
@@ -214,7 +215,7 @@ class EpubReferenceFidelityHostTest {
         rule.mainClock.advanceTimeBy(32)
         rule.waitForIdle()
         val second = image()
-        assertEquals(15, Color.red(second.getPixel(x, y)))
+        assertEquals(paperRed, Color.red(second.getPixel(x, y)))
         second.recycle()
         assertEquals(body, rule.onNodeWithTag("epub-reading-area").fetchSemanticsNode().boundsInRoot)
         pager.performTouchInput { moveTo(percentOffset(0.88f, 0.5f), 600); up() }
@@ -273,7 +274,7 @@ class EpubReferenceFidelityHostTest {
         rule.onNodeWithTag("epub-margin-2").performClick()
         rule.waitForIdle()
         assertEquals(com.m1racle.reader.data.settings.ContentPaddingLevel.Relaxed, settings.value.contentPaddingLevel)
-        rule.onNodeWithText("重置默认").performScrollTo().performClick()
+        rule.onNodeWithText("恢复默认").performScrollTo().performClick()
         rule.waitForIdle()
         assertEquals(ReaderSettings(), settings.value)
         rule.runOnIdle { menu.value = false }
@@ -308,7 +309,7 @@ class EpubReferenceFidelityHostTest {
         }
         assertTrue(lastWidth > capsule.width)
         assertTrue(lastHeight > capsule.height)
-        rule.onNodeWithText("关闭").performClick()
+        rule.onNodeWithTag("epub-menu-dismiss-area").performTouchInput { click(percentOffset(0.02f, 0.90f)) }
         repeat(8) {
             rule.mainClock.advanceTimeBy(40)
             assertEquals(toc, rule.onNodeWithTag("epub-menu-tab-toc").fetchSemanticsNode().boundsInRoot)
@@ -374,9 +375,27 @@ class EpubReferenceFidelityHostTest {
         val selectedLens = rule.onNodeWithTag("epub-segment-selection").fetchSemanticsNode().boundsInRoot
         val settingsTab = rule.onNodeWithTag("epub-menu-tab-settings").fetchSemanticsNode().boundsInRoot
         assertEquals(settingsTab.center.x, selectedLens.center.x, .5f)
-        rule.onNodeWithText("关闭").performClick()
+        rule.onNodeWithTag("epub-menu-dismiss-area").performTouchInput { click(percentOffset(0.02f, 0.90f)) }
         rule.waitForIdle()
         rule.onNodeWithTag("epub-settings-menu").assertDoesNotExist()
     }
+    @Test fun `closing settings keeps its content and selected segment until the panel is gone`() {
+        start()
+        rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
+        rule.onNodeWithContentDescription("设置").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("epub-font-2").assertIsDisplayed()
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithTag("epub-menu-dismiss-area").performTouchInput { click(percentOffset(0.02f, 0.90f)) }
+        rule.mainClock.advanceTimeBy(100)
+        rule.onNodeWithTag("epub-font-2").assertExists()
+        rule.onNodeWithTag("epub-menu-tab-settings").assertIsSelected()
+        rule.onNodeWithTag("epub-toc-list").assertDoesNotExist()
+        rule.mainClock.advanceTimeBy(300)
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        rule.onNodeWithTag("epub-settings-menu").assertDoesNotExist()
+    }
+
 }
 

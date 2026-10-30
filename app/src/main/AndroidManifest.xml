@@ -17,11 +17,13 @@
         <!-- Enables Macrobenchmark / FrameTiming sampling on physical devices. -->
         <profileable android:shell="true" />
 
+        <!-- Compose relayouts these changes without replacing the reader's
+             WebView. Keep its selection, scroll and lossless undo session. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:configChanges="uiMode"
+            android:configChanges="uiMode|screenLayout|orientation|screenSize|smallestScreenSize|keyboard|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.M1racleReader">
             <intent-filter>

@@ -66,7 +66,7 @@ fun EmbeddedOutlineImportDialog(
                     items(preview, key = { it.importKey }) { d ->
                         val indent = "　".repeat(d.depth.coerceAtMost(6))
                         Text(
-                            text = "$indent${d.title}  ·  p.${d.pageIndex + 1}",
+                            text = "$indent${d.title}    p.${d.pageIndex + 1}",
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

@@ -198,7 +198,7 @@ class EpubImmersiveHostTest {
         rule.onNodeWithContentDescription("目录").performClick()
         rule.mainClock.advanceTimeBy(1_000)
         assertImmersive()
-        rule.onNodeWithText("关闭").performClick()
+        rule.onNodeWithTag("epub-menu-dismiss-area").performTouchInput { click(percentOffset(0.02f, 0.90f)) }
         pager.performTouchInput { click(center) }
         rule.waitForIdle()
         assertImmersive()

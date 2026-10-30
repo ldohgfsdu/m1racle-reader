@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.pdf
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
@@ -76,9 +77,9 @@ class ReaderChromeMaterialTest {
             assertEquals(1f, spec.saturation, 0.001f)
             assertEquals(values.second, spec.highlightColor.alpha, 0.01f)
             assertEquals(when (role) {
-                GlassMaterialRole.Dialog -> Color(0xFF121212)
-                GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.SettingsCard -> Color(0xFF242424)
-                else -> Color(0xFF202020)
+                GlassMaterialRole.Dialog -> RadixColors.GrayDark1
+                GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.SettingsCard -> RadixColors.GrayDark3
+                else -> RadixColors.GrayDark3
             }, spec.surfaceColor.copy(alpha = 1f))
         }
     }
@@ -162,18 +163,28 @@ class ReaderChromeMaterialTest {
     }
 
     @Test
-    fun `home shares engine while content cards stay solid`() {
+    fun `home file menu is opaque while content cards stay solid`() {
         val home = appSource("com/m1racle/reader/ui/home/HomeScreen.kt").readText()
         val row = appSource("com/m1racle/reader/ui/home/DocumentListRow.kt").readText()
         val hero = appSource("com/m1racle/reader/ui/home/ContinueReadingCard.kt").readText()
         assertTrue(home.contains("controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())"))
         assertFalse(home.contains("glassMaterial"))
         assertFalse(home.contains("GlassMaterialRole.Control"))
-        assertTrue(row.contains("GlassMaterialRole.Dock"))
-        assertTrue(row.contains("GlassCapability.SOLID_FALLBACK"))
+        assertTrue(row.contains("DropdownMenu("))
+        assertTrue(row.contains("containerColor = scheme.surfaceContainerHigh.copy(alpha = 1f)"))
+        assertTrue(isOpaqueOutlinedMenu(row))
+        assertFalse(row.contains("GlassMaterialEngine"))
+        assertFalse(row.contains("GlassMaterialRole.Dock"))
         assertFalse(row.contains(".glassMaterial("))
         assertFalse(hero.contains("glassMaterial"))
         assertFalse(home.contains("GlassBackdropSource("))
+    }
+
+    private fun isOpaqueOutlinedMenu(source: String): Boolean {
+        val outlinedIcons = Regex("leadingIcon\\s*=\\s*\\{ Icon\\(Icons\\.Outlined\\.").findAll(source).count()
+        val divider = source.indexOf("HorizontalDivider(")
+        val remove = source.indexOf("Icons.Outlined.RemoveCircleOutline")
+        return outlinedIcons >= 5 && divider >= 0 && remove > divider
     }
 
     private fun source(name: String): String = appSource(

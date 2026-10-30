@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
@@ -63,7 +67,7 @@ class GlassDockUiTest {
         assertEquals(1, instances.get())
     }
 
-    @Test fun `drag visibly stretches and squashes lens then release rebounds and settles`() {
+    @Test fun `drag follows velocity then release settles without a decorative rebound`() {
         rule.setContent { DockTestTheme { HubDockMotionProvider(HubDestination.HOME) {
             GlassDock(onImportDocument = {}, onSelect = {})
         } } }
@@ -88,12 +92,15 @@ class GlassDockUiTest {
                 stretched.height < rule.onNodeWithTag("dock-material", useUnmergedTree = true)
                     .fetchSemanticsNode().boundsInRoot.height)
             home.performTouchInput { cancel() }
-            var rebounded = false
-            repeat(30) {
+            // Deliver the held=false composition before timing its 250ms animation.
+            rule.mainClock.advanceTimeByFrame()
+            repeat(17) {
                 rule.mainClock.advanceTimeByFrame()
-                if (lens.fetchSemanticsNode().boundsInRoot.width < rest.width * .98f) rebounded = true
+                assertTrue("release must not overshoot below the resting size",
+                    lens.fetchSemanticsNode().boundsInRoot.width >= rest.width - .5f)
             }
-            assertTrue("release must squash past rest before returning", rebounded)
+            assertEquals("release must finish on the shared 250ms curve", rest,
+                lens.fetchSemanticsNode().boundsInRoot)
         } finally {
             rule.mainClock.autoAdvance = true
         }
@@ -195,7 +202,7 @@ class GlassDockUiTest {
         action.performTouchInput { down(center); advanceEventTime(900) }
         rule.mainClock.advanceTimeBy(900)
         val held = icon.fetchSemanticsNode().boundsInRoot
-        assertEquals("reference independent action expands about nine percent", resting.width * 1.085f, held.width, .5f)
+        assertEquals("subtle independent action expands four percent", resting.width * 1.04f, held.width, .5f)
         assertTrue(action.fetchSemanticsNode().boundsInRoot.width <= touchBounds.width * 1.04f)
         rule.runOnIdle { assertEquals(0, imports) }
         action.performTouchInput { cancel() }
@@ -226,15 +233,34 @@ class GlassDockUiTest {
     }
 
     @Test
-    fun `busy import disables the trailing action`() {
+    fun `busy import announces progress prevents duplicate activation and recovers`() {
+        val importing = mutableStateOf(false)
+        var imports = 0
         rule.setContent {
             DockTestTheme {
-                HubDockMotionProvider(HubDestination.HOME) {
-                    GlassDock(onSelect = {}, onImportDocument = {}, importing = true)
+                HubDockMotionProvider(HubDestination.SETTINGS) {
+                    GlassDock(onSelect = {}, onImportDocument = { imports++ }, importing = importing.value)
                 }
             }
         }
-        rule.onNodeWithTag("dock-import").assertIsNotEnabled()
+        val action = rule.onNodeWithTag("dock-import")
+        val rest = action.fetchSemanticsNode().boundsInRoot
+        action.performTouchInput { down(center) }
+        rule.runOnIdle { importing.value = true }
+        rule.waitForIdle()
+        action.assertIsNotEnabled().assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, "正在导入…"))
+        rule.onNodeWithTag("dock-import-progress", useUnmergedTree = true).assertIsDisplayed()
+        action.performTouchInput { up() }
+        action.performTouchInput { down(center); up() }
+        rule.runOnIdle { assertEquals(0, imports) }
+        assertEquals(rest, action.fetchSemanticsNode().boundsInRoot)
+        rule.runOnIdle { importing.value = false }
+        action.assertIsEnabled()
+        rule.onNodeWithTag("dock-import-progress", useUnmergedTree = true).assertDoesNotExist()
+        action.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        action.performClick()
+        rule.runOnIdle { assertEquals(1, imports) }
     }
 
     @Test

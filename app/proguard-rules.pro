@@ -5,6 +5,11 @@
 -keep class com.m1racle.reader.BuildConfig { *; }
 -keep class com.m1racle.reader.MainActivity { *; }
 
+# The offline Markdown editor calls only annotated bridge methods by name.
+-keepclassmembers class com.m1racle.reader.ui.documents.** {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
 # ── Room ──
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *

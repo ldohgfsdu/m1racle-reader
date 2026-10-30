@@ -72,7 +72,7 @@ fun PillSegmentedControl(
 ) {
     require(labels.isNotEmpty())
     val scheme = MaterialTheme.colorScheme
-    val style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp)
+    val style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val textSizes = labels.map { measurer.measure(it, style = style, softWrap = false).size }
@@ -162,7 +162,7 @@ fun PillSegmentedControl(
                         Text(label, style = style, textAlign = TextAlign.Center,
                             softWrap = true,
                             modifier = Modifier.graphicsLayer {
-                                val scale = if (sampled) 1f + 0.12f * press.value else 1f
+                                val scale = 1f
                                 scaleX = scale
                                 scaleY = scale
                             },

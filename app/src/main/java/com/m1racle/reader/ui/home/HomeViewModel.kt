@@ -21,13 +21,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
+    /** Bounded recent preview, excluding the separate continue-reading card. */
     val documents: List<DocumentEntity> = emptyList(),
     val isEmpty: Boolean = false,
     /** First Room emission has arrived. Empty-copy is forbidden until this is true. */
     val ready: Boolean = false,
     /** H2.2 继续阅读 hero 目标（无阅读记录时为 null → UI 降级隐藏）。 */
     val continueReading: DocumentEntity? = null,
+    val hasMoreDocuments: Boolean = false,
 )
+
+internal const val HomeRecentLimit = 5
 
 /**
  * 状态推导纯函数（HomeViewModelTest 直测）：乐观删除过滤后，
@@ -38,11 +42,14 @@ internal fun homeUiState(
     pendingDeleteIds: Set<String>,
 ): HomeUiState {
     val visible = HomeListUpdate.visibleDocuments(source, pendingDeleteIds)
+    val continueReading = HomeHubSelectors.continueReading(visible)
+    val recent = visible.filter { it.id != continueReading?.id }
     return HomeUiState(
-        documents = visible,
+        documents = recent.take(HomeRecentLimit),
         isEmpty = visible.isEmpty(),
         ready = true,
-        continueReading = HomeHubSelectors.continueReading(visible),
+        continueReading = continueReading,
+        hasMoreDocuments = recent.size > HomeRecentLimit,
     )
 }
 

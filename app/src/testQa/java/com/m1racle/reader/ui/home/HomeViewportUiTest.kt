@@ -56,7 +56,7 @@ class HomeViewportUiTest {
     @Test fun `header stays fixed while the list reaches behind glass and clears the last item`() {
         rule.setContent {
             M1racleReaderTheme {
-                HomeWithDock(HomeUiState(documents = docs, ready = true), false, {}, {}, {}, {},
+                HomeWithDock(homeUiState(docs, emptySet()), false, {}, {}, {}, {},
                     modifier = Modifier.size(380.dp, 700.dp), statusTop = 32.dp, navBottom = 24.dp)
             }
         }
@@ -69,14 +69,38 @@ class HomeViewportUiTest {
         val dock = rule.onNodeWithTag("dock-selection", useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot
         assertTrue("list=$list dock=$dock", list.bottom > dock.top)
-        rule.onNodeWithTag("home-list").performScrollToIndex(20)
+        rule.onNodeWithTag("home-list").performScrollToIndex(4)
         assertEquals(header, rule.onNodeWithTag("home-header").fetchSemanticsNode().boundsInRoot)
         assertEquals(list, rule.onNodeWithTag("home-list").fetchSemanticsNode().boundsInRoot)
         rule.onNodeWithContentDescription("搜索文档与标注").assertIsDisplayed()
         rule.onNodeWithContentDescription("导入文件").assertIsDisplayed()
-        rule.onNodeWithTag("home-list").performScrollToIndex(30)
-        val last = rule.onNodeWithText("document-30").fetchSemanticsNode().boundsInRoot
+        rule.onNodeWithTag("home-list").performScrollToIndex(6)
+        val last = rule.onNodeWithText("document-5").fetchSemanticsNode().boundsInRoot
         assertTrue("last=$last dock=$dock", last.bottom < dock.top)
+        rule.onNodeWithText("document-6").assertDoesNotExist()
+    }
+
+    @Test fun `bounded recent preview opens the library from its section action`() {
+        var openedLibrary = 0
+        rule.setContent {
+            M1racleReaderTheme {
+                HomeContent(homeUiState(docs, emptySet()), false, {}, {}, {}, {},
+                    onOpenLibrary = { openedLibrary++ })
+            }
+        }
+        rule.onNodeWithText("Reader").assertIsDisplayed()
+        rule.onNodeWithTag("home-brand-mark").assertIsDisplayed()
+        rule.onNodeWithTag("home-view-all").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(1, openedLibrary) }
+    }
+
+    @Test fun `short recent history needs no view all action`() {
+        rule.setContent {
+            M1racleReaderTheme {
+                HomeContent(homeUiState(docs.take(6), emptySet()), false, {}, {}, {}, {})
+            }
+        }
+        rule.onNodeWithTag("home-view-all").assertDoesNotExist()
     }
 
     @Test fun `fixed import action is disabled while busy and available again afterwards`() {
@@ -90,7 +114,7 @@ class HomeViewportUiTest {
         }
         rule.onNodeWithContentDescription("导入文件").assertIsNotEnabled()
         rule.onNodeWithText("导入文件").assertIsNotEnabled()
-        rule.onNodeWithText("正在导入，请稍候…").assertIsDisplayed()
+        rule.onNodeWithText("正在导入…").assertIsDisplayed()
         rule.runOnIdle { busy.value = false }
         rule.onNodeWithContentDescription("导入文件").assertIsEnabled().performClick()
         rule.runOnIdle { assertEquals(1, imports) }

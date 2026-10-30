@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.viewer.components
 
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,11 +50,13 @@ fun InlineMarkdownText(
     annotationOffset: Int? = null,
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val linkColor = M1racleReaderTheme.extra.link
     val codeSize = ReaderTypography.inlineCodeFontSize.scaled(settings.fontScale)
-    val codeBg = colorScheme.surfaceContainerHighest
-    val styles = remember(colorScheme.primary, codeBg, codeSize, strongColor) {
+    // Keep code distinct without a heavy chip-shaped fill.
+    val codeBg = colorScheme.surfaceContainerHigh
+    val styles = remember(linkColor, codeBg, codeSize, strongColor) {
         InlineMarkdownStyles.themed(
-            primary = colorScheme.primary,
+            primary = linkColor,
             codeBackground = codeBg,
             codeFontSize = codeSize,
             boldColor = strongColor,

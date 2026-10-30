@@ -1,5 +1,7 @@
 package com.m1racle.reader.ui.pdf
 
+import com.m1racle.reader.ui.components.readerHairlineBorder
+import com.m1racle.reader.design.RadixColors
 import android.util.Log
 import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.combinedClickable
@@ -16,7 +18,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -61,8 +62,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -212,6 +211,7 @@ import com.m1racle.reader.pdf.ZoomPageOverlayMath
 import com.m1racle.reader.pdf.PageTap
 import com.m1racle.reader.pdf.export.ChapterExportState
 import com.m1racle.reader.ui.theme.M1racleReaderTheme
+import com.m1racle.reader.ui.theme.M1racleMotion
 import com.m1racle.reader.ui.annotation.AnnotationOverlayItem
 import com.m1racle.reader.ui.annotation.AnnotationsManagementSheet
 import com.m1racle.reader.ui.annotation.NoteEditDialog
@@ -1569,7 +1569,6 @@ private fun PdfChrome(
                 .toPx()
         }
 
-        val moreChromeSlidePx = with(chromeDensity) { 22.dp.roundToPx() }
 
         // Left back button — fixed TopStart anchor; visible IFF the two circles
         // are on (FULL / BUTTONS_ONLY). Scroll NEVER hides it alone; only the
@@ -1577,12 +1576,8 @@ private fun PdfChrome(
         PdfChromeVisibility(
             role = GlassMaterialRole.Control,
             visible = edgeButtonsVisible,
-            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -moreChromeSlidePx },
-            // Both round buttons exit with a 100ms delay so the hide order is
-            // always capsule first, then the two circles (staggered by the
-            // scroll rules; buttons re-enter immediately on restore).
-            exit = fadeOut(tween(180, delayMillis = 100)) +
-                slideOutVertically(tween(180, delayMillis = 100)) { -moreChromeSlidePx },
+            enter = fadeIn(M1racleMotion.normal),
+            exit = fadeOut(M1racleMotion.normalIn),
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(start = 20.dp, top = chromeRowTopDp)
@@ -1604,11 +1599,8 @@ private fun PdfChrome(
         PdfChromeVisibility(
             role = GlassMaterialRole.Menu,
             visible = edgeButtonsVisible || menuActiveLayer,
-            // Slide amount is pinned to the circle size (the layer itself is
-            // full-screen because it hosts the outside-tap catcher).
-            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -moreChromeSlidePx },
-            exit = fadeOut(tween(180, delayMillis = 100)) +
-                slideOutVertically(tween(180, delayMillis = 100)) { -moreChromeSlidePx },
+            enter = fadeIn(M1racleMotion.normal),
+            exit = fadeOut(M1racleMotion.normalIn),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(end = 20.dp, top = chromeRowTopDp)
@@ -1681,8 +1673,8 @@ private fun PdfChrome(
             PdfChromeVisibility(
                 role = GlassMaterialRole.Capsule,
                 visible = capsuleVisible && !menuActiveLayer,
-                enter = fadeIn(tween(180, delayMillis = 100)),
-                exit = fadeOut(tween(180)),
+                enter = fadeIn(M1racleMotion.normal),
+                exit = fadeOut(M1racleMotion.normalIn),
             ) {
                 PdfInfoCapsule(
                     data = capsuleData,
@@ -1768,7 +1760,7 @@ private fun pdfChromePageNumberText(): Color =
 
 /**
  * Small frosted capsule: document title (maxLines=1, ellipsis) plus
- * page · section line. Tap → jump-to-page.
+ * page  section line. Tap → jump-to-page.
  */
 /**
  * Center chrome surface: collapsed it is the position pill; expanded it is
@@ -1818,7 +1810,7 @@ private fun Modifier.capsuleLocalPressHighlight(
             drawRect(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.18f),
+                        RadixColors.White.copy(alpha = 0.18f),
                         Color.Transparent,
                     ),
                     center = center,
@@ -1946,7 +1938,7 @@ private fun PdfInfoCapsule(
                         stringResource(R.string.pdf_capsule_progress_percent, it)
                     }
                     Text(
-                        text = listOfNotNull(position, progress).joinToString(" · "),
+                        text = listOfNotNull(position, progress).joinToString("  "),
                         style = MaterialTheme.typography.labelSmall,
                         color = pdfChromePageNumberText(),
                         maxLines = 1,
@@ -1994,7 +1986,7 @@ private fun PdfInfoCapsule(
                     )
                     data.positionLine?.let { position ->
                         Text(
-                            text = listOfNotNull(position, data.printDetail).joinToString(" · "),
+                            text = listOfNotNull(position, data.printDetail).joinToString("  "),
                             style = MaterialTheme.typography.labelMedium,
                             color = pdfChromePrimaryText(),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -2093,10 +2085,8 @@ private fun JumpPageBody(
                 .fillMaxWidth()
                 .height(44.dp)
                 .clip(RoundedCornerShape(JumpInputCornerDp))
-                .background(scheme.onSurface.copy(alpha = 0.06f))
-                .border(
-                    width = 1.dp,
-                    color = if (error != null) {
+                .background(scheme.surfaceContainer)
+                .readerHairlineBorder(color = if (error != null) {
                         scheme.error.copy(alpha = 0.7f)
                     } else {
                         scheme.outline.copy(alpha = 0.4f)
@@ -3484,12 +3474,9 @@ internal fun PdfHorizontalPagedArea(
                         Surface(
                             // Registered paper-sheet radius (matches the intentional paper-white exception).
                             shape = RoundedCornerShape(2.dp),
-                            color = if (paperFilter != null) Color.Black else Color.White,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                scheme.outlineVariant,
-                            ),
+                            color = if (paperFilter != null) RadixColors.Black else RadixColors.White,
                             modifier = Modifier
+                                .readerHairlineBorder(scheme.outlineVariant, RoundedCornerShape(2.dp))
                                 .size(
                                     width = with(horizontalDensity) {
                                         fittedPage.fittedWidthPx.coerceAtLeast(1f).toDp()

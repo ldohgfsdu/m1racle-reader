@@ -26,6 +26,7 @@ import com.m1racle.reader.ui.home.HomeDesignTokens
 internal fun HubPageHeader(
     title: String,
     modifier: Modifier = Modifier,
+    leading: @Composable (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
@@ -34,10 +35,11 @@ internal fun HubPageHeader(
             .padding(start = HomeDesignTokens.PageHorizontal, end = 12.dp, top = 4.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        leading?.invoke()
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge.copy(
-                fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold,
             ),
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
@@ -65,7 +67,7 @@ internal fun HubEmptyState(
     ) {
         Box(
             modifier = Modifier.size(64.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(20.dp)),
+                .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null,

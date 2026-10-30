@@ -11,6 +11,7 @@ object MarkdownParser {
         val toc: List<TocItem>,
         val anchorRegistry: AnchorRegistry,
         val blockIds: List<String>,
+        val blockStartLines: List<Int> = emptyList(),
         /**
          * Empty HTML anchors that appeared after the last renderable block.
          * The registry only maps to block tops, so EOF anchors cannot be placed
@@ -24,8 +25,7 @@ object MarkdownParser {
     private val unorderedListRegex = Regex("""^([-*+])\s+(.*)$""")
     private val orderedListRegex = Regex("""^(\d+)\.\s+(.*)$""")
     private val quoteRegex = Regex("""^>\s?(.*)$""")
-    private val fenceOpenRegex = Regex("""^```(\S*)\s*$""")
-    private val fenceCloseRegex = Regex("""^```\s*$""")
+    private val fenceOpenRegex = Regex("""^(`{3,})([^`]*)$""")
     private val dividerRegex = Regex("""^\s*([-*_])\1{2,}\s*$""")
     private val separatorCellRegex = Regex("""^:?-{3,}:?$""")
     /** Whole-line image only: ![alt](source) optional "title" */
@@ -51,9 +51,11 @@ object MarkdownParser {
 
     fun parse(source: String): ParseResult = MarkdownPerformance.trace("MarkdownParse") {
         MarkdownPerformance.recordParse()
-        val normalized = stripHtmlComments(source)
-            .replace("\r\n", "\n")
-            .replace('\r', '\n')
+        // Normalize before removing comment text: a CR and LF originally
+        // separated by a comment must remain two lines for edit positioning.
+        // Ignore only the document encoding marker in the reading projection.
+        // Keep original editor/save text and all interior U+FEFF characters intact.
+        val normalized = stripHtmlComments(source.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n'))
         val lines = normalized.split('\n')
 
         val blocks = mutableListOf<MarkdownBlock>()
@@ -90,14 +92,18 @@ object MarkdownParser {
             pendingHtmlAnchors.clear()
         }
 
+        val blockStartLines = mutableListOf<Int>()
+        var currentBlockLine = 1
         fun addBlock(block: MarkdownBlock) {
             val index = blocks.size
             blocks.add(block)
+            blockStartLines.add(currentBlockLine)
             flushPendingHtmlAnchors(index)
         }
 
         var i = 0
         while (i < lines.size) {
+            currentBlockLine = i + 1
             val line = lines[i]
             val trimmed = line.trim()
 
@@ -120,12 +126,13 @@ object MarkdownParser {
             // Fenced code block (pipes inside never become tables).
             val fenceMatch = fenceOpenRegex.matchEntire(trimmed)
             if (fenceMatch != null) {
-                val language = fenceMatch.groupValues[1].ifBlank { null }
+                val fence = fenceMatch.groupValues[1]
+                val language = fenceMatch.groupValues[2].trim().ifBlank { null }
                 val codeLines = mutableListOf<String>()
                 i++
                 var closed = false
                 while (i < lines.size) {
-                    if (fenceCloseRegex.matchEntire(lines[i].trim()) != null) {
+                    if (isClosingFence(lines[i].trim(), fence.length)) {
                         closed = true
                         i++
                         break
@@ -327,6 +334,7 @@ object MarkdownParser {
             toc = toc.toList(),
             anchorRegistry = AnchorRegistry.fromTargets(anchorTargets),
             blockIds = blocks.mapIndexed { index, block -> block.blockId(index) },
+            blockStartLines = blockStartLines.toList(),
             ignoredTrailingHtmlAnchors = ignoredTrailing,
         )
     }
@@ -478,6 +486,8 @@ object MarkdownParser {
 
     /**
      * Split a table row into cells. Supports optional leading/trailing pipes.
+     * An unescaped pipe separates cells; `\|` remains cell content and is later
+     * unescaped by the shared inline parser.
      */
     private fun splitTableCells(line: String): List<String> {
         val trimmed = line.trim()
@@ -486,10 +496,27 @@ object MarkdownParser {
             // Single-column table rows are rare; treat as one cell only if separator-like or explicit.
             return listOf(trimmed)
         }
-        var s = trimmed
-        if (s.startsWith("|")) s = s.drop(1)
-        if (s.endsWith("|")) s = s.dropLast(1)
-        return s.split('|').map { it.trim() }
+        val start = if (trimmed.startsWith("|")) 1 else 0
+        val end = if (trimmed.endsWith("|") && !isEscapedAt(trimmed, trimmed.lastIndex)) {
+            trimmed.lastIndex
+        } else {
+            trimmed.length
+        }
+        val cells = mutableListOf<String>()
+        val cell = StringBuilder()
+        var i = start
+        while (i < end) {
+            val c = trimmed[i]
+            if (c == '|' && !isEscapedAt(trimmed, i)) {
+                cells += cell.toString().trim()
+                cell.clear()
+            } else {
+                cell.append(c)
+            }
+            i++
+        }
+        cells += cell.toString().trim()
+        return cells
     }
 
     private fun padCells(cells: List<String>, count: Int): List<String> {
@@ -507,15 +534,72 @@ object MarkdownParser {
 
     /**
      * Remove HTML comments so they never render as paragraphs.
-     * Non-greedy; supports multi-line comments. Code fences still parse after strip
-     * (comments inside fences are rare in packages; accepted MVP tradeoff).
+     * Non-greedy; supports multi-line comments. Fenced code is copied verbatim so
+     * comment syntax shown in code remains visible and searchable.
      */
     fun stripHtmlComments(source: String): String {
         if (!source.contains("<!--")) return source
-        return HTML_COMMENT_REGEX.replace(source, "")
+        val output = StringBuilder(source.length)
+        var inFence: String? = null
+        var i = 0
+        while (i < source.length) {
+            if (i == 0 || source[i - 1] == '\n' || source[i - 1] == '\r') {
+                val lineEnd = source.indexOfAny(charArrayOf('\r', '\n'), i)
+                    .let { if (it < 0) source.length else it }
+                val trimmed = source.substring(i, lineEnd).trim()
+                val opening = if (inFence == null) fenceOpenRegex.matchEntire(trimmed) else null
+                if (inFence != null || opening != null) {
+                    if (inFence != null) {
+                        if (isClosingFence(trimmed, inFence.length)) inFence = null
+                    } else inFence = opening!!.groupValues[1]
+                    var next = lineEnd
+                    if (next < source.length && source[next] == '\r') next++
+                    if (next < source.length && source[next] == '\n') next++
+                    output.append(source, i, next)
+                    i = next
+                    continue
+                }
+            }
+            if (source[i] == '`' && !isEscapedAt(source, i)) {
+                val end = InlineMarkdownParser.codeSpanEnd(source, i)
+                if (end != null) {
+                    output.append(source, i, end)
+                    i = end
+                    continue
+                }
+            }
+            if (source.startsWith("<!--", i)) {
+                val end = source.indexOf("-->", i + 4)
+                if (end >= 0) {
+                    // Retain paragraph boundaries, and skip the whole comment so its
+                    // contents cannot masquerade as a fence or another comment opener.
+                    for (offset in i until end + 3) {
+                        val c = source[offset]
+                        if (c == '\r' || c == '\n') output.append(c)
+                    }
+                    i = end + 3
+                    continue
+                }
+            }
+            output.append(source[i++])
+        }
+        return output.toString()
     }
 
-    private val HTML_COMMENT_REGEX = Regex("""<!--[\s\S]*?-->""")
+    private fun isClosingFence(trimmed: String, minimumLength: Int): Boolean =
+        trimmed.length >= minimumLength &&
+            trimmed.takeWhile { it == '`' }.length >= minimumLength &&
+            trimmed.dropWhile { it == '`' }.isBlank()
+
+    private fun isEscapedAt(text: String, index: Int): Boolean {
+        var slashCount = 0
+        var i = index - 1
+        while (i >= 0 && text[i] == '\\') {
+            slashCount++
+            i--
+        }
+        return slashCount % 2 == 1
+    }
 
     private fun isBlockStart(raw: String, trimmed: String): Boolean {
         if (matchEmptyHtmlAnchorId(trimmed) != null) return true

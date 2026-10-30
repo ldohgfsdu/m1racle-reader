@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.material
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.animation.core.Spring
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -38,8 +39,8 @@ class GlassMaterialRegressionTest {
             assertEquals(overlay.blur, dock.blur)
             assertEquals(4.dp, overlay.blur)
             assertEquals(overlay.surfaceColor.alpha, dock.surfaceColor.alpha, 0f)
-            assertEquals(if (dark) Color(0xFF707070) else Color.White, dock.surfaceColor.copy(alpha = 1f))
-            assertEquals(if (dark) Color(0xFF242424) else Color.White, overlay.surfaceColor.copy(alpha = 1f))
+            assertEquals(if (dark) RadixColors.GrayDark9 else Color.White, dock.surfaceColor.copy(alpha = 1f))
+            assertEquals(if (dark) RadixColors.GrayDark3 else Color.White, overlay.surfaceColor.copy(alpha = 1f))
             assertEquals(overlay.shadow, dock.shadow)
             assertEquals(overlay.shadowColor, dock.shadowColor)
             assertEquals(overlay.highlightWidth, dock.highlightWidth)
@@ -218,13 +219,13 @@ class GlassMaterialRegressionTest {
                 if (role == GlassMaterialRole.SelectionLens || role == GlassMaterialRole.DockLens) {
                     Color.White
                 } else if (role == GlassMaterialRole.Dialog) {
-                    Color(0xFF121212)
+                    RadixColors.GrayDark1
                 } else if (role == GlassMaterialRole.Dock) {
-                    Color(0xFF707070)
+                    RadixColors.GrayDark9
                 } else if (role in listOf(GlassMaterialRole.Dock, GlassMaterialRole.Control, GlassMaterialRole.Capsule, GlassMaterialRole.SelectionLens, GlassMaterialRole.Menu, GlassMaterialRole.SettingsCard)) {
-                    Color(0xFF242424)
+                    RadixColors.GrayDark3
                 } else if (role in listOf(GlassMaterialRole.ExpandedMenu)) {
-                    Color(0xFF202020)
+                    RadixColors.GrayDark3
                 } else {
                     Color.Black
                 },

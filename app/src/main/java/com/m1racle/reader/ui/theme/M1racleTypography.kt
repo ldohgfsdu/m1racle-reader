@@ -3,19 +3,9 @@ package com.m1racle.reader.ui.theme
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 
-/**
- * R36 reading-first type scale. Five styles, each mapped to a real surface:
- * Display = Home title, Title = document / toolbar / hero title,
- * Section = Continue Reading / Recent, Body = list metadata and toolbar
- * page/total, Caption = format labels.
- *
- * Home consumes display / title / section / body / caption. [M1racleReaderTypography]
- * remains the Material fallback elsewhere.
- */
+/** Product roles share the same three sizes as the Material UI. */
 @Immutable
 data class M1racleTypography(
     val display: TextStyle,
@@ -26,36 +16,11 @@ data class M1racleTypography(
 )
 
 val DefaultM1racleTypography = M1racleTypography(
-    display = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 28.sp,
-        lineHeight = 34.sp,
-    ),
-    title = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        lineHeight = 22.sp,
-    ),
-    section = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 15.sp,
-        lineHeight = 22.sp,
-    ),
-    body = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 15.sp,
-        lineHeight = 20.sp,
-    ),
-    caption = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-    ),
+    display = M1racleReaderTypography.titleLarge,
+    title = M1racleReaderTypography.titleMedium,
+    section = M1racleReaderTypography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+    body = M1racleReaderTypography.bodyMedium,
+    caption = M1racleReaderTypography.bodySmall,
 )
 
 val LocalM1racleTypography = staticCompositionLocalOf { DefaultM1racleTypography }

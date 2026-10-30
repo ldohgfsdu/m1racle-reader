@@ -106,13 +106,15 @@ class MainActivity : ComponentActivity() {
                             if (req != null) {
                                 try {
                                     val current = navController.currentBackStackEntry
-                                    if (current?.destination?.route == Routes.PDF_EDITOR) {
-                                        if (current.arguments?.getString("documentId") == req.documentId) {
+                                    if (current?.destination?.route == Routes.PDF_EDITOR || current?.savedStateHandle?.get<Boolean>("markdownEditing") == true) {
+                                        if (current?.arguments?.getString("documentId") == req.documentId) {
                                             return@collectLatest
                                         }
                                         toast("文档已导入，退出正文编辑后打开")
-                                        navController.currentBackStackEntryFlow.first {
-                                            it.destination.route != Routes.PDF_EDITOR
+                                        if (current?.destination?.route == Routes.PDF_EDITOR) {
+                                            navController.currentBackStackEntryFlow.first { it.destination.route != Routes.PDF_EDITOR }
+                                        } else {
+                                            current?.savedStateHandle?.getStateFlow("markdownEditing", false)?.first { !it }
                                         }
                                     }
                                     navigateReplaceViewer(
@@ -194,10 +196,10 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Night mode must not recreate the activity: PDF/Markdown would remount
-     * at page 0 (list/pager state is not saveable; restore can be clobbered
-     * by the first viewport callback). Compose already swaps [M1racleReaderTheme]
-     * via [androidx.compose.foundation.isSystemInDarkTheme].
+     * Theme, window size and keyboard changes keep the current reader runtime.
+     * In particular, Markdown's WebView owns its live selection and lossless
+     * undo history. Compose receives the new configuration through super and
+     * relayouts the existing content; the Activity must not remount the editor.
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)

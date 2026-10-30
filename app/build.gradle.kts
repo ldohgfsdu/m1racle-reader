@@ -12,6 +12,33 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// The offline editor is checked in with its rebuildable source. Refuse an APK
+// whose JavaScript bundle no longer matches that source or its recorded bytes.
+val verifyMarkdownEditorBundle = tasks.register("verifyMarkdownEditorBundle") {
+    val bundle = file("src/main/assets/markdown-editor")
+    val editorSource = rootProject.file("reader-markdown-editor")
+    inputs.files(fileTree(editorSource) { exclude("node_modules/**", "dist/**", "output/**") })
+    inputs.files(fileTree(bundle))
+    inputs.file(rootProject.file("app/src/main/java/com/m1racle/reader/design/RadixColors.kt"))
+    doLast {
+        val manifestFile = File(bundle, "build-manifest.json")
+        check(manifestFile.isFile) { "Markdown editor bundle missing. Run: node reader-markdown-editor/scripts/build.mjs" }
+        val manifest = groovy.json.JsonSlurper().parse(manifestFile) as Map<*, *>
+        fun verify(entry: Map<*, *>, base: File) {
+            val relative = entry["path"] as String
+            val target = File(base, relative).canonicalFile
+            check(target.toPath().startsWith(base.canonicalFile.toPath()) && target.isFile) { "Missing or invalid Markdown editor file: $relative" }
+            val hash = MessageDigest.getInstance("SHA-256").digest(target.readBytes()).joinToString("") { "%02x".format(it) }
+            check(hash == entry["sha256"]) { "Stale Markdown editor file: $relative. Rebuild reader-markdown-editor." }
+        }
+        (manifest["files"] as List<*>).forEach { verify(it as Map<*, *>, bundle) }
+        (manifest["sources"] as List<*>).map { it as Map<*, *> }
+            .filter { !(it["path"] as String).startsWith("upstream/") }
+            .forEach { verify(it, rootProject.projectDir) }
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(verifyMarkdownEditorBundle) }
+
 // Public version identity is explicit and committed. Never derive it from Git:
 // commit counts are not monotonic across rebases, shallow clones or branches.
 val versionPropertiesFile = file("version.properties")

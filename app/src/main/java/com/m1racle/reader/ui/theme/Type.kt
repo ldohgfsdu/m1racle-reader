@@ -6,75 +6,26 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-/**
- * App typography. Body/label defaults stay [FontWeight.Normal] so reading
- * content does not inherit Medium/SemiBold from Material defaults.
- */
+/** Three UI sizes; document typography keeps its own user-controlled scale. */
+object ReaderUiSize {
+    val Caption = 12.sp
+    val Body = 14.sp
+    val Title = 18.sp
+}
+
+private val UiTitle = TextStyle(fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.SemiBold, fontSize = ReaderUiSize.Title, lineHeight = 26.sp)
+private val UiBody = TextStyle(fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.Normal, fontSize = ReaderUiSize.Body, lineHeight = 22.sp)
+private val UiCaption = TextStyle(fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.Normal, fontSize = ReaderUiSize.Caption, lineHeight = 18.sp)
+
 val M1racleReaderTypography = Typography(
-    headlineMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 26.sp,
-        lineHeight = 34.sp,
-    ),
-    headlineSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 30.sp,
-    ),
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 19.sp,
-        lineHeight = 26.sp,
-    ),
-    titleMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-    ),
-    titleSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-    ),
-    bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 26.sp,
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 22.sp,
-    ),
-    bodySmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-    ),
-    labelLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-    ),
-    labelMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-    ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-    ),
+    displayLarge = UiTitle, displayMedium = UiTitle, displaySmall = UiTitle,
+    headlineLarge = UiTitle, headlineMedium = UiTitle, headlineSmall = UiTitle,
+    titleLarge = UiTitle,
+    titleMedium = UiBody.copy(fontWeight = FontWeight.Medium),
+    titleSmall = UiBody.copy(fontWeight = FontWeight.Medium),
+    bodyLarge = UiBody, bodyMedium = UiBody, bodySmall = UiCaption,
+    labelLarge = UiBody, labelMedium = UiCaption, labelSmall = UiCaption,
 )

@@ -30,7 +30,7 @@ internal fun deleteAppPrivateLibraryCopy(filesDir: File, uriString: String): Boo
 
 /** Extracted Markdown/EPUB resources belong to the deleted library identity. */
 internal fun deleteDocumentExtracts(filesDir: File, documentId: String) {
-    for (kind in listOf("packages", "epubs")) {
+    for (kind in listOf("packages", "epubs", "package-archives")) {
         val root = File(filesDir, kind).canonicalFile
         val directory = File(root, documentId).canonicalFile
         require(directory.parentFile == root) { "Invalid document id" }

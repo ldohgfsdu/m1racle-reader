@@ -25,33 +25,33 @@ object HomeDesignTokens {
     val SubtitleToSectionGap = 16.dp
 
 
-    /** Cards: solid tonal surface, radius 18–20dp. */
-    val RadiusCard = 20.dp
+    /** Cards: solid tonal surface, radius 12dp. */
+    val RadiusCard = 12.dp
     val CardShape = RoundedCornerShape(RadiusCard)
 
     /**
      * Utility actions use the platform-positioned solid menu with the shared corner.
      */
-    val MenuCorner = 10.dp
+    val MenuCorner = 12.dp
     val MenuShape = RoundedCornerShape(MenuCorner)
 
-    val AppNameSize = 22.sp
-    val AppNameLine = 28.sp
-    val AppSubtitleSize = 13.sp
-    val SectionTitleSize = 15.sp
+    val AppNameSize = 18.sp
+    val AppNameLine = 26.sp
+    val AppSubtitleSize = 12.sp
+    val SectionTitleSize = 14.sp
 
     // ── H2.2 Reading Hub ────────────────────────────────────────────────────
 
     /**
      * Continue Reading hero uses L2 [M1racleSurface.hero], never glass.
      */
-    val HeroCorner = 20.dp
+    val HeroCorner = 12.dp
     val HeroShape = RoundedCornerShape(HeroCorner)
     val HeroPaddingH = 20.dp
     val HeroPaddingV = 20.dp
     val HeroCaptionSize = 12.sp
-    val HeroTitleSize = 17.sp
-    val HeroTitleLine = 22.sp
+    val HeroTitleSize = 18.sp
+    val HeroTitleLine = 26.sp
     val HeroMetaSize = 12.sp
 
     /**
@@ -76,7 +76,7 @@ object HomeDesignTokens {
     val DockContentClearance
         @Composable get() = DockHeight + DockBottomGap + 24.dp
     val DockHorizontalMargin = 20.dp
-    val DockLabelSize = 11.sp
+    val DockLabelSize = 12.sp
     val DockItemWeight: Float = 1f
     val DockMaxWidth = 440.dp
     val DockContentPadding = 6.dp

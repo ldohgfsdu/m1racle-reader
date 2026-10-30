@@ -94,6 +94,7 @@ class R7GestureLifecycleInstrumentedTest {
         onPageSettled: (ReadingPosition) -> Unit = {},
         onTilePlan: (PdfTilePlan) -> Unit = {},
         tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
+        modifier: Modifier = Modifier.width(300.dp).height(600.dp),
     ) {
         MaterialTheme {
             ContinuousDocumentViewport(
@@ -112,8 +113,61 @@ class R7GestureLifecycleInstrumentedTest {
                 onEnsureAround = {},
                 onRetryPage = {},
                 gestureCoordinatorOverride = coordinator,
-                modifier = Modifier.width(300.dp).height(600.dp),
+                modifier = modifier,
             )
+        }
+    }
+
+    @Test
+    fun viewportResizePreservesReadingCenterAcrossWidthAndHeightChanges() {
+        val coordinator = ContinuousGestureCoordinator { }
+        val target = ReadingPosition(10, 0.5f, ReadingPositionSource.STARTUP_RESTORE, 101L)
+        var entry by mutableStateOf(ContinuousEntryState(
+            phase = ContinuousEntryPhase.APPLYING_TARGET,
+            pendingRestorePosition = target,
+        ))
+        var width by mutableStateOf(200.dp)
+        var height by mutableStateOf(400.dp)
+        composeRule.setContent {
+            ViewportUnderTest(
+                state = ready().copy(continuousEntryState = entry),
+                coordinator = coordinator,
+                onEntryRestoreApplied = { position, _ ->
+                    entry = ContinuousEntryState(
+                        phase = ContinuousEntryPhase.READY,
+                        lastStableReadingPosition = position,
+                    )
+                },
+                modifier = Modifier.width(width).height(height),
+            )
+        }
+        composeRule.waitUntil(5_000) {
+            entry.phase == ContinuousEntryPhase.READY &&
+                coordinator.snapshots.capture()?.payload?.viewportPage == 10
+        }
+        // The portrait center is on page 10, while its top edge is on page 9.
+        // Preserving only the top when widening the page changes the reading
+        // page. A height-only resize must preserve the same center as well.
+        for ((nextWidth, nextHeight) in listOf(
+            380.dp to 160.dp, 380.dp to 360.dp, 200.dp to 400.dp,
+        )) {
+            composeRule.runOnIdle { width = nextWidth; height = nextHeight }
+            val expectedWidth = with(composeRule.density) { nextWidth.roundToPx() }
+            val expectedHeight = with(composeRule.density) { nextHeight.roundToPx() }
+            composeRule.waitUntil(5_000) {
+                coordinator.snapshots.capture()?.payload?.let {
+                    it.viewportWidth == expectedWidth && it.viewportHeight == expectedHeight
+                } == true
+            }
+            composeRule.runOnIdle {
+                val frame = requireNotNull(coordinator.snapshots.capture()).payload
+                val anchor = frame.geometry.viewportSessionAtAnchor(
+                    frame.documentState, frame.viewportWidth.toFloat(), frame.viewportHeight.toFloat(), 0L,
+                )
+                assertEquals("resizing must preserve the reading page", 10, anchor.pageIndex)
+                assertEquals("resizing must preserve the page-local center", 0.5f, anchor.pageAnchorYFraction, 0.002f)
+                assertEquals(1f, frame.documentState.scale, 0f)
+            }
         }
     }
 

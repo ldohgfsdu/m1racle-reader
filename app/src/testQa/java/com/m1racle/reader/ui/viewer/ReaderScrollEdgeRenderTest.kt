@@ -71,17 +71,17 @@ class ReaderScrollEdgeRenderTest {
             }
         }
     }
-    @Test fun edgeFadesOnlyWhenScrollingContentOverlapsToolbar() {
+    @Test fun opaqueChromeProtectsTextOnEveryUnderlyingContentColor() {
         lateinit var view: View
-        val overlaps = mutableStateOf(false)
+        val bodyColor = mutableStateOf(Color.Red)
         rule.setContent {
             MaterialTheme(colorScheme = lightColorScheme(background = Color.White)) {
                 CompositionLocalProvider(LocalGlassCapability provides GlassCapability.SOLID_FALLBACK) {
                     view = LocalView.current
                     val backdrop = rememberLayerBackdrop()
-                    Box(Modifier.size(320.dp, 160.dp).background(Color.Red).testTag("page")) {
+                    Box(Modifier.size(320.dp, 160.dp).background(bodyColor.value).testTag("page")) {
                         ReaderTopBarOverlay(
-                            backdrop = backdrop, hasContentBehindBar = { overlaps.value },
+                            backdrop = backdrop,
                             title = "X", topBarScrollState = null, searchState = null,
                             onBack = {}, searchEnabled = true, onOpenSearch = {},
                             settingsEnabled = true, onOpenSettings = {}, tocEnabled = true, onOpenToc = {},
@@ -104,13 +104,14 @@ class ReaderScrollEdgeRenderTest {
                 (bounds.top + bounds.height * 30f / 160f).toInt(),
             ))
         }
-        assertEquals("no overlap leaves content clear", 0f, sampleBlankTitleArea().green, 0.005f)
-        rule.runOnIdle { overlaps.value = true }
-        rule.waitForIdle()
-        assertTrue("overlap protects toolbar contrast", sampleBlankTitleArea().green > 0.80f)
-        rule.runOnIdle { overlaps.value = false }
-        rule.waitForIdle()
-        assertEquals("returning to top removes edge", 0f, sampleBlankTitleArea().green, 0.005f)
+        for (color in listOf(Color.Red, Color.Blue, Color.Black)) {
+            rule.runOnIdle { bodyColor.value = color }
+            rule.waitForIdle()
+            val surface = sampleBlankTitleArea()
+            assertEquals("opaque chrome red", 1f, surface.red, 0.005f)
+            assertEquals("opaque chrome green", 1f, surface.green, 0.005f)
+            assertEquals("opaque chrome blue", 1f, surface.blue, 0.005f)
+        }
     }
 
 }

@@ -1,5 +1,7 @@
 package com.m1racle.reader.ui.theme
 
+import com.m1racle.reader.design.RadixColors
+
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -9,6 +11,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 
 /**
  * Extra semantic surfaces not always convenient from [ColorScheme] alone,
@@ -21,13 +25,26 @@ import androidx.compose.ui.graphics.Color
 data class M1racleReaderExtraColors(
     /** Area around PDF page bitmaps — not the page paper itself. */
     val pdfCanvas: Color,
+    val link: Color = RadixColors.Blue11,
+    val warning: Color = RadixColors.Amber11,
+    val success: Color = RadixColors.Green11,
+    val highlight: Color = RadixColors.Amber4,
+    val highlightText: Color = RadixColors.Amber12,
 )
 
 val LocalM1racleReaderExtraColors = staticCompositionLocalOf {
     M1racleReaderExtraColors(pdfCanvas = PaperPdfCanvas)
 }
 
+internal const val ReaderUiHairlinePx = 0.5f
+
 object M1racleReaderTheme {
+    /** Physical pixels, independent of display density and user font scale. */
+    val hairline: Dp
+        @Composable
+        @ReadOnlyComposable
+        get() = with(LocalDensity.current) { ReaderUiHairlinePx.toDp() }
+
     val extra: M1racleReaderExtraColors
         @Composable
         @ReadOnlyComposable
@@ -78,8 +95,8 @@ fun m1racleReaderOutlinedFieldColors(): TextFieldColors {
         errorContainerColor = scheme.surface,
         cursorColor = scheme.primary,
         errorCursorColor = scheme.error,
-        focusedBorderColor = scheme.outline,
-        unfocusedBorderColor = scheme.outline,
+        focusedBorderColor = scheme.primary,
+        unfocusedBorderColor = scheme.primary,
         disabledBorderColor = scheme.outlineVariant,
         errorBorderColor = scheme.error,
         focusedLabelColor = scheme.onSurfaceVariant,

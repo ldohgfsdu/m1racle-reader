@@ -3,3 +3,8 @@ app/schemas/** -text
 *.sh text eol=lf
 gradlew text eol=lf
 *.bat text eol=crlf
+
+# The offline editor manifest verifies exact asset and source bytes.
+app/src/main/assets/markdown-editor/** -text
+reader-markdown-editor/** -text
+app/src/main/java/com/m1racle/reader/design/RadixColors.kt -text

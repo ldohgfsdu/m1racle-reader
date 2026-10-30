@@ -3,7 +3,6 @@ package com.m1racle.reader.ui.pdf
 import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -201,7 +200,7 @@ internal val MoreCircleSize = 44.dp
 /** Parent width preferred 220dp (band 212–224). */
 internal val MoreMenuWidth = 220.dp
 internal val MoreMenuCornerClosed = 22.dp
-internal val MoreMenuCorner = 28.dp
+internal val MoreMenuCorner = 16.dp
 internal val MenuRowHeight = 52.dp
 internal val MenuOptionRowHeight = 48.dp
 
@@ -220,21 +219,14 @@ internal val OptionIndent = MenuRowHPad + MenuIconColWidth + MenuIconGap
  * text weights stay explicit SemiBold/Normal. No fourth scale. */
 
 // ── Motion ────────────────────────────────────────────────────────────────
-private const val MorphCollapseMs = 170
+private const val MorphCollapseMs = 250
 /** Emphasized decelerate / FastOutSlowIn-class. */
 internal val MoreMorphEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
-/**
- * R22.2 open-morph spring: the card grows out of the More button anchor
- * (top-right pinned) with one damped spring; close stays a short deterministic
- * tween so the host's morph-handoff window is exact.
- */
-internal val MoreMorphSpring = SpringSpec<Float>(
-    dampingRatio = 0.8f,
-    stiffness = 450f,
-)
+/** Menu geometry uses one restrained easing; text keeps its final layout. */
+internal val MoreMorphMotion = tween<Float>(250, easing = MoreMorphEasing)
 /** Inline expansion/collapse duration (single authoritative progress p). */
-private const val InlineProgressMs = 175
+private const val InlineProgressMs = 250
 
 /**
  * One menu entry. A childState identifies its nested destination and origin;
@@ -465,7 +457,7 @@ internal fun ReaderMoreHost(
     // ── MAIN container size (circle ↔ menu card) ────────────────────────────
     LaunchedEffect(active, closing) {
         if (active && !closing) {
-            cardWidth.animateTo(menuWidthPx, MoreMorphSpring)
+            cardWidth.animateTo(menuWidthPx, MoreMorphMotion)
         }
     }
     LaunchedEffect(
@@ -490,7 +482,7 @@ internal fun ReaderMoreHost(
                 )
             }
             if (cardHeight.value <= circlePx * 1.05f) {
-                cardHeight.animateTo(target, MoreMorphSpring)
+                cardHeight.animateTo(target, MoreMorphMotion)
             } else {
                 cardHeight.snapTo(target)
             }
@@ -964,7 +956,7 @@ internal fun PdfChromeMenuRow(
             .onGloballyPositioned { rowBounds = it.boundsInRoot() }
             .background(
                 scheme.onSurface.copy(alpha = rowHighlight),
-                RoundedCornerShape(10.dp),
+                RoundedCornerShape(8.dp),
             )
             .then(rowClick)
             .semantics { if (chevron) stateDescription = expandedDescription }

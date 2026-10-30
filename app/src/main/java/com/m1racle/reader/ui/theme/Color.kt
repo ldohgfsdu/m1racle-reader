@@ -1,103 +1,75 @@
 package com.m1racle.reader.ui.theme
 
-import androidx.compose.ui.graphics.Color
+import com.m1racle.reader.design.RadixColors
 
-/**
- * M1racleReader fixed brand palettes — neutral only (no Material You purple).
- *
- * Light: paper white / charcoal ink.
- * Dark: graphite black reading surfaces.
- */
+/** Fixed Radix semantic palette. Wallpaper colors never change the reading chrome. */
+// Radix 1-2 surfaces, 3-5 controls, 6-8 borders, 11-12 text.
+val PaperBackground = RadixColors.Gray1
+val PaperSurface = RadixColors.White
+val PaperSurfaceContainerLowest = RadixColors.White
+val PaperSurfaceContainerLow = RadixColors.Gray2
+val PaperSurfaceContainer = RadixColors.Gray3
+val PaperSurfaceContainerHigh = RadixColors.Gray4
+val PaperSurfaceContainerHighest = RadixColors.Gray5
+val PaperSurfaceVariant = RadixColors.Gray3
+val PaperOnBackground = RadixColors.Gray12
+val PaperOnSurface = RadixColors.Gray12
+val PaperOnSurfaceVariant = RadixColors.Gray11
+val PaperPrimary = RadixColors.Gray12
+val PaperOnPrimary = RadixColors.White
+val PaperPrimaryContainer = RadixColors.Gray5
+val PaperOnPrimaryContainer = RadixColors.Gray12
+val PaperSecondary = RadixColors.Gray11
+val PaperOnSecondary = RadixColors.White
+val PaperSecondaryContainer = RadixColors.Gray3
+val PaperOnSecondaryContainer = RadixColors.Gray12
+val PaperTertiary = RadixColors.Gray12
+val PaperOnTertiary = RadixColors.White
+val PaperTertiaryContainer = RadixColors.Amber3
+val PaperOnTertiaryContainer = RadixColors.Amber12
+val PaperOutline = RadixColors.Gray7
+val PaperOutlineVariant = RadixColors.Gray6
+val PaperError = RadixColors.Red11
+val PaperOnError = RadixColors.White
+val PaperErrorContainer = RadixColors.Red3
+val PaperOnErrorContainer = RadixColors.Red12
+val PaperScrim = RadixColors.Black
+val PaperPdfCanvas = RadixColors.Gray4
 
-// ---------------------------------------------------------------------------
-// Light — paper
-// ---------------------------------------------------------------------------
+// Blue remains local to the existing navigation selection and link roles.
+val DockSelectedLight = RadixColors.Blue11
+val DockSelectedDark = RadixColors.BlueDark10
+// Solid action fill must not inherit the lighter navigation foreground scale.
+val DockActionBackground = RadixColors.Blue9
 
-val PaperBackground = Color(0xFFFFFFFF)
-val PaperSurface = Color(0xFFFFFFFF)
-val PaperSurfaceContainerLowest = Color(0xFFFFFFFF)
-val PaperSurfaceContainerLow = Color(0xFFF7F7F8)
-val PaperSurfaceContainer = Color(0xFFF5F5F5)
-val PaperSurfaceContainerHigh = Color(0xFFF0F0F0)
-val PaperSurfaceContainerHighest = Color(0xFFECECEC)
-val PaperSurfaceVariant = Color(0xFFF0F0F0)
-
-val PaperOnBackground = Color(0xFF0D0D0D)
-val PaperOnSurface = Color(0xFF0D0D0D)
-val PaperOnSurfaceVariant = Color(0xFF5D5D5D)
-
-val PaperPrimary = Color(0xFF171717)
-/** Navigation accent stays local to the iOS-inspired glass dock. */
-val DockSelectedLight = Color(0xFF007AFF)
-val DockSelectedDark = Color(0xFF0A9FFF)
-val PaperOnPrimary = Color(0xFFFFFFFF)
-val PaperPrimaryContainer = Color(0xFFF2F2F2)
-val PaperOnPrimaryContainer = Color(0xFF0D0D0D)
-
-val PaperSecondary = Color(0xFF5D5D5D)
-val PaperOnSecondary = Color(0xFFFFFFFF)
-val PaperSecondaryContainer = Color(0xFFF2F2F2)
-val PaperOnSecondaryContainer = Color(0xFF0D0D0D)
-
-val PaperTertiary = Color(0xFF2F2F2F)
-val PaperOnTertiary = Color(0xFFFFFFFF)
-val PaperTertiaryContainer = Color(0xFFFFF1B8)
-val PaperOnTertiaryContainer = Color(0xFF3F2E00)
-
-val PaperOutline = Color(0xFFE5E5E5)
-val PaperOutlineVariant = Color(0xFFEFEFEF)
-
-val PaperError = Color(0xFFB3261E)
-val PaperOnError = Color(0xFFFFFFFF)
-val PaperErrorContainer = Color(0xFFF9DEDC)
-val PaperOnErrorContainer = Color(0xFF410E0B)
-
-val PaperScrim = Color(0xFF000000)
-
-/** Soft surround behind PDF pages in light mode (page content stays white). */
-val PaperPdfCanvas = Color(0xFFE8E8E8)
-
-// ---------------------------------------------------------------------------
-// Dark — graphite black (fixed visual polish palette)
-// ---------------------------------------------------------------------------
-
-val InkBackground = Color(0xFF0F0F0F)
-val InkSurface = Color(0xFF171717)
-val InkSurfaceContainerLowest = Color(0xFF0F0F0F)
-val InkSurfaceContainerLow = Color(0xFF1B1B1B)
-val InkSurfaceContainer = Color(0xFF1C1C1C)
-val InkSurfaceContainerHigh = Color(0xFF202020)
-val InkSurfaceContainerHighest = Color(0xFF292929)
-val InkSurfaceVariant = Color(0xFF292929)
-
-val InkOnBackground = Color(0xFFF2F2F2)
-val InkOnSurface = Color(0xFFF2F2F2)
-val InkOnSurfaceVariant = Color(0xFFB3B3B3)
-
-val InkPrimary = Color(0xFFE8E8E8)
-val InkOnPrimary = Color(0xFF111111)
-val InkPrimaryContainer = Color(0xFF292929)
-val InkOnPrimaryContainer = Color(0xFFF2F2F2)
-
-val InkSecondary = Color(0xFFB3B3B3)
-val InkOnSecondary = Color(0xFF111111)
-val InkSecondaryContainer = Color(0xFF292929)
-val InkOnSecondaryContainer = Color(0xFFF2F2F2)
-
-val InkTertiary = Color(0xFFC4C4C4)
-val InkOnTertiary = Color(0xFF111111)
-val InkTertiaryContainer = Color(0xFF3A3520)
-val InkOnTertiaryContainer = Color(0xFFFFF1B8)
-
-val InkOutline = Color(0xFF343434)
-val InkOutlineVariant = Color(0xFF292929)
-
-val InkError = Color(0xFFFFB4AB)
-val InkOnError = Color(0xFF690005)
-val InkErrorContainer = Color(0xFF93000A)
-val InkOnErrorContainer = Color(0xFFFFDAD6)
-
-val InkScrim = Color(0xFF000000)
-
-/** Fixed surround behind PDF pages in dark mode (page content not inverted). */
-val InkPdfCanvas = Color(0xFF252525)
+val InkBackground = RadixColors.GrayDark1
+val InkSurface = RadixColors.GrayDark2
+val InkSurfaceContainerLowest = RadixColors.GrayDark1
+val InkSurfaceContainerLow = RadixColors.GrayDark2
+val InkSurfaceContainer = RadixColors.GrayDark3
+val InkSurfaceContainerHigh = RadixColors.GrayDark4
+val InkSurfaceContainerHighest = RadixColors.GrayDark5
+val InkSurfaceVariant = RadixColors.GrayDark3
+val InkOnBackground = RadixColors.GrayDark12
+val InkOnSurface = RadixColors.GrayDark12
+val InkOnSurfaceVariant = RadixColors.GrayDark11
+val InkPrimary = RadixColors.GrayDark12
+val InkOnPrimary = RadixColors.GrayDark1
+val InkPrimaryContainer = RadixColors.GrayDark5
+val InkOnPrimaryContainer = RadixColors.GrayDark12
+val InkSecondary = RadixColors.GrayDark11
+val InkOnSecondary = RadixColors.GrayDark1
+val InkSecondaryContainer = RadixColors.GrayDark3
+val InkOnSecondaryContainer = RadixColors.GrayDark12
+val InkTertiary = RadixColors.GrayDark12
+val InkOnTertiary = RadixColors.GrayDark1
+val InkTertiaryContainer = RadixColors.AmberDark3
+val InkOnTertiaryContainer = RadixColors.AmberDark12
+val InkOutline = RadixColors.GrayDark7
+val InkOutlineVariant = RadixColors.GrayDark6
+val InkError = RadixColors.RedDark11
+val InkOnError = RadixColors.GrayDark1
+val InkErrorContainer = RadixColors.RedDark3
+val InkOnErrorContainer = RadixColors.RedDark12
+val InkScrim = RadixColors.Black
+val InkPdfCanvas = RadixColors.GrayDark3

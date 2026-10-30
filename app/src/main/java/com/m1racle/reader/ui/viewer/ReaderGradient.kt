@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.viewer
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -79,10 +80,10 @@ internal fun Modifier.readerGradient(
                 val fadeSpan = 1f - fadeStart
                 drawRect(
                     Brush.verticalGradient(
-                        0f to Color.White,
-                        fadeStart to Color.White,
-                        (fadeStart + fadeSpan * 0.35f) to Color.White.copy(alpha = 0.72f),
-                        (fadeStart + fadeSpan * 0.70f) to Color.White.copy(alpha = 0.22f),
+                        0f to RadixColors.White,
+                        fadeStart to RadixColors.White,
+                        (fadeStart + fadeSpan * 0.35f) to RadixColors.White.copy(alpha = 0.72f),
+                        (fadeStart + fadeSpan * 0.70f) to RadixColors.White.copy(alpha = 0.22f),
                         1f to Color.Transparent,
                         endY = extent,
                     ),

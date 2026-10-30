@@ -1,13 +1,17 @@
 package com.m1racle.reader.ui.home
 
+import com.m1racle.reader.ui.components.ReaderOutlinedTextField
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material3.*
@@ -27,10 +31,6 @@ import androidx.compose.ui.unit.sp
 import com.m1racle.reader.R
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.ui.material.GlassAlertDialog
-import com.m1racle.reader.ui.material.GlassCapability
-import com.m1racle.reader.ui.material.GlassMaterialEngine
-import com.m1racle.reader.ui.material.GlassMaterialRole
-import com.m1racle.reader.ui.material.LocalGlassEnvironment
 import com.m1racle.reader.ui.theme.M1racleReaderTheme
 
 /**
@@ -82,7 +82,7 @@ fun DocumentListRow(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(M1racleReaderTheme.cornerRadius.control))
-                    .background(scheme.onSurface.copy(alpha = 0.06f)),
+                    .background(scheme.surfaceContainer),
                 contentAlignment = Alignment.Center,
             ) {
                 com.m1racle.reader.image.DocumentCover(document, Modifier.fillMaxSize()) { Icon(
@@ -96,14 +96,14 @@ fun DocumentListRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = titles.displayTitle,
-                    style = M1racleReaderTheme.typography.title.copy(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium),
+                    style = M1racleReaderTheme.typography.title.copy(fontSize = 14.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium),
                     color = scheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "${titles.typeLabel} · $metadata",
+                    text = "${titles.typeLabel}  $metadata",
                     style = M1racleReaderTheme.typography.caption,
                     color = scheme.onSurfaceVariant,
                     maxLines = 2,
@@ -120,7 +120,7 @@ fun DocumentListRow(
         HorizontalDivider(
             modifier = Modifier.align(Alignment.BottomStart).padding(start = 48.dp),
             color = scheme.outlineVariant,
-            thickness = 0.5.dp,
+            thickness = M1racleReaderTheme.hairline,
         )
     }
 }
@@ -144,7 +144,9 @@ internal fun DocumentActionsMenu(
     val operations = LocalDocumentOperations.current
     val editor = com.m1racle.reader.ui.documents.LocalDocumentEditor.current
     val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.CreateDocument(document.mimeType ?: "application/octet-stream"),
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument(
+            if (document.type == com.m1racle.reader.data.local.DocumentType.MARKDOWN_PACKAGE) "application/zip"
+            else document.mimeType ?: "application/octet-stream"),
     ) { uri -> if (uri != null) operations?.export(document.id, uri) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val fullName = document.displayName.ifBlank { resolveDocumentCardTitles(document).displayTitle }
@@ -159,7 +161,7 @@ internal fun DocumentActionsMenu(
                     Text(listOfNotNull(
                         resolveDocumentCardTitles(document).typeLabel,
                         document.fileSize?.let { android.text.format.Formatter.formatShortFileSize(context, it) },
-                    ).joinToString(" · "))
+                    ).joinToString("  "))
                     Spacer(Modifier.height(12.dp))
                     Text("本地副本", style = MaterialTheme.typography.labelMedium)
                     SelectionContainer { Text(documentLocation(document.uri)) }
@@ -176,7 +178,7 @@ internal fun DocumentActionsMenu(
     if (renaming) GlassAlertDialog(
         onDismissRequest = { renaming = false }, title = { Text("重命名") },
         text = { Column {
-            OutlinedTextField(renameText, { renameText = it }, label = { Text("文件名") }, singleLine = true)
+            ReaderOutlinedTextField(renameText, { renameText = it }, label = { Text("文件名") }, singleLine = true)
             Text("修改书库名称，保留阅读记录与批注；原文件名称不变。", style = MaterialTheme.typography.bodySmall)
         } },
         confirmButton = { TextButton(onClick = { operations?.rename(document.id, renameText) { renaming = false } }, enabled = renameText.isNotBlank()) { Text("保存") } },
@@ -199,35 +201,46 @@ internal fun DocumentActionsMenu(
             dismissButton = { TextButton(onClick = { confirmRemoval = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
-    val overlay = GlassMaterialEngine.resolve(
-        role = GlassMaterialRole.Dock,
-        environment = LocalGlassEnvironment.current,
-        capability = GlassCapability.SOLID_FALLBACK,
-    )
+    val scheme = MaterialTheme.colorScheme
+
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         offset = DpOffset(0.dp, 4.dp),
-        shape = HomeDesignTokens.MenuShape,
-        containerColor = overlay.surfaceColor,
+        modifier = Modifier.widthIn(min = 224.dp, max = 280.dp),
+        shape = RoundedCornerShape(16.dp),
+        containerColor = scheme.surfaceContainerHigh.copy(alpha = 1f),
         tonalElevation = 0.dp,
-        shadowElevation = overlay.shadow,
+        shadowElevation = 6.dp,
     ) {
         if (editor != null && document.type == com.m1racle.reader.data.local.DocumentType.MARKDOWN) {
-            DropdownMenuItem(text = { Text("编辑正文") }, onClick = { onDismissRequest(); editor(document.id) })
+            DropdownMenuItem(text = { DocumentMenuLabel("编辑正文") },
+                leadingIcon = { Icon(Icons.Outlined.Edit, null, Modifier.size(20.dp)) },
+                onClick = { onDismissRequest(); editor(document.id) })
         }
         if (operations != null) {
-            DropdownMenuItem(text = { Text("重命名") }, onClick = { onDismissRequest(); renaming = true })
-            DropdownMenuItem(text = { Text("导出文件") }, onClick = { onDismissRequest(); exportLauncher.launch(document.displayName) })
+            DropdownMenuItem(text = { DocumentMenuLabel("重命名") },
+                leadingIcon = { Icon(Icons.Outlined.DriveFileRenameOutline, null, Modifier.size(20.dp)) },
+                onClick = { onDismissRequest(); renaming = true })
+            DropdownMenuItem(text = { DocumentMenuLabel("导出文件") },
+                leadingIcon = { Icon(Icons.Outlined.FileDownload, null, Modifier.size(20.dp)) }, onClick = {
+                onDismissRequest()
+                val name = if (document.type == com.m1racle.reader.data.local.DocumentType.MARKDOWN_PACKAGE &&
+                    !document.displayName.endsWith(".zip", ignoreCase = true)) "${document.displayName}.zip" else document.displayName
+                exportLauncher.launch(name)
+            })
         }
         DropdownMenuItem(
-            text = { Text(stringResource(R.string.home_document_information)) },
-            leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+            text = { DocumentMenuLabel(stringResource(R.string.home_document_information)) },
+            leadingIcon = { Icon(Icons.Outlined.Info, null, Modifier.size(20.dp)) },
             onClick = { onDismissRequest(); showInformation = true },
         )
+        HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            color = scheme.outlineVariant.copy(alpha = 0.5f))
         DropdownMenuItem(
-            text = { Text(stringResource(R.string.home_remove_title)) },
-            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            text = { DocumentMenuLabel(stringResource(R.string.home_remove_title)) },
+            leadingIcon = { Icon(Icons.Outlined.RemoveCircleOutline, null, Modifier.size(20.dp)) },
+            colors = MenuDefaults.itemColors(textColor = scheme.error, leadingIconColor = scheme.error),
             onClick = { onDismissRequest(); confirmRemoval = true },
         )
     }
@@ -239,4 +252,9 @@ internal fun DocumentActionsButton(onClick: () -> Unit) {
         Icon(Icons.Default.MoreVert, stringResource(R.string.home_document_actions),
             tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
     }
+}
+
+@Composable
+private fun DocumentMenuLabel(label: String) {
+    Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Normal)
 }

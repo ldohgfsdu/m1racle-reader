@@ -135,7 +135,7 @@ class EpubReaderUiTest {
         assertTrue("reading=$before footer=$footer", before.bottom <= footer.top)
         rule.onNodeWithTag("epub-pager").performTouchInput { click(percentOffset(0.5f, 0.5f)) }
         rule.waitForIdle()
-        val chapter = rule.onNodeWithText("第一章 ·", substring = true).fetchSemanticsNode().boundsInRoot
+        val chapter = rule.onNodeWithText("第一章  ", substring = true).fetchSemanticsNode().boundsInRoot
         assertTrue("reading=$before chapter=$chapter", before.bottom <= chapter.top)
         for (description in listOf("返回", "目录", "设置")) {
             val control = rule.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInRoot
@@ -235,13 +235,13 @@ class EpubReaderUiTest {
         rule.onNodeWithContentDescription("目录").assertIsDisplayed().performClick()
         rule.mainClock.advanceTimeBy(1_000) // Wait for the drawer to finish sliding before tapping a row.
         rule.waitForIdle()
-        rule.onNodeWithText("关闭").assertIsDisplayed()
+        rule.onNodeWithText("关闭").assertDoesNotExist()
         rule.onNode(hasText("第二章") and hasClickAction()).assertIsDisplayed().performClick()
         rule.waitForIdle()
         assertFalse(pageLabel().startsWith("第 1 /"))
         rule.onNodeWithTag("epub-pager").performTouchInput { click(percentOffset(0.5f, 0.5f)) }
         rule.waitForIdle()
-        rule.onNodeWithText("第二章 ·", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("第二章  ", substring = true).assertIsDisplayed()
     }
 
     @Test fun `swiping and TOC jumps show each same-file chapter at the first line with its own footer`() {
@@ -273,7 +273,7 @@ class EpubReaderUiTest {
         assertTrue(visibleText().startsWith("同文件第二章"))
         assertFalse(visibleText().contains("上一章结尾"))
         rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }
-        rule.onNodeWithText("同文件第二章 · 1/1").assertIsDisplayed()
+        rule.onNodeWithText("同文件第二章  1/1").assertIsDisplayed()
         rule.onNodeWithTag("epub-pager").performTouchInput { swipeRight() }
         rule.waitForIdle()
         rule.onNodeWithTag("epub-pager").performTouchInput { click(center) }

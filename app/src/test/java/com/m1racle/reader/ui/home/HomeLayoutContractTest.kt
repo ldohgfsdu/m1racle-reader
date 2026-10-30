@@ -97,8 +97,11 @@ class HomeLayoutContractTest {
         val row = rowSource()
         val home = homeSource()
         assertTrue(row.contains("DropdownMenu("))
-        assertTrue(row.contains("GlassMaterialRole.Dock"))
-        assertTrue(row.contains("GlassCapability.SOLID_FALLBACK"))
+        assertTrue(row.contains("offset = DpOffset(0.dp, 4.dp)"))
+        assertTrue(row.contains("containerColor = scheme.surfaceContainerHigh.copy(alpha = 1f)"))
+        assertTrue(isOpaqueOutlinedMenu(row))
+        assertFalse(row.contains("GlassMaterialEngine"))
+        assertFalse(row.contains("GlassMaterialRole.Dock"))
         assertFalse(row.contains(".glassMaterial("))
         val dock = ProductionSource.text("com/m1racle/reader/ui/hub/GlassDock.kt")
         // The approved rounded plus is drawn once, with two strokes, rather
@@ -139,8 +142,8 @@ class HomeLayoutContractTest {
 
     @Test
     fun `home typography separates current document from list and progress`() {
-        assertTrue(continueSource().contains("fontSize = 20.sp"))
-        assertTrue(rowSource().contains("fontSize = 16.sp"))
+        assertTrue(continueSource().contains("fontSize = 18.sp"))
+        assertTrue(rowSource().contains("fontSize = 14.sp"))
         assertTrue(rowSource().contains("typography.caption"))
         assertTrue(rowSource().contains("maxLines = 2"))
     }
@@ -148,7 +151,8 @@ class HomeLayoutContractTest {
     @Test
     fun `recent list excludes the continue reading document`() {
         val home = homeSource()
-        assertTrue(home.contains("documents.filter { it.id != continueReading?.id }"))
+        assertTrue(homeSourceVm().contains("visible.filter { it.id != continueReading?.id }"))
+        assertTrue(homeSourceVm().contains("recent.take(HomeRecentLimit)"))
         assertFalse(home.contains("progressPercent(continueReading)"))
     }
 
@@ -181,6 +185,13 @@ class HomeLayoutContractTest {
         assertTrue(vm.contains("pendingDeleteIds"))
         assertTrue(vm.contains("HomeListUpdate.visibleDocuments"))
         assertTrue(vm.contains("deleteById"))
+    }
+
+    private fun isOpaqueOutlinedMenu(source: String): Boolean {
+        val outlinedIcons = Regex("leadingIcon\\s*=\\s*\\{ Icon\\(Icons\\.Outlined\\.").findAll(source).count()
+        val divider = source.indexOf("HorizontalDivider(")
+        val remove = source.indexOf("Icons.Outlined.RemoveCircleOutline")
+        return outlinedIcons >= 5 && divider >= 0 && remove > divider
     }
 
     private fun homeSource(): String = source("ui/home/HomeScreen.kt")

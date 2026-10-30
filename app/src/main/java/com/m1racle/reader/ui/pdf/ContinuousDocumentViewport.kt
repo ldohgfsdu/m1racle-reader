@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.pdf
 
+import com.m1racle.reader.design.RadixColors
 import android.graphics.Paint
 import android.content.pm.ApplicationInfo
 import android.util.Log
@@ -243,27 +244,46 @@ internal fun ContinuousDocumentViewport(
         )
     }
     var geometryEpoch by remember(documentId) { mutableStateOf(geometry) }
+    var viewportEpoch by remember(documentId) { mutableStateOf(IntSize.Zero) }
+    val viewportResized = viewportEpoch.width > 0 && viewportEpoch.height > 0 &&
+        viewportSize.width > 0 && viewportSize.height > 0 && viewportEpoch != viewportSize
     val alignedDocumentState = if (
-        geometryEpoch !== geometry &&
+        (geometryEpoch !== geometry || viewportResized) &&
         geometryEpoch.pageCount == geometry.pageCount &&
         viewportSize.width > 0 &&
         viewportSize.height > 0
     ) {
-        geometry.remapStatePreservingViewportTop(
-            geometryEpoch,
-            documentState,
-            viewportSize.width.toFloat(),
-            viewportSize.height.toFloat(),
-        )
+        if (viewportResized) {
+            // A rotation changes both the page geometry and the viewport. Its
+            // old center may be on a later page than its top edge. Reuse the
+            // page-local session anchor so the reading page and zoom survive.
+            val anchor = geometryEpoch.viewportSessionAtAnchor(
+                documentState, viewportEpoch.width.toFloat(), viewportEpoch.height.toFloat(), 0L,
+            )
+            geometry.restoreViewportSession(
+                anchor, documentState, viewportSize.width.toFloat(), viewportSize.height.toFloat(),
+            )
+        } else {
+            // A real page aspect replacing a placeholder keeps the top edge.
+            geometry.remapStatePreservingViewportTop(
+                geometryEpoch,
+                documentState,
+                viewportSize.width.toFloat(),
+                viewportSize.height.toFloat(),
+            )
+        }
     } else {
         documentState
     }
     SideEffect {
-        if (geometryEpoch !== geometry) {
+        if ((geometryEpoch !== geometry || viewportEpoch != viewportSize) &&
+            viewportSize.width > 0 && viewportSize.height > 0
+        ) {
             // Mid-gesture writes fight the pointer epoch (baseTransform + absolute
             // delta) and jump the page; keep remapping for render only until lift.
             if (documentState.gestureActive) return@SideEffect
             geometryEpoch = geometry
+            viewportEpoch = viewportSize
             if (alignedDocumentState != documentState) {
                 documentState = alignedDocumentState
                 sharedGestureController.replaceTransform(
@@ -1551,7 +1571,7 @@ private fun DocumentPage(
 ) {
     val drawnTileKeys = remember(documentId, page) { mutableSetOf<com.m1racle.reader.pdf.PdfTileKey>() }
     val paperFilter = pdfPaperFilter()
-    val paperColor = if (paperFilter != null) Color.Black else Color.White
+    val paperColor = if (paperFilter != null) RadixColors.Black else RadixColors.White
     val diagnosticPaint = remember(showTileDiagnostics) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.MAGENTA

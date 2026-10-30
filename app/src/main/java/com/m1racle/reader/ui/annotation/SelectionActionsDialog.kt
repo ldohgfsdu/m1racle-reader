@@ -1,6 +1,9 @@
 package com.m1racle.reader.ui.annotation
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.m1racle.reader.ui.components.readerHairlineBorder
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -22,11 +25,11 @@ fun SelectionActionsDialog(selection: TextSelection, onDismiss: () -> Unit,
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SelectionContainer { Text(selection.excerpt.orEmpty(), Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState())) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HighlightStyle.entries.forEach { option -> FilterChip(selected = style == option, onClick = { style = option }, label = { Text(option.label) }) }
+                HighlightStyle.entries.forEach { option -> FilterChip(selected = style == option, onClick = { style = option }, label = { Text(option.label) }, border = null, shape = RoundedCornerShape(8.dp), modifier = Modifier.readerHairlineBorder(if (style == option) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))) }
             }
             Row {
                 TextButton(onClick = { clipboard.setText(AnnotatedString(selection.excerpt.orEmpty())); onDismiss() }, enabled = !selection.excerpt.isNullOrEmpty()) { Text("复制") }
-                if (onNote != null) TextButton(onClick = onNote) { Text("写笔记") }
+                if (onNote != null) TextButton(onClick = onNote) { Text("添加批注") }
             }
         }
     }, confirmButton = { TextButton(onClick = { onHighlight(style) }) { Text("标记") } },

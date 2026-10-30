@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.annotation
 
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -125,7 +126,7 @@ fun AnnotationsManagementSheet(
                 item(key = "section-divider") {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    )
+                     thickness = M1racleReaderTheme.hairline)
                     Spacer(Modifier.height(8.dp))
                 }
                 item(key = "note-section") {

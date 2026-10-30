@@ -18,6 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -70,17 +74,22 @@ fun ContinueReadingCard(
                 color = scheme.onSurfaceVariant,
                 modifier = Modifier.padding(end = 40.dp),
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
             if (document.isPdf || document.isEpub) {
-                com.m1racle.reader.image.DocumentCover(document,
-                    Modifier.width(56.dp).height(76.dp).clip(RoundedCornerShape(6.dp))) {}
+                Box(Modifier.width(56.dp).height(76.dp).clip(RoundedCornerShape(8.dp))
+                    .background(scheme.surfaceContainer), contentAlignment = Alignment.Center) {
+                    com.m1racle.reader.image.DocumentCover(document, Modifier.matchParentSize()) {
+                        Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null,
+                            tint = scheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                    }
+                }
                 Spacer(Modifier.width(16.dp))
             }
             Column(Modifier.weight(1f)) {
             Text(
                 text = titles.displayTitle,
-                style = M1racleReaderTheme.typography.title.copy(fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+                style = M1racleReaderTheme.typography.title.copy(fontSize = 18.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
                 color = scheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

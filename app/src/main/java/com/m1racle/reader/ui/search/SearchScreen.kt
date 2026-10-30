@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.search
 
+import com.m1racle.reader.ui.components.ReaderOutlinedTextField
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,7 +25,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -128,8 +128,8 @@ fun SearchScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.search_library_title),
-                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp,
-                        lineHeight = 28.sp, fontWeight = FontWeight.SemiBold)) },
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp,
+                        lineHeight = 26.sp, fontWeight = FontWeight.SemiBold)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -146,7 +146,7 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            OutlinedTextField(
+            ReaderOutlinedTextField(
                 value = state.query,
                 onValueChange = viewModel::onQueryChange,
                 modifier = Modifier
@@ -154,7 +154,7 @@ fun SearchScreen(
                     .focusRequester(focus)
                     .padding(horizontal = HomeDesignTokens.PageHorizontal, vertical = 12.dp),
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,

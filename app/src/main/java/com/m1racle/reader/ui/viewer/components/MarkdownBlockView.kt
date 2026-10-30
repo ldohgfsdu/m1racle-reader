@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.viewer.components
 
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
@@ -83,9 +84,9 @@ fun MarkdownBlockView(
                 HorizontalDivider(
                     modifier = modifier
                         .fillMaxWidth()
-                        .padding(vertical = 24.dp),
+                        .padding(vertical = 20.dp),
                     color = MaterialTheme.colorScheme.outlineVariant,
-                    thickness = 1.dp,
+                    thickness = M1racleReaderTheme.hairline,
                 )
             }
         }

@@ -14,6 +14,7 @@ import com.m1racle.reader.epub.EpubRestoreTier
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -94,5 +95,42 @@ class EpubAnchorPersistenceTest {
             assertEquals(AnchorCodec.encode(nearby), navigated.readingAnchor)
             assertEquals(1, navigated.lastScrollIndex)
         }
+    }
+
+    @Test fun degradedCurlTurnSavesAndReopensAtTheNewAnchor() = runBlocking {
+        val chapter = com.m1racle.reader.epub.EpubChapter(0, "chapter.xhtml", "Book", listOf(
+            com.m1racle.reader.epub.EpubBlock.Paragraph(listOf(com.m1racle.reader.epub.EpubInline("Opening text"))),
+            com.m1racle.reader.epub.EpubBlock.Paragraph(listOf(com.m1racle.reader.epub.EpubInline("New page text to restore exactly"))),
+        ), emptyMap())
+        val book = com.m1racle.reader.epub.EpubBook(
+            com.m1racle.reader.epub.EpubMetadata("Book", emptyList(), "en", null, "3", false, false),
+            listOf(com.m1racle.reader.epub.EpubSpineItem("c", chapter.href, true, 0)), emptyList(), listOf(chapter))
+        val location = com.m1racle.reader.epub.EpubLocation(0, 1, 2)
+        val newAnchor = requireNotNull(com.m1racle.reader.epub.EpubReadingAnchors.anchorAt(book, location))
+        val missing = newAnchor.copy(spineHref = "removed.xhtml")
+        repository.updateEpubReadingPosition("epub", missing, 12, 42, 0.5f)
+        val old = requireNotNull(db.documentDao().getById("epub"))
+        val restored = com.m1racle.reader.epub.EpubReadingAnchors.restore(book, old)
+        assertEquals(EpubRestoreTier.Progress, restored.tier)
+        val session = EpubRestoreSession(restored)
+        val curl = com.m1racle.reader.ui.epub.EpubCurlPageCommit(current = 2)
+
+        repository.updateEpubReadingPosition("epub", session.anchorForSave(newAnchor), 2, 0, 0.2f)
+        assertEquals(AnchorCodec.encode(missing), db.documentDao().getById("epub")!!.readingAnchor)
+
+        curl.onPointerDown()
+        curl.onPointerConsumedMove()
+        curl.onPointerUp()
+        assertNull(curl.observe(3, .6f))
+        assertEquals(3, curl.observe(3, 0f))
+        session.onUserNavigation()
+        repository.updateEpubReadingPosition("epub", session.anchorForSave(newAnchor), 3, 0, 0.3f)
+
+        val reopened = requireNotNull(db.documentDao().getById("epub"))
+        assertEquals(AnchorCodec.encode(newAnchor), reopened.readingAnchor)
+        assertEquals(3, reopened.lastScrollIndex)
+        val reopenResult = com.m1racle.reader.epub.EpubReadingAnchors.restore(book, reopened)
+        assertEquals(EpubRestoreTier.Exact, reopenResult.tier)
+        assertEquals(location, reopenResult.location)
     }
 }

@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.epub
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
@@ -20,7 +21,7 @@ internal fun Modifier.epubPaperEdge(corners: EpubDeviceCorners, visible: Boolean
         }
         onDrawWithContent {
             drawContent()
-            if (visible) drawPath(path, if (dark) Color.White.copy(alpha = 0.16f * shadow)
-                else Color.Black.copy(alpha = 0.08f * shadow), style = Stroke(1f))
+            if (visible) drawPath(path, if (dark) RadixColors.White.copy(alpha = 0.16f * shadow)
+                else RadixColors.Black.copy(alpha = 0.08f * shadow), style = Stroke(0.5f))
         }
     }

@@ -89,7 +89,7 @@ class ReaderProgressiveChromeInstrumentedTest {
         }
     }
 
-    @Test fun collapsingControlsKeepsTheSameProgressiveEdge() {
+    @Test fun solidReaderChromeHidesContentAndCollapsesWithControls() {
         val scroll = ReaderTopBarScrollState(100f, 8f)
         val enabled = mutableStateOf(true)
         val dark = mutableStateOf(false)
@@ -97,27 +97,40 @@ class ReaderProgressiveChromeInstrumentedTest {
         for (night in listOf(false, true)) {
             rule.runOnIdle { dark.value = night; enabled.value = true; scroll.forceShow() }
             rule.onNodeWithContentDescription("更多").assertExists()
-            val expanded = capture("expanded-fixed-$night")
+            val expanded = capture("solid-expanded-$night")
+            rule.runOnIdle { scroll.snapTo(50f) }
+            val halfway = capture("solid-halfway-$night")
             rule.runOnIdle { scroll.snapTo(100f) }
             rule.onNodeWithContentDescription("更多").assertDoesNotExist()
-            val collapsed = capture("collapsed-fixed-$night")
+            val collapsed = capture("solid-collapsed-$night")
             rule.runOnIdle { enabled.value = false }
-            val source = capture("source-fixed-$night")
-            var expandedDifference = 0f
-            var collapsedDifference = 0f
-            var visibilityDifference = 0f
-            var count = 0
-            // Empty title region between the back button and the navigation group:
-            // foreground controls must disappear, but these actual background pixels stay put.
-            for (y in px(70f) until px(104f)) for (x in px(100f) until px(200f)) {
-                expandedDifference += abs(expanded[x, y].red - source[x, y].red)
-                collapsedDifference += abs(collapsed[x, y].red - source[x, y].red)
-                visibilityDifference += abs(expanded[x, y].red - collapsed[x, y].red)
-                count++
+            val source = capture("solid-source-$night")
+            val page = if (night) Color(0xFF242424) else Color.White
+            fun bottom(pixels: PixelMap): Int {
+                var last = 0
+                for (y in 0 until px(145f)) {
+                    var difference = 0f
+                    for (x in px(100f) until px(170f)) difference += abs(pixels[x,y].red - source[x,y].red)
+                    if (difference / (px(170f) - px(100f)) > .05f) last = y + 1
+                }
+                return last
             }
-            assertTrue("expanded chrome must actually blur content", expandedDifference / count > .15f)
-            assertTrue("hiding controls must preserve the same blur", collapsedDifference / count > .15f)
-            assertTrue("control visibility must not change the depth profile", visibilityDifference / count < .005f)
+            val expandedBottom = bottom(expanded)
+            val halfBottom = bottom(halfway)
+            val collapsedBottom = bottom(collapsed)
+            assertTrue("surface contracts by half a 56dp toolbar", abs(px(28f) - (expandedBottom - halfBottom)) <= 1)
+            assertTrue("no blank toolbar remains after hiding", abs(px(56f) - (expandedBottom - collapsedBottom)) <= 1)
+            for (pixels in listOf(expanded, halfway, collapsed)) {
+                val edge = bottom(pixels)
+                for (y in 1 until (edge - 2).coerceAtLeast(1)) for (x in px(100f) until px(170f)) {
+                    assertEquals("opaque surface red", page.red, pixels[x,y].red, .008f)
+                    assertEquals("opaque surface green", page.green, pixels[x,y].green, .008f)
+                    assertEquals("opaque surface blue", page.blue, pixels[x,y].blue, .008f)
+                }
+            }
+            for (y in collapsedBottom + 2 until px(145f)) for (x in px(100f) until px(170f)) {
+                assertEquals("hiding reveals the original content", source[x,y].red, collapsed[x,y].red, .005f)
+            }
         }
     }
 

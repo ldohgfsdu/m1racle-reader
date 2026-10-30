@@ -1,5 +1,7 @@
 package com.m1racle.reader.ui.viewer.components
 
+import com.m1racle.reader.ui.annotation.readerHighlightColor
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,13 +50,13 @@ internal fun rememberMarkdownSelectedText(searched: AnnotatedString, annotationO
             val end = ((anchor?.charEnd ?: selectionContext.plainText.length) - inlineOffset).coerceIn(0, searched.length)
             val kind = com.m1racle.reader.data.anchor.HighlightStyle.fromStorage(highlight.style)
             val span = when (kind) {
-                com.m1racle.reader.data.anchor.HighlightStyle.Underline -> SpanStyle(textDecoration = TextDecoration.Underline, color = Color(kind.argb))
-                com.m1racle.reader.data.anchor.HighlightStyle.Strike -> SpanStyle(textDecoration = TextDecoration.LineThrough, color = Color(kind.argb))
-                else -> SpanStyle(background = Color(kind.argb))
+                com.m1racle.reader.data.anchor.HighlightStyle.Underline -> SpanStyle(textDecoration = TextDecoration.Underline, color = readerHighlightColor(kind))
+                com.m1racle.reader.data.anchor.HighlightStyle.Strike -> SpanStyle(textDecoration = TextDecoration.LineThrough, color = readerHighlightColor(kind))
+                else -> SpanStyle(background = readerHighlightColor(kind))
             }
             if (end > start) builder.addStyle(span, start, end)
         }
-        previewRange?.let { range -> if (!range.isEmpty()) builder.addStyle(SpanStyle(background = Color(0x6653B8FF)), range.first, range.last + 1) }
+        previewRange?.let { range -> if (!range.isEmpty()) builder.addStyle(SpanStyle(background = RadixColors.Blue9.copy(alpha = 0.40f)), range.first, range.last + 1) }
         builder.toAnnotatedString()
     }
     val currentSelection by rememberUpdatedState(selectionContext)

@@ -1,7 +1,10 @@
 package com.m1racle.reader.ui.theme
 
+import com.m1racle.reader.design.RadixColors
+
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -15,7 +18,7 @@ import com.m1racle.reader.ui.material.LocalGlassEnvironment
 
 /**
  * Fixed brand schemes — **dynamic color is intentionally off**.
- * Light: paper neutrals. Dark: graphite black reading UI.
+ * Light and dark use the official Radix Gray scales.
  * Wallpaper / Material You must not tint the chrome.
  */
 val LocalReaderDarkTheme = staticCompositionLocalOf { false }
@@ -51,6 +54,12 @@ private val LightColorScheme = lightColorScheme(
     errorContainer = PaperErrorContainer,
     onErrorContainer = PaperOnErrorContainer,
     scrim = PaperScrim,
+    inverseSurface = InkSurface,
+    inverseOnSurface = InkOnSurface,
+    inversePrimary = InkPrimary,
+    surfaceTint = PaperPrimary,
+    surfaceBright = PaperSurface,
+    surfaceDim = PaperSurfaceContainerHighest,
 )
 
 private val DarkColorScheme = darkColorScheme(
@@ -84,10 +93,23 @@ private val DarkColorScheme = darkColorScheme(
     errorContainer = InkErrorContainer,
     onErrorContainer = InkOnErrorContainer,
     scrim = InkScrim,
+    inverseSurface = PaperSurface,
+    inverseOnSurface = PaperOnSurface,
+    inversePrimary = PaperPrimary,
+    surfaceTint = InkPrimary,
+    surfaceBright = InkSurfaceContainerHighest,
+    surfaceDim = InkBackground,
 )
 
 private val LightExtra = M1racleReaderExtraColors(pdfCanvas = PaperPdfCanvas)
-private val DarkExtra = M1racleReaderExtraColors(pdfCanvas = InkPdfCanvas)
+private val DarkExtra = M1racleReaderExtraColors(
+    pdfCanvas = InkPdfCanvas,
+    link = RadixColors.BlueDark11,
+    warning = RadixColors.AmberDark11,
+    success = RadixColors.GreenDark11,
+    highlight = RadixColors.AmberDark4,
+    highlightText = RadixColors.AmberDark12,
+)
 
 @Composable
 fun M1racleReaderTheme(
@@ -111,6 +133,7 @@ fun M1racleReaderTheme(
     CompositionLocalProvider(
         LocalM1racleReaderExtraColors provides extra,
         LocalReaderDarkTheme provides darkTheme,
+        LocalContentColor provides colorScheme.onSurface,
         LocalM1racleTypography provides DefaultM1racleTypography,
         LocalM1racleSurface provides surface,
         LocalGlassEnvironment provides GlassEnvironment.app(darkTheme),

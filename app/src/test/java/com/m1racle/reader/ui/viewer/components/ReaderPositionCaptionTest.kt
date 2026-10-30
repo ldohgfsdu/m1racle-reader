@@ -10,7 +10,7 @@ class ReaderPositionCaptionTest {
     }
 
     @Test fun `different chapter still provides reading context`() {
-        assertEquals("第二章 · 37%", readerPositionCaption("文档", "第二章", 37))
+        assertEquals("第二章  37%", readerPositionCaption("文档", "第二章", 37))
     }
 
     @Test fun `absent chapter leaves honest progress only`() {

@@ -10,11 +10,11 @@ import org.junit.Test
 class M1racleMotionContractTest {
 
     @Test
-    fun `hub tab content uses a short fade and slide without bounce`() {
+    fun `hub content switches directly while the dock owns feedback`() {
         val motion = source("ui/hub/HubTabTransitions.kt")
         val nav = source("ui/navigation/NavGraph.kt")
-        assertTrue(motion.contains("M1racleMotion.NormalMs"))
-        assertTrue(motion.contains("M1racleMotion.SlowMs"))
+        assertTrue(motion.contains("EnterTransition.None"))
+        assertTrue(motion.contains("ExitTransition.None"))
         assertTrue(nav.contains("HubTabTransitions.enter"))
         assertTrue(nav.contains("HubTabTransitions.exit"))
         assertFalse(motion.contains("spring("))
@@ -35,10 +35,10 @@ class M1racleMotionContractTest {
     }
 
     @Test
-    fun `pdf chrome circles fade and slide without scale-enter leftovers`() {
+    fun `pdf chrome uses one fade without stagger or translation`() {
         val screen = source("ui/pdf/PdfViewerScreen.kt")
-        assertTrue(screen.contains("fadeIn(tween(200)) + slideInVertically(tween(200))"))
-        assertTrue(screen.contains("fadeOut(tween(180, delayMillis = 100))"))
+        assertTrue(screen.contains("fadeIn(M1racleMotion.normal)"))
+        assertTrue(screen.contains("fadeOut(M1racleMotion.normalIn)"))
         // The fade node lives in PdfChromeVisibility (shadow-clip single source);
         // PdfViewerScreen only passes enter/exit specs at the call sites.
         val chrome = source("ui/pdf/PdfChromeVisibility.kt")
@@ -55,10 +55,10 @@ class M1racleMotionContractTest {
 
         assertTrue(dock.contains("if (index == 2) DockImportAction(onImportDocument, enabled = !importing, backdrop = importBackdrop)"))
         assertTrue(dock.contains("enabled = !importing"))
-        // QA adds its own press recipe; production retains its scale and spring.
-        assertTrue(dock.contains("if (pressed) (if (coolapk) QaCoolapk.ImportPressScale else 1.085f) else 1f"))
-        assertTrue(dock.contains("if (!coolapk) androidx.compose.animation.core.spring(0.55f, 450f)"))
-        assertTrue(dock.contains("spring(0.55f, 450f)"))
+        // Production feedback is small, monotonic and bounded to the shared 250ms curve.
+        assertTrue(dock.contains("if (pressed) (if (coolapk) QaCoolapk.ImportPressScale else 1.04f) else 1f"))
+        assertTrue(dock.contains("if (!coolapk) M1racleMotion.normal"))
+        assertFalse(source("ui/hub/OpticalDockTabs.kt").contains("spring("))
         assertTrue(dock.contains("testTag(\"dock-import\")"))
         assertTrue(tabsHaveAnExcludedImportSlot())
         assertFalse(dock.contains("LiquidGlassButton("))
@@ -67,13 +67,13 @@ class M1racleMotionContractTest {
     }
 
     @Test
-    fun `more menu morphs from the circle with the capsule spring`() {
+    fun `more menu uses a short ease out without scaling its text`() {
         val host = source("ui/pdf/ReaderMoreHost.kt")
         val pop = source("ui/pdf/AnchoredNestedPopover.kt")
-        assertTrue(host.contains("MoreMorphSpring"))
+        assertTrue(host.contains("MoreMorphMotion"))
         assertTrue(host.contains("glassMaterial("))
-        assertTrue(host.contains("dampingRatio = 0.8f"))
-        assertTrue(host.contains("stiffness = 450f"))
+        assertTrue(host.contains("tween<Float>(250, easing = MoreMorphEasing)"))
+        assertTrue(host.contains("InlineProgressMs = 250"))
         // The card outline morphs; the text does not scale independently. Independent
         // content scaling was rejected as cheap-looking motion, so it must not return.
         assertFalse(host.contains("scaleX"))

@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.documents
 
+import com.m1racle.reader.ui.components.ReaderOutlinedTextField
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -28,7 +29,7 @@ fun ReaderDocumentDialog(id: String, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text("文件信息") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SelectionContainer { Text(doc.displayName) }
-            Text(listOfNotNull(doc.type.name, doc.fileSize?.let { android.text.format.Formatter.formatShortFileSize(context, it) }).joinToString(" · "))
+            Text(listOfNotNull(doc.type.name, doc.fileSize?.let { android.text.format.Formatter.formatShortFileSize(context, it) }).joinToString("  "))
             Text("本地副本", style = MaterialTheme.typography.labelMedium)
             SelectionContainer { Text(documentLocation(doc.uri)) }
             doc.sourceUri?.takeIf { it != doc.uri }?.let { source ->
@@ -41,7 +42,7 @@ fun ReaderDocumentDialog(id: String, onDismiss: () -> Unit) {
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } })
     if (renaming) AlertDialog(onDismissRequest = { renaming = false }, title = { Text("重命名") }, text = {
         Column {
-            OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("书库名称") })
+            ReaderOutlinedTextField(name, { name = it }, singleLine = true, label = { Text("文档名称") })
             Text("保留阅读位置和批注，原文件名称不变。", style = MaterialTheme.typography.bodySmall)
         }
     }, confirmButton = { TextButton(onClick = { operations.rename(id, name) { renaming = false } }, enabled = name.isNotBlank()) { Text("保存") } },

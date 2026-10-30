@@ -1,14 +1,17 @@
 package com.m1racle.reader.ui.hub
 
+import com.m1racle.reader.ui.components.readerHairlineBorder
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
+import com.m1racle.reader.design.RadixColors
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.m1racle.reader.ui.material.LocalGlassBackdropHost
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -33,6 +36,10 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -55,6 +62,8 @@ import com.m1racle.reader.ui.home.HomeDesignTokens
 import com.m1racle.reader.ui.material.LocalGlassEnvironment
 import com.m1racle.reader.ui.theme.DockSelectedLight
 import com.m1racle.reader.ui.theme.DockSelectedDark
+import com.m1racle.reader.ui.theme.DockActionBackground
+import com.m1racle.reader.ui.theme.M1racleMotion
 import com.m1racle.reader.ui.material.QaCoolapk
 import com.m1racle.reader.ui.material.QaGlass
 import com.m1racle.reader.ui.material.QaCoolapkImport
@@ -130,18 +139,17 @@ fun GlassDock(
 }
 
 /**
- * Tinted import glass transmits the processed dock underneath. QA variant 2
- * retains its measured 80% accent tint (QA_GLASS_VARIANTS.md).
+ * The import action uses a full-strength Radix solid, independently of the
+ * navigation foreground. QA variant 2 retains its own material comparison.
  */
-private fun dockImportBrush(
+internal fun dockImportFill(
     enabled: Boolean,
     coolapk: Boolean,
     dark: Boolean,
-    gradient: List<Color>,
-): androidx.compose.ui.graphics.Brush = when {
-    !enabled -> androidx.compose.ui.graphics.SolidColor(Color.Gray)
-    coolapk -> androidx.compose.ui.graphics.SolidColor(qaCoolapkImportTint(dark))
-    else -> androidx.compose.ui.graphics.Brush.horizontalGradient(gradient.map { it.copy(alpha = .88f) })
+): Color = when {
+    !enabled -> if (dark) RadixColors.GrayDark6 else RadixColors.Gray6
+    coolapk -> qaCoolapkImportTint(dark)
+    else -> DockActionBackground
 }
 
 /** The middle slot is an action, never a navigation destination. */
@@ -161,17 +169,25 @@ private fun androidx.compose.foundation.layout.RowScope.DockImportAction(
     val pressed by interaction.collectIsPressedAsState()
     val coolapk = QaGlass.selection.coolapk
     val scale by androidx.compose.animation.core.animateFloatAsState(
-        if (pressed) (if (coolapk) QaCoolapk.ImportPressScale else 1.085f) else 1f,
-        if (!coolapk) androidx.compose.animation.core.spring(0.55f, 450f)
+        if (pressed) (if (coolapk) QaCoolapk.ImportPressScale else 1.04f) else 1f,
+        if (!coolapk) M1racleMotion.normal
         else if (pressed) androidx.compose.animation.core.tween(QaCoolapk.PressInMillis,
             easing = androidx.compose.animation.core.LinearOutSlowInEasing)
         else androidx.compose.animation.core.spring(QaCoolapk.ReleaseDampingRatio, QaCoolapk.ReleaseStiffness),
         label = "dock-import-press")
     val dark = LocalGlassEnvironment.current.isDark
-    val colors = listOf(if (dark) DockSelectedDark else Color(0xFF6DB5FF), DockSelectedLight)
+    val importingDescription = stringResource(R.string.home_importing)
+    val description = stringResource(R.string.import_file)
     Box(
         Modifier.weight(1f).fillMaxHeight()
                 .testTag("dock-import")
+                .semantics {
+                    if (!enabled) {
+                        contentDescription = description
+                        stateDescription = importingDescription
+                        liveRegion = LiveRegionMode.Polite
+                    }
+                }
                 .clickable(enabled = enabled, interactionSource = interaction, indication = null,
                     role = androidx.compose.ui.semantics.Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -183,23 +199,27 @@ private fun androidx.compose.foundation.layout.RowScope.DockImportAction(
             .testTag("dock-import-surface")
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(importShape)
-            .background(dockImportBrush(enabled, coolapk, dark, colors), importShape)
-            .then(if (enabled && coolapk) Modifier.border(
-                QaCoolapkImport.RimWidth,
-                qaCoolapkImportRim(dark),
+            .background(dockImportFill(enabled, coolapk, dark), importShape)
+            .then(if (enabled && coolapk) Modifier.readerHairlineBorder(qaCoolapkImportRim(dark),
                 importShape) else Modifier)
             .drawBehind {
                 if (enabled && !coolapk) {
                     // The reference action has a horizontal tint, with light
                     // appearing on pickup rather than a permanent top bevel.
-                    val pickup = ((scale - 1f) / .085f).coerceIn(0f, 1f)
-                    drawRect(Color.White.copy(alpha = .20f * pickup))
-                } else if (pressed) drawRect(Color.White.copy(
+                    val pickup = ((scale - 1f) / .04f).coerceIn(0f, 1f)
+                    drawRect(RadixColors.White.copy(alpha = .08f * pickup))
+                } else if (pressed) drawRect(RadixColors.White.copy(
                     alpha = QaCoolapk.ImportPressOverlayAlpha))
             }, contentAlignment = Alignment.Center) {
-            val description = stringResource(R.string.import_file)
-            val glyphColor = if (coolapk && enabled) qaCoolapkImportGlyph(dark) else Color.White
-            Canvas(Modifier.size(24.dp).semantics { contentDescription = description }) {
+            val glyphColor = if (coolapk && enabled) qaCoolapkImportGlyph(dark) else RadixColors.White
+            if (!enabled) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp).testTag("dock-import-progress")
+                        .clearAndSetSemantics { },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    strokeWidth = 2.dp,
+                )
+            } else Canvas(Modifier.size(24.dp).semantics { contentDescription = description }) {
                 val arm = 7.dp.toPx()
                 val stroke = 2.5.dp.toPx()
                 drawLine(glyphColor, center.copy(x = center.x - arm), center.copy(x = center.x + arm),

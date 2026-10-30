@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.pdf
 
+import com.m1racle.reader.ui.components.ReaderOutlinedTextField
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,9 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -78,7 +77,7 @@ fun OutlineEditDialog(
     }
 
     val parentLabel = parentOptions.firstOrNull { it.id == parentId }?.let {
-        "${it.nodeType.displayLabelZh()} · ${it.title}"
+        "${it.nodeType.displayLabelZh()}  ${it.title}"
     } ?: stringResource(R.string.pdf_outline_parent_none)
 
     fun submit() {
@@ -112,7 +111,7 @@ fun OutlineEditDialog(
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(
+                ReaderOutlinedTextField(
                     value = title,
                     onValueChange = { title = it; error = null },
                     label = { Text(stringResource(R.string.pdf_outline_field_title)) },
@@ -126,14 +125,11 @@ fun OutlineEditDialog(
                     expanded = typeExpanded,
                     onExpandedChange = { typeExpanded = it },
                 ) {
-                    OutlinedTextField(
+                    ReaderOutlinedTextField(
                         value = type.displayLabelZh(),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text(stringResource(R.string.pdf_outline_field_type)) },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded)
-                        },
                         colors = fieldColors,
                         modifier = Modifier
                             .menuAnchor()
@@ -161,14 +157,11 @@ fun OutlineEditDialog(
                     expanded = parentExpanded,
                     onExpandedChange = { parentExpanded = it },
                 ) {
-                    OutlinedTextField(
+                    ReaderOutlinedTextField(
                         value = parentLabel,
                         onValueChange = {},
                         readOnly = true,
                         label = { Text(stringResource(R.string.pdf_outline_field_parent)) },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = parentExpanded)
-                        },
                         colors = fieldColors,
                         modifier = Modifier
                             .menuAnchor()
@@ -188,7 +181,7 @@ fun OutlineEditDialog(
                         parentOptions.forEach { n ->
                             DropdownMenuItem(
                                 text = {
-                                    Text("${n.nodeType.displayLabelZh()} · ${n.title}")
+                                    Text("${n.nodeType.displayLabelZh()}  ${n.title}")
                                 },
                                 onClick = {
                                     parentId = n.id
@@ -200,7 +193,7 @@ fun OutlineEditDialog(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
+                ReaderOutlinedTextField(
                     value = startText,
                     onValueChange = {
                         startText = it.filter { ch -> ch.isDigit() }.take(6)
@@ -213,7 +206,7 @@ fun OutlineEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
+                ReaderOutlinedTextField(
                     value = endText,
                     onValueChange = {
                         endText = it.filter { ch -> ch.isDigit() }.take(6)

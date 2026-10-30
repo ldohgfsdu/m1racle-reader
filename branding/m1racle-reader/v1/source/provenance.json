@@ -1,0 +1,30 @@
+{
+  "product": "M1racle Reader",
+  "master": "User-supplied original, identical SHA256 to formal Note source; existing vector trace reused without redrawing",
+  "masterSha256": "bba150d619a943dca94cec93503be979e3b99aee34f2c398d68344b420cbb2cb",
+  "traceSha256": "609402969079d5891bb551440e695b37cc50563482f6733d997eacf3e44180d5",
+  "fontSha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+  "fontAxes": {
+    "opsz": 32,
+    "wght": 500
+  },
+  "lettering": "Actual Inter glyph outlines; Medium 500, opsz 32",
+  "labelWidthAt256": 154.28,
+  "android": {
+    "viewport": 108,
+    "background": "#FFFFFF",
+    "artboardScale": 0.28125,
+    "artboardTranslation": [
+      18.0,
+      18.0
+    ],
+    "artboardTileDp": 72,
+    "visibleMask": [
+      18,
+      18,
+      90,
+      90
+    ]
+  },
+  "generator": "scripts/branding/build_reader_icon.py"
+}

@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.common
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -43,7 +44,7 @@ fun StatusBarProtection(
     // Apple Books / Safari style: a very light dark scrim over the content,
     // NOT a surface-colored band (a surface gradient reads as a black block
     // in dark mode). The translucent top bar below carries the readability.
-    val scrim = Color.Black
+    val scrim = RadixColors.Black
     Box(
         modifier = modifier
             .fillMaxWidth()

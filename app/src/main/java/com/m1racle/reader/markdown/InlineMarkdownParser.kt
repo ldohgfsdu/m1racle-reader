@@ -1,6 +1,7 @@
 package com.m1racle.reader.markdown
 
 import androidx.compose.ui.graphics.Color
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -27,10 +28,10 @@ data class InlineMarkdownStyles(
         fontFamily = FontFamily.Monospace,
         fontSize = InlineCodeFontSizeSp.sp,
         fontWeight = FontWeight.Normal,
-        background = Color(0x1A2F5D50),
+        background = RadixColors.Gray3,
     ),
     val link: SpanStyle = SpanStyle(
-        color = Color(0xFF2F5D50),
+        color = RadixColors.Blue11,
         textDecoration = TextDecoration.Underline,
         fontWeight = FontWeight.Normal,
     ),
@@ -73,6 +74,14 @@ data class InlineMarkdownStyles(
 object InlineMarkdownParser {
 
     const val LINK_ANNOTATION_TAG = "m1racle-reader.markdown.link"
+
+    private val angleUrlAutolinkRegex = Regex("""(?i)https?://[^\s<>]+""")
+    private val emailAutolinkRegex = Regex(
+        """(?i)[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)+""",
+    )
+    private val htmlTagRegex = Regex(
+        """(?:</[A-Za-z][A-Za-z0-9-]*\s*>|<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*/?>)""",
+    )
 
     /**
      * True when [text] may contain inline Markdown that must be walked.
@@ -156,7 +165,7 @@ object InlineMarkdownParser {
      * Used to register heading `#fragment` targets such as `## [德篇](#de-pian)`.
      */
     fun extractLinkDestinations(text: String): List<String> {
-        if (text.isEmpty() || !text.contains('[')) return emptyList()
+        if (text.isEmpty()) return emptyList()
         return try {
             val result = mutableListOf<String>()
             var i = 0
@@ -164,8 +173,13 @@ object InlineMarkdownParser {
             while (i < end) {
                 when {
                     text[i] == '`' -> {
-                        val close = text.indexOf('`', i + 1)
-                        i = if (close == -1 || close >= end) i + 1 else close + 1
+                        val delimiterLength = countBacktickRun(text, i, end)
+                        val close = findClosingBacktickRun(text, i, delimiterLength, end)
+                        i = if (close == -1) {
+                            i + delimiterLength
+                        } else {
+                            close + delimiterLength
+                        }
                     }
                     text[i] == '!' && i + 1 < end && text[i + 1] == '[' -> {
                         val link = tryParseLink(text, i + 1, end)
@@ -178,6 +192,15 @@ object InlineMarkdownParser {
                         } else {
                             result += text.substring(link.urlStart, link.urlEnd).trim()
                             i = link.endExclusive
+                        }
+                    }
+                    text[i] == '<' -> {
+                        val autolink = tryParseAngleAutolink(text, i, end)
+                        if (autolink == null) {
+                            i++
+                        } else {
+                            result += autolink.url
+                            i = autolink.endExclusive
                         }
                     }
                     else -> i++
@@ -208,13 +231,14 @@ object InlineMarkdownParser {
                 }
 
                 source[i] == '`' -> {
-                    val close = source.indexOf('`', i + 1)
-                    if (close == -1 || close >= end) {
-                        append('`')
-                        i++
+                    val delimiterLength = countBacktickRun(source, i, end)
+                    val close = findClosingBacktickRun(source, i, delimiterLength, end)
+                    if (close == -1) {
+                        append(source, i, i + delimiterLength)
+                        i += delimiterLength
                     } else {
-                        append(source.substring(i + 1, close))
-                        i = close + 1
+                        append(codeContent(source, i + delimiterLength, close))
+                        i = close + delimiterLength
                     }
                 }
 
@@ -287,20 +311,30 @@ object InlineMarkdownParser {
                     i++
                 }
 
-                // Escape: \X → X
-                source[i] == '\\' && i + 1 < end -> {
+                // Escape: only CommonMark ASCII punctuation.
+                source[i] == '\\' && i + 1 < end && isEscapableAsciiPunctuation(source[i + 1]) -> {
                     append(source[i + 1])
                     i += 2
                 }
+                source[i] == '\\' && i + 1 < end -> {
+                    append('\\')
+                    i++
+                }
 
-                // Skip crude HTML tags
+                // Autolinks and HTML: never swallow unknown angle-bracket text.
                 source[i] == '<' -> {
-                    val close = source.indexOf('>', i + 1)
-                    if (close == -1 || close >= end) {
-                        append('<')
-                        i++
+                    val autolink = tryParseAngleAutolink(source, i, end)
+                    if (autolink != null) {
+                        append(autolink.label)
+                        i = autolink.endExclusive
                     } else {
-                        i = close + 1
+                        val htmlTagEnd = findHtmlTagEnd(source, i, end)
+                        if (htmlTagEnd == -1) {
+                            append('<')
+                            i++
+                        } else {
+                            i = htmlTagEnd + 1
+                        }
                     }
                 }
 
@@ -354,17 +388,18 @@ object InlineMarkdownParser {
                     }
                 }
 
-                // Inline code: `code`
+                // Inline code: a matching run of backticks.
                 source[i] == '`' -> {
-                    val close = source.indexOf('`', i + 1)
-                    if (close == -1 || close >= end) {
-                        append('`')
-                        i++
+                    val delimiterLength = countBacktickRun(source, i, end)
+                    val close = findClosingBacktickRun(source, i, delimiterLength, end)
+                    if (close == -1) {
+                        append(source, i, i + delimiterLength)
+                        i += delimiterLength
                     } else {
                         withStyle(styles.code) {
-                            append(source.substring(i + 1, close))
+                            append(codeContent(source, i + delimiterLength, close))
                         }
-                        i = close + 1
+                        i = close + delimiterLength
                     }
                 }
 
@@ -388,6 +423,32 @@ object InlineMarkdownParser {
                             pop()
                         }
                         i = link.endExclusive
+                    }
+                }
+
+                source[i] == '<' -> {
+                    val autolink = tryParseAngleAutolink(source, i, end)
+                    if (autolink == null) {
+                        val htmlTagEnd = findHtmlTagEnd(source, i, end)
+                        if (htmlTagEnd == -1) {
+                            append('<')
+                            i++
+                        } else {
+                            i = htmlTagEnd + 1
+                        }
+                    } else {
+                        pushStringAnnotation(
+                            tag = LINK_ANNOTATION_TAG,
+                            annotation = autolink.url,
+                        )
+                        try {
+                            withStyle(styles.link) {
+                                append(autolink.label)
+                            }
+                        } finally {
+                            pop()
+                        }
+                        i = autolink.endExclusive
                     }
                 }
 
@@ -464,21 +525,16 @@ object InlineMarkdownParser {
                             i++
                         }
 
-                        // Escape: \X → X
-                        source[i] == '\\' && i + 1 < end -> {
+                        // Escape: only CommonMark ASCII punctuation.
+                        source[i] == '\\' &&
+                            i + 1 < end &&
+                            isEscapableAsciiPunctuation(source[i + 1]) -> {
                             append(source[i + 1])
                             i += 2
                         }
-
-                        // Skip crude HTML tags
-                        source[i] == '<' -> {
-                            val close = source.indexOf('>', i + 1)
-                            if (close == -1 || close >= end) {
-                                append('<')
-                                i++
-                            } else {
-                                i = close + 1
-                            }
+                        source[i] == '\\' && i + 1 < end -> {
+                            append('\\')
+                            i++
                         }
 
                         // Basic HTML entities
@@ -532,6 +588,12 @@ object InlineMarkdownParser {
         val endExclusive: Int,
     )
 
+    private data class ParsedAutolink(
+        val label: String,
+        val url: String,
+        val endExclusive: Int,
+    )
+
     private fun tryParseLink(source: String, start: Int, end: Int): ParsedLink? {
         // [title](url)
         if (start >= end || source[start] != '[') return null
@@ -572,12 +634,84 @@ object InlineMarkdownParser {
         while (i < end) {
             if (source[i] == delim) {
                 val doubled = i + 1 < end && source[i + 1] == delim
-                if (!doubled) return i
+                if (!doubled && !isEscaped(source, i)) return i
                 i += 2 // skip ** or __
             } else {
                 i++
             }
         }
         return -1
+    }
+
+    private fun countBacktickRun(source: String, start: Int, end: Int): Int {
+        var i = start
+        while (i < end && source[i] == '`') i++
+        return i - start
+    }
+
+    private fun findClosingBacktickRun(
+        source: String,
+        openingStart: Int,
+        delimiterLength: Int,
+        end: Int,
+    ): Int {
+        var i = openingStart + delimiterLength
+        while (i < end) {
+            if (source[i] != '`') {
+                i++
+                continue
+            }
+            val runLength = countBacktickRun(source, i, end)
+            if (runLength == delimiterLength) return i
+            i += runLength
+        }
+        return -1
+    }
+
+    internal fun codeSpanEnd(source: String, start: Int, end: Int = source.length): Int? {
+        val length = countBacktickRun(source, start, end)
+        if (length == 0) return null
+        val closing = findClosingBacktickRun(source, start, length, end)
+        return closing.takeIf { it >= 0 }?.plus(length)
+    }
+
+    private fun codeContent(source: String, start: Int, end: Int): String {
+        val text = source.substring(start, end).replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ')
+        return if (text.length >= 2 && text.startsWith(' ') && text.endsWith(' ') && text.isNotBlank())
+            text.substring(1, text.lastIndex) else text
+    }
+
+    private fun isEscaped(source: String, index: Int): Boolean {
+        var slashCount = 0
+        var i = index - 1
+        while (i >= 0 && source[i] == '\\') {
+            slashCount++
+            i--
+        }
+        return slashCount % 2 == 1
+    }
+
+    private fun isEscapableAsciiPunctuation(c: Char): Boolean =
+        c in "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+
+    private fun tryParseAngleAutolink(source: String, start: Int, end: Int): ParsedAutolink? {
+        val close = source.indexOf('>', start + 1)
+        if (close == -1 || close >= end) return null
+        val content = source.substring(start + 1, close)
+        if (content.isEmpty() || content.any { it.isWhitespace() || it == '<' }) return null
+        val isUrl = angleUrlAutolinkRegex.matches(content)
+        val isEmail = emailAutolinkRegex.matches(content)
+        if (!isUrl && !isEmail) return null
+        return ParsedAutolink(
+            label = content,
+            url = if (isEmail) "mailto:$content" else content,
+            endExclusive = close + 1,
+        )
+    }
+
+    private fun findHtmlTagEnd(source: String, start: Int, end: Int): Int {
+        val close = source.indexOf('>', start + 1)
+        if (close == -1 || close >= end) return -1
+        return close.takeIf { htmlTagRegex.matches(source.substring(start, close + 1)) } ?: -1
     }
 }

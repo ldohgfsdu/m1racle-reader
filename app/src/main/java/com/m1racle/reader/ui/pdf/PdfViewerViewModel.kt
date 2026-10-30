@@ -2277,7 +2277,6 @@ class PdfViewerViewModel(
 
         val job = viewModelScope.launch {
             val renderStartedAt = System.currentTimeMillis()
-            val size = renderer.pageSizePts(pageIndex)
             val result = renderer.renderPage(
                 pageIndex = pageIndex,
                 targetWidthPx = widthForJob,
@@ -2293,13 +2292,8 @@ class PdfViewerViewModel(
                         Log.d(ZOOM_LOG_TAG, "ZOOM_QUALITY_READY page=$pageIndex tier=$forceTier widthBucket=$widthForJob " +
                             "renderDurationMs=${readyAt - renderStartedAt} timestamp=$readyAt")
                     }
-                    val aspect = pageCache.aspect(pageIndex) ?: if (size != null && size.first > 0) {
-                        size.second.toFloat() / size.first.toFloat()
-                    } else if (result.widthPx > 0) {
-                        result.heightPx.toFloat() / result.widthPx.toFloat()
-                    } else {
-                        DEFAULT_PAGE_ASPECT
-                    }
+                    val aspect = pageCache.aspect(pageIndex)
+                        ?: (result.pageSize.height.toFloat() / result.pageSize.width.toFloat())
                     val entry = PageBitmapEntry(
                         image = result.image,
                         widthBucket = widthForJob,
@@ -2653,7 +2647,6 @@ class PdfViewerViewModel(
     companion object {
         private const val ZOOM_LOG_TAG = "M1racleReaderPdfZoom"
         private const val PERSIST_DEBOUNCE_MS = 350L
-        private const val DEFAULT_PAGE_ASPECT = 1.414f
     }
 
     private val isDebuggable: Boolean

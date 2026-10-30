@@ -34,6 +34,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 class EpubReleaseHandoffHostTest {
     @get:Rule val rule = createComposeRule()
+    private val paperRed get() = Color.red(com.m1racle.reader.ui.theme.InkBackground.toArgb())
     private lateinit var view: View
     private var savedRow = 0
     private val book = EpubBook(
@@ -88,8 +89,17 @@ class EpubReleaseHandoffHostTest {
         }
         rule.mainClock.advanceTimeByFrame()
         val before = rightPaperRed()
-        if (forward) assertEquals(15, before)
-        else assertTrue("original paper follows drag distance", before in 27..30)
+        if (forward) assertEquals(paperRed, before)
+        else {
+            val bounds = pager.fetchSemanticsNode().boundsInRoot
+            val under = rule.onNodeWithTag("epub-sheet-1").fetchSemanticsNode().boundsInRoot
+            val distance = (under.left - bounds.left) / (bounds.width * 0.25f)
+            val expected = Color.red(androidx.compose.ui.graphics.lerp(
+                com.m1racle.reader.ui.theme.InkBackground,
+                com.m1racle.reader.design.RadixColors.GrayDark3,
+                1 - (1-distance) * (1-distance)).toArgb())
+            assertEquals("original paper follows drag distance", expected, before)
+        }
         pager.performTouchInput { up() }
         // Sample each real render frame across drag -> fling, rather than just its final page.
         repeat(3) { frame ->
@@ -98,8 +108,8 @@ class EpubReleaseHandoffHostTest {
             val under = rule.onNodeWithTag("epub-sheet-1").fetchSemanticsNode().boundsInRoot
             val distance = if (forward) 1f - (under.left - bounds.left) / (bounds.width * 0.25f)
                 else (under.left - bounds.left) / (bounds.width * 0.25f)
-            val expected = if (forward) 15 else Color.red(androidx.compose.ui.graphics.lerp(
-                com.m1racle.reader.ui.theme.InkBackground, androidx.compose.ui.graphics.Color(0xFF202022),
+            val expected = if (forward) paperRed else Color.red(androidx.compose.ui.graphics.lerp(
+                com.m1racle.reader.ui.theme.InkBackground, com.m1racle.reader.design.RadixColors.GrayDark3,
                 1 - (1-distance) * (1-distance)).toArgb())
             assertEquals("paper identity changed at release frame $frame", expected, rightPaperRed())
             assertEquals("footer committed before the sheet stopped", label, pageLabel())
@@ -140,7 +150,7 @@ class EpubReleaseHandoffHostTest {
         rule.mainClock.advanceTimeBy(32)
         pager.performTouchInput { down(percentOffset(0.26f, 0.5f)) }
         rule.mainClock.advanceTimeByFrame()
-        assertEquals("re-grab must not change the paper's identity", 15, rightPaperRed())
+        assertEquals("re-grab must not change the paper's identity", paperRed, rightPaperRed())
         assertEquals(label, pageLabel())
         assertEquals(0, savedRow)
         pager.performTouchInput {

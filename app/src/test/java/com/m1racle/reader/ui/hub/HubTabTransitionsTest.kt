@@ -30,16 +30,9 @@ class HubTabTransitionsTest {
     }
 
     @Test
-    fun `slide is a short fade not a full-width push`() {
-        val source = java.io.File("app/src/main/java/com/m1racle/reader/ui/hub/HubTabTransitions.kt")
-            .takeIf { it.isFile }
-            ?: java.io.File("src/main/java/com/m1racle/reader/ui/hub/HubTabTransitions.kt")
-        val text = source.readText()
-        assertTrue(text.contains("SlideFraction = 0.08f"))
-        assertTrue(text.contains("M1racleMotion.NormalMs"))
-        assertTrue(text.contains("M1racleMotion.SlowMs"))
-        assertTrue(text.contains("M1racleMotion.easeOut"))
-        assertTrue(text.contains("M1racleMotion.easeIn"))
-        assertFalse(text.contains("spring("))
+    fun `hub pages switch directly without adding a decorative transition`() {
+        assertEquals(androidx.compose.animation.EnterTransition.None, HubTabTransitions.enter("home", "library"))
+        assertEquals(androidx.compose.animation.ExitTransition.None, HubTabTransitions.exit("home", "library"))
+        assertEquals(androidx.compose.animation.EnterTransition.None, HubTabTransitions.enter("settings", "home"))
     }
 }

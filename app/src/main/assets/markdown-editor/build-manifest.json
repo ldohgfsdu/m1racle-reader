@@ -1,0 +1,216 @@
+{
+  "generatedAt": "2026-10-29T13:52:05.112Z",
+  "origin": "https://reader-markdown.local/",
+  "entry": "index.html",
+  "node": "v24.22.1",
+  "vitePath": "C:\\Users\\42899\\Desktop\\M1racle Note\\node_modules\\vite",
+  "dependencyRoot": "C:\\Users\\42899\\Desktop\\M1racle Note\\node_modules",
+  "files": [
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "bytes": 654,
+      "sha256": "0977f5cb734317170f15101ac3665f6bb453d77a15e6d74d3146af41c9f80c90"
+    },
+    {
+      "path": "assets/app-DrS5ZcQw.js",
+      "bytes": 1353987,
+      "sha256": "74b06563864d6f30a9571c1f6112fa8557be97ed1aacd423be85dc3f0cc46acb"
+    },
+    {
+      "path": "assets/index-ChVChY-W.css",
+      "bytes": 12899,
+      "sha256": "02805c96c48050f6fdad24c8b84f10f17b2323fb47f55bf4efc31b49b261d21f"
+    },
+    {
+      "path": "index.html",
+      "bytes": 901,
+      "sha256": "ae5e20a4edd377b4c366fb4232be1952da57ecdfb7725b1f97641bed53dc3e62"
+    },
+    {
+      "path": "licenses/@atomic-editor-editor.txt",
+      "bytes": 1072,
+      "sha256": "e1ce7da88958b6876939f6e6fd9c970b51c44ef3fcdb317ee9679eef78b6c58f"
+    },
+    {
+      "path": "licenses/@codemirror-autocomplete.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-commands.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-lang-css.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-lang-html.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-lang-javascript.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-lang-markdown.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-language.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-lint.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-search.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-state.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-streamparser.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@codemirror-view.txt",
+      "bytes": 1118,
+      "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+    },
+    {
+      "path": "licenses/@lezer-common.txt",
+      "bytes": 1113,
+      "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+    },
+    {
+      "path": "licenses/@lezer-css.txt",
+      "bytes": 1113,
+      "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+    },
+    {
+      "path": "licenses/@lezer-highlight.txt",
+      "bytes": 1113,
+      "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+    },
+    {
+      "path": "licenses/@lezer-html.txt",
+      "bytes": 1113,
+      "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+    },
+    {
+      "path": "licenses/@lezer-javascript.txt",
+      "bytes": 1113,
+      "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+    },
+    {
+      "path": "licenses/@lezer-lr.txt",
+      "bytes": 1113,
+      "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+    },
+    {
+      "path": "licenses/@lezer-markdown.txt",
+      "bytes": 1113,
+      "sha256": "54bd812a6d334e0c438b78a43cea74b67e882739fd3450115ddc7c52be5706c1"
+    },
+    {
+      "path": "licenses/@marijn-find-cluster-break.txt",
+      "bytes": 1102,
+      "sha256": "9360b00fdd091f05c783b568bdd46c679c41b72415599252de98949462ea1acb"
+    },
+    {
+      "path": "licenses/crelt.txt",
+      "bytes": 1089,
+      "sha256": "23852ebf6aef7fadffc92514b3c5df163a8651f2c3ed0dbb494cb49d93bd5de5"
+    },
+    {
+      "path": "licenses/style-mod.txt",
+      "bytes": 1100,
+      "sha256": "cb4474e26547397169061d3586c00022cda5330a1b64fa13e872319f3b63aff1"
+    },
+    {
+      "path": "licenses/w3c-keyname.txt",
+      "bytes": 1100,
+      "sha256": "869c30f368eb08735e779027b9f4bc9fea2f39624351856aebe42741f0bc0884"
+    }
+  ],
+  "sources": [
+    {
+      "path": "app/src/main/java/com/m1racle/reader/design/RadixColors.kt",
+      "sha256": "74af43a9cded2a61e89093830ec3d272fbcb87bce6470198bdf4f8d63947a79e"
+    },
+    {
+      "path": "reader-markdown-editor/src/source.mjs",
+      "sha256": "b89f321704a85945c2e852daf48c0be85cfffa61e4a059af2fec84d97365ae94"
+    },
+    {
+      "path": "reader-markdown-editor/src/source-history.mjs",
+      "sha256": "6dbf522b97235f849e42459d34f82ac311babdc9c70d1566bfaacd6ef51cf6f6"
+    },
+    {
+      "path": "reader-markdown-editor/src/phrases.mjs",
+      "sha256": "0fd359fe1d073b6f773e890f26184d003c5a6fd9d5d3d5194bd237fbcb547614"
+    },
+    {
+      "path": "reader-markdown-editor/src/preview-update.mjs",
+      "sha256": "f49e9f18f27107024475b9caa3b2422d320db5c1c2dd09cb69a3b0c58774f717"
+    },
+    {
+      "path": "reader-markdown-editor/scripts/build.mjs",
+      "sha256": "5a345b2ec4ec9fa0c5f132ec2a062e675c78ec5b62ea46155c999478ae29a64e"
+    },
+    {
+      "path": "reader-markdown-editor/scripts/atomic-policy.mjs",
+      "sha256": "624303d63d92cdd42e6d40d5ff41c7730fd959db1332b1352b19d1dd76cc34c0"
+    },
+    {
+      "path": "reader-markdown-editor/scripts/table-policy.mjs",
+      "sha256": "9bf63cd07313aada245a7018b5ebd993568594722c1689b1137d5b59bb8b2737"
+    },
+    {
+      "path": "reader-markdown-editor/src/main.mjs",
+      "sha256": "ac8624b01719a86e55b0f036af135d1fc83603c2cf7df6c3c6879fff7f881e11"
+    },
+    {
+      "path": "reader-markdown-editor/src/style.css",
+      "sha256": "14dffbe78068ce2fc6ecfc1ac05d7c10b274390f05a5dc6ff3725b0e7af906dc"
+    },
+    {
+      "path": "reader-markdown-editor/index.html",
+      "sha256": "4c316a89bc65ed6dfee8959c405f2d71222825ee10f10ab5cfd04ad5503b21ae"
+    },
+    {
+      "path": "reader-markdown-editor/package.json",
+      "sha256": "3a5a640b8b7cf694aadd0923c86718b048fbabc188bd0437f9bc39ebd036aaee"
+    },
+    {
+      "path": "reader-markdown-editor/package-lock.json",
+      "sha256": "31540ec5b0a9fd913985c049129cfd312a5d5cc51eb84ba28f1a49df61683e98"
+    },
+    {
+      "path": "reader-markdown-editor/THIRD_PARTY_NOTICES.md",
+      "sha256": "0977f5cb734317170f15101ac3665f6bb453d77a15e6d74d3146af41c9f80c90"
+    },
+    {
+      "path": "upstream/@atomic-editor/editor/dist/inline-preview.js",
+      "sha256": "2a4c765a4973c6916096f950852f0ce960f7e3a5d56882763173202df4ad9b78"
+    },
+    {
+      "path": "upstream/@atomic-editor/editor/dist/table-widget.js",
+      "sha256": "a951f1d8f49cb05320aab01212eec7eee8bd3a02aa3fbc66fbc344b3abee927c"
+    }
+  ]
+}

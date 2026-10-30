@@ -1,6 +1,9 @@
 package com.m1racle.reader.pdf
 
+import androidx.compose.ui.graphics.Color
+import com.m1racle.reader.design.RadixColors
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -79,7 +82,9 @@ class R7ContinuousViewportTest {
 
     @Test fun `V2 cold pages use white background not spinner`() {
         val source = viewportSource()
-        assertTrue(source.contains("Color.White"))
+        assertTrue(source.contains("val paperColor = if (paperFilter != null) RadixColors.Black else RadixColors.White"))
+        assertTrue(source.contains("background(paperColor)"))
+        assertEquals(Color.White, RadixColors.White)
         assertFalse(source.contains("CircularProgressIndicator"))
     }
 

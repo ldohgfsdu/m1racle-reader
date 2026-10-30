@@ -230,7 +230,7 @@ class ReaderMoreHostUiTest {
         // Nested body: empty outline shows the dedicated empty-state guidance
         // (count line only renders when the outline is non-empty).
         composeRule.onAllNodesWithText("教材目录").onFirst().assertExists()
-        composeRule.onNodeWithText("暂无目录项 · 可扫描 PDF 或从当前页新建").assertExists()
+        composeRule.onNodeWithText("暂无目录项").assertExists()
     }
 
     @Test

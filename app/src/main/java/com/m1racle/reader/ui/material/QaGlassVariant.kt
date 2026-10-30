@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.material
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -112,9 +113,9 @@ data class QaGlassOverride(
  * on pure black / white is about 9.8 (black text, day) and 8.4 (white text, night).
  */
 object QaUnified {
-    val LightTint = Color.White
+    val LightTint = RadixColors.White
     const val LightAlpha = 0.32f
-    val DarkTint = Color(0xFF242424)
+    val DarkTint = RadixColors.GrayDark3
     const val DarkAlpha = 0.22f
     const val LightContrast = 0.45f
     const val LightBrightness = 0.275f
@@ -165,12 +166,11 @@ val QaGlassSelection.coolapk: Boolean get() = variant == QaGlassVariant.COOLAPK
  * Rim matches the variant 2 capsule.
  */
 object QaCoolapkImport {
-    val LightTint = Color(0xFF0055B3)
-    val DarkTint = Color(0xFF6AAEFF)
+    val LightTint = RadixColors.Blue12
+    val DarkTint = RadixColors.BlueDark11
     const val TintAlpha = 0.80f
-    val LightGlyph = Color.White
-    val DarkGlyph = Color(0xFF1C1C1E)
-    val RimWidth: Dp = 1.dp
+    val LightGlyph = RadixColors.White
+    val DarkGlyph = RadixColors.Gray12
     const val LightRimAlpha = 0.50f
     const val DarkRimAlpha = 0.25f
 }
@@ -182,12 +182,12 @@ fun qaCoolapkImportGlyph(dark: Boolean): Color =
     if (dark) QaCoolapkImport.DarkGlyph else QaCoolapkImport.LightGlyph
 
 fun qaCoolapkImportRim(dark: Boolean): Color =
-    Color.White.copy(alpha = if (dark) QaCoolapkImport.DarkRimAlpha else QaCoolapkImport.LightRimAlpha)
+    RadixColors.White.copy(alpha = if (dark) QaCoolapkImport.DarkRimAlpha else QaCoolapkImport.LightRimAlpha)
 
 /** Primary text on glass from the spec: dark #1C1C1E, light #F2F2F2. */
 object QaGlassText {
-    val OnLightGlass = Color(0xFF1C1C1E)
-    val OnDarkGlass = Color(0xFFF2F2F2)
+    val OnLightGlass = RadixColors.Gray12
+    val OnDarkGlass = RadixColors.GrayDark12
 }
 
 
@@ -199,7 +199,7 @@ fun qaGlassOverride(role: GlassMaterialRole, selection: QaGlassSelection): QaGla
         role == GlassMaterialRole.Dock
     if (role == GlassMaterialRole.SelectionLens || role == GlassMaterialRole.DockLens) {
         return if (selection.dockNightLens == QaDockNightLens.BLACK_12_STROKE) {
-            QaGlassOverride(darkTint = Color.Black, darkAlpha = 0.12f)
+            QaGlassOverride(darkTint = RadixColors.Black, darkAlpha = 0.12f)
         } else {
             null
         }
@@ -226,14 +226,14 @@ fun qaGlassOverride(role: GlassMaterialRole, selection: QaGlassSelection): QaGla
     return when (selection.variant) {
         QaGlassVariant.BASELINE, QaGlassVariant.FOLLOW_PAGE, QaGlassVariant.UNIFIED -> null
         QaGlassVariant.SOLID_NIGHT -> QaGlassOverride(
-            darkTint = Color(0xFF242424),
+            darkTint = RadixColors.GrayDark3,
             darkAlpha = 0.75f,
             clearPressedTint = true,
         )
         QaGlassVariant.COOLAPK -> QaGlassOverride(
-            lightTint = Color.White,
+            lightTint = RadixColors.White,
             lightAlpha = 0.70f,
-            darkTint = Color(0xFF1C1C1E),
+            darkTint = RadixColors.Gray12,
             darkAlpha = 0.70f,
             blur = 24.dp,
             highlightWidth = 1.dp,
@@ -260,7 +260,7 @@ fun qaPdfChromeDark(variant: QaGlassVariant, themeDark: Boolean, pagesDark: Bool
 fun qaGlassPrimaryText(variant: QaGlassVariant, glassDark: Boolean): Color? =
     if (variant == QaGlassVariant.BASELINE) null
     // 档 3: pure black / white, Coolapk style.
-    else if (variant == QaGlassVariant.UNIFIED) (if (glassDark) Color.White else Color.Black)
+    else if (variant == QaGlassVariant.UNIFIED) (if (glassDark) RadixColors.White else RadixColors.Black)
     else if (glassDark) QaGlassText.OnDarkGlass else QaGlassText.OnLightGlass
 
 /** Page number on the PDF capsule: primary text in every variant except baseline. */

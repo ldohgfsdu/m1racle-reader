@@ -4,19 +4,19 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 
 /**
- * Shared motion language. Three durations, one easing pair.
- * Enter / show uses [easeOut]; exit / hide uses [easeIn].
+ * Shared motion language. Necessary feedback uses a 250ms ease-out transition.
+ * Show and hide share the same deceleration curve.
  * No bounce, stretch, or overshoot lives here.
  *
- * The dock keeps its gesture springs in the UI layer.
+ * Dock feedback uses the same curve; dragging still follows pointer events.
  */
 object M1racleMotion {
     val easeOut = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-    val easeIn = CubicBezierEasing(0.4f, 0f, 1f, 1f)
+    val easeIn = easeOut
 
-    const val FastMs = 120
-    const val NormalMs = 180
-    const val SlowMs = 220
+    const val FastMs = 250
+    const val NormalMs = 250
+    const val SlowMs = 250
 
     val fast = tween<Float>(FastMs, easing = easeOut)
     val normal = tween<Float>(NormalMs, easing = easeOut)

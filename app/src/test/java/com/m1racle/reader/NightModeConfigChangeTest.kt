@@ -18,9 +18,11 @@ class NightModeConfigChangeTest {
         val text = manifest.readText()
         val activity = text.substringAfter("android:name=\".MainActivity\"")
             .substringBefore("</activity>")
+        val handledChanges = Regex("android:configChanges=\"([^\"]+)\"")
+            .find(activity)?.groupValues?.get(1)?.split('|').orEmpty()
         assertTrue(
             "MainActivity must handle uiMode so night mode does not remount the reader",
-            activity.contains("android:configChanges=\"uiMode\""),
+            "uiMode" in handledChanges,
         )
         val src = File("app/src/main/java/com/m1racle/reader/MainActivity.kt").takeIf { it.isFile }
             ?: File("src/main/java/com/m1racle/reader/MainActivity.kt")

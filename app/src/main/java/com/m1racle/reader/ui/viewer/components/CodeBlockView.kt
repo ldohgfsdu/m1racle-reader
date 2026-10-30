@@ -1,10 +1,11 @@
 package com.m1racle.reader.ui.viewer.components
 
+import com.m1racle.reader.ui.components.readerHairlineBorder
+import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -108,7 +109,7 @@ fun CodeBlockView(
             .fillMaxWidth()
             .padding(vertical = 10.dp)
             .clip(shape)
-            .border(1.dp, border, shape)
+            .readerHairlineBorder(border, shape)
             .background(bodyBg),
     ) {
         Row(

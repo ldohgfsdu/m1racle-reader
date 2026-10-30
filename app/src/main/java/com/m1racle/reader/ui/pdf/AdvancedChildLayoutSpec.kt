@@ -14,8 +14,8 @@ object AdvancedChildLayoutSpec {
     const val HeaderHeightDp = 52f
 
     /** Component geometry stays outside the material engine. */
-    const val InputCornerDp = 16f
-    const val ActionCornerDp = 18f
+    const val InputCornerDp = 8f
+    const val ActionCornerDp = 8f
 
     /**
      * Preferred total Child height (header + body), before maxHeight clamp.

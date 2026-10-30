@@ -1,6 +1,7 @@
 package com.m1racle.reader.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -31,10 +32,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -43,6 +46,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -85,6 +89,7 @@ fun HomeScreen(
             onOpenSearch = onOpenSearch,
             onOpen = onOpenDocument,
             onDelete = viewModel::deleteDocument,
+            onOpenLibrary = { onNavigateHub(com.m1racle.reader.ui.hub.HubDestination.LIBRARY) },
         )
     }
 }
@@ -104,13 +109,25 @@ internal fun HomeContent(
     // Reserve its full area from the first frame so the entire page stays still.
     statusTop: Dp = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
     navBottom: Dp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+    onOpenLibrary: () -> Unit = {},
 ) {
     Column(
         modifier = modifier.fillMaxSize()
             .background(com.m1racle.reader.ui.theme.M1racleReaderTheme.surface.background)
             .padding(top = statusTop),
     ) {
-        HubPageHeader(title = stringResource(R.string.app_name), modifier = Modifier.testTag("home-header")) {
+        HubPageHeader(
+            title = stringResource(R.string.reader_brand_name),
+            modifier = Modifier.testTag("home-header"),
+            leading = {
+                Image(
+                    painterResource(R.drawable.ic_reader_brand_mark), contentDescription = null,
+                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
+                    modifier = Modifier.padding(end = 12.dp).size(32.dp, 16.5.dp)
+                        .testTag("home-brand-mark"),
+                )
+            },
+        ) {
             IconButton(onClick = onOpenSearch) {
                 Icon(Icons.Default.Search, stringResource(R.string.search_library_entry), modifier = Modifier.size(22.dp))
             }
@@ -141,6 +158,8 @@ internal fun HomeContent(
             RecentDocumentList(
                 documents = uiState.documents,
                 continueReading = uiState.continueReading,
+                hasMoreDocuments = uiState.hasMoreDocuments,
+                onOpenLibrary = onOpenLibrary,
                 onOpen = onOpen,
                 onDelete = onDelete,
                 navBottom = navBottom,
@@ -154,6 +173,8 @@ internal fun HomeContent(
 private fun RecentDocumentList(
     documents: List<DocumentEntity>,
     continueReading: DocumentEntity?,
+    hasMoreDocuments: Boolean,
+    onOpenLibrary: () -> Unit,
     navBottom: Dp,
     onOpen: (DocumentEntity) -> Unit,
     onDelete: (String) -> Unit,
@@ -180,15 +201,23 @@ private fun RecentDocumentList(
                 )
             }
         }
-        val recentDocuments = documents.filter { it.id != continueReading?.id }
-        if (recentDocuments.isNotEmpty()) {
+        if (documents.isNotEmpty()) {
             item(key = "home_recent_section") {
-                Text(stringResource(R.string.recent_reads),
-                    style = com.m1racle.reader.ui.theme.M1racleReaderTheme.typography.section,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp).semantics { heading() })
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.recent_reads),
+                        style = com.m1racle.reader.ui.theme.M1racleReaderTheme.typography.section,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f).semantics { heading() })
+                    if (hasMoreDocuments) {
+                        TextButton(onClick = onOpenLibrary, modifier = Modifier.testTag("home-view-all")) {
+                            Text(stringResource(R.string.home_view_all),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
             }
-            items(recentDocuments, key = { doc -> doc.id }, contentType = { "home_doc_row" }) { document ->
+            items(documents, key = { doc -> doc.id }, contentType = { "home_doc_row" }) { document ->
                 DocumentListRow(document, onOpen = { onOpen(document) },
                     onDelete = { onDelete(document.id) }, modifier = Modifier.fillMaxWidth())
             }
@@ -233,7 +262,7 @@ internal fun resolveDocumentCardTitles(document: DocumentEntity): DocumentCardTi
         )
         return DocumentCardTitles(
             displayTitle = displayTitle,
-            typeLabel = "MD 教材包",
+            typeLabel = "Markdown 包",
         )
     }
     val displayTitle = DocumentListTitle.normalizeListDisplayTitle(
@@ -263,7 +292,7 @@ private fun fileNameFromUri(uri: String): String {
     return path.substringAfterLast('/').ifBlank { decoded }
 }
 
-/** List metadata: format · reading progress once. No last-opened time. */
+/** List metadata: format  reading progress once. No last-opened time. */
 internal fun formatMeta(document: DocumentEntity): String = formatListMetadata(document)
 
 internal fun formatPdfProgress(document: DocumentEntity): String {

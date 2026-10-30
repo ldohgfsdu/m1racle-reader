@@ -1,28 +1,15 @@
 # 当前状态
 
-当前代码和正式候选包为 **1.0.0 / 77，Room17**。用户否定76的顶栏过渡观感，77已替换为平台原生高斯尺度连续衔接。自动检查和正式模拟器流程通过；手机ADB连接已断开，最近核对的手机包是76，77手机安装、Download同步和最终观感待验。
+2026-10-30：正式签名、压缩 Release **1.0.0 / 88，Room17**。开发仓库 D:/03_M1racle Reader/reader-ui-release-20261025；构建入口使用 reader-env-local.ps1 的 $readerRepository。原 reader 与 82 工作树保留。
 
-当前证据见 [77连续过渡报告](MARKDOWN_TOPBAR_NATIVE_TRANSITION_20261014.md)。[75状态已归档](history/CURRENT_STATUS_75_before_native_topbar_20261014.md)。Dock/Tab沿用73实现，工作台维持删除，顶栏范围仍固定，按钮独立收起。
+88 将 PDF 页面尺寸随渲染结果返回，每次页面渲染从两次打开页减少为一次；合入 Markdown 文件头 BOM 解析修复、导入忙碌反馈及禁用状态语义修正。继承 87 界面与品牌资源。详见 [88 实现与证据](PDF_RENDER_METADATA_20261030.md)。
 
-## 当前候选产物
+唯一交付：D:/03_M1racle Reader/apk/M1racle-Reader-1.0.0-88.apk，27605878 字节（26.33 MiB）。SHA-256：8C64AAB0EFF1F0775252F82ED3B02E383394417DB28811B42438F4441F67A1CC。生产签名、16KiB 对齐、R8 / 资源压缩、35 个 assets 同源校验通过，无 INTERNET。构建、Outbox、交付、已安装包及模拟器 Download 摘要一致。
 
-[77正式签名APK](../.external_outbox/m1racle-reader-release-v1.0.0-20261014-183909.apk)，27,121,682 bytes；Outbox latest为同一产物。
+最终同源 QA 单元测试 1847 项、Release 单元测试 1690 项，均 0 failures / 0 errors，各 2 项既有环境跳过；lint 0 errors / 179 warnings / 6 hints。最终原生专项 2 项中，新增渲染尺寸与像素一致性测试通过；既有瓦片拼接测试失败，在 QA86 上复现完全相同差值，未关闭。85 六项扩展原生旧失败仍待独立核查。
 
-SHA-256：`aa175ffd155856f075cc1c94896bb85ae5de8c12fb35d7527c49d6247dc46bfa`。
+已在 API35 模拟器保留数据覆盖安装 88，firstInstallTime 不变。正式 PDF 竖屏打开及转横屏后均显示第 2/3 页，留有截图与 XML。模拟器恢复后补充验证 PDF 退出重开及横屏再回竖屏均保持第 2/3 页；Markdown 标题与正文显示正常，EPUB 恢复第 10/18 页。屏幕方向恢复为原设置。这些基本检查不能替代完整阅读性能验收。物理手机未连接，手机安装、真实滚动性能和用户手感验收 pending。
 
-证书连续、16KiB对齐、minSdk31/targetSdk35，无INTERNET；profileable shell=true。构建输出、Outbox、冻结77副本、模拟器安装源和Download回读摘要一致。未声称同步到离线手机。
+m1racle workers 重试后完成独立只读审查，无 P0/P1/P2；ViewModel 成功渲染至缓存、比例与锚点的完整集成回归仍为 P3 证据缺口。阶段状态 READY_WITH_LIMITATIONS；未提交、未推送、未公开发布。
 
-## 已验证范围
-
-| 检查 | 本轮结果 | 边界 |
-|---|---|---|
-| 全量QA / Release JVM | 1780 / 1637，0失败/错误，各2既有环境跳过 | 571文件检查点；最终XML已归档 |
-| Release lint / 构建 / 签名 | 0错误 / 170警告 / 4提示；正式签名和16KiB通过 | 第一轮内存退出已归档，独立重试成功 |
-| QA原生 | 52/52：顶栏10、Markdown6、Dock35、导航1 | API35硬件GPU、隔离QA包；移动检查验证逐步窗口像素 |
-| 根因负向 | 相同77测试APK拒绝75顶边闪动；保留全部既有断言 | 旧包差0.2424，新包差0.00263 |
-| 正式77日夜流程 | 收起/展开及搜索位置通过；76→77保留firstInstallTime和可见书库 | 仅模拟器；初始不同安全区和位置的静态并排图未用于匹配证明 |
-
-## 未完成项
-
-- 77的物理手机安装、Download同步、屏幕颜色、实际触摸滚动及用户最终视觉认可待验。最近确认手机为76，且用户否定其过渡观感；76像素检查不能作为77手机验收。
-- 全功能实机边界仍见[原始矩阵](STABILIZATION_20261013.md)。本轮新路径实际证据为API35，不扩大到API31–32或API36。当前源码已提交并推送至[公开GitHub仓库](https://github.com/ldohgfsdu/m1racle-reader/tree/master)，不代表正式APK发布或全积压清单完成。
+证据：D:/03_M1racle Reader/output/pdf-render-metadata-20261030/v88。源码冻结包、摘要、完整测试、签名与安装记录均保留；[87 历史](history/CURRENT_STATUS_87_before_pdf_metadata_20261030.md)。

@@ -27,7 +27,7 @@ import org.robolectric.annotation.ConscryptMode
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@GraphicsMode(GraphicsMode.Mode.LEGACY)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 @Config(sdk = [34])
 class ReaderFixedGradientUiTest {
@@ -75,7 +75,7 @@ class ReaderFixedGradientUiTest {
         rule.onNodeWithContentDescription("更多").assertDoesNotExist()
     }
     @Test
-    fun groupedControlsKeepTouchTargetsAndSeparationOnNarrowLargeTextScreen() {
+    fun singleLineTitleKeepsFullSizedControlsOnNarrowLargeTextScreen() {
         var searches = 0
         var tocOpens = 0
         rule.setContent {
@@ -86,7 +86,6 @@ class ReaderFixedGradientUiTest {
                         GlassBackdropSource(backdrop, Modifier.fillMaxSize()) {}
                         ReaderTopBarOverlay(
                             backdrop = backdrop, title = "A long document title for large text",
-                            subtitle = { androidx.compose.material3.Text("33%", style = androidx.compose.material3.MaterialTheme.typography.labelSmall) },
                             topBarScrollState = null, searchState = null, onBack = {},
                             searchEnabled = true, onOpenSearch = { searches++ },
                             settingsEnabled = true, onOpenSettings = {},
@@ -98,16 +97,18 @@ class ReaderFixedGradientUiTest {
                 }
             }
         }
-        val titleBounds = rule.onNodeWithText("A long document title for large text", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val subtitleBounds = rule.onNodeWithText("33%", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        assertTrue("subtitle below title", subtitleBounds.top >= titleBounds.bottom)
-        assertTrue("title and subtitle stay inside enlarged toolbar", subtitleBounds.bottom <= 75f)
-        val buttons = listOf("返回", "搜索当前文档", "打开目录", "更多")
+        val titleNode = rule.onNodeWithText("A long document title for large text", useUnmergedTree = true)
+        val titleBounds = titleNode.fetchSemanticsNode().boundsInRoot
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        titleNode.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1, layouts.single().lineCount)
+        assertTrue("long filename is ellipsized", layouts.single().isLineEllipsized(0))
+        assertTrue("title stays inside compact toolbar", titleBounds.bottom <= 56f)
+        val buttons = listOf("返回", "打开目录", "搜索当前文档", "更多")
             .map { rule.onNodeWithContentDescription(it) }
         val bounds = buttons.map { it.fetchSemanticsNode().boundsInRoot }
         bounds.forEach { assertTrue(it.width >= 48f); assertTrue(it.height >= 48f) }
         bounds.zipWithNext().forEach { (left, right) -> assertTrue(left.right <= right.left) }
-        assertTrue("navigation and more are separate groups", bounds[3].left - bounds[2].right >= 8f)
         buttons[1].performClick()
         buttons[2].performClick()
         rule.runOnIdle { assertEquals(1, searches); assertEquals(1, tocOpens) }

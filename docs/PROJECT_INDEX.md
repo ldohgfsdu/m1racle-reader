@@ -7,6 +7,12 @@
 | 主题 | 文件 | 说明 |
 |---|---|---|
 | 当前状态 | [CURRENT_STATUS.md](CURRENT_STATUS.md) | 版本、验证基线、已交付产物、设备验收状态、未决项 |
+| 87 界面与品牌基线 | [HOME_POLISH_20261029.md](HOME_POLISH_20261029.md) | 首页、五条预览、Radix、Note 图标占比及同源正式包 |
+| 当前 88 交付 | [PDF_RENDER_METADATA_20261030.md](PDF_RENDER_METADATA_20261030.md) | PDF 重复开页优化、BOM、忙碌反馈及最终同源验证 |
+| 85 旋转修复基线 | [EDITOR_ROTATION_20261029.md](EDITOR_ROTATION_20261029.md) | 编辑器选区 / 历史及 PDF 阅读锚点、既有验收边界 |
+| 83 界面基线与历史交付 | [UI_RELEASE_20261025.md](UI_RELEASE_20261025.md) | 82 完整基线合入界面整理、原图标、完整回归；当前正式包见 88 报告 |
+| 设置品牌头与首页文件菜单（81历史） | [SETTINGS_MENU_20261024.md](SETTINGS_MENU_20261024.md) | 81 正式包、品牌头滚动折叠、实色菜单、取消路径、模拟器证据与源码冻结 |
+| 设置页纯母标品牌区（当前） | [SETTINGS_BRAND_20261025.md](SETTINGS_BRAND_20261025.md) | 82 正式包、纯母标 M、单次 Reader、深浅反色、折叠回顶与源码冻结 |
 | 会话对象 | [.memory/active_object.yaml](../.memory/active_object.yaml) | 当前 active object 的 id / status / scope |
 | 产品范围 | [PRD.md](PRD.md) | 做什么、不做什么（Markdown/PDF/EPUB 有限阅读、PDF 正文有限编辑） |
 | 界面设计规范 | [../design.md](../design.md) | 页面职责、主题排版、阅读 / 搜索 / 编辑交互、Liquid Glass、历史冲突裁决与验收边界；阶段报告仅保留来源和证据 |
@@ -14,7 +20,7 @@
 | 发布门禁 | [../RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) | 公开产物前的硬门禁，含未勾选项 |
 | 首轮稳定性基线与验收矩阵 | [STABILIZATION_20261013.md](STABILIZATION_20261013.md) | 原始源码检查点与核心能力验收矩阵；当前复验结果见下列工作台取消报告 |
 | 工作台取消与正式版复验 | [WORKBENCH_REMOVAL_20261013.md](WORKBENCH_REMOVAL_20261013.md) | 按用户最新决定彻底删除工作台；保留当前 iOS 参考材质，复验 QA / Release |
-| 全清单实现 | [FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md) | 用户当前范围与每项验证状态；Markdown 编辑等待 M1racle Note |
+| 全清单实现 | [FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md) | 用户当前范围与每项验证状态；独立 Markdown 编辑已按 2026-10-24 授权接入 Note 引擎 |
 | 功能分层和验证入口 | [FEATURE_LAYERS_AND_VERIFICATION.md](FEATURE_LAYERS_AND_VERIFICATION.md) | 模块职责、开发检查和正式发布流程 |
 | Code Wiki | [代码百科入口](../CODE_WIKI.md) · [分篇目录](code-wiki/README.md) | 74工作树的架构与模块索引；77顶栏最新差异见下列连续过渡报告，不替代当前状态 |
 
@@ -28,8 +34,11 @@
 | 本机入口等价关系（2026-10-11 标注） | `Reader构建.cmd` ≡ `reader-build-local.ps1`；`Reader模拟调试.cmd` ≡ `reader-emulator-local.ps1`（两者均为参数透传的薄包装） |
 | QA 连接测试唯一入口 | `scripts/run-qa-connected-tests.ps1`：先调用 `reader-emulator-local.ps1` 完成设备准备与 QA 构建，再执行 `:app:connectedQaAndroidTest` |
 | 玻璃材质与来源（阅读控件） | [PDF 材质统一与 RiseDiary 来源移除](OPTICAL_GLASS_20261011.md)；阅读控件统一基准；Dock以当前独立报告为准 |
-| Dock 材质与拖动（当前） | [折射、细色散与点击动画修正](DOCK_OPTICS_20261013.md)；72 色阶 / 端帽为阶段证据，最新光学、点击转场与验收边界见本报告 |
-| Markdown 顶栏（当前） | [77原生高斯连续过渡](MARKDOWN_TOPBAR_NATIVE_TRANSITION_20261014.md)；全量与52项原生、正式日夜模拟器滚动/搜索通过；用户否定76，77手机安装和最终观感待验。75/76为历史证据 |
+| Dock 材质与拖动（当前） | [折射、细色散与点击动画修正](DOCK_OPTICS_20261013.md)；72 色阶 / 端帽为阶段证据，折射和拖动基线见本报告；最新强调色、叠层及转场见 [87 报告](HOME_POLISH_20261029.md) |
+| Reader 应用图标（当前） | [87 Note 同尺寸画板](HOME_POLISH_20261029.md)，72dp、放大 12.5%、原路径及真实启动器检查；[80 历史](READER_ICON_20261024.md) |
+| 设置页品牌头（当前） | [纯母标 M、单次 Reader 与折叠验收](SETTINGS_BRAND_20261025.md)；无白底、onSurface 深浅反色，折叠为左上母标 + 设置；82正式包模拟器验收 |
+| 首页文件菜单（当前） | [实色锚定菜单与取消路径](SETTINGS_MENU_20261024.md)；Markdown 编辑入口按类型显示，危险移除独立分隔，不破坏原始文件 |
+| Markdown 当前页编辑模式（当前） | [阅读页内编辑模式](MARKDOWN_INLINE_MODE_20261024.md)；点顶栏编辑原地进入，完成后原地回阅读，不创建新路由。此前 [Note 引擎移植](MARKDOWN_NOTE_PORT_20261024.md) 为 78 版历史证据 |
 | Dock 视觉新标准 | [iOS App Store 日间 / 夜间原录屏与逐状态标准](IOS_MATERIAL_STANDARD_20261013.md)；2026-10-13 用户指定，优先于旧参考；用户对72的光学与点击动画补充见最新修正报告 |
 | 酷安底栏真实参考数据 | [真机尺寸、按压/拖动录屏与帧统计](COOLAPK_DOCK_CAPTURE_20261008.md) |
 | 酷安玻璃复刻 | [底栏、阅读控件与独立动作反馈实现及验证](COOLAPK_GLASS_REPLICA_20261008.md) |

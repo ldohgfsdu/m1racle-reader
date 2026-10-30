@@ -3,6 +3,8 @@ package com.m1racle.reader.ui.components
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -35,7 +37,10 @@ fun ReaderFontContent(content: @Composable () -> Unit) {
 
 /** The same private library serves the hub and both reflowable readers. */
 @Composable
-fun ReaderFontPicker(modifier: Modifier = Modifier) {
+fun ReaderFontPicker(
+    modifier: Modifier = Modifier,
+    entry: (@Composable (selectedName: String?, onOpen: () -> Unit) -> Unit)? = null,
+) {
     val app = LocalContext.current.applicationContext as? M1racleReaderApplication ?: return
     val fonts by app.readerFontRepository.fonts.collectAsState()
     val settings by app.readerSettingsRepository.settingsFlow.collectAsState(initial = null)
@@ -56,14 +61,21 @@ fun ReaderFontPicker(modifier: Modifier = Modifier) {
         }
     }
     val selected = fonts?.firstOrNull { it.id == settings?.importedFontId }
-    TextButton(onClick = { open = true }, modifier = modifier.fillMaxWidth()) {
-        Text(selected?.let { "字体：${it.name}" } ?: "导入 / 管理字体", maxLines = 2)
+    if (entry != null) {
+        entry(selected?.name) { open = true }
+    } else Row(modifier.fillMaxWidth().heightIn(min = 48.dp)
+        .clickable(role = Role.Button) { open = true }.padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text("阅读字体", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(selected?.name ?: "默认", maxLines = 2,
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.widthIn(max = 160.dp))
     }
     if (open) AlertDialog(
         onDismissRequest = { if (!busy) open = false },
         title = { Text("阅读字体") },
         text = { Column {
-            Text("支持 TTF / OTF，最大 50 MB。用于 EPUB 和 Markdown 正文。",
+            Text("TTF / OTF，最大 50 MB",
                 style = MaterialTheme.typography.bodySmall)
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
                 item {

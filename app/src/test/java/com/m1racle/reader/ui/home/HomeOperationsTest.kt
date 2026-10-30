@@ -117,13 +117,15 @@ class HomeOperationsTest {
         withTimeout(5000) { vm.uiState.first { it.ready } }
         vm.deleteDocument(document.id)
         assertTrue(entered.await(5, TimeUnit.SECONDS))
-        withTimeout(5000) { vm.uiState.first { it.documents.isEmpty() } }
+        withTimeout(5000) { vm.uiState.first { it.isEmpty && it.continueReading == null } }
         vm.deleteDocument(document.id)
         assertEquals(1, calls.get())
         release.countDown()
         assertEquals(HomeEvent.DeleteFailed, withTimeout(5000) { vm.events.first() })
-        val restored = withTimeout(5000) { vm.uiState.first { it.documents.isNotEmpty() } }
+        val restored = withTimeout(5000) { vm.uiState.first { it.continueReading == document } }
         assertEquals(document, restored.continueReading)
-        assertEquals(listOf(document), restored.documents)
+        assertFalse(restored.isEmpty)
+        assertTrue(restored.documents.isEmpty())
+        assertEquals(listOf(document), source.value)
     }
 }

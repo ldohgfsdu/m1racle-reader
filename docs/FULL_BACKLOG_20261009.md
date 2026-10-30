@@ -1,3 +1,5 @@
+2026-10-24 用户进一步授权移植 Note 预览编辑并重做 Markdown 顶栏，本轮对应实现与验收见 [Note 移植报告](MARKDOWN_NOTE_PORT_20261024.md)。以下 2026-10-09 的等待 Note 记录为历史决定，已被本次授权取代。
+
 # 全清单实现与验收
 
 用户于2026-10-09在逐项核查后明确要求“全部实现”。这构成本轮范围授权，覆盖所附markDown1791523727279.md及核查出的缺口，取代旧范围中与本清单冲突的Markdown编辑、更多EPUB阅读方式和文件管理限制。不扩展账号、网络同步、广告、OCR或DRM解除。
@@ -14,7 +16,7 @@
 | PDF反色、进度拖动、沉浸与玻璃闪烁 | pending | pending | pending |
 | PDF创建、加密、合并、转Markdown | pending | pending | pending |
 | PDF选字复制、多样高亮、笔记与有限正文编辑 | partial | pending | pending |
-| Markdown选字与批注（编辑等待 M1racle Note） | implemented | partial | partial |
+| Markdown选字、批注与独立文件编辑 | implemented | partial | partial |
 | Markdown渐进模糊、顶栏动画、预见式返回与进度拖动 | partial | pending | pending |
 | 系统长截图适配 | implemented | Android 原生协议通过 | device_verified：Markdown、生产 PDF 连续视口三屏捕获及原位置恢复；系统厂商截图面板人工流程尚待确认 |
 | EPUB连续阅读与拟真卷页 | pending | pending | pending |

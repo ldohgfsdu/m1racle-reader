@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 
-private val GlassDialogShape = RoundedCornerShape(28.dp)
+private val GlassDialogShape = RoundedCornerShape(16.dp)
 
 /** Material 3 dialog behavior and layout on top of the unified Dialog recipe. */
 @OptIn(ExperimentalMaterial3Api::class)

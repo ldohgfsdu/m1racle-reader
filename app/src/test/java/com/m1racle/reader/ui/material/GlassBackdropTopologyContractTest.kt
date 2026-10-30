@@ -151,14 +151,15 @@ class GlassBackdropTopologyContractTest {
     }
 
     @Test
-    fun `dialog and menu retain isolated soft plate behavior`() {
+    fun `dialogs stay isolated and file action menus are fully opaque`() {
         val dialog = appSource("ui/material/GlassAlertDialog.kt").readText()
         val menu = appSource("ui/home/DocumentListRow.kt").readText()
 
         assertTrue(dialog.contains("sampleBackdrop = false"))
         assertTrue(menu.contains("DropdownMenu("))
-        assertTrue(menu.contains("GlassMaterialRole.Dock"))
-        assertTrue(menu.contains("GlassCapability.SOLID_FALLBACK"))
+        assertTrue(menu.contains("containerColor = scheme.surfaceContainerHigh.copy(alpha = 1f)"))
+        assertFalse(menu.contains("GlassMaterialEngine"))
+        assertFalse(menu.contains("GlassMaterialRole.Dock"))
         assertFalse(menu.contains(".glassMaterial("))
     }
 

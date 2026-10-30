@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.material
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -46,11 +47,11 @@ class QaGlassVariantTest {
             val day = spec(role, dark = false, sel(QaGlassVariant.SOLID_NIGHT))
             assertEquals(base.surfaceColor, day.surfaceColor)
             val night = spec(role, dark = true, sel(QaGlassVariant.SOLID_NIGHT))
-            assertRgb(Color(0xFF242424), night.surfaceColor)
+            assertRgb(RadixColors.GrayDark3, night.surfaceColor)
             assertEquals("$role night alpha", 0.75f, night.surfaceColor.alpha, 0.004f)
             // A denser plate must not turn grey / lighter on press.
             val pressed = spec(role, dark = true, sel(QaGlassVariant.SOLID_NIGHT), pressed = true)
-            assertRgb(Color(0xFF242424), pressed.surfaceColor)
+            assertRgb(RadixColors.GrayDark3, pressed.surfaceColor)
             assertTrue(pressed.surfaceColor.alpha >= night.surfaceColor.alpha)
         }
         val menu = spec(GlassMaterialRole.Menu, dark = true, sel(QaGlassVariant.SOLID_NIGHT))
@@ -64,7 +65,7 @@ class QaGlassVariantTest {
             val night = spec(role, dark = true, sel(QaGlassVariant.COOLAPK))
             assertRgb(Color.White, day.surfaceColor)
             assertEquals(0.70f, day.surfaceColor.alpha, 0.004f)
-            assertRgb(Color(0xFF1C1C1E), night.surfaceColor)
+            assertRgb(RadixColors.Gray12, night.surfaceColor)
             assertEquals(0.70f, night.surfaceColor.alpha, 0.004f)
             listOf(day, night).forEach { assertEquals("$role blur", 24f, it.blur.value, 0f) }
             listOf(day, night).forEach { assertEquals("$role rim", 1f, it.highlightWidth.value, 0f) }
@@ -115,13 +116,13 @@ class QaGlassVariantTest {
 
     @Test
     fun coolapkImportIsDenseTintedGlassReadableOnWhiteAndBlack() {
-        assertRgb(Color(0xFF0055B3), qaCoolapkImportTint(dark = false))
-        assertRgb(Color(0xFF6AAEFF), qaCoolapkImportTint(dark = true))
+        assertRgb(RadixColors.Blue12, qaCoolapkImportTint(dark = false))
+        assertRgb(RadixColors.BlueDark11, qaCoolapkImportTint(dark = true))
         assertEquals(0.80f, qaCoolapkImportTint(false).alpha, 0.004f)
         assertEquals(0.80f, qaCoolapkImportTint(true).alpha, 0.004f)
         assertEquals(Color.White, qaCoolapkImportGlyph(dark = false))
-        assertEquals(Color(0xFF1C1C1E), qaCoolapkImportGlyph(dark = true))
-        assertEquals(1f, QaCoolapkImport.RimWidth.value, 0f)
+        assertEquals(RadixColors.Gray12, qaCoolapkImportGlyph(dark = true))
+        assertEquals(0.5f, com.m1racle.reader.ui.theme.ReaderUiHairlinePx, 0f)
         listOf(false, true).forEach { dark ->
             val worst = listOf(Color.White, Color.Black).minOf { bg ->
                 contrast(qaCoolapkImportGlyph(dark), over(qaCoolapkImportTint(dark), bg))
@@ -147,8 +148,8 @@ class QaGlassVariantTest {
     @Test
     fun textColorsAndPdfChromeDarkness() {
         listOf(QaGlassVariant.FOLLOW_PAGE, QaGlassVariant.SOLID_NIGHT, QaGlassVariant.COOLAPK).forEach { v ->
-            assertEquals(Color(0xFF1C1C1E), qaGlassPrimaryText(v, glassDark = false))
-            assertEquals(Color(0xFFF2F2F2), qaGlassPrimaryText(v, glassDark = true))
+            assertEquals(RadixColors.Gray12, qaGlassPrimaryText(v, glassDark = false))
+            assertEquals(RadixColors.GrayDark12, qaGlassPrimaryText(v, glassDark = true))
             assertEquals(qaGlassPrimaryText(v, true), qaPdfPageNumberText(v, true))
         }
         // 1a follows the rendered page; the others follow the theme.
@@ -172,7 +173,7 @@ class QaGlassVariantTest {
         assertEquals(0.35f, qaDockNightLensStrokeAlpha(QaDockNightLens.BLACK_12_STROKE, dark = true), 0f)
         assertEquals(0f, qaDockNightLensStrokeAlpha(QaDockNightLens.BLACK_12_STROKE, dark = false), 0f)
         assertEquals(0f, qaDockNightLensStrokeAlpha(QaDockNightLens.WHITE_10, dark = true), 0f)
-        assertEquals(Color(0xFFF2F2F2), qaDockSelectedText(QaDockNightLens.BLACK_12_STROKE, dark = true))
+        assertEquals(RadixColors.GrayDark12, qaDockSelectedText(QaDockNightLens.BLACK_12_STROKE, dark = true))
         assertNull(qaDockSelectedText(QaDockNightLens.BLACK_12_STROKE, dark = false))
         assertNull(qaDockSelectedText(QaDockNightLens.WHITE_10, dark = true))
     }
@@ -187,7 +188,7 @@ class QaGlassVariantTest {
         // 1a then follows the white pages: light glass + dark text in night theme.
         val pagesDark = qaPdfInvertPages(themeDark = true, selection = off)
         assertEquals(false, qaPdfChromeDark(QaGlassVariant.FOLLOW_PAGE, themeDark = true, pagesDark = pagesDark))
-        assertEquals(Color(0xFF1C1C1E), qaGlassPrimaryText(QaGlassVariant.FOLLOW_PAGE, glassDark = false))
+        assertEquals(RadixColors.Gray12, qaGlassPrimaryText(QaGlassVariant.FOLLOW_PAGE, glassDark = false))
     }
 
     // ---- 档 3 全部统一 ----
@@ -204,7 +205,7 @@ class QaGlassVariantTest {
                 val night = spec(role, dark = true, uni(b))
                 assertRgb(Color.White, day.surfaceColor)
                 assertEquals("$role day alpha", 0.32f, day.surfaceColor.alpha, 0.004f)
-                assertRgb(Color(0xFF242424), night.surfaceColor)
+                assertRgb(RadixColors.GrayDark3, night.surfaceColor)
                 assertEquals("$role night alpha", 0.22f, night.surfaceColor.alpha, 0.004f)
                 assertEquals("$role blur", b.radius.value, day.blur.value, 0f)
                 assertEquals(0.45f, day.contrast, 0f); assertEquals(0.275f, day.brightness, 0f)
@@ -213,7 +214,7 @@ class QaGlassVariantTest {
                 assertEquals("$role muted", 1f, night.contentMutedAlpha, 0f)
                 // Press: no grey #AAAAAA plate, only a small denser tint.
                 val down = spec(role, dark = true, uni(b), pressed = true)
-                assertRgb(Color(0xFF242424), down.surfaceColor)
+                assertRgb(RadixColors.GrayDark3, down.surfaceColor)
                 assertTrue(down.surfaceColor.alpha >= night.surfaceColor.alpha)
             }
         }

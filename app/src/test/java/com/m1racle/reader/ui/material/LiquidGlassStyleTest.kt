@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.material
 
+import com.m1racle.reader.design.RadixColors
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.*
 import org.junit.Test
@@ -35,7 +36,7 @@ class LiquidGlassStyleTest {
             val capsule = GlassMaterialEngine.resolve(GlassMaterialRole.Capsule, env)
             assertEquals(control.blur, dock.blur)
             assertEquals(control.surfaceColor.alpha, dock.surfaceColor.alpha, 0f)
-            assertEquals(if (dark) androidx.compose.ui.graphics.Color(0xFF707070) else androidx.compose.ui.graphics.Color.White,
+            assertEquals(if (dark) RadixColors.GrayDark9 else androidx.compose.ui.graphics.Color.White,
                 dock.surfaceColor.copy(alpha = 1f))
             assertEquals(control.lensHeight, dock.lensHeight)
             assertEquals(control.lensAmount, dock.lensAmount)

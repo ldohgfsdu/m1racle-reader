@@ -78,7 +78,7 @@ import kotlinx.coroutines.launch
 
 object Routes {
     const val HOME = "home"
-    const val VIEWER = "viewer/{documentId}?anchor={anchor}"
+    const val VIEWER = "viewer/{documentId}?anchor={anchor}&edit={edit}"
     const val PDF_VIEWER = "pdf/{documentId}?anchor={anchor}"
     const val EPUB_VIEWER = "epub/{documentId}"
     const val PDF_EDITOR = "pdf-edit/{documentId}?page={page}"
@@ -169,6 +169,7 @@ fun M1racleReaderNavGraph(
 
     // One import owner for the home empty state and the shared trailing action.
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(repository))
+    val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(repository))
     val importing by homeViewModel.isImporting.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val documentOperations: com.m1racle.reader.ui.home.DocumentOperations = viewModel(
@@ -228,7 +229,12 @@ fun M1racleReaderNavGraph(
     // Never sample that outgoing reader through a newly mounted hub dock.
     val showDock = HubDestination.isTopLevelRoute(currentEntry?.destination?.route) &&
         visibleEntries.all { HubDestination.isTopLevelRoute(it.destination.route) }
-    CompositionLocalProvider(com.m1racle.reader.ui.home.LocalDocumentOperations provides documentOperations) {
+    CompositionLocalProvider(
+        com.m1racle.reader.ui.home.LocalDocumentOperations provides documentOperations,
+        com.m1racle.reader.ui.documents.LocalDocumentEditor provides { id ->
+            navController.navigate(Routes.viewer(id) + "?edit=true") { launchSingleTop = true }
+        },
+    ) {
     HubDockMotionProvider(selected = selectedHub) {
         Box(modifier = modifier.fillMaxSize()) {
             GlassBackdropSource(hubBackdrop, Modifier.fillMaxSize(), enabled = showDock) {
@@ -239,12 +245,10 @@ fun M1racleReaderNavGraph(
                     enterTransition = { androidx.compose.animation.EnterTransition.None },
                     exitTransition = { androidx.compose.animation.ExitTransition.None },
                     popEnterTransition = {
-                        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))
+                        androidx.compose.animation.fadeIn(com.m1racle.reader.ui.theme.M1racleMotion.normal)
                     },
                     popExitTransition = {
-                        androidx.compose.animation.scaleOut(targetScale = 0.92f,
-                            animationSpec = androidx.compose.animation.core.tween(220)) +
-                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220))
+                        androidx.compose.animation.fadeOut(com.m1racle.reader.ui.theme.M1racleMotion.normal)
                     },
                     modifier = Modifier.fillMaxSize(),
                 ) {
@@ -258,15 +262,14 @@ fun M1racleReaderNavGraph(
                                 openDocument(navController, document)
                             },
                             onNavigateHub = { destination ->
+                                // The home section's "view all" always opens the full library.
+                                libraryViewModel.setFilter(com.m1racle.reader.ui.hub.LibraryFilter.ALL)
                                 navController.navigateToHub(destination)
                             },
                         )
                     }
 
                     composable(Routes.LIBRARY, enterTransition = hubEnter, exitTransition = hubExit) {
-                        val libraryViewModel: LibraryViewModel = viewModel(
-                            factory = LibraryViewModel.Factory(repository),
-                        )
                         LibraryScreen(
                             modifier = Modifier.testTag("hub-page-library"),
                             viewModel = libraryViewModel,
@@ -282,16 +285,10 @@ fun M1racleReaderNavGraph(
 
                     composable(Routes.SEARCH,
                         enterTransition = {
-                            androidx.compose.animation.scaleIn(initialScale = 0.2f,
-                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.92f, 0.04f),
-                                animationSpec = androidx.compose.animation.core.tween(280)) +
-                                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180))
+                            androidx.compose.animation.fadeIn(com.m1racle.reader.ui.theme.M1racleMotion.normal)
                         },
                         popExitTransition = {
-                            androidx.compose.animation.scaleOut(targetScale = 0.2f,
-                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.92f, 0.04f),
-                                animationSpec = androidx.compose.animation.core.tween(240)) +
-                                androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180))
+                            androidx.compose.animation.fadeOut(com.m1racle.reader.ui.theme.M1racleMotion.normal)
                         },
                     ) {
                         val repositoryForSearch = requireNotNull(searchRepo) {
@@ -382,6 +379,7 @@ fun M1racleReaderNavGraph(
                                 nullable = true
                                 defaultValue = null
                             },
+                            navArgument("edit") { type = NavType.BoolType; defaultValue = false },
                         ),
                     ) { entry ->
                         val documentId = entry.arguments?.getString("documentId").orEmpty()
@@ -435,9 +433,14 @@ fun M1racleReaderNavGraph(
                                 c?.onViewerClosed(documentId, sessionId)
                             }
                         }
-                        CompositionLocalProvider(com.m1racle.reader.ui.documents.LocalReaderDocumentId provides documentId) {
+                        CompositionLocalProvider(
+                            com.m1racle.reader.ui.documents.LocalReaderDocumentId provides documentId,
+                        ) {
                         ViewerScreen(
                             viewModel = viewerViewModel,
+                            repository = repository,
+                            startEditing = entry.arguments?.getBoolean("edit") == true,
+                            onEditingChanged = { entry.savedStateHandle["markdownEditing"] = it },
                             onBack = {
                                 navController.popBackStack(Routes.HOME, inclusive = false)
                             },
