@@ -100,8 +100,7 @@ object EpubXhtmlParser {
                 ) {
                     return
                 }
-                val id = el.getAttribute("id")
-                if (id.isNotEmpty() && id !in anchors) anchors[id] = out.size
+                registerAnchors(el, out.size, anchors)
                 when (tag) {
                     "h1", "h2", "h3", "h4", "h5", "h6" -> {
                         val text = clean(el.textContent)
@@ -208,9 +207,17 @@ object EpubXhtmlParser {
     }
 
     private fun registerInlineAnchors(el: Element, block: Int, anchors: MutableMap<String, Int>) {
+        registerAnchors(el, block, anchors)
+        eachElement(el) { child, _ -> registerInlineAnchors(child, block, anchors) }
+    }
+
+    private fun registerAnchors(el: Element, block: Int, anchors: MutableMap<String, Int>) {
         val id = el.getAttribute("id")
         if (id.isNotEmpty()) anchors.putIfAbsent(id, block)
-        eachElement(el) { child, _ -> registerInlineAnchors(child, block, anchors) }
+        if (el.tagName.substringAfter(":").equals("a", ignoreCase = true)) {
+            val name = el.getAttribute("name")
+            if (name.isNotEmpty()) anchors.putIfAbsent(name, block)
+        }
     }
 
     /** Collapse whitespace across styled runs, trimming only the whole block. */

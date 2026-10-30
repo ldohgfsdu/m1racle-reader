@@ -40,4 +40,40 @@ class EpubXhtmlBoundaryTest {
         assertEquals(1, anchors["target"])
         assertEquals(2, anchors["quoted"])
     }
+
+    @Test fun `id and name anchors are registered at block and inline positions`() {
+        val (_, anchors) = parse(
+            "<a id='block-id' name='block-name'>block</a>" +
+                "<p>inline <a name='name-only'/><a id='' name='inline-name'/>" +
+                "<a id='inline-id' name='different-name'>run</a></p>",
+        )
+
+        assertEquals(0, anchors["block-id"])
+        assertEquals(0, anchors["block-name"])
+        assertEquals(1, anchors["name-only"])
+        assertEquals(1, anchors["inline-name"])
+        assertEquals(1, anchors["inline-id"])
+        assertEquals(1, anchors["different-name"])
+        assertFalse(anchors.containsKey(""))
+    }
+
+    @Test fun `duplicate id and name anchors keep the first document position`() {
+        val (_, anchors) = parse(
+            "<p>first<a id='first-id' name='first-name'/></p>" +
+                "<p><a id='first-id' name='first-name'>duplicate</a></p>" +
+                "<p id='cross-key'>first</p>" +
+                "<p><a name='cross-key'>duplicate</a></p>" +
+                "<p id='' name=''>empty</p>",
+        )
+
+        assertEquals(0, anchors["first-id"])
+        assertEquals(0, anchors["first-name"])
+        assertEquals(2, anchors["cross-key"])
+        assertFalse(anchors.containsKey(""))
+    }
+
+    @Test fun `unrelated name attributes do not shadow a later fragment id`() {
+        val (_, anchors) = parse("<p name='target'>first</p><p id='target'>target</p>")
+        assertEquals(1, anchors["target"])
+    }
 }
