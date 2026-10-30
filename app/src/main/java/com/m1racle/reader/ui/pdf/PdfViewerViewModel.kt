@@ -23,7 +23,6 @@ import com.m1racle.reader.pdf.BitmapMetadata
 import com.m1racle.reader.pdf.PageBitmapEntry
 import com.m1racle.reader.pdf.PageRenderRole
 import com.m1racle.reader.pdf.PdfPageBitmapCache
-import com.m1racle.reader.pdf.PdfChromePrefs
 import com.m1racle.reader.pdf.PdfPageRenderer
 import com.m1racle.reader.pdf.PdfReadingMode
 import com.m1racle.reader.pdf.PdfReadingNavigation
@@ -193,14 +192,12 @@ class PdfViewerViewModel(
     /** Separate renderer + LRU for sheet thumbnails (does not block main page). */
     private val thumbnailLoader = PdfThumbnailLoader(application.applicationContext)
     private val readingPrefs = PdfReadingPrefs(application.applicationContext)
-    private val chromePrefs = PdfChromePrefs(application.applicationContext)
-
-    private val _topBarMode = MutableStateFlow(chromePrefs.getTopBarMode())
+    // Each newly opened PDF starts immersive; menu changes apply to this reading session.
+    private val _topBarMode = MutableStateFlow(PdfTopBarMode.IMMERSIVE)
     val topBarMode: StateFlow<PdfTopBarMode> = _topBarMode.asStateFlow()
 
     fun setTopBarMode(mode: PdfTopBarMode) {
         if (_topBarMode.value == mode) return
-        chromePrefs.setTopBarMode(mode)
         _topBarMode.value = mode
     }
 

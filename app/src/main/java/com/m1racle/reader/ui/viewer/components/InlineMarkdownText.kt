@@ -3,22 +3,9 @@ package com.m1racle.reader.ui.viewer.components
 import com.m1racle.reader.ui.theme.M1racleReaderTheme
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -114,9 +101,7 @@ fun InlineMarkdownText(
             }
         }
     }
-    val selection = rememberMarkdownSelectedText(searched, annotationOffset ?: LocalMarkdownInlineOffset.current)
-    val annotated = selection.text
-    val selectionModifier = selection.modifier
+    val inlineOffset = annotationOffset ?: LocalMarkdownInlineOffset.current
     val importedFont = com.m1racle.reader.ui.components.LocalReaderImportedFont.current
     val resolvedStyle = remember(style, importedFont) {
         style.copy(
@@ -124,37 +109,13 @@ fun InlineMarkdownText(
             fontWeight = style.fontWeight ?: FontWeight.Normal,
         )
     }
-    // Link lookup is keyed by the annotated result — not re-scanned every frame for free.
-    val hasLinks = remember(annotated, onLinkClick != null) {
-        onLinkClick != null && annotated.getStringAnnotations(
-            tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
-            start = 0,
-            end = annotated.length,
-        ).isNotEmpty()
-    }
     CompositionLocalProvider(LocalTextStyle provides resolvedStyle) {
-        if (hasLinks) {
-            @Suppress("DEPRECATION")
-            ClickableText(
-                text = annotated,
-                style = resolvedStyle,
-                modifier = modifier.then(selectionModifier),
-                onTextLayout = selection.layout,
-                onClick = { offset ->
-                    annotated.getStringAnnotations(
-                        tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
-                        start = offset,
-                        end = offset,
-                    ).firstOrNull()?.let { onLinkClick?.invoke(it.item) }
-                },
-            )
-        } else {
-            Text(
-                text = annotated,
-                style = resolvedStyle,
-                modifier = modifier.then(selectionModifier),
-                onTextLayout = selection.layout,
-            )
-        }
+        MarkdownSelectableText(
+            searched = searched,
+            style = resolvedStyle,
+            modifier = modifier,
+            annotationOffset = inlineOffset,
+            onLinkClick = onLinkClick,
+        )
     }
 }

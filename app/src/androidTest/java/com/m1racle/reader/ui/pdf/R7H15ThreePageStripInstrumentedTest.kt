@@ -1,8 +1,7 @@
 package com.m1racle.reader.ui.pdf
 
-import android.content.ComponentName
-import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.m1racle.reader.pdf.ZoomedPageTransitionPhase
@@ -249,30 +248,13 @@ class R7H15ThreePageStripInstrumentedTest {
 
     private fun scenario(block: (H1QaHarnessActivity, H1QaMotionEventTrace) -> Unit) {
         assertEquals("com.m1racle.reader.qa", instrumentation.targetContext.packageName)
-        H1QaHarnessActivity.currentInstance?.let { stale ->
-            instrumentation.runOnMainSync { stale.finish() }
-            waitUntil { H1QaHarnessActivity.currentInstance == null }
-        }
-        val component = ComponentName(
-            instrumentation.targetContext.packageName,
-            H1QaHarnessActivity::class.java.name,
-        )
-        val output = ParcelFileDescriptor.AutoCloseInputStream(
-            instrumentation.uiAutomation.executeShellCommand(
-                "am start --display 0 -W -n ${component.packageName}/${component.className}",
-            ),
-        ).bufferedReader().use { it.readText() }
-        check(output.contains("Status: ok")) { "QA activity launch failed: $output" }
-        waitUntil { H1QaHarnessActivity.currentInstance != null }
-        val activity = checkNotNull(H1QaHarnessActivity.currentInstance)
-        try {
+        ActivityScenario.launch(H1QaHarnessActivity::class.java).use { scenario ->
+            lateinit var activity: H1QaHarnessActivity
+            scenario.onActivity { activity = it }
             waitUntil { activity.contentBoundsOnScreen().width() > 0 }
             waitUntil(3_000L) { activity.hasWindowFocus() }
-            SystemClock.sleep(180L)
+            instrumentation.waitForIdleSync()
             block(activity, H1QaMotionEventTrace(instrumentation, activity.contentBoundsOnScreen()))
-        } finally {
-            instrumentation.runOnMainSync { activity.finish() }
-            waitUntil { H1QaHarnessActivity.currentInstance == null }
         }
     }
 

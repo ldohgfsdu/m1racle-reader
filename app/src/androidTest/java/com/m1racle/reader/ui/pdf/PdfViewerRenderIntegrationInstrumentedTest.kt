@@ -12,6 +12,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -69,6 +72,7 @@ class PdfViewerRenderIntegrationInstrumentedTest {
         var model by mutableStateOf<PdfViewerViewModel?>(null)
         var width by mutableStateOf(260.dp)
         var height by mutableStateOf(420.dp)
+        var availableWidth: Dp? = null
         var coordinator = ContinuousGestureCoordinator { }
         val repository = DocumentRepository(app, db, db.documentDao(), db.pdfPrintPageAnchorDao(),
             db.textbookOutlineNodeDao(), SearchRepository(db.searchIndexDao()))
@@ -109,31 +113,36 @@ class PdfViewerRenderIntegrationInstrumentedTest {
         }
         try {
             rule.setContent {
-                val current = model
-                if (current != null) {
-                    val state by current.uiState.collectAsState()
-                    val ready = state as? PdfViewerUiState.Ready
-                    if (ready != null) MaterialTheme {
-                        ContinuousDocumentViewport(
-                            state = ready, pageJump = null, onPageJumpConsumed = current::onContinuousPageJumpConsumed,
-                            onViewportWidthPx = current::onViewportWidth,
-                            onContinuousGeometryReady = current::onContinuousGeometryReady,
-                            onContinuousEntryRestoreApplied = current::onContinuousEntryRestoreApplied,
-                            onDocumentStateSettled = current::commitContinuousDocumentState,
-                            onZoomGestureActive = current::setZoomGestureActive,
-                            onPageSettled = current::onVerticalPageSettled,
-                            onViewportChanged = current::onContinuousViewportChanged,
-                            onEnsureAround = current::ensurePagesAround, onRetryPage = current::ensurePagesAround,
-                            onViewportSessionSettled = current::commitViewportSession,
-                            onViewportSessionPreview = current::previewViewportSession,
-                            gestureCoordinatorOverride = coordinator, modifier = Modifier.width(width).height(height),
-                        )
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    availableWidth = maxWidth
+                    val current = model
+                    if (current != null) {
+                        val state by current.uiState.collectAsState()
+                        val ready = state as? PdfViewerUiState.Ready
+                        if (ready != null) MaterialTheme {
+                            ContinuousDocumentViewport(
+                                state = ready, pageJump = null, onPageJumpConsumed = current::onContinuousPageJumpConsumed,
+                                onViewportWidthPx = current::onViewportWidth,
+                                onContinuousGeometryReady = current::onContinuousGeometryReady,
+                                onContinuousEntryRestoreApplied = current::onContinuousEntryRestoreApplied,
+                                onDocumentStateSettled = current::commitContinuousDocumentState,
+                                onZoomGestureActive = current::setZoomGestureActive,
+                                onPageSettled = current::onVerticalPageSettled,
+                                onViewportChanged = current::onContinuousViewportChanged,
+                                onEnsureAround = current::ensurePagesAround, onRetryPage = current::ensurePagesAround,
+                                onViewportSessionSettled = current::commitViewportSession,
+                                onViewportSessionPreview = current::previewViewportSession,
+                                gestureCoordinatorOverride = coordinator, modifier = Modifier.width(width).height(height),
+                            )
+                        }
                     }
                 }
             }
             rule.runOnIdle { model = createModel() }
             awaitRenderedAnchor()
-            rule.runOnIdle { width = 380.dp; height = 210.dp }
+            val expandedWidth = minOf(380.dp, requireNotNull(availableWidth))
+            assertTrue("fixture must exercise a wider viewport", expandedWidth > 260.dp)
+            rule.runOnIdle { width = expandedWidth; height = 210.dp }
             rule.waitUntil(5_000) {
                 coordinator.snapshots.capture()?.payload?.viewportWidth == with(rule.density) { width.roundToPx() }
             }

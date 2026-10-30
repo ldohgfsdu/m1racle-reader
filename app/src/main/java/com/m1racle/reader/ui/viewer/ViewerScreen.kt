@@ -12,6 +12,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -95,6 +97,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
@@ -306,6 +310,9 @@ private fun ViewerSuccessScreen(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val markdownSelectionSession = remember(state.document.id) {
+        com.m1racle.reader.ui.viewer.components.MarkdownSelectionSession()
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     val resources = androidx.compose.ui.platform.LocalResources.current
     val hasToc = state.toc.isNotEmpty()
@@ -386,6 +393,7 @@ private fun ViewerSuccessScreen(
         if (repository == null || state.document.type != com.m1racle.reader.data.local.DocumentType.MARKDOWN) return
         val index = (listState.firstVisibleItemIndex - listHeaderCount).coerceAtLeast(0)
         editLine = state.blockStartLines.getOrElse(index) { 1 }
+        markdownSelectionSession.clear()
         viewModel.closeSearch()
         topBarScrollState.forceShow()
         editSession++
@@ -503,17 +511,45 @@ private fun ViewerSuccessScreen(
         }
     }
 
+    fun openNoteEditorForSelection(
+        selection: com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection,
+    ) {
+        val notes = noteController ?: return
+        scope.launch {
+            selection.toAnchor()?.let { anchor ->
+                noteTarget = MarkdownNoteTarget(
+                    anchor = anchor,
+                    note = notes.linkedAt(anchor),
+                    returnToManagement = false,
+                )
+            }
+        }
+    }
+
     /**
-     * 长按块的唯一入口：无高亮则整块高亮；已有高亮则进批注编辑器
-     *（新建关联批注或编辑既有关联批注）。置于 openNoteEditorForBlock 之后
-     *（Kotlin 局部函数先声明后调用）。
+     * A body tap owns the chrome toggle. Reading scroll continues to drive the same
+     * state through the existing nested-scroll path.
      */
-    fun annotateBlock(blockIndex: Int) {
-        val highlights = highlightController ?: return
-        val block = state.blocks.getOrNull(blockIndex) ?: return
-        val plain = block.plainTextForAnnotation()
-        if (plain.isEmpty()) return
-        pendingTextSelection = com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection(blockIndex, 0, plain.length, plain)
+    fun toggleChromeFromBodyTap() {
+        if (markdownSelectionSession.isActive) {
+            markdownSelectionSession.clear()
+            return
+        }
+        if (
+            editing ||
+            searchState.isActive ||
+            showSettings ||
+            showAnnotationSheet ||
+            drawerState.isOpen
+        ) {
+            return
+        }
+        topBarScrollState.snapTo(
+            nextTopBarOffsetForBodyTap(
+                collapseFraction = topBarScrollState.collapseFraction,
+                maxHiddenOffsetPx = topBarScrollState.maxHiddenOffsetPx,
+            ),
+        )
     }
 
     pendingTextSelection?.let { selection ->
@@ -530,9 +566,7 @@ private fun ViewerSuccessScreen(
             },
             onNote = if (noteController != null) ({
                 pendingTextSelection = null
-                scope.launch { selection.toAnchor()?.let { anchor ->
-                    noteTarget = MarkdownNoteTarget(anchor, noteController.linkedAt(anchor), false)
-                } }
+                openNoteEditorForSelection(selection)
             }) else null,
         )
     }
@@ -682,6 +716,10 @@ private fun ViewerSuccessScreen(
         scope.launch { drawerState.close() }
     }
 
+    BackHandler(enabled = markdownSelectionSession.isActive) {
+        markdownSelectionSession.clear()
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = hasToc && !editing,
@@ -725,7 +763,10 @@ private fun ViewerSuccessScreen(
     ) {
         Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().then(if (editing) Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { } else Modifier)) {
-        CompositionLocalProvider(com.m1racle.reader.ui.documents.LocalDocumentEditor provides
+        CompositionLocalProvider(
+            com.m1racle.reader.ui.viewer.components.LocalMarkdownSelectionSession provides
+                markdownSelectionSession,
+            com.m1racle.reader.ui.documents.LocalDocumentEditor provides
             (if (repository != null && state.document.type == com.m1racle.reader.data.local.DocumentType.MARKDOWN) ({ _: String -> beginEditing() }) else null),
             com.m1racle.reader.ui.reader.LocalReaderProgress provides remember(listState, scope) {
             com.m1racle.reader.ui.reader.ReaderProgress(
@@ -743,13 +784,18 @@ private fun ViewerSuccessScreen(
             tocEnabled = hasToc,
             onOpenToc = {
                 if (hasToc) {
+                    markdownSelectionSession.clear()
                     scope.launch { drawerState.open() }
                 }
             },
             settingsEnabled = true,
-            onOpenSettings = { showSettings = true },
+            onOpenSettings = {
+                markdownSelectionSession.clear()
+                showSettings = true
+            },
             searchEnabled = true,
             onOpenSearch = {
+                markdownSelectionSession.clear()
                 topBarScrollState.forceShow()
                 viewModel.openSearch()
             },
@@ -764,7 +810,10 @@ private fun ViewerSuccessScreen(
                 null
             },
             onOpenAnnotations = if (highlightController != null) {
-                { showAnnotationSheet = true }
+                {
+                    markdownSelectionSession.clear()
+                    showAnnotationSheet = true
+                }
             } else {
                 null
             },
@@ -794,16 +843,28 @@ private fun ViewerSuccessScreen(
                 listHeaderCount = listHeaderCount,
                 innerPadding = innerPadding,
                 tableLayoutCache = tableLayoutCache,
-                onAnchorJump = topBarScrollState::forceShow,
+                onAnchorJump = {
+                    markdownSelectionSession.clear()
+                    topBarScrollState.forceShow()
+                },
                 annotatedBlocks = annotatedBlocks,
                 highlights = managementHighlights,
                 noteBlocks = managementNotes.filter { it.locationKind == "SCROLL_POSITION" }.map { it.location }.toSet(),
                 onNoteTap = { openNoteEditorForBlock(it) },
-                onTextSelection = if (highlightController != null) ({ pendingTextSelection = it }) else null,
-                onBlockLongPress = if (highlightController != null) {
-                    { blockIndex -> annotateBlock(blockIndex) }
-                } else {
+                onHighlightRequest = if (highlightController != null) ({
+                    pendingTextSelection = it
+                }) else null,
+                onTextNote = if (noteController != null) ::openNoteEditorForSelection else null,
+                onBodyTap = if (
+                    editing ||
+                    searchState.isActive ||
+                    showSettings ||
+                    showAnnotationSheet ||
+                    drawerState.isOpen
+                ) {
                     null
+                } else {
+                    ::toggleChromeFromBodyTap
                 },
             )
         }
@@ -959,12 +1020,12 @@ private fun ReaderDocumentBody(
     onAnchorJump: () -> Unit,
     /** 已高亮的内容块索引（SCROLL_POSITION）；空集 = 零绘制路径。 */
     annotatedBlocks: Set<Int> = emptySet(),
-    /** null = 标注未启用，不挂长按。 */
-    onBlockLongPress: ((Int) -> Unit)? = null,
     highlights: List<com.m1racle.reader.data.local.HighlightEntity> = emptyList(),
     noteBlocks: Set<Int> = emptySet(),
     onNoteTap: (Int) -> Unit = {},
-    onTextSelection: ((com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection) -> Unit)? = null,
+    onHighlightRequest: ((com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection) -> Unit)? = null,
+    onTextNote: ((com.m1racle.reader.ui.annotation.TextSelection.MarkdownSelection) -> Unit)? = null,
+    onBodyTap: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -1058,6 +1119,7 @@ private fun ReaderDocumentBody(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .passiveReaderBodyShortTap(onBodyTap)
             .padding(
                 start = innerPadding.calculateStartPadding(
                     androidx.compose.ui.platform.LocalLayoutDirection.current,
@@ -1142,9 +1204,22 @@ private fun ReaderDocumentBody(
                             activeStableKey = activeKeyForBlock,
                         )
                     }
-                    val selectionContext = remember(index, block, highlights, onTextSelection) {
-                        onTextSelection?.let { callback -> com.m1racle.reader.ui.viewer.components.MarkdownSelectionContext(
-                            index, block.plainTextForAnnotation(), highlights.filter { it.locationKind == "SCROLL_POSITION" && it.location == index }, callback) }
+                    val selectionContext = remember(
+                        index,
+                        block,
+                        highlights,
+                        onHighlightRequest,
+                        onTextNote,
+                    ) {
+                        com.m1racle.reader.ui.viewer.components.MarkdownSelectionContext(
+                            block = index,
+                            plainText = block.plainTextForAnnotation(),
+                            highlights = highlights.filter {
+                                it.locationKind == "SCROLL_POSITION" && it.location == index
+                            },
+                            onHighlight = onHighlightRequest,
+                            onNote = onTextNote,
+                        )
                     }
                     CompositionLocalProvider(com.m1racle.reader.ui.viewer.components.LocalMarkdownSelection provides selectionContext) {
                     MarkdownBlockView(
@@ -1166,7 +1241,8 @@ private fun ReaderDocumentBody(
                         } else {
                             Modifier
                         })
-                            // P0-1：已高亮块底色 + 长按创建/编辑标注；未启用时零修饰。
+                            // Text blocks paint persisted character ranges in their inline text.
+                            // Images retain a block-level tint because they have no text spans.
                             .then(
                                 if (annotatedBlocks.contains(index) && (block is MarkdownBlock.Image)) {
                                     Modifier.background(
@@ -1174,16 +1250,6 @@ private fun ReaderDocumentBody(
                                     )
                                 } else {
                                     Modifier
-                                },
-                            )
-                            .then(
-                                if (onBlockLongPress != null && block is MarkdownBlock.Image) {
-                                    Modifier.combinedClickable(
-                                        onClick = { if (index in noteBlocks) onNoteTap(index) },
-                                        onLongClick = { onBlockLongPress.invoke(index) },
-                                    )
-                                } else {
-                                    if (index in noteBlocks) Modifier.clickable { onNoteTap(index) } else Modifier
                                 },
                             ),
                     )
@@ -1700,6 +1766,61 @@ private fun safeScrollIndex(savedIndex: Int, totalItems: Int): Int {
     if (totalItems <= 0) return 0
     if (savedIndex < 0 || savedIndex >= totalItems) return 0
     return savedIndex
+}
+
+internal fun nextTopBarOffsetForBodyTap(
+    collapseFraction: Float,
+    maxHiddenOffsetPx: Float,
+): Float {
+    val max = maxHiddenOffsetPx.coerceAtLeast(0f)
+    if (max <= 0f) return 0f
+    return if (collapseFraction.coerceIn(0f, 1f) >= 1f) 0f else max
+}
+
+/**
+ * Observe short taps across the complete reading surface, including margins and gaps
+ * between blocks. Child controls, text links, selection handles and scrolling get the
+ * Main pass first; this detector reads Final and only acts when the complete gesture
+ * remains unconsumed.
+ */
+@Composable
+internal fun Modifier.passiveReaderBodyShortTap(onTap: (() -> Unit)?): Modifier {
+    val currentOnTap by rememberUpdatedState(onTap)
+    if (onTap == null) return this
+    return pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(
+                requireUnconsumed = false,
+                pass = PointerEventPass.Initial,
+            )
+            var cancelled = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Final)
+                val change = event.changes.firstOrNull { it.id == down.id }
+                if (change == null || event.changes.count { it.pressed } > 1) {
+                    cancelled = true
+                    break
+                }
+                if (!change.pressed) {
+                    val shortTap =
+                        change.uptimeMillis - down.uptimeMillis <
+                            viewConfiguration.longPressTimeoutMillis
+                    if (!cancelled && !change.isConsumed && shortTap) {
+                        change.consume()
+                        currentOnTap?.invoke()
+                    }
+                    break
+                }
+                if (
+                    change.isConsumed ||
+                    (change.position - down.position).getDistance() >
+                    viewConfiguration.touchSlop
+                ) {
+                    cancelled = true
+                }
+            }
+        }
+    }
 }
 
 /**

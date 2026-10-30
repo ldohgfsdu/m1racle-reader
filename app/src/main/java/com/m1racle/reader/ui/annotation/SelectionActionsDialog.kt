@@ -32,6 +32,6 @@ fun SelectionActionsDialog(selection: TextSelection, onDismiss: () -> Unit,
                 if (onNote != null) TextButton(onClick = onNote) { Text("添加批注") }
             }
         }
-    }, confirmButton = { TextButton(onClick = { onHighlight(style) }) { Text("标记") } },
+    }, confirmButton = { TextButton(onClick = { onHighlight(style) }) { Text(if (style == HighlightStyle.Underline || style == HighlightStyle.Strike) style.label else "高亮") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
 }

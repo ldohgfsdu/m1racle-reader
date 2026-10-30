@@ -74,6 +74,7 @@ class MarkdownEditorRotationInstrumentedTest {
                 })()
             """) as String
             rule.onNodeWithContentDescription("撤销").performClick()
+            awaitMarkdown(firstEdit)
             assertEquals(firstEdit, markdown())
             evaluate("""
                 (() => {
@@ -107,10 +108,13 @@ class MarkdownEditorRotationInstrumentedTest {
             // Undo removes an edit spanning CRLF, LF and CR. A text-only
             // restoration or lossy history serialization cannot pass this.
             rule.onNodeWithContentDescription("撤销").performClick()
+            awaitMarkdown(original)
             assertEquals(original, markdown())
             rule.onNodeWithContentDescription("重做").performClick()
+            awaitMarkdown(firstEdit)
             assertEquals(firstEdit, markdown())
             rule.onNodeWithContentDescription("重做").performClick()
+            awaitMarkdown(secondEdit)
             assertEquals(secondEdit, markdown())
             rule.onNodeWithText("正文").performClick()
             rule.onNodeWithText("完成").performClick()
@@ -156,6 +160,10 @@ class MarkdownEditorRotationInstrumentedTest {
     }
 
     private fun markdown() = evaluate("window.ReaderMarkdown.getMarkdown()") as String
+
+    private fun awaitMarkdown(expected: String) {
+        rule.waitUntil(5_000) { markdown() == expected }
+    }
 
     private fun evaluate(script: String): Any {
         val result = AtomicReference<String>()

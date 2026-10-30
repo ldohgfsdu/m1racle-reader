@@ -20,7 +20,7 @@ class PdfChromeInteractionLockContractTest {
     private val t0 = 1_000_000L
     private val p = PdfChromeScrollParams()
 
-    private fun machine() = PdfChromeScrollStateMachine(p)
+    private fun machine() = PdfChromeScrollStateMachine(p, initialLevel = PdfChromeLevel.FULL)
 
     private fun PdfChromeScrollStateMachine.up(d: Float, now: Long = t0) =
         onScrollSample(ChromeContentDirection.UP, d, rawDeltaPx = -d, anchorDeltaYPx = -d, nowMs = now)
@@ -47,7 +47,7 @@ class PdfChromeInteractionLockContractTest {
             assertNull(m.upFling())
             assertEquals(PdfChromeLevel.FULL, m.level)
             // 中央单击是显式操作：锁定期间仍允许。
-            assertEquals(PdfChromeLevel.BUTTONS_ONLY, m.onCenterTap().levelAfter)
+            assertEquals(PdfChromeLevel.HIDDEN, m.onCenterTap().levelAfter)
             m.endInteractionLock(lock)
             assertFalse(m.isInteractionLocked)
         }
@@ -152,10 +152,10 @@ class PdfChromeInteractionLockContractTest {
             val m = machine()
             m.beginInteractionLock(lock)
             val tap = m.onCenterTap()
-            assertEquals(PdfChromeLevel.BUTTONS_ONLY, tap.levelAfter)
+            assertEquals(PdfChromeLevel.HIDDEN, tap.levelAfter)
             m.endInteractionLock(lock)
             // level 是正交模式位：锁定不回滚显式操作的结果。
-            assertEquals(PdfChromeLevel.BUTTONS_ONLY, m.level)
+            assertEquals(PdfChromeLevel.HIDDEN, m.level)
         }
     }
 }

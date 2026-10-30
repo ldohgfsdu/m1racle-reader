@@ -216,6 +216,7 @@ import com.m1racle.reader.ui.annotation.AnnotationOverlayItem
 import com.m1racle.reader.ui.annotation.AnnotationsManagementSheet
 import com.m1racle.reader.ui.annotation.NoteEditDialog
 import com.m1racle.reader.ui.annotation.PdfHighlightLayer
+import com.m1racle.reader.ui.annotation.PdfTextSelectionSession
 import com.m1racle.reader.ui.material.GlassBackdropHost
 import com.m1racle.reader.ui.material.GlassBackdropSource
 import com.m1racle.reader.ui.material.GlassEnvironment
@@ -325,8 +326,10 @@ fun PdfViewerScreen(
     // Scroll-driven chrome state machine (pure logic, unit-tested). The UI
     // layer feeds ONLY the measured content anchor delta (ground truth screen
     // motion), mapped by mapScrollToContentMotion — never the raw delta sign.
-    val chromeStateMachine = remember { com.m1racle.reader.pdf.PdfChromeScrollStateMachine() }
-    var chromeLevel by remember { mutableStateOf(com.m1racle.reader.pdf.PdfChromeLevel.FULL) }
+    val chromeStateMachine = remember(viewModel) { com.m1racle.reader.pdf.PdfChromeScrollStateMachine() }
+    var chromeLevel by remember(chromeStateMachine) { mutableStateOf(chromeStateMachine.level) }
+    val textSelectionGestures = remember(viewModel) { androidx.compose.runtime.mutableStateMapOf<Int, Unit>() }
+    val textSelectionSession = remember(viewModel) { PdfTextSelectionSession() }
     fun applyChromeChange(c: com.m1racle.reader.pdf.ChromeStateChange) {
         chromeLevel = c.levelAfter
         if (BuildConfig.READER_PERFORMANCE_EXPERIMENTS_ENABLED) {
@@ -358,10 +361,9 @@ fun PdfViewerScreen(
             android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 
-    // Initial visibility lock: the document opens in FULL and stays FULL —
+    // Initial visibility lock: the document opens with controls hidden —
     // init scrolls / layout settling / programmatic restore may not change
-    // chromeLevel; only real user scrolls may. The capsule has NO timer: its
-    // visibility is purely `chromeLevel == FULL`.
+    // chromeLevel; real user scrolls keep their existing staged behavior.
     var chromeInitialLockUntilMs by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) {
         chromeInitialLockUntilMs = android.os.SystemClock.uptimeMillis() +
@@ -371,7 +373,11 @@ fun PdfViewerScreen(
     }
 
     val toggleChromeByTap: () -> Unit = {
-        chromeStateMachine.onCenterTap()?.let { applyChromeChange(it) }
+        if (textSelectionSession.hasSelection()) {
+            textSelectionSession.clear()
+        } else if (textSelectionGestures.isEmpty()) {
+            applyChromeChange(chromeStateMachine.onCenterTap())
+        }
     }
     val topBarMode by viewModel.topBarMode.collectAsStateWithLifecycle()
 
@@ -589,6 +595,7 @@ fun PdfViewerScreen(
                 ),
                 onBack = onBack,
                 onCapsuleToggle = null,
+                chromeLevel = chromeLevel,
                 modifier = Modifier.fillMaxSize(),
                 content = {
                     Box(
@@ -776,10 +783,21 @@ fun PdfViewerScreen(
                         items = pageItems,
                         selectionEnabled = true,
                         textPage = textPage,
+                        selectionSession = textSelectionSession,
+                        onSelectionGestureActiveChanged = { active ->
+                            if (active) textSelectionGestures[page] = Unit else textSelectionGestures.remove(page)
+                        },
                         onSelectionUnavailable = {
                             scope.launch { snackbarHostState.showSnackbar(textError ?: textPage?.unavailableReason ?: "正在读取此页文字，请稍后长按选择") }
                         },
                         onSelectCompleted = { pendingSelection = it },
+                        onSelectionNoteRequested = if (noteController != null) ({ selection ->
+                            scope.launch {
+                                selection.toAnchor()?.let { anchor ->
+                                    noteEditorTarget = editorTargetForAnchor(anchor, selection.page, false)
+                                }
+                            }
+                        }) else null,
                         onDeleteRequested = { itemId, _ ->
                             scope.launch {
                                 highlightController.deleteHighlight(itemId)
@@ -1071,14 +1089,27 @@ fun PdfViewerScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .pointerInput(Unit) {
-                                        detectTapGestures(onTap = {
-                                            if (menuActive) {
-                                                closePdfMenu()
-                                            } else {
-                                                toggleChromeByTap()
+                                    .pointerInput(state.document.id) {
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false)
+                                            var maxDistance = 0f
+                                            var multiplePointers = false
+                                            while (true) {
+                                                val event = awaitPointerEvent(PointerEventPass.Final)
+                                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                                multiplePointers = multiplePointers || event.changes.count { it.pressed } > 1
+                                                maxDistance = maxOf(maxDistance, (change.position - down.position).getDistance())
+                                                if (!change.pressed) {
+                                                    if (!change.isConsumed && !multiplePointers &&
+                                                        maxDistance <= viewConfiguration.touchSlop &&
+                                                        change.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis
+                                                    ) {
+                                                        if (menuActive) closePdfMenu() else toggleChromeByTap()
+                                                    }
+                                                    break
+                                                }
                                             }
-                                        })
+                                        }
                                     },
                             ) {
                             ContinuousDocumentViewport(
@@ -1098,7 +1129,7 @@ fun PdfViewerScreen(
                                 onViewportChanged = { snapshot ->
                                     val now = android.os.SystemClock.uptimeMillis()
                                     val phase = snapshot.phase
-                                    val chromeFrozen = menuActive || capsuleExpanded
+                                    val chromeFrozen = menuActive || capsuleExpanded || textSelectionGestures.isNotEmpty()
                                     if (!chromeFrozen) {
                                         // Gesture boundary: end clears residue (keeps level),
                                         // begin starts a new gesture id.
@@ -1179,6 +1210,7 @@ fun PdfViewerScreen(
                                 onEnsureAround = viewModel::ensurePagesAround,
                                 onRetryPage = { viewModel.ensurePagesAround(it) },
                                 pageAnnotation = pageAnnotation,
+                                isTextSelectionGestureActive = { textSelectionGestures.isNotEmpty() },
                                 modifier = Modifier.fillMaxSize(),
                             )
                             }
@@ -1204,6 +1236,7 @@ fun PdfViewerScreen(
                                 onZoomGestureActive = viewModel::setZoomGestureActive,
                                 onEnsureAround = viewModel::ensurePagesAround,
                                 pageAnnotation = pageAnnotation,
+                                isTextSelectionGestureActive = { textSelectionGestures.isNotEmpty() },
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -1430,7 +1463,7 @@ private fun PdfChrome(
     /** Capsule tap: toggle the anchored jump card (never changes chrome levels). */
     onCapsuleToggle: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    /** Four-state chrome visibility: FULL / BUTTONS_ONLY / CAPSULE_ONLY / HIDDEN. */
+    /** Scroll stages FULL / BUTTONS_ONLY / HIDDEN; taps switch the complete group. */
     chromeLevel: PdfChromeLevel = PdfChromeLevel.FULL,
     /** Capsule anchored expansion (jump card) state — overlay controller. */
     capsuleExpanded: Boolean = false,
@@ -1468,11 +1501,8 @@ private fun PdfChrome(
 ) {
     val systemCapturing = androidx.compose.ui.platform.LocalScrollCaptureInProgress.current
     val scheme = MaterialTheme.colorScheme
-    // Four-state orthogonal derivation: capsule and the two circles are
-    // independent dims. FULL=(T,T) BUTTONS_ONLY=(F,T) CAPSULE_ONLY=(T,F)
-    // HIDDEN=(F,F). Tap toggles the capsule only; scroll drives both.
-    val capsuleVisible = chromeLevel == PdfChromeLevel.FULL ||
-        chromeLevel == PdfChromeLevel.CAPSULE_ONLY
+    // Scroll keeps the intermediate buttons-only stage; taps toggle the complete group.
+    val capsuleVisible = chromeLevel == PdfChromeLevel.FULL
     val edgeButtonsVisible = chromeLevel == PdfChromeLevel.FULL ||
         chromeLevel == PdfChromeLevel.BUTTONS_ONLY
 
@@ -1867,6 +1897,7 @@ private fun PdfInfoCapsule(
 
     Column(
         modifier = Modifier
+            .testTag("pdf-location-capsule")
             .width(surfaceWidthDp)
             .glassMaterial(
                 role = GlassMaterialRole.Capsule,
@@ -2194,8 +2225,10 @@ internal fun PdfHorizontalPagedArea(
     onZoomGestureActive: (Boolean) -> Unit = {},
     onEnsureAround: (Int) -> Unit = {},
     pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
+    isTextSelectionGestureActive: () -> Boolean = { false },
     qaProbe: HorizontalInteractionProbe? = null,
 ) {
+    val currentTextSelectionGestureActive by rememberUpdatedState(isTextSelectionGestureActive)
     // GPU zoom only inside clipped viewport — never covers TopBar.
     var scale by remember(state.document.id) {
         mutableFloatStateOf(
@@ -3045,6 +3078,7 @@ internal fun PdfHorizontalPagedArea(
                             publishHorizontalTileSnapshot(page, pointerDown = true, rebaseFrame = true)
                             do {
                                 val event = awaitPointerEvent()
+                                if (currentTextSelectionGestureActive() || event.changes.any { it.isConsumed }) continue
                                 val pressed = event.changes.filter { it.pressed }
                                 val origin = transformOrigin(page)
                                 val controllerFrame = if (pressed.isNotEmpty()) {
@@ -3403,8 +3437,10 @@ internal fun PdfHorizontalPagedArea(
                             val downPosition = tapPositionInViewport(down.position)
                             var lastPosition = downPosition
                             var upTimeMs = down.uptimeMillis
+                            var consumed = down.isConsumed
                             do {
                                 val event = awaitPointerEvent()
+                                consumed = consumed || event.changes.any { it.isConsumed }
                                 val change = event.changes.firstOrNull()
                                 if (change != null) {
                                     lastPosition = tapPositionInViewport(change.position)
@@ -3414,7 +3450,10 @@ internal fun PdfHorizontalPagedArea(
                                     )
                                 }
                             } while (event.changes.any { it.pressed })
-                            if (maxDistance > viewConfig.touchSlop) {
+                            if (consumed || currentTextSelectionGestureActive() ||
+                                upTimeMs - down.uptimeMillis >= viewConfig.longPressTimeoutMillis ||
+                                maxDistance > viewConfig.touchSlop
+                            ) {
                                 return@awaitEachGesture
                             }
                             val now = upTimeMs

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -576,43 +575,16 @@ private fun TableAnnotatedText(
     onLinkClick: ((String) -> Unit)? = null,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
-    val selection = rememberMarkdownSelectedText(annotated, annotationOffset)
-    val hasLinks = remember(annotated, onLinkClick != null) {
-        onLinkClick != null && annotated.getStringAnnotations(
-            tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
-            start = 0,
-            end = annotated.length,
-        ).isNotEmpty()
-    }
     val resolvedStyle = style.copy(textAlign = textAlign)
-    if (hasLinks) {
-        @Suppress("DEPRECATION")
-        ClickableText(
-            text = selection.text,
-            style = resolvedStyle,
-            softWrap = true,
-            overflow = TextOverflow.Clip,
-            maxLines = Int.MAX_VALUE,
-            modifier = modifier.then(selection.modifier),
-            onTextLayout = { selection.layout(it); onTextLayout?.invoke(it) },
-            onClick = { offset ->
-                annotated.getStringAnnotations(
-                    tag = InlineMarkdownParser.LINK_ANNOTATION_TAG,
-                    start = offset,
-                    end = offset,
-                ).firstOrNull()?.let { onLinkClick?.invoke(it.item) }
-            },
-        )
-    } else {
-        Text(
-            text = selection.text,
-            modifier = modifier.then(selection.modifier),
-            style = resolvedStyle,
-            textAlign = textAlign,
-            softWrap = true,
-            overflow = TextOverflow.Clip,
-            maxLines = Int.MAX_VALUE,
-            onTextLayout = { selection.layout(it); onTextLayout?.invoke(it) },
-        )
-    }
+    MarkdownSelectableText(
+        searched = annotated,
+        annotationOffset = annotationOffset,
+        style = resolvedStyle,
+        modifier = modifier,
+        softWrap = true,
+        overflow = TextOverflow.Clip,
+        maxLines = Int.MAX_VALUE,
+        onTextLayout = onTextLayout,
+        onLinkClick = onLinkClick,
+    )
 }

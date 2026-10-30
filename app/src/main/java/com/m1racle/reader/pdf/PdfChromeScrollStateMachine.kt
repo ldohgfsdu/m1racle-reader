@@ -14,16 +14,13 @@ import kotlin.math.abs
 enum class ChromeContentDirection { UP, DOWN }
 
 /**
- * 阅读器顶部 Chrome 的四态正交组合（capsuleVisible × edgeButtonsVisible）。
- * 允许四种合法组合，CAPSULE_ONLY 是正式状态，不得为兼容旧枚举而禁止。
+ * 阅读器顶部 Chrome。滚动保留两级收纳和恢复，正文单击整组切换。
  */
 enum class PdfChromeLevel {
     /** capsule=true, buttons=true */
     FULL,
     /** capsule=false, buttons=true */
     BUTTONS_ONLY,
-    /** capsule=true, buttons=false（仅单击可进入） */
-    CAPSULE_ONLY,
     /** capsule=false, buttons=false */
     HIDDEN,
 }
@@ -45,8 +42,8 @@ enum class ChromeTriggerReason {
     FLING_HIDE_BUTTONS,          // 快速 fling：收纳第二级
     FLING_SHOW_BUTTONS,          // 快速 fling：恢复第一级
     FLING_SHOW_CAPSULE,          // 快速 fling：恢复第二级
-    TAP_CAPSULE_OFF,             // 正文单击：只切胶囊（隐藏）
-    TAP_CAPSULE_ON,              // 正文单击：只切胶囊（显示）
+    TAP_HIDE_ALL,                // 正文单击：整组隐藏
+    TAP_SHOW_ALL,                // 正文单击：整组显示
     SESSION_RESET,               // 菜单关闭等：清除手势残留
 }
 
@@ -66,7 +63,7 @@ data class ChromeStateChange(
 ) {
     /** 迁移后的胶囊可见性（渲染用）。 */
     val capsuleVisibleAfter: Boolean
-        get() = levelAfter == PdfChromeLevel.FULL || levelAfter == PdfChromeLevel.CAPSULE_ONLY
+        get() = levelAfter == PdfChromeLevel.FULL
 
     /** 迁移后的左右圆可见性（渲染用）。 */
     val edgeButtonsVisibleAfter: Boolean
@@ -121,18 +118,18 @@ data class PdfChromeScrollParams(
  *     FULL →36→ BUTTONS_ONLY（胶囊先收）→56→ HIDDEN（两圆后收）。
  *  2. 内容向下（CONTENT_MOVING_DOWN，用户向下滑寻找控制）＝ 恢复方向：
  *     HIDDEN →32→ BUTTONS_ONLY（两圆先现）→28→ FULL（胶囊后现）。
- *  3. 正文单击（Tap controller）只 toggle 胶囊：edgeButtonsVisible 永不变。
- *     FULL↔BUTTONS_ONLY；HIDDEN↔CAPSULE_ONLY。
- *  4. 滚动与点击解耦：Scroll controller 负责两个维度，Tap controller 只负责胶囊。
+ *  3. 正文单击：可见控件全部隐藏，隐藏后再次单击全部显示。
+ *  4. 滚动与点击共用同一个 level；滚动迁移链及距离阈值保持不变。
  *
  * 保留 R17 全部机制：anchor epoch/reset（UI 层）、remainder/overshoot、
  * subpixel 累计、transform/programmatic 隔离、手势 session 生命周期、诊断日志。
  */
 class PdfChromeScrollStateMachine(
     private val params: PdfChromeScrollParams = PdfChromeScrollParams(),
+    initialLevel: PdfChromeLevel = PdfChromeLevel.HIDDEN,
 ) {
 
-    var level: PdfChromeLevel = PdfChromeLevel.FULL
+    var level: PdfChromeLevel = initialLevel
         private set
 
     var userGestureId: Long = 0L
@@ -283,18 +280,12 @@ class PdfChromeScrollStateMachine(
     }
 
     /**
-     * 正文中央单击（Tap controller）：只 toggle 胶囊，两圆完全不变。
+     * 正文单击：整组收起/显示，滚动产生的部分可见状态也先整组收起。
      * 单击后清除全部手势残留，从新 level 开始下一次手势 session。
      */
     fun onCenterTap(): ChromeStateChange {
         val before = level
-        // 只切胶囊：两圆完全不变。
-        val target = when (before) {
-            PdfChromeLevel.FULL -> PdfChromeLevel.BUTTONS_ONLY // capsule off
-            PdfChromeLevel.CAPSULE_ONLY -> PdfChromeLevel.HIDDEN // capsule off
-            PdfChromeLevel.BUTTONS_ONLY -> PdfChromeLevel.FULL // capsule on
-            PdfChromeLevel.HIDDEN -> PdfChromeLevel.CAPSULE_ONLY // capsule on
-        }
+        val target = if (before == PdfChromeLevel.HIDDEN) PdfChromeLevel.FULL else PdfChromeLevel.HIDDEN
         level = target
         resetForNewSession()
         return ChromeStateChange(
@@ -305,10 +296,10 @@ class PdfChromeScrollStateMachine(
             effectiveDistanceDp = 0f,
             levelBefore = before,
             levelAfter = target,
-            reason = if (target == PdfChromeLevel.BUTTONS_ONLY || target == PdfChromeLevel.HIDDEN) {
-                ChromeTriggerReason.TAP_CAPSULE_OFF
+            reason = if (target == PdfChromeLevel.HIDDEN) {
+                ChromeTriggerReason.TAP_HIDE_ALL
             } else {
-                ChromeTriggerReason.TAP_CAPSULE_ON
+                ChromeTriggerReason.TAP_SHOW_ALL
             },
         )
     }
@@ -330,7 +321,6 @@ class PdfChromeScrollStateMachine(
     /**
      * 显式方向迁移表（r18 一）：每条规则只属于一个方向。
      * UP＝收纳（信息层先收、导航层后收）；DOWN＝恢复（导航层先现、信息层后现）。
-     * CAPSULE_ONLY 为合法状态（仅单击进入），滚动从该状态继续按方向迁移。
      */
     private fun transitionFor(
         level: PdfChromeLevel,
@@ -341,16 +331,12 @@ class PdfChromeScrollStateMachine(
             PdfChromeLevel.BUTTONS_ONLY to params.hideCapsuleDp
         level == PdfChromeLevel.BUTTONS_ONLY && dir == ChromeContentDirection.UP ->
             PdfChromeLevel.HIDDEN to params.hideButtonsAddDp
-        level == PdfChromeLevel.CAPSULE_ONLY && dir == ChromeContentDirection.UP ->
-            PdfChromeLevel.HIDDEN to params.hideCapsuleDp
 
         // ── 内容向下（恢复方向）──
         level == PdfChromeLevel.HIDDEN && dir == ChromeContentDirection.DOWN ->
             PdfChromeLevel.BUTTONS_ONLY to params.showButtonsDp
         level == PdfChromeLevel.BUTTONS_ONLY && dir == ChromeContentDirection.DOWN ->
             PdfChromeLevel.FULL to params.showCapsuleAddDp
-        level == PdfChromeLevel.CAPSULE_ONLY && dir == ChromeContentDirection.DOWN ->
-            PdfChromeLevel.FULL to params.showButtonsDp
 
         // 收纳/恢复链端点（HIDDEN×UP、FULL×DOWN）＝ 停留。
         else -> null
@@ -363,11 +349,9 @@ class PdfChromeScrollStateMachine(
         // UP fling：收纳一级。
         level == PdfChromeLevel.FULL && dir == ChromeContentDirection.UP -> PdfChromeLevel.BUTTONS_ONLY
         level == PdfChromeLevel.BUTTONS_ONLY && dir == ChromeContentDirection.UP -> PdfChromeLevel.HIDDEN
-        level == PdfChromeLevel.CAPSULE_ONLY && dir == ChromeContentDirection.UP -> PdfChromeLevel.HIDDEN
         // DOWN fling：恢复一级。
         level == PdfChromeLevel.HIDDEN && dir == ChromeContentDirection.DOWN -> PdfChromeLevel.BUTTONS_ONLY
         level == PdfChromeLevel.BUTTONS_ONLY && dir == ChromeContentDirection.DOWN -> PdfChromeLevel.FULL
-        level == PdfChromeLevel.CAPSULE_ONLY && dir == ChromeContentDirection.DOWN -> PdfChromeLevel.FULL
         else -> null
     }
 
@@ -384,12 +368,8 @@ class PdfChromeScrollStateMachine(
     ): ChromeTriggerReason = when {
         after == PdfChromeLevel.BUTTONS_ONLY && before == PdfChromeLevel.FULL ->
             ChromeTriggerReason.CAPSULE_HIDE_THRESHOLD
-        after == PdfChromeLevel.HIDDEN && before == PdfChromeLevel.CAPSULE_ONLY ->
-            ChromeTriggerReason.CAPSULE_HIDE_THRESHOLD
         after == PdfChromeLevel.HIDDEN -> ChromeTriggerReason.BUTTONS_HIDE_THRESHOLD
         after == PdfChromeLevel.BUTTONS_ONLY -> ChromeTriggerReason.BUTTONS_SHOW_THRESHOLD
-        after == PdfChromeLevel.FULL && before == PdfChromeLevel.CAPSULE_ONLY ->
-            ChromeTriggerReason.BUTTONS_SHOW_THRESHOLD
         else -> ChromeTriggerReason.CAPSULE_SHOW_THRESHOLD
     }
 
@@ -399,12 +379,8 @@ class PdfChromeScrollStateMachine(
     ): ChromeTriggerReason = when {
         after == PdfChromeLevel.BUTTONS_ONLY && before == PdfChromeLevel.FULL ->
             ChromeTriggerReason.FLING_HIDE_CAPSULE
-        after == PdfChromeLevel.HIDDEN && before == PdfChromeLevel.CAPSULE_ONLY ->
-            ChromeTriggerReason.FLING_HIDE_CAPSULE
         after == PdfChromeLevel.HIDDEN -> ChromeTriggerReason.FLING_HIDE_BUTTONS
         after == PdfChromeLevel.BUTTONS_ONLY -> ChromeTriggerReason.FLING_SHOW_BUTTONS
-        after == PdfChromeLevel.FULL && before == PdfChromeLevel.CAPSULE_ONLY ->
-            ChromeTriggerReason.FLING_SHOW_BUTTONS
         else -> ChromeTriggerReason.FLING_SHOW_CAPSULE
     }
 }

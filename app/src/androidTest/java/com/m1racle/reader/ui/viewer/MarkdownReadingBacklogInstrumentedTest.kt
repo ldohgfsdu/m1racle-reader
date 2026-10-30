@@ -56,16 +56,61 @@ class MarkdownReadingBacklogInstrumentedTest {
         } finally { directory.deleteRecursively() }
     }
 
+    /**
+     * The caller tag belongs to MarkdownSelectableText's outer box. Text layout and
+     * the long-press gesture live on the inner text node, so a container tag cannot
+     * answer GetTextLayoutResult. Nodes that already expose the action stay as they are.
+     */
+    private fun textCarrier(node: SemanticsNodeInteraction): SemanticsNodeInteraction {
+        val anchor = node.fetchSemanticsNode()
+        if (anchor.config.contains(SemanticsActions.GetTextLayoutResult)) return node
+        val carriers = rule.onAllNodes(
+            SemanticsMatcher("GetTextLayoutResult") {
+                it.config.contains(SemanticsActions.GetTextLayoutResult)
+            },
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().filter { candidate ->
+            var parent = candidate.parent
+            while (parent != null && parent.id != anchor.id) parent = parent.parent
+            parent?.id == anchor.id
+        }
+        check(carriers.size == 1) {
+            "Expected one text layout inside semantics ${anchor.id}, found ${carriers.size}"
+        }
+        val carrierId = carriers.single().id
+        return rule.onNode(
+            SemanticsMatcher("text layout $carrierId") { it.id == carrierId },
+            useUnmergedTree = true,
+        )
+    }
+
     private fun select(node: SemanticsNodeInteraction, from: Int, to: Int) {
+        val target = textCarrier(node)
         val results = mutableListOf<TextLayoutResult>()
-        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        target.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
         val layout = results.single()
         fun point(index: Int) = layout.getBoundingBox(index).let {
             androidx.compose.ui.geometry.Offset(it.left + it.width * 0.25f, it.center.y)
         }
         val start = point(from)
         val end = point(to)
-        node.performTouchInput { down(start); moveTo(start, 650); moveTo(end, 180); up() }
+        target.performTouchInput { down(start); moveTo(start, 650); moveTo(end, 180); up() }
+        rule.waitForIdle()
+    }
+
+    private fun longPressReleasesWithoutDragging(node: SemanticsNodeInteraction, index: Int) {
+        val target = textCarrier(node)
+        val results = mutableListOf<TextLayoutResult>()
+        target.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        val layout = results.single()
+        val point = layout.getBoundingBox(index).let {
+            androidx.compose.ui.geometry.Offset(it.left + it.width * 0.25f, it.center.y)
+        }
+        target.performTouchInput {
+            down(point)
+            moveTo(point, 650)
+            up()
+        }
         rule.waitForIdle()
     }
 
@@ -73,12 +118,21 @@ class MarkdownReadingBacklogInstrumentedTest {
         val text = "Alpha 🌟 中文 Beta gamma"
         var selected: TextSelection.MarkdownSelection? = null
         rule.setContent { M1racleReaderTheme {
-            CompositionLocalProvider(LocalMarkdownSelection provides MarkdownSelectionContext(7, text, emptyList()) { selected = it }) {
+            CompositionLocalProvider(
+                LocalMarkdownSelection provides MarkdownSelectionContext(
+                    block = 7,
+                    plainText = text,
+                    highlights = emptyList(),
+                    onHighlight = { selected = it },
+                ),
+            ) {
                 InlineMarkdownText(text, ReaderSettings.Default, MaterialTheme.typography.bodyLarge,
                     Modifier.padding(24.dp).testTag("paragraph"))
             }
         } }
         select(rule.onNodeWithTag("paragraph"), 6, 10)
+        rule.runOnIdle { assertNull("Long-press must not open the style dialog", selected) }
+        rule.onNodeWithTag("markdown-selection-highlight").assertExists().performClick()
         rule.runOnIdle {
             val actual = requireNotNull(selected)
             assertEquals(7, actual.blockIndex)
@@ -88,26 +142,207 @@ class MarkdownReadingBacklogInstrumentedTest {
         }
     }
 
+    @Test fun longPressReleaseKeepsCharactersHandlesAndNonModalActions() {
+        val text = "长按松手保留逐字选区"
+        var highlighted: TextSelection.MarkdownSelection? = null
+        var noted: TextSelection.MarkdownSelection? = null
+        rule.setContent { M1racleReaderTheme {
+            CompositionLocalProvider(
+                LocalMarkdownSelection provides MarkdownSelectionContext(
+                    block = 8,
+                    plainText = text,
+                    highlights = emptyList(),
+                    onHighlight = { highlighted = it },
+                    onNote = { noted = it },
+                ),
+            ) {
+                InlineMarkdownText(
+                    text = text,
+                    settings = ReaderSettings.Default,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(24.dp).testTag("long-press-paragraph"),
+                )
+            }
+        } }
+
+        longPressReleasesWithoutDragging(rule.onNodeWithTag("long-press-paragraph"), 2)
+
+        rule.runOnIdle { assertNull("Long-press release must not request a highlight", highlighted) }
+        rule.onNodeWithTag("markdown-selection-handle-start")
+            .assertExists()
+            .assertContentDescriptionEquals("调整选区起点")
+        rule.onNodeWithTag("markdown-selection-handle-end")
+            .assertExists()
+            .assertContentDescriptionEquals("调整选区终点")
+        rule.onNodeWithTag("markdown-selection-copy").assertExists()
+        rule.onNodeWithTag("markdown-selection-highlight").assertExists()
+        rule.onNodeWithTag("markdown-selection-note").assertExists().performClick()
+        rule.runOnIdle {
+            assertNull(highlighted)
+            assertNotNull(noted)
+            assertEquals(text.substring(2, 3), noted!!.excerpt)
+            assertEquals(2, noted!!.charStart)
+            assertEquals(3, noted!!.charEnd)
+        }
+        rule.onNodeWithTag("markdown-selection-note").assertDoesNotExist()
+    }
+
+    @Test fun draggingEndHandleKeepsExactStartAndExtendsSelection() {
+        val text = "句柄可以逐字调整端点"
+        var highlighted: TextSelection.MarkdownSelection? = null
+        rule.setContent { M1racleReaderTheme {
+            CompositionLocalProvider(
+                LocalMarkdownSelection provides MarkdownSelectionContext(
+                    block = 11,
+                    plainText = text,
+                    highlights = emptyList(),
+                    onHighlight = { highlighted = it },
+                ),
+            ) {
+                InlineMarkdownText(
+                    text = text,
+                    settings = ReaderSettings.Default,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(24.dp).testTag("handle-paragraph"),
+                )
+            }
+        } }
+
+        longPressReleasesWithoutDragging(rule.onNodeWithTag("handle-paragraph"), 2)
+        rule.onNodeWithTag("markdown-selection-handle-end").performTouchInput {
+            down(center)
+            moveBy(androidx.compose.ui.geometry.Offset(48f, 0f))
+            up()
+        }
+        rule.onNodeWithTag("markdown-selection-highlight").performClick()
+        rule.runOnIdle {
+            val actual = requireNotNull(highlighted)
+            assertEquals(2, actual.charStart)
+            assertTrue("Dragging the end handle must extend the range", actual.charEnd > 3)
+            assertTrue(actual.excerpt.orEmpty().startsWith("可"))
+        }
+    }
+
+    @Test fun bodyShortTapCoversWhitespaceAndTextButNotLinksOrLongPress() {
+        var bodyTaps = 0
+        var linkClicks = 0
+        val text = "正文"
+        rule.setContent { M1racleReaderTheme {
+            Box(
+                Modifier
+                    .size(320.dp, 360.dp)
+                    .background(Color.White)
+                    .passiveReaderBodyShortTap { bodyTaps++ }
+                    .testTag("reader-body-surface"),
+            ) {
+                Column(Modifier.padding(32.dp)) {
+                    CompositionLocalProvider(
+                        LocalMarkdownSelection provides MarkdownSelectionContext(
+                            block = 20,
+                            plainText = text,
+                            highlights = emptyList(),
+                            onHighlight = null,
+                        ),
+                    ) {
+                        InlineMarkdownText(
+                            text = text,
+                            settings = ReaderSettings.Default,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                    InlineMarkdownText(
+                        text = "[链接](https://example.com)",
+                        settings = ReaderSettings.Default,
+                        style = MaterialTheme.typography.bodyLarge,
+                        onLinkClick = { linkClicks++ },
+                    )
+                }
+            }
+        } }
+
+        rule.onNodeWithTag("reader-body-surface").performTouchInput {
+            click(bottomCenter - androidx.compose.ui.geometry.Offset(0f, 24f))
+        }
+        rule.runOnIdle { assertEquals(1, bodyTaps) }
+
+        rule.onNodeWithText("正文").performTouchInput { click() }
+        rule.runOnIdle { assertEquals(2, bodyTaps) }
+
+        rule.onNodeWithText("链接").performTouchInput { click() }
+        rule.runOnIdle {
+            assertEquals(1, linkClicks)
+            assertEquals("A consumed link tap must not toggle chrome", 2, bodyTaps)
+        }
+
+        longPressReleasesWithoutDragging(rule.onNodeWithText("正文"), 0)
+        rule.runOnIdle { assertEquals("A long press must not toggle chrome", 2, bodyTaps) }
+    }
+
+    @Test fun passiveBodyTapDoesNotFireForVerticalScroll() {
+        var bodyTaps = 0
+        lateinit var list: androidx.compose.foundation.lazy.LazyListState
+        rule.setContent { M1racleReaderTheme {
+            Box(
+                Modifier
+                    .size(320.dp, 360.dp)
+                    .passiveReaderBodyShortTap { bodyTaps++ }
+                    .testTag("scroll-body-surface"),
+            ) {
+                list = rememberLazyListState()
+                LazyColumn(state = list, modifier = Modifier.fillMaxSize()) {
+                    items(40) { index ->
+                        Text("Scroll line $index", Modifier.fillMaxWidth().height(48.dp))
+                    }
+                }
+            }
+        } }
+
+        rule.onNodeWithTag("scroll-body-surface").performTouchInput { swipeUp() }
+        rule.waitUntil(5_000) { list.firstVisibleItemIndex > 0 }
+        rule.runOnIdle { assertEquals(0, bodyTaps) }
+    }
+
     @Test fun codeAndTableUseDocumentOffsetsRatherThanCellLocalOffsets() {
         var selected: TextSelection.MarkdownSelection? = null
+        var bodyTaps = 0
         val code = "val answer = 42"
         val tablePlain = "Key Value Alpha Beta"
-        rule.setContent { M1racleReaderTheme { Column(Modifier.padding(24.dp)) {
-            CompositionLocalProvider(LocalMarkdownSelection provides MarkdownSelectionContext(3, code, emptyList()) { selected = it }) {
+        rule.setContent { M1racleReaderTheme { Column(
+            Modifier.padding(24.dp).passiveReaderBodyShortTap { bodyTaps++ },
+        ) {
+            CompositionLocalProvider(LocalMarkdownSelection provides MarkdownSelectionContext(
+                block = 3,
+                plainText = code,
+                highlights = emptyList(),
+                onHighlight = { selected = it },
+            )) {
                 CodeBlockView(MarkdownBlock.CodeBlock("kotlin", code), ReaderSettings.Default, {})
             }
-            CompositionLocalProvider(LocalMarkdownSelection provides MarkdownSelectionContext(4, tablePlain, emptyList()) { selected = it }) {
+            CompositionLocalProvider(LocalMarkdownSelection provides MarkdownSelectionContext(
+                block = 4,
+                plainText = tablePlain,
+                highlights = emptyList(),
+                onHighlight = { selected = it },
+            )) {
                 TableBlockView(MarkdownBlock.Table(listOf("Key", "Value"), listOf(listOf("Alpha", "Beta")),
                     listOf(TableAlignment.Start, TableAlignment.Start)), ReaderSettings.Default)
             }
         } } }
         select(rule.onNodeWithText(code, useUnmergedTree = true), 4, 9)
+        rule.onNodeWithTag("markdown-selection-highlight").performClick()
         rule.runOnIdle { assertEquals(3, selected!!.blockIndex); assertEquals("answer", selected!!.excerpt) }
+        selected = null
         select(rule.onNodeWithText("Beta", useUnmergedTree = true), 0, 2)
+        rule.onNodeWithTag("markdown-selection-highlight").performClick()
         rule.runOnIdle {
             android.util.Log.i("ReaderSelectionQA", "table selection=$selected")
             assertEquals(4, selected!!.blockIndex); assertEquals(16, selected!!.charStart)
             assertEquals(19, selected!!.charEnd); assertEquals("Bet", selected!!.excerpt)
+        }
+        bodyTaps = 0
+        rule.onNodeWithTag("markdown-table").performTouchInput { swipeLeft() }
+        rule.runOnIdle {
+            assertEquals("Horizontal table movement must not toggle chrome", 0, bodyTaps)
         }
     }
 

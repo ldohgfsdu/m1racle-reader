@@ -23,6 +23,22 @@ data class PdfSelectableLine(
     val flowLeft: Float,
     val flowRight: Float,
 )
+
+/**
+ * One logical selection range. [anchor] and [focus] keep their endpoint identity while
+ * [ordered] provides the visual reading order used for drawing and text extraction.
+ */
+data class PdfTextSelectionRange(
+    val anchor: PdfSelectablePage.Hit,
+    val focus: PdfSelectablePage.Hit,
+) {
+    fun ordered(): Pair<PdfSelectablePage.Hit, PdfSelectablePage.Hit> {
+        val anchorFirst = anchor.line < focus.line ||
+            (anchor.line == focus.line && anchor.glyph <= focus.glyph)
+        return if (anchorFirst) anchor to focus else focus to anchor
+    }
+}
+
 data class PdfSelectablePage(
     val page: Int,
     val width: Float,
@@ -48,6 +64,14 @@ data class PdfSelectablePage(
         return best
     }
 
+    fun validRange(anchor: Hit, focus: Hit): PdfTextSelectionRange? =
+        if (contains(anchor) && contains(focus)) PdfTextSelectionRange(anchor, focus) else null
+
+    fun selection(range: PdfTextSelectionRange): PdfSelectedText {
+        val (first, last) = range.ordered()
+        return selection(first, last)
+    }
+
     fun selection(start: Hit, end: Hit): PdfSelectedText {
         val forward = start.line < end.line || (start.line == end.line && start.glyph <= end.glyph)
         val a = if (forward) start else end
@@ -69,6 +93,9 @@ data class PdfSelectablePage(
         }
         return PdfSelectedText(DocumentAnchor.PdfPage(page, rects), excerpts.joinToString("\n"))
     }
+
+    private fun contains(hit: Hit): Boolean =
+        hit.line in lines.indices && hit.glyph in lines[hit.line].glyphs.indices
 
     companion object {
         fun bounds(rects: List<NormalizedRect>): NormalizedRect {

@@ -1,9 +1,10 @@
-id: READER_STABILITY_20261030
+id: READER_TEXT_SELECTION_AND_IMMERSION_20261030
 priority: P1
-status: automated_verified
+status: complete
 scope:
-  - Atomic bookmark toggles and EPUB named anchors
-  - PDF native regression failures and render-to-position integration
+  - PDF and Markdown long-press character selection, handles, highlights and notes
+  - Tap toggles all reader chrome while preserving scroll-driven visibility
+  - New PDF sessions open immersive with controls hidden
   - Isolated QA and signed Release verification
   - Recoverable source baseline and current documentation
 constraints:
@@ -11,14 +12,10 @@ constraints:
   - Never clear or uninstall com.m1racle.reader
   - Physical-phone and human acceptance require a connected physical device
 verification:
-  release_version_code: 89
-  qa_unit_tests: 1853
-  release_unit_tests: 1696
-  existing_environment_skips_per_variant: 2
-  native_tests_passed: 40
-  emulator_release_smoke: verified
-  physical_phone: pending
+  baseline_release_version_code: 89
+  current_candidate: 90
+  physical_phone: device_verified
+  native_phone_tests: 47_passed_0_failed_0_skipped
   human_acceptance: pending
-  performance_acceptance: pending
 state_source: docs/CURRENT_STATUS.md
-evidence: D:/03_M1racle Reader/output/stability-fixes-20261030/v89
+evidence: D:/03_M1racle Reader/output/reading-selection-20261030

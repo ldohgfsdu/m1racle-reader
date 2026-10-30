@@ -102,8 +102,6 @@ fun CodeBlockView(
         }
     }
 
-    val selection = rememberMarkdownSelectedText(codeAnnotated)
-
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -173,17 +171,15 @@ fun CodeBlockView(
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
             ) {
-                Text(
-                    text = selection.text,
-                    modifier = selection.modifier,
-                    onTextLayout = selection.layout,
+                MarkdownSelectableText(
+                    searched = codeAnnotated,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontFamily = FontFamily.Monospace,
                         fontSize = codeSize,
                         lineHeight = codeLine,
                         fontWeight = FontWeight.Normal,
+                        color = plainCode,
                     ),
-                    color = plainCode,
                     softWrap = false,
                 )
             }

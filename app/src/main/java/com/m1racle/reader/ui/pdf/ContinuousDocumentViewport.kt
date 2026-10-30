@@ -144,8 +144,10 @@ internal fun ContinuousDocumentViewport(
     tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
     gestureCoordinatorOverride: ContinuousGestureCoordinator? = null,
     pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
+    isTextSelectionGestureActive: () -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
+    val currentTextSelectionGestureActive by rememberUpdatedState(isTextSelectionGestureActive)
     val systemCaptureInProgress by rememberUpdatedState(androidx.compose.ui.platform.LocalScrollCaptureInProgress.current)
     val documentId = state.document.id
     val scope = rememberCoroutineScope()
@@ -1145,6 +1147,9 @@ internal fun ContinuousDocumentViewport(
                     var dragStarted = false
                     do {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
+                        // A page's long press or selection handle owns this pointer stream.
+                        // Leave it unconsumed for the text layer without changing scroll physics.
+                        if (currentTextSelectionGestureActive()) continue
                         val pressed = event.changes.filter { it.pressed }
                         if (pressed.size >= 2) {
                             tileFocusViewport = if(pressed.size>=2) Offset((pressed[0].position.x+pressed[1].position.x)/2f,(pressed[0].position.y+pressed[1].position.y)/2f) else null

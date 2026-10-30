@@ -3,6 +3,8 @@ package com.m1racle.reader.ui.pdf
 import androidx.compose.ui.graphics.asImageBitmap
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +24,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
@@ -129,18 +132,22 @@ class R7GestureLifecycleInstrumentedTest {
         ))
         var width by mutableStateOf(200.dp)
         var height by mutableStateOf(400.dp)
+        var availableWidth: Dp? = null
         composeRule.setContent {
-            ViewportUnderTest(
-                state = ready().copy(continuousEntryState = entry),
-                coordinator = coordinator,
-                onEntryRestoreApplied = { position, _ ->
-                    entry = ContinuousEntryState(
-                        phase = ContinuousEntryPhase.READY,
-                        lastStableReadingPosition = position,
-                    )
-                },
-                modifier = Modifier.width(width).height(height),
-            )
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                availableWidth = maxWidth
+                ViewportUnderTest(
+                    state = ready().copy(continuousEntryState = entry),
+                    coordinator = coordinator,
+                    onEntryRestoreApplied = { position, _ ->
+                        entry = ContinuousEntryState(
+                            phase = ContinuousEntryPhase.READY,
+                            lastStableReadingPosition = position,
+                        )
+                    },
+                    modifier = Modifier.width(width).height(height),
+                )
+            }
         }
         composeRule.waitUntil(5_000) {
             entry.phase == ContinuousEntryPhase.READY &&
@@ -149,8 +156,12 @@ class R7GestureLifecycleInstrumentedTest {
         // The portrait center is on page 10, while its top edge is on page 9.
         // Preserving only the top when widening the page changes the reading
         // page. A height-only resize must preserve the same center as well.
+        // 380dp exceeds the available width on some physical phones. Test
+        // actual width and height changes within this window's constraints.
+        val expandedWidth = minOf(380.dp, requireNotNull(availableWidth))
+        assertTrue("fixture must exercise a wider viewport", expandedWidth > 200.dp)
         for ((nextWidth, nextHeight) in listOf(
-            380.dp to 160.dp, 380.dp to 360.dp, 200.dp to 400.dp,
+            expandedWidth to 160.dp, expandedWidth to 360.dp, 200.dp to 400.dp,
         )) {
             composeRule.runOnIdle { width = nextWidth; height = nextHeight }
             val expectedWidth = with(composeRule.density) { nextWidth.roundToPx() }

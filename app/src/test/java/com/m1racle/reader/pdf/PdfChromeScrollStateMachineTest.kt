@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * R18: 滚动方向规则修正（UP=收纳 / DOWN=恢复）、四态正交模型、单击只切胶囊。
+ * 滚动方向与阈值保留，正文单击整组收起/显示，打开文档默认隐藏控件。
  * 覆盖 r18.md §十 自动化回归 1-4、10。
  */
 class PdfChromeScrollStateMachineTest {
@@ -15,7 +15,17 @@ class PdfChromeScrollStateMachineTest {
     private val t0 = 1_000_000L
     private val p = PdfChromeScrollParams()
 
-    private fun machine() = PdfChromeScrollStateMachine(p)
+    private fun machine() = PdfChromeScrollStateMachine(p, initialLevel = PdfChromeLevel.FULL)
+
+    @Test
+    fun `new reader starts hidden and first tap reveals all controls`() {
+        val m = PdfChromeScrollStateMachine()
+        assertEquals(PdfChromeLevel.HIDDEN, m.level)
+        val change = m.onCenterTap()
+        assertEquals(PdfChromeLevel.FULL, change.levelAfter)
+        assertTrue(change.capsuleVisibleAfter)
+        assertTrue(change.edgeButtonsVisibleAfter)
+    }
 
     private fun PdfChromeScrollStateMachine.up(d: Float, now: Long = t0) =
         onScrollSample(ChromeContentDirection.UP, d, rawDeltaPx = -d, anchorDeltaYPx = -d, nowMs = now)
@@ -71,8 +81,8 @@ class PdfChromeScrollStateMachineTest {
     @Test
     fun `content moving down restores buttons first then capsule`() {
         val m = machine()
-        m.onCenterTap() // FULL→BUTTONS_ONLY
-        m.onCenterTap() // BUTTONS_ONLY→FULL
+        m.onCenterTap() // FULL→HIDDEN
+        m.onCenterTap() // HIDDEN→FULL
         // 用滚动把两圆收进 HIDDEN（UP 收纳链）。
         m.up(40f)
         m.up(60f)
@@ -109,57 +119,57 @@ class PdfChromeScrollStateMachineTest {
         assertEquals(PdfChromeLevel.FULL, changes[1].levelAfter)
     }
 
-    // ── ③ 正文单击：只切胶囊，两圆纹丝不动 ──────────────────────────────────
+    // ── ③ 正文单击：整组切换，包括滚动产生的部分可见状态 ────────────────────
 
     @Test
-    fun `single tap toggles capsule only across all four states`() {
+    fun `single tap hides every visible control and next tap reveals all`() {
         val m = machine()
-        // FULL tap → BUTTONS_ONLY（buttons 保留）
         val a = m.onCenterTap()
-        assertEquals(PdfChromeLevel.BUTTONS_ONLY, a.levelAfter)
-        assertTrue(a.edgeButtonsVisibleAfter)
-        // BUTTONS_ONLY tap → FULL
+        assertEquals(PdfChromeLevel.HIDDEN, a.levelAfter)
+        assertFalse(a.capsuleVisibleAfter)
+        assertFalse(a.edgeButtonsVisibleAfter)
+        assertEquals(ChromeTriggerReason.TAP_HIDE_ALL, a.reason)
         val b = m.onCenterTap()
         assertEquals(PdfChromeLevel.FULL, b.levelAfter)
+        assertTrue(b.capsuleVisibleAfter)
         assertTrue(b.edgeButtonsVisibleAfter)
-        // 收两圆（滚动）→ HIDDEN tap → CAPSULE_ONLY（胶囊现，两圆仍隐藏）
-        m.up(40f)
-        m.up(60f)
-        assertEquals(PdfChromeLevel.HIDDEN, m.level)
+        assertEquals(ChromeTriggerReason.TAP_SHOW_ALL, b.reason)
+        m.up(36f)
+        assertEquals(PdfChromeLevel.BUTTONS_ONLY, m.level)
         val c = m.onCenterTap()
-        assertEquals(PdfChromeLevel.CAPSULE_ONLY, c.levelAfter)
-        assertTrue(c.capsuleVisibleAfter)
-        assertTrue(c.edgeButtonsVisibleAfter.not())
-        // CAPSULE_ONLY tap → HIDDEN
+        assertEquals(PdfChromeLevel.HIDDEN, c.levelAfter)
+        assertFalse(c.capsuleVisibleAfter)
+        assertFalse(c.edgeButtonsVisibleAfter)
         val d = m.onCenterTap()
-        assertEquals(PdfChromeLevel.HIDDEN, d.levelAfter)
-        assertTrue(d.capsuleVisibleAfter.not())
-        assertTrue(d.edgeButtonsVisibleAfter.not())
+        assertEquals(PdfChromeLevel.FULL, d.levelAfter)
+        assertTrue(d.capsuleVisibleAfter)
+        assertTrue(d.edgeButtonsVisibleAfter)
     }
 
-    // ── ④ scroll + tap 交错：四组合无非法跳态 ───────────────────────────────
+    // ── ④ scroll + tap 交错：保持原滚动阈值与顺序 ───────────────────────────
 
     @Test
     fun `scroll UP then tap then scroll DOWN never produces illegal states`() {
         val m = machine()
         m.up(40f) // FULL→BUTTONS_ONLY
         m.up(60f) // BUTTONS_ONLY→HIDDEN
-        m.onCenterTap() // HIDDEN→CAPSULE_ONLY
-        assertEquals(PdfChromeLevel.CAPSULE_ONLY, m.level)
-        // CAPSULE_ONLY × UP：收胶囊 → HIDDEN。
+        m.onCenterTap() // HIDDEN→FULL
+        assertEquals(PdfChromeLevel.FULL, m.level)
         val changes = m.up(40f)
         assertEquals(1, changes.size)
-        assertEquals(PdfChromeLevel.HIDDEN, changes[0].levelAfter)
-        // CAPSULE_ONLY × DOWN：恢复两圆 → FULL。
-        m.onCenterTap() // HIDDEN→CAPSULE_ONLY
-        val restore = m.down(40f)
+        assertEquals(PdfChromeLevel.BUTTONS_ONLY, changes[0].levelAfter)
+        m.onCenterTap() // 部分可见→HIDDEN，同时清除前次滚动累计
+        assertTrue(m.down(31f).isEmpty())
+        val restore = m.down(1f)
         assertEquals(1, restore.size)
-        assertEquals(PdfChromeLevel.FULL, restore[0].levelAfter)
+        assertEquals(PdfChromeLevel.BUTTONS_ONLY, restore[0].levelAfter)
         assertEquals(ChromeTriggerReason.BUTTONS_SHOW_THRESHOLD, restore[0].reason)
+        assertTrue(m.down(27f).isEmpty())
+        assertEquals(PdfChromeLevel.FULL, m.down(1f).single().levelAfter)
     }
 
     @Test
-    fun `scroll DOWN restores to FULL then tap only toggles capsule`() {
+    fun `scroll DOWN restores to FULL then tap hides the complete group`() {
         val m = machine()
         m.up(40f)
         m.up(60f)
@@ -168,8 +178,9 @@ class PdfChromeScrollStateMachineTest {
         m.down(30f) // →FULL
         assertEquals(PdfChromeLevel.FULL, m.level)
         val t = m.onCenterTap()
-        assertEquals(PdfChromeLevel.BUTTONS_ONLY, t.levelAfter)
-        assertTrue(t.edgeButtonsVisibleAfter)
+        assertEquals(PdfChromeLevel.HIDDEN, t.levelAfter)
+        assertFalse(t.capsuleVisibleAfter)
+        assertFalse(t.edgeButtonsVisibleAfter)
     }
 
     // ── ⑤ 抖动 / 确认 / cooldown（R17 机制保留） ────────────────────────────
@@ -367,9 +378,9 @@ class PdfChromeScrollStateMachineTest {
         val m = machine()
         m.beginInteractionLock(ChromeInteractionLock.PINCH)
         m.onCenterTap()
-        assertEquals(PdfChromeLevel.BUTTONS_ONLY, m.level)
+        assertEquals(PdfChromeLevel.HIDDEN, m.level)
         m.endInteractionLock(ChromeInteractionLock.PINCH)
-        assertEquals(PdfChromeLevel.BUTTONS_ONLY, m.level)
+        assertEquals(PdfChromeLevel.HIDDEN, m.level)
     }
 
     // ── ⑩ adapter ground truth（R17 映射，禁止反转） ───────────────────────

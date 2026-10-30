@@ -275,4 +275,18 @@ class ReaderTopBarScrollStateTest {
         s.onUserDragDelta(-40f)
         assertEquals(0.5f, s.collapseFraction, 0.001f)
     }
+
+    @Test
+    fun bodyTapTogglesWholeChromeOpenAndClosed() {
+        assertEquals(100f, nextTopBarOffsetForBodyTap(0f, 100f), 0f)
+        assertEquals(0f, nextTopBarOffsetForBodyTap(1f, 100f), 0f)
+        assertEquals(100f, nextTopBarOffsetForBodyTap(0.49f, 100f), 0f)
+        assertEquals(100f, nextTopBarOffsetForBodyTap(0.5f, 100f), 0f)
+        assertEquals(100f, nextTopBarOffsetForBodyTap(0.99f, 100f), 0f)
+    }
+
+    @Test
+    fun bodyTapIsNoOpWhenChromeHasNoMeasuredOffset() {
+        assertEquals(0f, nextTopBarOffsetForBodyTap(0f, 0f), 0f)
+    }
 }
