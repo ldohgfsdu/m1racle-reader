@@ -13,31 +13,34 @@ class ContinuousInteractionTransactionTest {
         val first = ContinuousInteractionReducer.pinchStart(
             ContinuousInteractionTransaction(), setOf(4, 5, 6), mapOf(5 to 101), doc,
         )
-        val ended = ContinuousInteractionReducer.pinchEnd(first, doc, 1_000L)
+        val ended = ContinuousInteractionReducer.pinchEnd(first, doc)
         val reused = ContinuousInteractionReducer.pinchStart(ended, setOf(8), mapOf(8 to 202), doc)
         assertEquals(first.interactionId, reused.interactionId)
         assertEquals(setOf(4, 5, 6), reused.stableVisiblePages)
     }
 
-    @Test fun `short release does not settle and new pinch cancels settling`() {
+    @Test fun `release waits for its owner and a new pinch prevents the stale settle`() {
         val start = ContinuousInteractionReducer.pinchStart(
             ContinuousInteractionTransaction(), setOf(1), emptyMap(), doc,
         )
-        val end = ContinuousInteractionReducer.pinchEnd(start, doc, 1_000L)
-        assertFalse(ContinuousInteractionReducer.canSettle(end, 1_449L))
-        assertEquals(ContinuousInteractionPhase.PINCHING,
-            ContinuousInteractionReducer.pinchStart(end, setOf(2), emptyMap(), doc).phase)
+        val end = ContinuousInteractionReducer.pinchEnd(start, doc)
+        assertEquals(ContinuousInteractionPhase.SETTLING, end.phase)
+        assertEquals(0, end.settleCommitCount)
+        val next = ContinuousInteractionReducer.pinchStart(end, setOf(2), emptyMap(), doc)
+        assertEquals(ContinuousInteractionPhase.PINCHING, next.phase)
+        assertSame(next, ContinuousInteractionReducer.settleCommit(next))
     }
 
     @Test fun `ten pinches have one final settle commit`() {
         var transaction = ContinuousInteractionTransaction()
-        repeat(10) { index ->
+        repeat(10) {
             transaction = ContinuousInteractionReducer.pinchStart(transaction, setOf(1, 2), emptyMap(), doc)
-            transaction = ContinuousInteractionReducer.pinchEnd(transaction, doc, index * 100L)
+            transaction = ContinuousInteractionReducer.pinchEnd(transaction, doc)
         }
-        transaction = ContinuousInteractionReducer.settleCommit(transaction, 1_350L)
+        transaction = ContinuousInteractionReducer.settleCommit(transaction)
         assertEquals(1, transaction.settleCommitCount)
         assertEquals(ContinuousInteractionPhase.IDLE, transaction.phase)
+        assertSame(transaction, ContinuousInteractionReducer.settleCommit(transaction))
     }
 
     @Test fun `visible pages only append during transaction`() {

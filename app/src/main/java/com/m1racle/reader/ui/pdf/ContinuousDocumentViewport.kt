@@ -253,10 +253,10 @@ internal fun ContinuousDocumentViewport(
         viewportSize.width > 0 &&
         viewportSize.height > 0
     ) {
-        if (viewportResized) {
-            // A rotation changes both the page geometry and the viewport. Its
-            // old center may be on a later page than its top edge. Reuse the
-            // page-local session anchor so the reading page and zoom survive.
+        if (viewportEpoch.width > 0 && viewportEpoch.height > 0) {
+            // Resize and late native page dimensions both rebuild geometry.
+            // Preserve the measured reading center: preserving only the top
+            // moves a restored page-local anchor when its aspect arrives later.
             val anchor = geometryEpoch.viewportSessionAtAnchor(
                 documentState, viewportEpoch.width.toFloat(), viewportEpoch.height.toFloat(), 0L,
             )
@@ -1329,7 +1329,7 @@ internal fun ContinuousDocumentViewport(
                     val capture = gestureCapture
                     if (pinchUsed && capture != null) {
                         val now = System.currentTimeMillis()
-                        interaction = ContinuousInteractionReducer.pinchEnd(interaction, ended, now)
+                        interaction = ContinuousInteractionReducer.pinchEnd(interaction, ended)
                         publishViewportSnapshot(ended)
                         val settlingId = interaction.interactionId
                         val settlingGeneration = capture.generation
@@ -1345,7 +1345,7 @@ internal fun ContinuousDocumentViewport(
                                 val settleNow = System.currentTimeMillis()
                                 if (!gestureCoordinator.isCurrent(settlingGeneration) ||
                                     interaction.interactionId != settlingId ||
-                                    !ContinuousInteractionReducer.canSettle(interaction, settleNow)
+                                    interaction.phase != ContinuousInteractionPhase.SETTLING
                                 ) return@launch
 
                                 // P0B1: settle commit — best-of(displayed, pending) per page.
@@ -1393,7 +1393,7 @@ internal fun ContinuousDocumentViewport(
                                 pendingBitmaps = emptyMap()
                                 pendingMetadata = emptyMap()
                                 pendingAspects = emptyMap()
-                                interaction = ContinuousInteractionReducer.settleCommit(interaction, settleNow)
+                                interaction = ContinuousInteractionReducer.settleCommit(interaction)
                                 val stable = documentState.copy(gestureActive = false)
                                 val settledPrimary = currentGeometry.pageAtViewportCenter(
                                     stable,

@@ -71,6 +71,52 @@ class R7P0c12TileGeometryTest {
         assertEquals(second.right, third.left)
     }
 
+    @Test fun `full page render keeps the explicit tile scale across buckets`() {
+        val pdfSize = PdfPageSize(595, 842)
+        val fittedWidth = 256f
+        val fittedHeight = fittedWidth * pdfSize.height / pdfSize.width
+        val view = PageTileViewport(
+            pageIndex = 0,
+            pageWidth = fittedWidth,
+            pageHeight = fittedHeight,
+            visibleRect = PageLayoutRect(0f, 0f, fittedWidth, fittedHeight),
+        )
+        for ((bucket, scale) in scales.withIndex()) {
+            val plan = PdfFullPageRenderMath.create(
+                pageSize = pdfSize,
+                targetWidthPx = fittedWidth * scale,
+                maxWidthPx = 3072,
+                maxEdgePx = 8192,
+                minEdgePx = 1,
+                maxPixels = 32_000_000,
+            )
+            val tileRequests = PdfTilePlanner.requests("doc", 1, view, bucket, 1, null, null)
+            assertTrue("bucket=$bucket", tileRequests.isNotEmpty())
+            assertEquals((fittedWidth * scale).roundToInt(), plan.widthPx)
+            for (tileRequest in tileRequests) {
+                val tileTransform = PdfTileRenderMath.create(
+                    tileRequest,
+                    view.pageSize,
+                    pdfSize,
+                )
+                assertEquals("bucket=$bucket x", tileTransform.matrixValues[0], plan.scale, .000001f)
+                assertEquals("bucket=$bucket y", tileTransform.matrixValues[4], plan.scale, .000001f)
+            }
+        }
+
+        val roundedHeightFit = fittedWidth * pdfSize.height / pdfSize.width
+        val bitmapFitScale = roundedHeightFit.roundToInt().toFloat() / pdfSize.height
+        val portraitPlan = PdfFullPageRenderMath.create(
+            pageSize = pdfSize,
+            targetWidthPx = fittedWidth,
+            maxWidthPx = 3072,
+            maxEdgePx = 8192,
+            minEdgePx = 1,
+            maxPixels = 32_000_000,
+        )
+        assertNotEquals(bitmapFitScale, portraitPlan.scale)
+    }
+
     @Test fun `geometry identity changes with fitted size or rotation`() {
         val baseline = pageGeometryGeneration(1080f, 1527.12f, 0)
         assertNotEquals(baseline, pageGeometryGeneration(1081f, 1528.534f, 0))

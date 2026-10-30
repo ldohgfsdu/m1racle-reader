@@ -57,6 +57,7 @@ class R7GestureLifecycleInstrumentedTest {
     private fun ready(
         documentId: String = "r7-test",
         stable: ContinuousDocumentState = ContinuousDocumentState(),
+        pageCount: Int = 30,
     ): PdfViewerUiState.Ready = PdfViewerUiState.Ready(
         document = DocumentEntity(
             id = documentId,
@@ -72,13 +73,13 @@ class R7GestureLifecycleInstrumentedTest {
             title = null,
             headingCount = 0,
             documentType = DocumentType.PDF.name,
-            pageCount = 30,
+            pageCount = pageCount,
         ),
         pageIndex = 0,
-        pageCount = 30,
+        pageCount = pageCount,
         pageImage = null,
         isRendering = false,
-        pageAspects = (0 until 30).associateWith { 1f },
+        pageAspects = (0 until pageCount).associateWith { 1f },
         zoomScale = stable.scale,
         continuousDocumentState = stable,
         continuousEntryState = ContinuousEntryState(phase = ContinuousEntryPhase.READY),
@@ -179,6 +180,8 @@ class R7GestureLifecycleInstrumentedTest {
             moveTo(0, Offset(c.x - 85f, c.y), 16L)
             moveTo(1, Offset(c.x + 85f, c.y), 16L)
         }
+        // Injection queues both move events; sample only after the final one is consumed.
+        composeRule.waitForIdle()
         composeRule.waitUntil(3_000L) {
             coordinator.isActive &&
                 (coordinator.snapshots.capture()?.payload?.documentState?.scale ?: 1f) > 1.05f
@@ -206,7 +209,7 @@ class R7GestureLifecycleInstrumentedTest {
 
         composeRule.setContent {
             ViewportUnderTest(
-                state = ready().copy(continuousEntryState = entry),
+                state = ready(pageCount = 60).copy(continuousEntryState = entry),
                 coordinator = coordinator,
                 onGeometryReady = {
                     if (entry.phase == ContinuousEntryPhase.WAITING_GEOMETRY) {
@@ -506,16 +509,21 @@ class R7GestureLifecycleInstrumentedTest {
     fun p0c12StaleGeometryTileIsSuppressedWithoutChangingDocumentTransform() {
         val coordinator = ContinuousGestureCoordinator { }
         val base=ready().copy(continuousDocumentState=ContinuousDocumentState(2f,40f,400f))
+        var readyState by mutableStateOf(base)
         val bitmap=android.graphics.Bitmap.createBitmap(16,16,android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()
-        val geometryGeneration = com.m1racle.reader.pdf.pageGeometryGeneration(1080f, 1080f * 1.414f, 0)
-        val key=com.m1racle.reader.pdf.PdfTileKey("document-a",base.tileDocumentGeneration,geometryGeneration,0,0,1080,2,0,0)
+        composeRule.setContent { ViewportUnderTest(readyState,coordinator) }
+        composeRule.waitForIdle()
+        val before = requireNotNull(coordinator.snapshots.capture()).payload
+        val geometryGeneration = before.geometry.pageGeometryGeneration(0) + 1L
+        val key=com.m1racle.reader.pdf.PdfTileKey(base.document.id,base.tileDocumentGeneration,geometryGeneration,0,0,before.viewportWidth,2,0,0)
         val entry=com.m1racle.reader.pdf.PdfTileEntry(key,bitmap,com.m1racle.reader.pdf.PageLayoutRect(0f,0f,256f,256f),com.m1racle.reader.pdf.TilePixelRect(0,0,16,16),System.nanoTime(),1,1024)
-        composeRule.setContent { ViewportUnderTest(base.copy(tileEntries=mapOf(key to entry)),coordinator) }
+        // Compare across the stale overlay update, after the initial fitted geometry is known.
+        composeRule.runOnIdle { readyState = base.copy(tileEntries = mapOf(key to entry)) }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("r7-continuous-viewport").assert(
             SemanticsMatcher.expectValue(R7TileCountKey,0),
         )
-        assertEquals(base.continuousDocumentState,coordinator.snapshots.capture()!!.payload.documentState)
+        assertEquals(before.documentState,coordinator.snapshots.capture()!!.payload.documentState)
     }
 
     private data class DecoupledHarness(
@@ -566,6 +574,7 @@ class R7GestureLifecycleInstrumentedTest {
             down(0, start)
             repeat(frames) { frame -> moveTo(0, start - Offset(0f, (frame + 1) * 18f), 32L) }
         }
+        composeRule.waitForIdle()
     }
 
     @Test fun p0c14HeldDragPlansBeforeRelease() {

@@ -16,8 +16,6 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
-import kotlin.math.max
-import kotlin.math.roundToInt
 
 /**
  * Local-only PDF page renderer backed by [PdfRenderer].
@@ -190,6 +188,24 @@ class PdfPageRenderer(
         maxEdgePx: Int = MAX_EDGE_PX,
         minEdgePx: Int = MIN_EDGE_PX,
         maxPixels: Long = MAX_PIXELS,
+    ): RenderResult = renderPage(
+        pageIndex = pageIndex,
+        targetWidthPx = targetWidthPx.toFloat(),
+        maxEdgePx = maxEdgePx,
+        minEdgePx = minEdgePx,
+        maxPixels = maxPixels,
+    )
+
+    /**
+     * Float-width overload for callers that must keep a fractional tile scale until
+     * [Bitmap.createBitmap] rounds the final destination dimensions.
+     */
+    suspend fun renderPage(
+        pageIndex: Int,
+        targetWidthPx: Float,
+        maxEdgePx: Int = MAX_EDGE_PX,
+        minEdgePx: Int = MIN_EDGE_PX,
+        maxPixels: Long = MAX_PIXELS,
     ): RenderResult = withContext(Dispatchers.IO) {
         mutex.withLock {
             val pdf = renderer ?: return@withLock RenderResult.Closed
@@ -200,38 +216,32 @@ class PdfPageRenderer(
                 pdf.openPage(pageIndex).use { page ->
                     val pageW = page.width.coerceAtLeast(1)
                     val pageH = page.height.coerceAtLeast(1)
-                    val lo = minEdgePx.coerceAtLeast(1)
-                    val hi = maxEdgePx.coerceAtLeast(lo)
-                    // targetWidthPx is always pixels (never dp). Cap width at MAX_WIDTH_PX.
-                    val desiredW = targetWidthPx
-                        .coerceAtMost(MAX_WIDTH_PX)
-                        .coerceIn(lo, hi)
-                    var scale = desiredW.toFloat() / pageW.toFloat()
-                    var outW = (pageW * scale).roundToInt().coerceAtLeast(1)
-                    var outH = (pageH * scale).roundToInt().coerceAtLeast(1)
-                    val longEdge = max(outW, outH)
-                    if (longEdge > maxEdgePx) {
-                        val down = maxEdgePx.toFloat() / longEdge.toFloat()
-                        outW = max(1, (outW * down).roundToInt())
-                        outH = max(1, (outH * down).roundToInt())
-                    }
-                    val pixels = outW.toLong() * outH.toLong()
-                    if (pixels > maxPixels) {
-                        val factor = kotlin.math.sqrt(maxPixels.toDouble() / pixels.toDouble())
-                        outW = max(1, (outW * factor).roundToInt())
-                        outH = max(1, (outH * factor).roundToInt())
-                    }
+                    val plan = PdfFullPageRenderMath.create(
+                        pageSize = PdfPageSize(pageW, pageH),
+                        targetWidthPx = targetWidthPx,
+                        maxWidthPx = MAX_WIDTH_PX,
+                        maxEdgePx = maxEdgePx,
+                        minEdgePx = minEdgePx,
+                        maxPixels = maxPixels,
+                    )
                     BitmapAllocationGuard.allocateOr(
-                        allocate = { Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888) },
+                        allocate = {
+                            Bitmap.createBitmap(
+                                plan.widthPx,
+                                plan.heightPx,
+                                Bitmap.Config.ARGB_8888,
+                            )
+                        },
                         onOutOfMemory = { RenderResult.OutOfMemory },
                         onRelease = { it.recycle() },
                         body = { bitmap ->
                             bitmap.eraseColor(android.graphics.Color.WHITE)
-                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            val matrix = Matrix().apply { setScale(plan.scale, plan.scale) }
+                            page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                             RenderResult.Success(
                                 image = bitmap.asImageBitmap(),
-                                widthPx = outW,
-                                heightPx = outH,
+                                widthPx = plan.widthPx,
+                                heightPx = plan.heightPx,
                                 pageSize = PdfPageSize(pageW, pageH),
                             )
                         },

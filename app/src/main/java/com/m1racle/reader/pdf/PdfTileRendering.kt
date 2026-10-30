@@ -61,6 +61,59 @@ data class PdfPageSize(val width: Int, val height: Int) {
     }
 }
 
+data class PdfFullPageRenderPlan(
+    val widthPx: Int,
+    val heightPx: Int,
+    val scale: Float,
+) {
+    init {
+        require(widthPx > 0 && heightPx > 0)
+        require(scale > 0f && scale.isFinite())
+    }
+}
+
+/**
+ * Full-page rendering uses the same explicit page-to-bitmap scale as tile rendering.
+ * A null PdfRenderer transform would refit the page into rounded output dimensions and
+ * introduce a subpixel scale mismatch with the tile overlay.
+ */
+object PdfFullPageRenderMath {
+    fun create(
+        pageSize: PdfPageSize,
+        targetWidthPx: Float,
+        maxWidthPx: Int,
+        maxEdgePx: Int,
+        minEdgePx: Int,
+        maxPixels: Long,
+    ): PdfFullPageRenderPlan {
+        val lo = minEdgePx.coerceAtLeast(1)
+        val hi = maxEdgePx.coerceAtLeast(lo)
+        val desiredWidthPx = targetWidthPx
+            .coerceAtMost(maxWidthPx.coerceAtLeast(1).toFloat())
+            .coerceIn(lo.toFloat(), hi.toFloat())
+        var scale = desiredWidthPx / pageSize.width.toFloat()
+        var widthPx = (pageSize.width * scale).roundToInt().coerceAtLeast(1)
+        var heightPx = (pageSize.height * scale).roundToInt().coerceAtLeast(1)
+
+        val longEdge = max(widthPx, heightPx)
+        if (longEdge > maxEdgePx) {
+            val downscale = maxEdgePx.toFloat() / longEdge.toFloat()
+            widthPx = max(1, (widthPx * downscale).roundToInt())
+            heightPx = max(1, (heightPx * downscale).roundToInt())
+            scale *= downscale
+        }
+
+        val pixels = widthPx.toLong() * heightPx.toLong()
+        if (pixels > maxPixels) {
+            val downscale = kotlin.math.sqrt(maxPixels.toDouble() / pixels.toDouble()).toFloat()
+            widthPx = max(1, (widthPx * downscale).roundToInt())
+            heightPx = max(1, (heightPx * downscale).roundToInt())
+            scale *= downscale
+        }
+        return PdfFullPageRenderPlan(widthPx, heightPx, scale)
+    }
+}
+
 /**
  * Immutable cache identity for one detail tile.
  *

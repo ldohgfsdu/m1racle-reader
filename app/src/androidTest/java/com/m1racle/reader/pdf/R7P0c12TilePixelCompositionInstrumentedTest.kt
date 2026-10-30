@@ -39,7 +39,7 @@ class R7P0c12TilePixelCompositionInstrumentedTest {
                 for ((bucket, scale) in PdfZoomBuckets.scales.withIndex()) {
                     val referenceResult = renderer.renderPage(
                         pageIndex = pageIndex,
-                        targetWidthPx = (fittedWidth * scale).roundToInt(),
+                        targetWidthPx = fittedWidth * scale,
                         maxEdgePx = 8192,
                         minEdgePx = 1,
                         maxPixels = 32_000_000,

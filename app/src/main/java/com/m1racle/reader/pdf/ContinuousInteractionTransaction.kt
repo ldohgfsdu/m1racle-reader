@@ -113,7 +113,6 @@ data class ContinuousInteractionTransaction(
     val transientScale: Float = 1f,
     val transientScrollX: Float = 0f,
     val transientScrollY: Float = 0f,
-    val lastGestureEndTimestamp: Long = 0L,
     val settleCommitCount: Int = 0,
     // P0B1: gesture baseline for focal-point-preserving transform
     val gestureId: Long = 0L,
@@ -179,22 +178,14 @@ object ContinuousInteractionReducer {
     fun pinchEnd(
         transaction: ContinuousInteractionTransaction,
         document: ContinuousDocumentState,
-        nowMillis: Long,
     ): ContinuousInteractionTransaction = transform(transaction, document).copy(
         phase = ContinuousInteractionPhase.SETTLING,
-        lastGestureEndTimestamp = nowMillis,
     )
 
-    fun canSettle(
-        transaction: ContinuousInteractionTransaction,
-        nowMillis: Long,
-    ): Boolean = transaction.phase == ContinuousInteractionPhase.SETTLING &&
-        nowMillis - transaction.lastGestureEndTimestamp >= SETTLE_DEBOUNCE_MS
-
+    /** The owning coroutine supplies the debounce; wall time must not veto its completion. */
     fun settleCommit(
         transaction: ContinuousInteractionTransaction,
-        nowMillis: Long,
-    ): ContinuousInteractionTransaction = if (canSettle(transaction, nowMillis)) {
+    ): ContinuousInteractionTransaction = if (transaction.phase == ContinuousInteractionPhase.SETTLING) {
         transaction.copy(
             phase = ContinuousInteractionPhase.IDLE,
             stableVisiblePages = emptySet(),
