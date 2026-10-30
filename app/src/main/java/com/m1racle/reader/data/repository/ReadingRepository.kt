@@ -51,19 +51,18 @@ class ReadingRepository(
 
     // ── Reader bookmark toggle（R23：阅读器唯一写入路径） ──────────────────
 
-    /** 同一 (文档, 坐标系, 位置) 上已存在的书签；无则 null。 */
-    suspend fun findBookmarkAt(
-        documentId: String,
-        locationKind: String,
-        location: Int,
-    ): BookmarkEntity? = bookmarkDao.getAt(documentId, locationKind, location)
-
-    /** 删除该位置上的书签。返回是否确有删除。 */
-    suspend fun removeBookmarkAt(
-        documentId: String,
-        locationKind: String,
-        location: Int,
-    ): Boolean = bookmarkDao.deleteAt(documentId, locationKind, location) > 0
+    /** The read and mutation share one Room transaction, including overlapping reader actions. */
+    suspend fun toggleBookmark(bookmark: BookmarkEntity): Boolean = transactionRunner.run {
+        val existing = bookmarkDao.getAt(bookmark.documentId, bookmark.locationKind, bookmark.location)
+        if (existing != null) {
+            // Also removes duplicates left by an earlier interrupted or overlapping toggle.
+            bookmarkDao.deleteAt(bookmark.documentId, bookmark.locationKind, bookmark.location)
+            false
+        } else {
+            bookmarkDao.insert(bookmark)
+            true
+        }
+    }
 
     /** 该文档在指定坐标系下全部已标注位置集合（用于阅读器状态图标）。 */
     suspend fun bookmarkedLocations(documentId: String, locationKind: String): Set<Int> =

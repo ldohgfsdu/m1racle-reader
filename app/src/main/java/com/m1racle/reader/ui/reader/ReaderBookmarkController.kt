@@ -46,28 +46,18 @@ class ReaderBookmarkController(
         offset: Long? = null,
         target: com.m1racle.reader.data.anchor.BookmarkTarget? = null,
     ): ToggleResult {
-        val existing = readingRepository.findBookmarkAt(
-            documentId = documentId,
-            locationKind = locationKind.name,
-            location = location,
+        val added = readingRepository.toggleBookmark(
+            BookmarkEntity(
+                documentId = documentId,
+                locationKind = locationKind.name,
+                location = location,
+                offset = offset,
+                anchor = target?.encode(),
+                title = title,
+                note = note,
+                createdAt = nowMs,
+            ),
         )
-        return if (existing != null) {
-            readingRepository.removeBookmarkAt(documentId, locationKind.name, location)
-            ToggleResult.Removed
-        } else {
-            readingRepository.createBookmark(
-                BookmarkEntity(
-                    documentId = documentId,
-                    locationKind = locationKind.name,
-                    location = location,
-                    offset = offset,
-                    anchor = target?.encode(),
-                    title = title,
-                    note = note,
-                    createdAt = nowMs,
-                ),
-            )
-            ToggleResult.Added
-        }
+        return if (added) ToggleResult.Added else ToggleResult.Removed
     }
 }

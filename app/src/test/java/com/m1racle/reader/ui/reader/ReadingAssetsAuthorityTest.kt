@@ -36,14 +36,18 @@ class ReadingAssetsAuthorityTest {
     @Test
     fun `repository stays the single bookmark writer facade`() {
         val repo = norm(source("app/src/main/java/com/m1racle/reader/data/repository/ReadingRepository.kt").readText())
-        assertTrue(repo.contains("findBookmarkAt"))
-        assertTrue(repo.contains("removeBookmarkAt"))
+        assertTrue(repo.contains("suspend fun toggleBookmark(bookmark: BookmarkEntity): Boolean = transactionRunner.run"))
+        assertTrue(repo.contains("bookmarkDao.getAt("))
+        assertTrue(repo.contains("bookmarkDao.deleteAt("))
         assertTrue(repo.contains("bookmarkedLocations"))
         val controller = norm(
             source("app/src/main/java/com/m1racle/reader/ui/reader/ReaderBookmarkController.kt").readText(),
         )
         // 控制器只经由仓库，不绕过到 DAO。
         assertFalse(controller.contains("Dao"))
+        assertTrue(controller.contains("readingRepository.toggleBookmark("))
+        assertFalse(controller.contains("findBookmarkAt("))
+        assertFalse(controller.contains("removeBookmarkAt("))
     }
 
     private fun source(repoRelative: String): File = ProductionSource.projectFile(repoRelative)

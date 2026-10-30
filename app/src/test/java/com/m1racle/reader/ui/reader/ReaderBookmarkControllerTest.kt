@@ -11,8 +11,14 @@ import com.m1racle.reader.data.local.HighlightEntity
 import com.m1racle.reader.data.local.NoteDao
 import com.m1racle.reader.data.local.NoteEntity
 import com.m1racle.reader.data.repository.ReadingRepository
+import com.m1racle.reader.data.repository.RepositoryTransactionRunner
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -28,7 +34,7 @@ import org.junit.Test
 class ReaderBookmarkControllerTest {
 
     /** 内存 Fake：完整实现 DAO 契约（含 R23 定位查询）。 */
-    private class FakeBookmarkDao : BookmarkDao {
+    private class FakeBookmarkDao(private val suspendReads: Boolean = false) : BookmarkDao {
         val rows = LinkedHashMap<Long, BookmarkEntity>()
         private var nextId = 1L
 
@@ -52,10 +58,14 @@ class ReaderBookmarkControllerTest {
             documentId: String,
             locationKind: String,
             location: Int,
-        ): BookmarkEntity? = rows.values.firstOrNull {
-            it.documentId == documentId &&
-                it.locationKind == locationKind &&
-                it.location == location
+        ): BookmarkEntity? {
+            val found = rows.values.firstOrNull {
+                it.documentId == documentId &&
+                    it.locationKind == locationKind &&
+                    it.location == location
+            }
+            if (suspendReads) yield()
+            return found
         }
 
         override suspend fun deleteAt(
@@ -114,14 +124,56 @@ class ReaderBookmarkControllerTest {
             throw UnsupportedOperationException()
     }
 
-    private fun repo(dao: FakeBookmarkDao) = ReadingRepository(
+    private fun repo(
+        dao: FakeBookmarkDao,
+        transactions: RepositoryTransactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
+    ) = ReadingRepository(
         bookmarkDao = dao,
         favoriteDao = NoFavorites(),
         highlightDao = NoHighlights(),
         noteDao = NoNotes(),
         searchRepository = com.m1racle.reader.testing.testSearchRepository(),
-            transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner(),
+            transactionRunner = transactions,
         )
+
+    private class SerialTransactions : RepositoryTransactionRunner {
+        private val mutex = Mutex()
+        var count = 0
+        override suspend fun <T> run(block: suspend () -> T): T = mutex.withLock {
+            count++
+            block()
+        }
+    }
+
+    @Test
+    fun `overlapping reader toggles are serialized around the read and write`() = runTest {
+        val dao = FakeBookmarkDao(suspendReads = true)
+        val transactions = SerialTransactions()
+        val repository = repo(dao, transactions)
+        val first = ReaderBookmarkController(repository, "pdf", BookmarkLocationKind.PAGE_INDEX)
+        val second = ReaderBookmarkController(repository, "pdf", BookmarkLocationKind.PAGE_INDEX)
+
+        val results = listOf(async { first.toggle(7) }, async { second.toggle(7) }).awaitAll()
+
+        assertEquals(listOf(ReaderBookmarkController.ToggleResult.Added, ReaderBookmarkController.ToggleResult.Removed), results)
+        assertTrue("Two toggles must leave no bookmark, including when both initial reads can suspend", dao.rows.isEmpty())
+        assertEquals(2, transactions.count)
+    }
+
+    @Test
+    fun `many overlapping toggles preserve parity without creating duplicate locations`() = runTest {
+        val dao = FakeBookmarkDao(suspendReads = true)
+        val transactions = SerialTransactions()
+        val repository = repo(dao, transactions)
+        val controllers = List(3) { ReaderBookmarkController(repository, "pdf", BookmarkLocationKind.PAGE_INDEX) }
+
+        val results = List(101) { index -> async { controllers[index % controllers.size].toggle(9) } }.awaitAll()
+
+        assertEquals(51, results.count { it is ReaderBookmarkController.ToggleResult.Added })
+        assertEquals(50, results.count { it is ReaderBookmarkController.ToggleResult.Removed })
+        assertEquals(1, dao.rows.size)
+        assertEquals(9, dao.rows.values.single().location)
+    }
 
     @Test
     fun `pdf toggle adds page index bookmark with PAGE_INDEX kind`() = runTest {
