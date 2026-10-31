@@ -1223,7 +1223,7 @@ private fun ReaderDocumentBody(
                     }
                     CompositionLocalProvider(com.m1racle.reader.ui.viewer.components.LocalMarkdownSelection provides selectionContext) {
                     MarkdownBlockView(
-                        documentUri = state.document.uri,
+                        documentUri = com.m1racle.reader.markdown.MarkdownAssetResolver.imageBaseUriFor(state.document),
                         block = block,
                         settings = readerSettings,
                         searchHighlights = searchHighlights,

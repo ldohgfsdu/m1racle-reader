@@ -126,7 +126,7 @@ class MarkdownEditorViewModel(app: Application, private val id: String, private 
             try {
                 candidate = withContext(Dispatchers.IO) { File.createTempFile("markdown-edit-", ".md", getApplication<Application>().cacheDir).apply { writeText(text, Charsets.UTF_8) } }
                 val updated = repository.saveDocumentEdits(id, hash, candidate, source)
-                document = updated; hash = requireNotNull(updated.contentSha256); original = text; message = "已保存，阅读记录及批注保留"
+                document = updated; hash = requireNotNull(updated.contentSha256); original = text; message = "已保存，批注已按新内容重新定位"
                 draftBaseHash = hash
                 // A queued renderer input may arrive while the snapshot saves.
                 // Keep those later edits as a draft against the new revision.

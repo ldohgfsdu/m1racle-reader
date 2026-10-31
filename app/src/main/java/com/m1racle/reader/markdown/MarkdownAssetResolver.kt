@@ -95,13 +95,21 @@ object MarkdownAssetResolver {
     )
 
     /**
+     * 相对图片的解析基准：独立 Markdown 读的是书库副本；原文件是 file:// 时以原目录为准，
+     * content:// 来源无法枚举同目录，仍用书库副本。
+     */
+    fun imageBaseUriFor(document: DocumentEntity): String {
+        val source = document.sourceUri
+        return if (document.type == DocumentType.MARKDOWN && source != null && source.startsWith("file:")) source else document.uri
+    }
+    /**
      * Build base location from a library document. No schema fields required.
      * Never fabricates sibling content:// URIs.
      */
     fun fromDocument(context: Context, document: DocumentEntity): MarkdownDocumentBase {
         return fromDocumentUri(
             context = context,
-            documentUri = if (document.type == DocumentType.MARKDOWN) document.sourceUri ?: document.uri else document.uri,
+            documentUri = imageBaseUriFor(document),
             documentType = document.type,
         )
     }

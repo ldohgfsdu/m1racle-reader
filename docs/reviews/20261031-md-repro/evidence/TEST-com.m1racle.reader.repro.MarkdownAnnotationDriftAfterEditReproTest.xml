@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.m1racle.reader.repro.MarkdownAnnotationDriftAfterEditReproTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-31T16:23:53.562Z" hostname="比羊的晚一" time="0.101">
+  <properties/>
+  <testcase name="highlightStaysOnSameParagraphAfterInsertingParagraphBefore" classname="com.m1racle.reader.repro.MarkdownAnnotationDriftAfterEditReproTest" time="0.066"/>
+  <testcase name="saveDocumentEditsRebasesOrRemapsMarkdownAnnotations" classname="com.m1racle.reader.repro.MarkdownAnnotationDriftAfterEditReproTest" time="0.03"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

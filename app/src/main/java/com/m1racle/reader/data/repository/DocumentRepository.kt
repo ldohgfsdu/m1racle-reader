@@ -108,6 +108,47 @@ class DocumentRepository(
         )
     }
 
+    /**
+     * 正文修订后把 Markdown 高亮/笔记的块锚映射到新修订（与指针更新同一事务）。
+     * 旧修订读不到时保持原样。
+     */
+    private suspend fun rebaseAnnotations(documentId: String, oldUri: String, candidate: File) {
+        val oldText = runCatching {
+            context.contentResolver.openInputStream(Uri.parse(oldUri))?.use { it.readBytes().toString(Charsets.UTF_8) }
+        }.getOrNull() ?: return
+        val oldBlocks = com.m1racle.reader.markdown.MarkdownParser.parse(oldText).blocks
+        val newBlocks = com.m1racle.reader.markdown.MarkdownParser.parse(candidate.readText(Charsets.UTF_8)).blocks
+        val appDb = db as? AppDatabase ?: return
+        val highlightDao = appDb.highlightDao()
+        val noteDao = appDb.noteDao()
+        val sql = appDb.openHelper.writableDatabase
+        fun moved(kind: String, location: Int, raw: String?): com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock? {
+            if (kind != "SCROLL_POSITION") return null
+            val a = com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver.resolve(kind, location, raw)
+                as? com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock
+                ?: com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock(location, null, null)
+            val m = com.m1racle.reader.markdown.MarkdownAnnotationRemapper
+                .remap(oldBlocks, newBlocks, a.blockIndex, a.charStart, a.charEnd) ?: return null
+            val next = com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock(m.blockIndex, m.charStart, m.charEnd)
+            return if (next == a && raw != null) null else next
+        }
+        highlightDao.listForDocument(documentId).forEach { h ->
+            val a = moved(h.locationKind, h.location, h.anchor) ?: return@forEach
+            val p = com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver.project(a)
+            sql.execSQL(
+                "UPDATE highlights SET location = ?, anchor = ? WHERE id = ? AND documentId = ?",
+                arrayOf<Any?>(p.location, p.encoded, h.id, documentId),
+            )
+        }
+        noteDao.listForDocument(documentId).forEach { n ->
+            val a = moved(n.locationKind, n.location, n.anchor) ?: return@forEach
+            val p = com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver.project(a)
+            sql.execSQL(
+                "UPDATE notes SET location = ?, anchor = ? WHERE id = ? AND documentId = ?",
+                arrayOf<Any?>(p.location, p.encoded, n.id, documentId),
+            )
+        }
+    }
     /** A new immutable revision plus a Room pointer update preserves id and every child row. */
     suspend fun saveDocumentEdits(id: String, expectedHash: String, candidate: File, sourceTarget: Uri? = null): DocumentEntity =
         withContext(Dispatchers.IO) {
@@ -145,6 +186,7 @@ class DocumentRepository(
                                 sourceUri=sourceTarget?.toString() ?: current.sourceUri,
                                 sourceSha256=if(sourceTarget!=null) nextHash else current.sourceSha256 ?: expectedHash)
                             documentDao.updateDocument(updated)
+                            if (before.type == DocumentType.MARKDOWN) rebaseAnnotations(id, before.uri, candidate)
                             searchRepository.index(updated,indexedAt=System.currentTimeMillis())
                             updated
                         }.also { committed = true }
