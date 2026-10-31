@@ -1600,7 +1600,7 @@ class PdfViewerViewModel(
         title: String,
         startPageIndex: Int,
         endPageIndex: Int,
-        sortOrder: Int = 0,
+        sortOrder: Int? = null,
     ) {
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
         viewModelScope.launch {

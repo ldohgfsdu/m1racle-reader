@@ -48,6 +48,23 @@ data class ExportRangePlan(
 
 object ExportRangeResolver {
 
+    /**
+     * Parent end used for bounding children. A parent whose stored end == start (default for
+     * "use current page" / newly created chapters) or that ends before one of its children
+     * is treated as open-ended and uses its computed outline end instead.
+     */
+    fun effectiveParentEnd(
+        parent: TextbookOutlineNodeEntity,
+        nodes: List<TextbookOutlineNodeEntity>,
+        documentPageCount: Int,
+    ): Int {
+        val stored = parent.endPageIndex
+        val maxChildStart = nodes.filter { it.parentId == parent.id }.maxOfOrNull { it.startPageIndex }
+        val stale = stored <= parent.startPageIndex || (maxChildStart != null && maxChildStart > stored)
+        if (!stale) return stored
+        return maxOf(stored, computeEndPage(parent, nodes, documentPageCount).first)
+    }
+
     fun siblingsOf(
         node: TextbookOutlineNodeEntity,
         nodes: List<TextbookOutlineNodeEntity>,
@@ -55,8 +72,8 @@ object ExportRangeResolver {
         return nodes
             .filter { it.parentId == node.parentId }
             .sortedWith(
-                compareBy<TextbookOutlineNodeEntity> { it.sortOrder }
-                    .thenBy { it.startPageIndex }
+                compareBy<TextbookOutlineNodeEntity> { it.startPageIndex }
+                    .thenBy { it.sortOrder }
                     .thenBy { it.title },
             )
     }
@@ -100,7 +117,7 @@ object ExportRangeResolver {
         // Direct parent end (if any)
         val directParent = node.parentId?.let { byId[it] }
         if (directParent != null) {
-            val end = directParent.endPageIndex.coerceAtLeast(start).coerceAtMost(last)
+            val end = effectiveParentEnd(directParent, nodes, documentPageCount).coerceAtLeast(start).coerceAtMost(last)
             return end to EndPageSource.PARENT_END
         }
 
@@ -132,16 +149,17 @@ object ExportRangeResolver {
             end = t
         }
 
-        // Clamp to parent range if parent exists
+        // Clamp to parent range only for auto-computed ranges; never silently rewrite a
+        // user override, and never collapse the range to the parent's start page.
         val parent = node.parentId?.let { pid -> nodes.find { it.id == pid } }
-        if (parent != null) {
+        if (parent != null && overrideStartIndex == null && overrideEndIndex == null) {
             val pStart = parent.startPageIndex.coerceIn(0, last)
-            val pEnd = parent.endPageIndex.coerceIn(0, last)
-            start = start.coerceIn(pStart, pEnd)
-            end = end.coerceIn(pStart, pEnd)
-            if (start > end) {
-                start = pStart
-                end = pStart
+            val pEnd = effectiveParentEnd(parent, nodes, documentPageCount).coerceIn(pStart, last)
+            val cStart = start.coerceIn(pStart, pEnd)
+            val cEnd = end.coerceIn(pStart, pEnd)
+            if (cStart <= cEnd) {
+                start = cStart
+                end = cEnd
             }
         }
 

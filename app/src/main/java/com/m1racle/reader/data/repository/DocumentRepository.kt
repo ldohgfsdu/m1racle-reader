@@ -682,6 +682,15 @@ class DocumentRepository(
             textbookOutlineNodeDao.listForDocument(documentId)
         }
 
+    private suspend fun nextOutlineSortOrder(documentId: String, parentId: String?): Int {
+        val siblings = if (parentId == null) {
+            textbookOutlineNodeDao.listRoots(documentId)
+        } else {
+            textbookOutlineNodeDao.listChildren(documentId, parentId)
+        }
+        return outlineNextSortOrder(siblings)
+    }
+
     suspend fun upsertOutlineNode(
         documentId: String,
         id: String? = null,
@@ -690,7 +699,7 @@ class DocumentRepository(
         title: String,
         startPageIndex: Int,
         endPageIndex: Int,
-        sortOrder: Int = 0,
+        sortOrder: Int? = null,
         pageCount: Int,
     ): TextbookOutlineNodeEntity = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
@@ -702,6 +711,7 @@ class DocumentRepository(
         val existingId = id?.takeIf { it.isNotBlank() }
         val entity = if (existingId != null) {
             val old = textbookOutlineNodeDao.getById(existingId)
+            val keptSort = sortOrder ?: old?.sortOrder ?: nextOutlineSortOrder(documentId, parentId)
             TextbookOutlineNodeEntity(
                 id = existingId,
                 documentId = documentId,
@@ -710,7 +720,7 @@ class DocumentRepository(
                 title = title.trim().ifBlank { type.displayLabelZh() },
                 startPageIndex = start,
                 endPageIndex = end,
-                sortOrder = sortOrder,
+                sortOrder = keptSort,
                 createdAt = old?.createdAt ?: now,
                 updatedAt = now,
                 source = old?.source ?: OutlineNodeSource.MANUAL.name,
@@ -725,7 +735,7 @@ class DocumentRepository(
                 title = title.trim().ifBlank { type.displayLabelZh() },
                 startPageIndex = start,
                 endPageIndex = end,
-                sortOrder = sortOrder,
+                sortOrder = sortOrder ?: nextOutlineSortOrder(documentId, parentId),
                 createdAt = now,
                 updatedAt = now,
                 source = OutlineNodeSource.MANUAL.name,
@@ -1257,3 +1267,7 @@ sealed class DocumentReadException : Exception() {
             get() = causeError
     }
 }
+
+/** 新目录节点排在同级末尾（编辑时保留原 sortOrder）。 */
+internal fun outlineNextSortOrder(siblings: List<com.m1racle.reader.data.local.TextbookOutlineNodeEntity>): Int =
+    (siblings.maxOfOrNull { it.sortOrder } ?: -1) + 1

@@ -1,0 +1,47 @@
+﻿> Task :app:verifyMarkdownEditorBundle
+> Task :app:preBuild
+> Task :app:preQaBuild
+> Task :app:generateQaBuildConfig UP-TO-DATE
+> Task :app:generateQaResources UP-TO-DATE
+> Task :app:packageQaResources UP-TO-DATE
+> Task :app:processQaNavigationResources UP-TO-DATE
+> Task :app:parseQaLocalResources UP-TO-DATE
+> Task :app:generateQaRFile UP-TO-DATE
+> Task :app:javaPreCompileQa UP-TO-DATE
+> Task :app:checkQaAarMetadata UP-TO-DATE
+> Task :app:mapQaSourceSetPaths UP-TO-DATE
+> Task :app:compileQaNavigationResources UP-TO-DATE
+> Task :app:mergeQaResources UP-TO-DATE
+> Task :app:createQaCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksQa UP-TO-DATE
+> Task :app:processQaMainManifest UP-TO-DATE
+> Task :app:processQaManifest UP-TO-DATE
+> Task :app:processQaManifestForPackage UP-TO-DATE
+> Task :app:processQaResources UP-TO-DATE
+> Task :app:preQaUnitTestBuild
+> Task :app:javaPreCompileQaUnitTest UP-TO-DATE
+> Task :app:generateQaAssets UP-TO-DATE
+> Task :app:mergeQaAssets UP-TO-DATE
+> Task :app:packageQaUnitTestForUnitTest UP-TO-DATE
+> Task :app:processQaUnitTestManifest UP-TO-DATE
+> Task :app:generateQaUnitTestConfig UP-TO-DATE
+> Task :app:kspQaKotlin
+
+> Task :app:compileQaKotlin
+w: file:///D:/03_M1racle%20Reader/reader-ui-release-20261025/app/src/main/java/com/m1racle/reader/pdf/export/ExportRangeResolver.kt:107:64 Unnecessary non-null assertion (!!) on a non-null receiver of type 'TextbookOutlineNodeEntity'.
+w: file:///D:/03_M1racle%20Reader/reader-ui-release-20261025/app/src/main/java/com/m1racle/reader/pdf/export/ExportRangeResolver.kt:107:64 Unnecessary non-null assertion (!!) on a non-null receiver of type 'TextbookOutlineNodeEntity'.
+w: file:///D:/03_M1racle%20Reader/reader-ui-release-20261025/app/src/main/java/com/m1racle/reader/ui/pdf/PdfViewerScreen.kt:991:51 'val Icons.Outlined.Notes: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Notes.
+
+> Task :app:compileQaJavaWithJavac UP-TO-DATE
+> Task :app:processQaJavaRes
+> Task :app:bundleQaClassesToCompileJar
+> Task :app:bundleQaClassesToRuntimeJar
+> Task :app:kspQaUnitTestKotlin
+> Task :app:compileQaUnitTestKotlin
+> Task :app:compileQaUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processQaUnitTestJavaRes UP-TO-DATE
+> Task :app:testQaUnitTest
+
+BUILD SUCCESSFUL in 3m 25s
+33 actionable tasks: 9 executed, 24 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
