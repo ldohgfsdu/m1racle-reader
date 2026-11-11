@@ -25,7 +25,12 @@ try {
             '--tests', '*ReaderProgressWheelTest', '--tests', '*PdfHighlightLoopTest', '--tests', '*DocumentSearchUnicodeOffsetTest',
             '--tests', '*MigrationV15ToV16Test')
     } else {
-        $readerTasks = @(':app:testQaUnitTest', ':app:testReleaseUnitTest', ':app:lintRelease')
+        $readerTasks = @(
+            ':core:model:testReleaseUnitTest', ':core:database:testReleaseUnitTest', ':core:pdf:testReleaseUnitTest',
+            ':core:model:lintRelease', ':core:database:lintRelease', ':core:pdf:lintRelease',
+            ':pdf-tool:testReleaseUnitTest', ':pdf-tool:lintRelease',
+            ':app:testQaUnitTest', ':app:testReleaseUnitTest', ':app:lintRelease'
+        )
         if ($Mode -eq 'Release') { $readerTasks += ':app:assembleRelease' }
         elseif ($PrepareDeviceTests) { $readerTasks += @(':app:assembleQa', ':app:assembleQaAndroidTest') }
     }

@@ -312,4 +312,99 @@ class PdfSplitExporterTest {
             assertArrayEquals(expectedRgb, decodedRgb)
         }
     }
+
+    @Test
+    fun createFailure_beforeAnyOutput_doesNotReportCleanupFailure() = runBlocking {
+        val plan = PdfSplitPlanner.byPageCount("create-fail.pdf", 5, 1)
+        val target = ScriptedTarget(outputDir, failCreateAfter = 0)
+        val result = export(plan, target)
+
+        val failed = result as PdfSplitState.Failed
+        assertTrue(failed.message.contains("无法在所选目录创建"))
+        assertFalse(failed.outputCleanupFailed)
+        assertTrue(failed.retainedOutputs.isEmpty())
+    }
+
+    @Test
+    fun outputOpenFailure_afterSuccessfulDelete_doesNotReportCleanupFailure() = runBlocking {
+        val plan = PdfSplitPlanner.byPageCount("open-fail.pdf", 5, 1)
+        val target = ScriptedTarget(outputDir, failOpenOutput = true)
+        val result = export(plan, target)
+
+        val failed = result as PdfSplitState.Failed
+        assertTrue(failed.message.contains("无法写入"))
+        assertFalse(failed.outputCleanupFailed)
+        assertTrue(failed.retainedOutputs.isEmpty())
+        assertTrue(outputDir.listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun readbackOpenFailure_afterSuccessfulDelete_doesNotReportCleanupFailure() = runBlocking {
+        val plan = PdfSplitPlanner.byPageCount("readback-fail.pdf", 5, 5)
+        val target = ScriptedTarget(outputDir, failOpenInput = true)
+        val result = export(plan, target)
+
+        val failed = result as PdfSplitState.Failed
+        assertTrue(failed.message.contains("无法校验"))
+        assertFalse(failed.outputCleanupFailed)
+        assertTrue(failed.retainedOutputs.isEmpty())
+        assertTrue(outputDir.listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun refusedDelete_keepsEveryCreatedOutputName() = runBlocking {
+        val plan = PdfSplitPlanner.byPageCount("retain-fail.pdf", 5, 1)
+        val target = ScriptedTarget(outputDir, failCreateAfter = 3, refuseDelete = true)
+        val result = export(plan, target)
+
+        val failed = result as PdfSplitState.Failed
+        assertTrue(failed.outputCleanupFailed)
+        assertEquals(3, failed.retainedOutputs.size)
+        assertEquals(
+            failed.retainedOutputs.map { it.displayName }.toSet(),
+            outputDir.listFiles().orEmpty().map { it.name }.toSet(),
+        )
+        failed.retainedOutputs.forEach { residue ->
+            assertTrue(File(requireNotNull(residue.uri.path)).isFile)
+        }
+    }
+
+    private fun export(plan: PdfSplitPlan, target: PdfSplitOutputTarget): PdfSplitState =
+        runBlocking {
+            PdfSplitExporter(app, target).export(
+                sourceUri = Uri.fromFile(source),
+                plan = plan,
+                outputDirectoryUri = Uri.fromFile(outputDir),
+                cancellation = ExportCancellationToken(),
+                onState = {},
+            )
+        }
+
+    private class ScriptedTarget(
+        root: File,
+        private val failCreateAfter: Int = Int.MAX_VALUE,
+        private val failOpenOutput: Boolean = false,
+        private val failOpenInput: Boolean = false,
+        private val refuseDelete: Boolean = false,
+    ) : PdfSplitOutputTarget {
+        private val directory = root.apply { mkdirs() }
+
+        override fun createPdf(directoryUri: Uri, displayName: String): Uri? {
+            if (directory.listFiles().orEmpty().size >= failCreateAfter) return null
+            val file = File(directory, displayName)
+            check(file.createNewFile())
+            return Uri.fromFile(file)
+        }
+
+        override fun openInput(uri: Uri): InputStream? =
+            if (failOpenInput) null else FileInputStream(requireNotNull(uri.path))
+
+        override fun openOutput(uri: Uri): OutputStream? =
+            if (failOpenOutput) null else FileOutputStream(requireNotNull(uri.path))
+
+        override fun delete(uri: Uri): Boolean {
+            if (refuseDelete) return false
+            return uri.path?.let { File(it).delete() } == true
+        }
+    }
 }

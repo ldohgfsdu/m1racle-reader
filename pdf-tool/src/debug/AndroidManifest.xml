@@ -10,6 +10,11 @@
             android:exported="true"
             android:label="PDF Load Bench"
             android:theme="@style/Theme.PdfSplit" />
+        <activity
+            android:name=".verify.VerifyActivity"
+            android:exported="true"
+            android:label="@string/verify_name"
+            android:theme="@style/Theme.PdfSplit" />
     </application>
 
 </manifest>

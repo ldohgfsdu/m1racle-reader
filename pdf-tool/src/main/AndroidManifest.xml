@@ -31,20 +31,6 @@
                 <data android:mimeType="application/pdf" />
             </intent-filter>
         </activity>
-
-        <!-- 内部验证入口：A1 正确性校验台。只做只读验证 + 额外产物，
-             不改变生产的加载策略与拆分算法。 -->
-        <activity
-            android:name=".verify.VerifyActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
-            android:exported="true"
-            android:label="@string/verify_name"
-            android:launchMode="singleTop">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
     </application>
 
 </manifest>

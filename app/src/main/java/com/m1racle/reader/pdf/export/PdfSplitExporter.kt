@@ -29,6 +29,11 @@ data class PdfSplitOutput(
     val pageCount: Int,
 )
 
+data class PdfSplitResidue(
+    val displayName: String,
+    val uri: Uri,
+)
+
 sealed interface PdfSplitState {
     data class Preparing(
         val partCount: Int,
@@ -53,11 +58,15 @@ sealed interface PdfSplitState {
 
     data class Completed(val outputs: List<PdfSplitOutput>) : PdfSplitState
 
-    data class Cancelled(val cleanedOutputs: Boolean) : PdfSplitState
+    data class Cancelled(
+        val cleanedOutputs: Boolean,
+        val retainedOutputs: List<PdfSplitResidue> = emptyList(),
+    ) : PdfSplitState
 
     data class Failed(
         val message: String,
         val outputCleanupFailed: Boolean,
+        val retainedOutputs: List<PdfSplitResidue> = emptyList(),
     ) : PdfSplitState
 }
 
@@ -91,18 +100,19 @@ class PdfSplitExporter internal constructor(
             appContext.cacheDir,
             "pdf_split_${System.currentTimeMillis()}_${System.nanoTime()}",
         )
-        val createdUris = ArrayList<Uri>(plan.parts.size)
+        val createdOutputs = ArrayList<PdfSplitResidue>(plan.parts.size)
         var completed = false
 
-        fun cleanupOutputs(): Boolean {
-            var allDeleted = true
-            for (uri in createdUris) {
-                val deleted = runCatching { outputTarget.delete(uri) }
+        fun cleanupOutputs(): List<PdfSplitResidue> {
+            val retained = ArrayList<PdfSplitResidue>()
+            for (output in createdOutputs) {
+                val deleted = runCatching { outputTarget.delete(output.uri) }
                     .getOrDefault(false)
-                if (!deleted) allDeleted = false
+                if (!deleted) retained += output
             }
-            createdUris.clear()
-            return allDeleted
+            createdOutputs.clear()
+            createdOutputs.addAll(retained)
+            return retained.toList()
         }
 
         try {
@@ -116,7 +126,7 @@ class PdfSplitExporter internal constructor(
                 return@withContext fail(
                     message = "无法创建拆分临时目录",
                     workDir = workDir,
-                    cleanupFailed = false,
+                    retainedOutputs = emptyList(),
                     onState = onState,
                 )
             }
@@ -124,7 +134,7 @@ class PdfSplitExporter internal constructor(
                 return@withContext fail(
                     message = "PDF 组件初始化失败",
                     workDir = workDir,
-                    cleanupFailed = false,
+                    retainedOutputs = emptyList(),
                     onState = onState,
                 )
             }
@@ -136,7 +146,7 @@ class PdfSplitExporter internal constructor(
                     return@withContext fail(
                         message = "源 PDF 页数已变化：计划 ${plan.sourcePageCount}，实际 ${source.numberOfPages}",
                         workDir = workDir,
-                        cleanupFailed = false,
+                        retainedOutputs = emptyList(),
                         onState = onState,
                     )
                 }
@@ -165,10 +175,10 @@ class PdfSplitExporter internal constructor(
                     ) ?: return@withContext fail(
                         message = "无法在所选目录创建 ${part.outputName}",
                         workDir = workDir,
-                        cleanupFailed = cleanupOutputs(),
+                        retainedOutputs = cleanupOutputs(),
                         onState = onState,
                     )
-                    createdUris += outputUri
+                    createdOutputs += PdfSplitResidue(part.outputName, outputUri)
 
                     outputTarget.openOutput(outputUri)?.use { output ->
                         FileInputStream(localPdf).use { input ->
@@ -182,7 +192,7 @@ class PdfSplitExporter internal constructor(
                     } ?: return@withContext fail(
                         message = "无法写入 ${part.outputName}",
                         workDir = workDir,
-                        cleanupFailed = cleanupOutputs(),
+                        retainedOutputs = cleanupOutputs(),
                         onState = onState,
                     )
 
@@ -202,7 +212,7 @@ class PdfSplitExporter internal constructor(
                     } ?: return@withContext fail(
                         message = "无法校验 ${part.outputName} 的完整输出",
                         workDir = workDir,
-                        cleanupFailed = cleanupOutputs(),
+                        retainedOutputs = cleanupOutputs(),
                         onState = onState,
                     )
                     check(localSha == outputSha) {
@@ -235,14 +245,14 @@ class PdfSplitExporter internal constructor(
                     } ?: return@withContext fail(
                         message = "无法回读 ${part.outputName}",
                         workDir = workDir,
-                        cleanupFailed = cleanupOutputs(),
+                        retainedOutputs = cleanupOutputs(),
                         onState = onState,
                     )
                     if (verifiedPages != part.sourceRange.pageCount) {
                         return@withContext fail(
                             message = "回读页数不一致：${part.outputName}",
                             workDir = workDir,
-                            cleanupFailed = cleanupOutputs(),
+                            retainedOutputs = cleanupOutputs(),
                             onState = onState,
                         )
                     }
@@ -254,10 +264,10 @@ class PdfSplitExporter internal constructor(
             }
 
             throwIfExportCancelled(cancellation) { coroutineContext.isActive }
-            val outputs = plan.parts.zip(createdUris).map { (part, uri) ->
+            val outputs = plan.parts.zip(createdOutputs).map { (part, created) ->
                 PdfSplitOutput(
                     displayName = part.outputName,
-                    uri = uri,
+                    uri = created.uri,
                     sourceRange = part.sourceRange,
                     pageCount = part.sourceRange.pageCount,
                 )
@@ -265,20 +275,26 @@ class PdfSplitExporter internal constructor(
             val done = PdfSplitState.Completed(outputs)
             onState(done)
             completed = true
-            createdUris.clear()
+            createdOutputs.clear()
             ChapterPackageExporter.cleanupDir(workDir)
             done
         } catch (cancelled: CancellationException) {
-            val cleaned = cleanupOutputs()
+            val retained = cleanupOutputs()
             ChapterPackageExporter.cleanupDir(workDir)
-            onState(PdfSplitState.Cancelled(cleanedOutputs = cleaned))
+            onState(
+                PdfSplitState.Cancelled(
+                    cleanedOutputs = retained.isEmpty(),
+                    retainedOutputs = retained,
+                ),
+            )
             throw cancelled
         } catch (t: Throwable) {
-            val cleaned = cleanupOutputs()
+            val retained = cleanupOutputs()
             ChapterPackageExporter.cleanupDir(workDir)
             val state = PdfSplitState.Failed(
                 message = t.message?.takeIf { it.isNotBlank() } ?: "PDF 拆分失败",
-                outputCleanupFailed = !cleaned,
+                outputCleanupFailed = retained.isNotEmpty(),
+                retainedOutputs = retained,
             )
             onState(state)
             state
@@ -566,13 +582,14 @@ class PdfSplitExporter internal constructor(
     private fun fail(
         message: String,
         workDir: File,
-        cleanupFailed: Boolean,
+        retainedOutputs: List<PdfSplitResidue>,
         onState: (PdfSplitState) -> Unit,
     ): PdfSplitState {
         ChapterPackageExporter.cleanupDir(workDir)
         val state = PdfSplitState.Failed(
             message = message,
-            outputCleanupFailed = cleanupFailed,
+            outputCleanupFailed = retainedOutputs.isNotEmpty(),
+            retainedOutputs = retainedOutputs,
         )
         onState(state)
         return state

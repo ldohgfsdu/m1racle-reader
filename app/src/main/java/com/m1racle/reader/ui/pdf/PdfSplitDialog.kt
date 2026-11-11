@@ -39,6 +39,7 @@ import com.m1racle.reader.pdf.export.PdfSplitMode
 import com.m1racle.reader.pdf.export.PdfSplitPageRange
 import com.m1racle.reader.pdf.export.PdfSplitPlan
 import com.m1racle.reader.pdf.export.PdfSplitPlanner
+import com.m1racle.reader.pdf.export.PdfSplitResidue
 import com.m1racle.reader.pdf.export.PdfSplitSamePagePolicy
 import com.m1racle.reader.pdf.export.PdfSplitState
 import com.m1racle.reader.ui.material.GlassAlertDialog
@@ -260,6 +261,9 @@ fun PdfSplitProgressDialog(
                                 MaterialTheme.colorScheme.error
                             },
                         )
+                        if (!state.cleanedOutputs) {
+                            ResidueNames(state.retainedOutputs)
+                        }
                     }
                     is PdfSplitState.Failed -> {
                         Text(state.message, color = MaterialTheme.colorScheme.error)
@@ -268,6 +272,7 @@ fun PdfSplitProgressDialog(
                                 "部分不完整文件无法由文件提供方删除。",
                                 color = MaterialTheme.colorScheme.error,
                             )
+                            ResidueNames(state.retainedOutputs)
                         }
                     }
                 }
@@ -285,6 +290,16 @@ fun PdfSplitProgressDialog(
                 TextButton(onClick = onCancel) { Text("取消") }
             }
         },
+    )
+}
+
+@Composable
+private fun ResidueNames(retained: List<PdfSplitResidue>) {
+    if (retained.isEmpty()) return
+    Text(
+        retained.joinToString("\n") { it.displayName },
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall,
     )
 }
 

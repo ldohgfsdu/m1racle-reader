@@ -239,10 +239,12 @@ object LocalImageLoader {
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
 
-            val bitmap = BitmapFactory.decodeFile(
-                canonical.absolutePath,
-                options,
-            ) ?: decodeWithImageDecoder(canonical)
+            val bitmap = constrainToMaxEdge(
+                BitmapFactory.decodeFile(
+                    canonical.absolutePath,
+                    options,
+                ) ?: decodeWithImageDecoder(canonical),
+            )
 
             if (bitmap == null || bitmap.width <= 0 || bitmap.height <= 0) {
                 bitmap?.recycle()
@@ -265,8 +267,9 @@ object LocalImageLoader {
 
         return try {
             val source = ImageDecoder.createSource(file)
-            ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+            ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.setTargetSampleSize(sampleSize(info.size.width, info.size.height))
             }
         } catch (e: Exception) {
             Log.d(
@@ -292,15 +295,32 @@ object LocalImageLoader {
             inSampleSize = sample
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
-        val bitmap = open()?.use { stream ->
-            BitmapFactory.decodeStream(stream, null, opts)
-        } ?: return LocalImageState.Error("图片无法读取")
+        val bitmap = constrainToMaxEdge(
+            open()?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, opts)
+            },
+        ) ?: return LocalImageState.Error("图片无法读取")
 
         if (bitmap.width <= 0 || bitmap.height <= 0) {
             bitmap.recycle()
             return LocalImageState.Error("图片无法读取")
         }
         return LocalImageState.Success(bitmap.asImageBitmap())
+    }
+
+    internal fun sampleSize(width: Int, height: Int): Int =
+        calculateInSampleSize(width, height, MAX_EDGE_PX)
+
+    internal fun constrainToMaxEdge(bitmap: Bitmap?): Bitmap? {
+        if (bitmap == null) return null
+        if (bitmap.width <= MAX_EDGE_PX && bitmap.height <= MAX_EDGE_PX) return bitmap
+        val sample = sampleSize(bitmap.width, bitmap.height)
+        val width = (bitmap.width / sample).coerceAtLeast(1)
+        val height = (bitmap.height / sample).coerceAtLeast(1)
+        if (width == bitmap.width && height == bitmap.height) return bitmap
+        val scaled = Bitmap.createScaledBitmap(bitmap, width, height, true)
+        if (scaled !== bitmap) bitmap.recycle()
+        return scaled
     }
 
     private fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int): Int {

@@ -199,8 +199,11 @@ fun MarkdownInlineEditor(id: String, title: String, initialLine: Int, repository
         } }
     }
     fun snapshot(action: () -> Unit) {
-        controller.snapshot(onSnapshot = { text -> model.change(TextFieldValue(text)); action() },
-            onComposing = { model.inform("请先完成当前输入") })
+        controller.snapshot(
+            onSnapshot = { text -> model.change(TextFieldValue(text)); action() },
+            onComposing = { model.inform("请先完成当前输入") },
+            onUnavailable = { model.inform("暂时无法读取编辑内容，请重试") },
+        )
     }
     fun back() {
         if (model.busy && model.document != null) return

@@ -93,10 +93,9 @@ android {
     }
 
     lint {
-        // First cut of the standalone tool; release correctness is gated by the
-        // build and the runtime read-back, not by lint style findings.
-        checkReleaseBuilds = false
-        abortOnError = false
+        checkReleaseBuilds = true
+        abortOnError = true
+        warningsAsErrors = false
     }
 }
 
