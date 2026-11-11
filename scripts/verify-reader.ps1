@@ -28,7 +28,7 @@ try {
         $readerTasks = @(
             ':core:model:testReleaseUnitTest', ':core:database:testReleaseUnitTest', ':core:pdf:testReleaseUnitTest',
             ':core:model:lintRelease', ':core:database:lintRelease', ':core:pdf:lintRelease',
-            ':pdf-tool:testReleaseUnitTest', ':pdf-tool:lintRelease',
+            ':pdf-tool:testDebugUnitTest', ':pdf-tool:lintRelease',
             ':app:testQaUnitTest', ':app:testReleaseUnitTest', ':app:lintRelease'
         )
         if ($Mode -eq 'Release') { $readerTasks += ':app:assembleRelease' }
