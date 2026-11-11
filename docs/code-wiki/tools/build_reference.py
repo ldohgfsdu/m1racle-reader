@@ -176,9 +176,9 @@ def package_dependencies():
 
 
 def schema_path() -> Path:
-    src = read(REPO / (BASE + "data/local/AppDatabase.kt"))
+    src = read(REPO / "core/database/src/main/java/com/m1racle/reader/data/local/AppDatabase.kt")
     version = int(re.search(r"version\s*=\s*(\d+)", src)[1])
-    return REPO / f"app/schemas/com.m1racle.reader.data.local.AppDatabase/{version}.json"
+    return REPO / f"core/database/schemas/com.m1racle.reader.data.local.AppDatabase/{version}.json"
 
 
 def database_schema():
@@ -213,7 +213,7 @@ def input_fingerprint():
     for root in ALL_ROOTS:
         inputs.update((REPO / root).rglob("*.kt"))
         inputs.update((REPO / root).rglob("*.xml"))
-    inputs.update((REPO / "app/schemas").rglob("*.json"))
+    inputs.update((REPO / "core/database/schemas").rglob("*.json"))
     for name in ["settings.gradle.kts", "build.gradle.kts", "app/build.gradle.kts", "benchmark/build.gradle.kts", "app/version.properties", "gradle.properties", "gradle/wrapper/gradle-wrapper.properties", "app/proguard-rules.pro"]:
         inputs.add(REPO / name)
     inputs.update(path for path in (REPO / "scripts").iterdir() if path.is_file())

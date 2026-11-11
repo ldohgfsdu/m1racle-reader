@@ -1,6 +1,8 @@
 package com.m1racle.reader.ui.reader
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
+
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkWithDocument
@@ -160,5 +162,5 @@ class AnnotationManagementTest {
         r: Float = 260f,
         b: Float = 140f,
     ) =
-        com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(page = page, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((l) / (800f), (t) / (1131f), ((r) - (l)).coerceAtLeast(0f) / (800f), ((b) - (t)).coerceAtLeast(0f) / (1131f))))
+        com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(page = page, rects = listOf(com.m1racle.reader.core.model.NormalizedRect((l) / (800f), (t) / (1131f), ((r) - (l)).coerceAtLeast(0f) / (800f), ((b) - (t)).coerceAtLeast(0f) / (1131f))))
 }

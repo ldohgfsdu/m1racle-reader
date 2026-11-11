@@ -6,6 +6,7 @@ import android.provider.DocumentsContract
 import kotlinx.coroutines.CancellationException
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 
 internal const val EXPORT_COPY_CHUNK_BYTES: Int = 64 * 1024
 
@@ -44,14 +45,51 @@ internal fun copyWithExportCancellation(
     }
 }
 
+/** Hash a stream in fixed-size chunks without materializing it in memory. */
+internal fun sha256WithExportCancellation(
+    input: InputStream,
+    cancellation: ExportCancellationToken,
+    jobActive: () -> Boolean = { true },
+): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val buf = ByteArray(EXPORT_COPY_CHUNK_BYTES)
+    while (true) {
+        throwIfExportCancelled(cancellation, jobActive)
+        val n = input.read(buf)
+        if (n < 0) break
+        digest.update(buf, 0, n)
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
 /**
- * Best-effort removal of a partially written SAF destination so a cancelled
- * export does not leave a stale file behind. Never throws: providers may not
- * support delete for arbitrary stream URIs, in which case a partial (never
- * complete) file may remain.
+ * Best-effort removal of incomplete SAF output. Never throws. Returns true
+ * when the provider reports deletion, so export state can tell the user when a
+ * partial file could not be removed.
  */
-internal fun deleteSafDocumentBestEffort(resolver: ContentResolver, uri: Uri) {
+internal fun deleteSafDocumentBestEffort(resolver: ContentResolver, uri: Uri): Boolean =
     runCatching {
         DocumentsContract.deleteDocument(resolver, uri)
+    }.getOrDefault(false)
+
+/** Job-local SAF destination ownership. Cleanup is idempotent. */
+internal class SafExportDestination(
+    private val resolver: ContentResolver,
+    private val uri: Uri,
+) {
+    var committed: Boolean = false
+        private set
+
+    private var cleaned: Boolean = false
+
+    fun markCommitted() {
+        committed = true
+    }
+
+    /** Returns true when no incomplete destination remains. */
+    fun cleanupIfUncommitted(): Boolean {
+        if (committed || cleaned) return true
+        cleaned = deleteSafDocumentBestEffort(resolver, uri)
+        return cleaned
     }
 }

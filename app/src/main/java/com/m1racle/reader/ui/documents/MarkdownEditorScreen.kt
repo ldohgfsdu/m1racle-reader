@@ -28,7 +28,7 @@ import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
 import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.settings.ReaderSettings
-import com.m1racle.reader.pdf.edit.PdfSourceWriteStore
+import com.m1racle.reader.core.model.ContentSha256
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -64,7 +64,7 @@ class MarkdownEditorViewModel(app: Application, private val id: String, private 
             check(doc.type == DocumentType.MARKDOWN) { "请先将文档导出为独立Markdown文件" }
             val text = repository.readDocumentText(doc.uri, doc.contentSha256).getOrThrow()
             hash = withContext(Dispatchers.IO) {
-                getApplication<Application>().contentResolver.openInputStream(Uri.parse(doc.uri))?.use(PdfSourceWriteStore::sha256) ?: error("无法读取文档")
+                getApplication<Application>().contentResolver.openInputStream(Uri.parse(doc.uri))?.use(ContentSha256::of) ?: error("无法读取文档")
             }
             original = text; value = TextFieldValue(text)
             val draft = withContext(Dispatchers.IO) { drafts.read() }

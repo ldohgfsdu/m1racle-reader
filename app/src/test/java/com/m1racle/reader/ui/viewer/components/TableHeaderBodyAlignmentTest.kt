@@ -4,7 +4,7 @@ import androidx.compose.ui.text.style.TextAlign
 import com.m1racle.reader.markdown.MarkdownBlock
 import com.m1racle.reader.markdown.MarkdownParser
 import com.m1racle.reader.markdown.TableAlignment
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -215,8 +215,6 @@ class TableHeaderBodyAlignmentTest {
         assertTrue(source.contains("testTag(\"markdown-table-scroll\")"))
     }
 
-    private fun tableSource(): String = listOf(
-        File("app/src/main/java/com/m1racle/reader/ui/viewer/components/TableBlockView.kt"),
-        File("src/main/java/com/m1racle/reader/ui/viewer/components/TableBlockView.kt"),
-    ).first { it.isFile }.readText()
+    private fun tableSource(): String =
+        ProductionSource.text("com/m1racle/reader/ui/viewer/components/TableBlockView.kt")
 }

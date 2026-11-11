@@ -27,14 +27,19 @@ class R7H15ThreePageStripInstrumentedTest {
         var lastDisplayedOffset = original.pageTransitionOffsetPx
         var directionalFrames = 0
         var heldSlots: List<Int>? = null
+        val samples = mutableListOf<String>()
         trace.singleDragHoldWithPath(
             startX = 0.82f,
             startY = 0.46f,
             pathX = path,
-            onFrame = { _, pointerX ->
+            onFrame = { frame, pointerX ->
                 val live = activity.interactionSnapshot()
                 val inputDelta = (pointerX - lastPointerX) * width
                 val displayedDelta = live.pageTransitionOffsetPx - lastDisplayedOffset
+                samples += "frame=$frame x=$pointerX inputDx=$inputDelta displayedDx=$displayedDelta " +
+                    "offset=${live.pageTransitionOffsetPx} rawAbs=${live.pageStripRawInputAbsPx} " +
+                    "displayedAbs=${live.pageStripDisplayedDeltaAbsPx} eventMs=${trace.lastInjectedEventTimeMs} " +
+                    "observedMs=${SystemClock.uptimeMillis()}"
                 assertTrue(live.pointerDown)
                 assertEquals(originalPage, live.pageIndex)
                 assertEquals(0, live.pageIndexChangeCount)
@@ -56,6 +61,7 @@ class R7H15ThreePageStripInstrumentedTest {
                 lastDisplayedOffset = live.pageTransitionOffsetPx
             },
             beforeRelease = {
+                emitEvidence("H15_HOLD_SAMPLES width=$width\n" + samples.joinToString("\n"))
                 val held = activity.interactionSnapshot()
                 assertTrue(held.pointerDown)
                 assertEquals(originalPage, held.pageIndex)
@@ -70,7 +76,7 @@ class R7H15ThreePageStripInstrumentedTest {
                 assertTrue(abs(held.pageTransitionOffsetPx) > width * 0.5f)
                 assertTrue(held.pageStripDragGainX in 0.97f..1.03f)
                 assertEquals(0, held.reverseDeltaCount)
-                assertTrue(directionalFrames >= 30)
+                assertTrue("directionalFrames=$directionalFrames, expected at least 30", directionalFrames >= 30)
             },
         )
         waitUntil(3_000L) { activity.interactionSnapshot().pageIndex == originalPage + 1 }

@@ -47,7 +47,7 @@ import androidx.navigation.navArgument
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
 import com.m1racle.reader.data.anchor.AnchorCodec
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.repository.ReadingRepository
 import com.m1racle.reader.data.repository.SearchRepository
@@ -193,6 +193,7 @@ fun M1racleReaderNavGraph(
                 }
                 HomeEvent.UnsupportedFormat -> resources.getString(R.string.error_unsupported_format)
                 HomeEvent.SourceTooLarge -> resources.getString(R.string.home_import_too_large,
+                    com.m1racle.reader.share.ExternalDocumentImporter.PDF_MAX_BYTES / (1024L * 1024L),
                     com.m1racle.reader.share.ExternalDocumentImporter.MAX_BYTES / (1024L * 1024L))
                 HomeEvent.DeleteFailed -> resources.getString(R.string.home_delete_failed)
                 HomeEvent.ReadFailed -> resources.getString(R.string.error_read_failed)

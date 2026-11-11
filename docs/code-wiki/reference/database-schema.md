@@ -2,7 +2,7 @@
 
 [返回 Wiki](../README.md)
 
-自动来源：[17.json](../../../app/schemas/com.m1racle.reader.data.local.AppDatabase/17.json)。共有 9 张表；字段类型/空值/主键/索引/外键以导出 JSON 为准，业务解释见数据章节。
+自动来源：[17.json](../../../core/database/schemas/com.m1racle.reader.data.local.AppDatabase/17.json)。共有 9 张表；字段类型/空值/主键/索引/外键以导出 JSON 为准，业务解释见数据章节。
 
 ## `documents`
 

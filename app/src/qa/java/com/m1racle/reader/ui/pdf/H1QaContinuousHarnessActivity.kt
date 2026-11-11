@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.ui.graphics.asImageBitmap
@@ -14,6 +15,7 @@ import com.m1racle.reader.pdf.ContinuousDocumentState
 import com.m1racle.reader.pdf.ContinuousEntryPhase
 import com.m1racle.reader.pdf.ContinuousEntryState
 import com.m1racle.reader.pdf.ContinuousGestureCoordinator
+import com.m1racle.reader.pdf.ContinuousViewportSnapshot
 import com.m1racle.reader.pdf.PdfTileEntry
 import com.m1racle.reader.pdf.PdfTilePlan
 import com.m1racle.reader.pdf.TileOverlaySnapshot
@@ -28,6 +30,14 @@ class H1QaContinuousHarnessActivity : ComponentActivity() {
     private val overlays = MutableStateFlow(TileOverlaySnapshot())
     private val lock = Any()
     private var metrics = H1QaTileMetrics()
+    /**
+     * G1-3: every viewport frame production published, in emission order.
+     *
+     * The vertical real-frame gate must measure the same [ContinuousViewportSnapshot]
+     * the ViewModel consumes, not a reconstruction. Bounded so a long fling cannot
+     * grow the heap unbounded during a QA run.
+     */
+    private val viewportFrameLog = java.util.concurrent.ConcurrentLinkedQueue<H1QaViewportFrame>()
     @Volatile private var stableTransform = initialTransform()
     private val pageBitmap by lazy {
         Bitmap.createBitmap(720, 996, Bitmap.Config.ARGB_8888).apply {
@@ -56,7 +66,7 @@ class H1QaContinuousHarnessActivity : ComponentActivity() {
                     onDocumentStateSettled = { next, _ -> stableTransform = next },
                     onZoomGestureActive = {},
                     onPageSettled = {},
-                    onViewportChanged = {},
+                    onViewportChanged = ::onViewportChanged,
                     onTilePlan = ::onTilePlan,
                     tileOverlaySnapshots = overlays,
                     onEnsureAround = {},
@@ -74,6 +84,18 @@ class H1QaContinuousHarnessActivity : ComponentActivity() {
 
     internal fun tileMetrics(): H1QaTileMetrics = synchronized(lock) { metrics }
     internal fun transformSnapshot(): ContinuousDocumentState = stableTransform
+
+    /** Ordered production viewport frames captured for the vertical real-frame gate. */
+    internal fun viewportFrames(): List<H1QaViewportFrame> = viewportFrameLog.toList()
+
+    internal fun clearViewportFrames() {
+        viewportFrameLog.clear()
+    }
+
+    private fun onViewportChanged(snapshot: ContinuousViewportSnapshot) {
+        if (viewportFrameLog.size >= VIEWPORT_FRAME_CAP) viewportFrameLog.poll()
+        viewportFrameLog.add(H1QaViewportFrame(System.nanoTime(), SystemClock.uptimeMillis(), snapshot))
+    }
 
     internal fun contentBoundsOnScreen(): Rect {
         val content = findViewById<android.view.View>(android.R.id.content)
@@ -157,13 +179,36 @@ class H1QaContinuousHarnessActivity : ComponentActivity() {
 
     companion object {
         const val PAGE_COUNT = 8
+
+        /** Enough for a 30 s drag at 120 Hz plus the settle tail. */
+        private const val VIEWPORT_FRAME_CAP = 8_192
         @Volatile
         internal var currentInstance: H1QaContinuousHarnessActivity? = null
 
-        private fun initialTransform() =
-            ContinuousDocumentState(scale = 2.5f, scrollX = 240f, scrollY = 720f)
+        /**
+         * G1-3 only: start at a scale at which production still publishes viewport
+         * frames while a finger is down. The continuous collector suppresses every
+         * frame when `gestureActive && scale > 1.001`, so a 1:1 drag gain cannot be
+         * measured at the 2.5x tile-test default. Left null by all other suites.
+         */
+        @Volatile
+        internal var oneToOneScaleOverride: Boolean = false
+
+        private fun initialTransform(): ContinuousDocumentState =
+            if (oneToOneScaleOverride) {
+                ContinuousDocumentState(scale = 1f, scrollX = 0f, scrollY = 0f)
+            } else {
+                ContinuousDocumentState(scale = 2.5f, scrollX = 240f, scrollY = 720f)
+            }
     }
 }
+
+/** One published viewport frame: wall clock, uptime clock and the snapshot itself. */
+internal data class H1QaViewportFrame(
+    val observedAtNanos: Long,
+    val observedAtUptimeMs: Long,
+    val snapshot: ContinuousViewportSnapshot,
+)
 
 internal data class H1QaTileMetrics(
     val pointerDownRequests: Int = 0,

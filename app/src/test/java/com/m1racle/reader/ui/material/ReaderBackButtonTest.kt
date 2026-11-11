@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.material
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,10 +22,6 @@ class ReaderBackButtonTest {
         assertFalse(icon.contains("graphicsLayer"))
     }
 
-    private fun source(relative: String): String = File(readerRoot(), relative).readText()
-
-    private fun readerRoot(): File = listOf(
-        File("src/main/java/com/m1racle/reader"),
-        File("app/src/main/java/com/m1racle/reader"),
-    ).first { it.isDirectory }
+    private fun source(relative: String): String =
+        ProductionSource.text("com/m1racle/reader/$relative")
 }

@@ -93,11 +93,9 @@ class R25ReaderFoundationTest {
     @Test
     fun `popover uses full source-to-target LTRB morph not bottom-only`() {
         val pop = popoverSource()
-        val geo = listOf(
-            File("app/src/main/java/com/m1racle/reader/pdf/AnchoredNestedGeometry.kt"),
-            File("../app/src/main/java/com/m1racle/reader/pdf/AnchoredNestedGeometry.kt"),
-            File("src/main/java/com/m1racle/reader/pdf/AnchoredNestedGeometry.kt"),
-        ).first { it.isFile }.readText()
+        val geo = com.m1racle.reader.testing.ProductionSource.text(
+            "com/m1racle/reader/pdf/AnchoredNestedGeometry.kt",
+        )
         // Shipped morph interpolates all four edges.
         assertTrue(geo.contains("sourceLeft + (targetLeft - sourceLeft) * t"))
         assertTrue(geo.contains("sourceTop + (targetTop - sourceTop) * t"))

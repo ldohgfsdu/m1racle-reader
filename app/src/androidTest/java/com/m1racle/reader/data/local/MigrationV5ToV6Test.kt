@@ -10,8 +10,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.m1racle.reader.data.repository.DocumentRepository
-import com.m1racle.reader.pdf.PdfReadingMode
-import com.m1racle.reader.pdf.PdfViewportSessionState
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfViewportSessionState
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -217,12 +217,24 @@ class MigrationV5ToV6Test {
             dbName, 6, true, AppDatabase.MIGRATION_5_6
         )
 
-        // 3. Open with current AppDatabase (v7). The focused v6 -> v7 contract
-        // is covered separately; this keeps the historical v5 -> v6 fixture
-        // readable after the current schema advances.
+        // 3. Open with current AppDatabase (v17). v5 -> v6 stays validated above.
+        // Register the same forward chain AppDatabase.getInstance uses so the
+        // preserved fixture can move from 6 to 17 without a destructive fallback.
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
             .allowMainThreadQueries()
-            .addMigrations(AppDatabase.MIGRATION_6_7)
+            .addMigrations(
+                AppDatabase.MIGRATION_6_7,
+                AppDatabase.MIGRATION_7_8,
+                AppDatabase.MIGRATION_8_9,
+                AppDatabase.MIGRATION_9_10,
+                AppDatabase.MIGRATION_10_11,
+                AppDatabase.MIGRATION_11_12,
+                AppDatabase.MIGRATION_12_13,
+                AppDatabase.MIGRATION_13_14,
+                AppDatabase.MIGRATION_14_15,
+                AppDatabase.MIGRATION_15_16,
+                AppDatabase.MIGRATION_16_17,
+            )
             .build()
         val docDao = roomDb.documentDao()
         val outlineDao = roomDb.textbookOutlineNodeDao()

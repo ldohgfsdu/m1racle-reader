@@ -29,8 +29,8 @@ import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.repository.SearchRepository
 import com.m1racle.reader.pdf.ContinuousEntryPhase
 import com.m1racle.reader.pdf.ContinuousGestureCoordinator
-import com.m1racle.reader.pdf.PdfReadingMode
-import com.m1racle.reader.pdf.PdfReadingPositionCodec
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfReadingPositionCodec
 import com.m1racle.reader.pdf.PdfReadingPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

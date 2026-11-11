@@ -7,12 +7,16 @@
 | 主题 | 文件 | 说明 |
 |---|---|---|
 | 当前状态 | [CURRENT_STATUS.md](CURRENT_STATUS.md) | 版本、验证基线、已交付产物、设备验收状态、未决项 |
+| PDF 大文件、滑动与拆分导出 | [PDF_LARGE_FILE_SPLIT_20261106.md](PDF_LARGE_FILE_SPLIT_20261106.md) | 94 正式包交付、三层模块边界、章节/页数拆分、回读清理、同源验证、59 项原生测试和正式包模拟器检查；当前验收以 CURRENT_STATUS 为准 |
+| PDF 目录后台导入与 93 交付（历史） | [PDF_AUTOMATIC_OUTLINE_20261031.md](PDF_AUTOMATIC_OUTLINE_20261031.md) | 默认后台合并、读取开销、40/40 模拟器回归、93 手机安装与实际目录验收边界 |
+| 92 PDF 首屏与横向输入基线 | [PDF_INPUT_ROUTING_20261031.md](PDF_INPUT_ROUTING_20261031.md) | 92 正式包、固定视口手势入口、39/39 原生回归与同源交付；[91 首屏实现](PDF_FIRST_FRAME_20261031.md) 保留底图与可见邻页依据 |
+| 92 手机安装与有限启动检查 | [PHONE92_INSTALL_20261031.md](PHONE92_INSTALL_20261031.md) | 90 → 92 保留数据升级、Download / 安装摘要、手机显示与验收边界 |
 | 当前选字、标注与沉浸交互 | [TEXT_SELECTION_AND_IMMERSION_20261031.md](TEXT_SELECTION_AND_IMMERSION_20261031.md) | 90 正式包、逐字选区与句柄、整组点击显隐、默认沉浸和 47 项真机回归 |
 | 89 稳定性基线 | [STABILITY_FIXES_20261030.md](STABILITY_FIXES_20261030.md) | 原子书签、EPUB 命名锚点、PDF 像素及恢复链路、当时源码基线与验收边界 |
 | 87 界面与品牌基线 | [HOME_POLISH_20261029.md](HOME_POLISH_20261029.md) | 首页、五条预览、Radix、Note 图标占比及同源正式包 |
 | 88 渲染优化与历史交付 | [PDF_RENDER_METADATA_20261030.md](PDF_RENDER_METADATA_20261030.md) | PDF 重复开页优化、BOM、忙碌反馈及当时同源验证 |
 | 85 旋转修复基线 | [EDITOR_ROTATION_20261029.md](EDITOR_ROTATION_20261029.md) | 编辑器选区 / 历史及 PDF 阅读锚点、既有验收边界 |
-| 83 界面基线与历史交付 | [UI_RELEASE_20261025.md](UI_RELEASE_20261025.md) | 82 完整基线合入界面整理、原图标、完整回归；当前 90 正式包见 CURRENT_STATUS 与选字、沉浸报告 |
+| 83 界面基线与历史交付 | [UI_RELEASE_20261025.md](UI_RELEASE_20261025.md) | 82 完整基线合入界面整理、原图标、完整回归；当前正式包见 CURRENT_STATUS |
 | 设置品牌头与首页文件菜单（81历史） | [SETTINGS_MENU_20261024.md](SETTINGS_MENU_20261024.md) | 81 正式包、品牌头滚动折叠、实色菜单、取消路径、模拟器证据与源码冻结 |
 | 设置页纯母标品牌区（当前） | [SETTINGS_BRAND_20261025.md](SETTINGS_BRAND_20261025.md) | 82 正式包、纯母标 M、单次 Reader、深浅反色、折叠回顶与源码冻结 |
 | 会话对象 | [.memory/active_object.yaml](../.memory/active_object.yaml) | 当前 active object 的 id / status / scope |

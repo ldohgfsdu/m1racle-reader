@@ -4,6 +4,7 @@
 /.idea/
 .DS_Store
 /build
+/**/build/
 /app/build
 /benchmark/build
 /captures
@@ -44,6 +45,8 @@ ovisocr2-deploy/
 # checksums kept out of git at their generation locations only)
 dist/
 *.pftrace
+__pycache__/
+*.pyc
 
 # Optional local docs dumps (uncomment if too noisy)
 # docs/R7_*.md

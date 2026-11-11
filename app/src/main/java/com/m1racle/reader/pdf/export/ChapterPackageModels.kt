@@ -3,7 +3,8 @@ package com.m1racle.reader.pdf.export
 import com.m1racle.reader.data.local.PdfPrintPageAnchorEntity
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.pdf.PrintPageResolver
-import com.m1racle.reader.pdf.TextbookOutlineResolver
+import com.m1racle.reader.pdf.toPrintPageAnchors
+import com.m1racle.reader.data.local.TextbookOutlineResolver
 
 /**
  * Build metadata JSON for chapter packages without org.json
@@ -113,9 +114,10 @@ object ChapterPackageMetadata {
         plan: ExportRangePlan,
         printAnchors: List<PdfPrintPageAnchorEntity>,
     ): String {
+        val corePrintAnchors = printAnchors.toPrintPageAnchors()
         val entries = (0 until plan.pageCount).joinToString(",\n") { i ->
             val source0 = plan.startPageIndex + i
-            val printed = PrintPageResolver.resolve(source0, printAnchors)
+            val printed = PrintPageResolver.resolve(source0, corePrintAnchors)
             val printedJson = printed?.toString() ?: "null"
             """
   {

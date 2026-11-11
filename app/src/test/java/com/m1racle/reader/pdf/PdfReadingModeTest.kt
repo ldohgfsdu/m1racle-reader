@@ -1,5 +1,8 @@
 package com.m1racle.reader.pdf
 
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfReadingNavigation
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

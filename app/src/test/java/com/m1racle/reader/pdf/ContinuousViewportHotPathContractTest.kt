@@ -1,6 +1,6 @@
 package com.m1racle.reader.pdf
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,9 +9,7 @@ import org.junit.Test
 class ContinuousViewportHotPathContractTest {
 
     private fun source(path: String): String =
-        File("app/src/main/java/com/m1racle/reader/$path").takeIf { it.isFile }
-            ?.readText()
-            ?: File("src/main/java/com/m1racle/reader/$path").readText()
+        ProductionSource.text("com/m1racle/reader/$path")
 
     private fun viewport() = source("ui/pdf/ContinuousDocumentViewport.kt")
     private fun viewModel() = source("ui/pdf/PdfViewerViewModel.kt")

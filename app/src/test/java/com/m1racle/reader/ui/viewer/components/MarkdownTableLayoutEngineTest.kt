@@ -5,7 +5,7 @@ import com.m1racle.reader.markdown.MarkdownBlock
 import com.m1racle.reader.markdown.MarkdownParser
 import com.m1racle.reader.data.settings.ContentPaddingLevel
 import com.m1racle.reader.data.settings.ReaderSettings
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import kotlin.math.ceil
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -662,8 +662,6 @@ class MarkdownTableLayoutEngineTest {
         assertEquals(27, combinations)
     }
 
-    private fun tableSource(): String = listOf(
-        File("app/src/main/java/com/m1racle/reader/ui/viewer/components/TableBlockView.kt"),
-        File("src/main/java/com/m1racle/reader/ui/viewer/components/TableBlockView.kt"),
-    ).first { it.isFile }.readText()
+    private fun tableSource(): String =
+        ProductionSource.text("com/m1racle/reader/ui/viewer/components/TableBlockView.kt")
 }

@@ -24,7 +24,6 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import kotlin.coroutines.coroutineContext
 import kotlin.math.min
 
@@ -48,24 +47,23 @@ class PdfAnnotatedExporter(
         onState: (ChapterExportState) -> Unit,
     ): ChapterExportState = withContext(Dispatchers.IO) {
         val workDir = File(appContext.cacheDir, "pdf_export_${System.currentTimeMillis()}")
-        var destinationCommitted = false
+        val destination = SafExportDestination(appContext.contentResolver, outputUri)
         try {
             onState(ChapterExportState.Preparing)
             if (!workDir.mkdirs()) {
-                return@withContext fail("无法创建临时目录", workDir, onState)
+                return@withContext fail("无法创建临时目录", workDir, destination, onState)
             }
             throwIfExportCancelled(cancellation) { coroutineContext.isActive }
             if (!PdfBoxRuntime.ensureInit(appContext)) {
-                return@withContext fail("PDF 组件初始化失败", workDir, onState)
+                return@withContext fail(
+                    "PDF 组件初始化失败",
+                    workDir,
+                    destination,
+                    onState,
+                )
             }
 
-            val sourceTemp = File(workDir, "_source.tmp")
             val outPdf = File(workDir, "annotated.pdf")
-            val input = appContext.contentResolver.openInputStream(sourceUri)
-                ?: return@withContext fail("无法打开源 PDF", workDir, onState)
-            input.use { src ->
-                FileOutputStream(sourceTemp).use { dst -> src.copyTo(dst) }
-            }
             throwIfExportCancelled(cancellation) { coroutineContext.isActive }
 
             val chapterTitle = plan.pathTitles.lastOrNull()?.ifBlank { null }
@@ -75,17 +73,22 @@ class PdfAnnotatedExporter(
 
             onState(ChapterExportState.CopyingPages(0, total))
             val mem = PdfBoxRuntime.memorySetting()
-            FileInputStream(sourceTemp).use { srcIn ->
-                PDDocument.load(srcIn, mem).use { source ->
+            PdfBoxRuntime.open(appContext, sourceUri).use { source ->
                     val srcPages = source.numberOfPages
-                    if (plan.endPageIndex >= srcPages) {
+                    val rangeError = ExportRangeResolver.validateRange(
+                        plan.startPageIndex,
+                        plan.endPageIndex,
+                        srcPages,
+                    )
+                    if (rangeError != null) {
                         return@withContext fail(
-                            "结束页超出源文档 (共 $srcPages 页)",
+                            rangeError,
                             workDir,
+                            destination,
                             onState,
                         )
                     }
-                    PDDocument().use { dest ->
+                    PDDocument(mem).use { dest ->
                         val font = loadBestFont(dest)
 
                         // Cover page (Android canvas → image → PDF page) for reliable CJK.
@@ -103,6 +106,9 @@ class PdfAnnotatedExporter(
                             try {
                                 val page = source.getPage(srcIndex)
                                 val imported = dest.importPage(page)
+                                if (!page.cosObject.containsKey(com.tom_roush.pdfbox.cos.COSName.RESOURCES)) {
+                                    page.resources?.let { imported.resources = it }
+                                }
                                 stampFooter(
                                     doc = dest,
                                     page = imported,
@@ -117,6 +123,7 @@ class PdfAnnotatedExporter(
                                 return@withContext fail(
                                     "复制第 ${srcIndex + 1} 页失败: ${t.message ?: t.javaClass.simpleName}",
                                     workDir,
+                                    destination,
                                     onState,
                                 )
                             }
@@ -125,21 +132,46 @@ class PdfAnnotatedExporter(
 
                         throwIfExportCancelled(cancellation) { coroutineContext.isActive }
                         onState(ChapterExportState.WritingArchive)
+                        PdfImportedPageLinks.isolate(source, dest, plan.startPageIndex, destinationStart0 = 1)
                         dest.save(outPdf)
                     }
                 }
-            }
 
             throwIfExportCancelled(cancellation) { coroutineContext.isActive }
 
             // A successful stream close commits the destination. Any cancellation
             // before this boundary is handled by the outer cleanup path.
+            val expectedPdfSha = ChapterPackageExporter.sha256File(outPdf)
             appContext.contentResolver.openOutputStream(outputUri)?.use { out ->
                 FileInputStream(outPdf).use { inp ->
                     copyWithExportCancellation(inp, out, cancellation) { coroutineContext.isActive }
                 }
-            } ?: return@withContext fail("无法写入所选位置", workDir, onState)
-            destinationCommitted = true
+            } ?: return@withContext fail(
+                "无法写入所选位置",
+                workDir,
+                destination,
+                onState,
+            )
+            val readbackPdfSha = appContext.contentResolver.openInputStream(outputUri)?.use { inp ->
+                sha256WithExportCancellation(inp, cancellation) {
+                    coroutineContext.isActive
+                }
+            } ?: return@withContext fail(
+                "无法回读所选位置的 PDF",
+                workDir,
+                destination,
+                onState,
+            )
+            if (readbackPdfSha != expectedPdfSha) {
+                return@withContext fail(
+                    "PDF 回读校验失败",
+                    workDir,
+                    destination,
+                    onState,
+                )
+            }
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
+            destination.markCommitted()
 
             val name = ExportRangeResolver.defaultPdfName(documentDisplayName, plan.pathTitles)
             val done = ChapterExportState.Completed(displayName = name)
@@ -147,14 +179,12 @@ class PdfAnnotatedExporter(
             cleanupDir(workDir)
             done
         } catch (e: CancellationException) {
-            if (!destinationCommitted) {
-                deleteSafDocumentBestEffort(appContext.contentResolver, outputUri)
-            }
+            destination.cleanupIfUncommitted()
             cancel(workDir, onState)
             throw e
         } catch (t: Throwable) {
             Log.e(TAG, "annotated export failed", t)
-            fail(t.message ?: "导出失败", workDir, onState)
+            fail(t.message ?: "导出失败", workDir, destination, onState)
         }
     }
 
@@ -346,10 +376,17 @@ class PdfAnnotatedExporter(
     private fun fail(
         msg: String,
         workDir: File,
+        destination: SafExportDestination,
         onState: (ChapterExportState) -> Unit,
     ): ChapterExportState {
         cleanupDir(workDir)
-        val s = ChapterExportState.Failed(msg)
+        val cleanupFailed = !destination.cleanupIfUncommitted()
+        val message = if (cleanupFailed) {
+            "$msg；未能删除不完整的目标文件"
+        } else {
+            msg
+        }
+        val s = ChapterExportState.Failed(message)
         onState(s)
         return s
     }

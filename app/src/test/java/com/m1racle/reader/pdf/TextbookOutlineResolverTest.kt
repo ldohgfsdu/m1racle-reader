@@ -1,5 +1,7 @@
 package com.m1racle.reader.pdf
 
+import com.m1racle.reader.data.local.TextbookOutlineResolver
+
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

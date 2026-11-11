@@ -1,11 +1,11 @@
 package com.m1racle.reader.repro
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver
 import com.m1racle.reader.markdown.MarkdownAnnotationRemapper
 import com.m1racle.reader.markdown.MarkdownBlock
 import com.m1racle.reader.markdown.MarkdownParser
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -47,7 +47,7 @@ class MarkdownAnnotationDriftAfterEditReproTest {
 
     @Test
     fun saveDocumentEditsRebasesOrRemapsMarkdownAnnotations() {
-        val src = File("src/main/java/com/m1racle/reader/data/repository/DocumentRepository.kt").readText()
+        val src = ProductionSource.text("com/m1racle/reader/data/repository/DocumentRepository.kt")
         val start = src.indexOf("suspend fun saveDocumentEdits(")
         val next = Regex("""\n\s*(private |internal )?(suspend )?fun """).find(src, start + 30)?.range?.first ?: src.length
         val body = src.substring(start, next)

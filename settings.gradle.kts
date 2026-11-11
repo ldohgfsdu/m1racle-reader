@@ -22,3 +22,8 @@ dependencyResolutionManagement {
 rootProject.name = "m1racle-reader"
 include(":app")
 include(":benchmark")
+include(":core:model")
+include(":core:database")
+include(":core:pdf")
+// Standalone page-range PDF splitting tool. Shares no source with :app.
+include(":pdf-tool")

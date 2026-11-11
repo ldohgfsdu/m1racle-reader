@@ -1,10 +1,13 @@
 package com.m1racle.reader.data.repository
 
+import com.m1racle.reader.core.model.TextbookOutlineNodeType
+
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.m1racle.reader.data.local.*
-import com.m1racle.reader.pdf.EmbeddedOutlineNodeDraft
-import com.m1racle.reader.pdf.OutlineImportMode
+import com.m1racle.reader.core.model.OutlineImportDraft
+import com.m1racle.reader.core.model.OutlineImportMode
+import com.m1racle.reader.core.model.OutlineImportPlan
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
@@ -29,8 +32,8 @@ class OutlineImportTransactionTest {
     private var failAt = Int.MAX_VALUE
     private var cancel = false
     private val drafts = listOf(
-        EmbeddedOutlineNodeDraft("One", 0, 2, 0, 0, -1, TextbookOutlineNodeType.CHAPTER, "one"),
-        EmbeddedOutlineNodeDraft("Two", 3, 5, 0, 1, -1, TextbookOutlineNodeType.CHAPTER, "two"),
+        OutlineImportDraft("One", 0, 2, 0, 0, -1, TextbookOutlineNodeType.CHAPTER, "one"),
+        OutlineImportDraft("Two", 3, 5, 0, 1, -1, TextbookOutlineNodeType.CHAPTER, "two"),
     )
 
     @Before fun setUp() = runBlocking {
@@ -70,7 +73,7 @@ class OutlineImportTransactionTest {
         failAt = 2
         cancel = cancelled
         try {
-            repository.importEmbeddedOutline("doc", drafts, mode)
+            repository.importEmbeddedOutline(OutlineImportPlan("doc", drafts, mode))
             fail("expected write failure")
         } catch (error: Exception) {
             if (cancelled) assertTrue(error is CancellationException) else assertTrue(error is IOException)
@@ -93,7 +96,7 @@ class OutlineImportTransactionTest {
     }
 
     @Test fun successfulReplacementCommitsCompleteDirectory() = runBlocking {
-        assertEquals(2, repository.importEmbeddedOutline("doc", drafts, OutlineImportMode.REPLACE))
+        assertEquals(2, repository.importEmbeddedOutline(OutlineImportPlan("doc", drafts, OutlineImportMode.REPLACE)))
         assertEquals(setOf("One", "Two"), db.textbookOutlineNodeDao().listForDocument("doc").map { it.title }.toSet())
     }
 

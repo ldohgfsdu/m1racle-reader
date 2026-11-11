@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.reader
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkWithDocument

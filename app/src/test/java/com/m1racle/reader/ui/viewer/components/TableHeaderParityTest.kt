@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.m1racle.reader.markdown.InlineMarkdownParser
 import com.m1racle.reader.markdown.InlineMarkdownStyles
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -80,8 +80,6 @@ class TableHeaderParityTest {
         assertEquals(null, strong.fontFamily)
     }
 
-    private fun tableSource(): String = listOf(
-        File("app/src/main/java/com/m1racle/reader/ui/viewer/components/TableBlockView.kt"),
-        File("src/main/java/com/m1racle/reader/ui/viewer/components/TableBlockView.kt"),
-    ).first { it.isFile }.readText()
+    private fun tableSource(): String =
+        ProductionSource.text("com/m1racle/reader/ui/viewer/components/TableBlockView.kt")
 }

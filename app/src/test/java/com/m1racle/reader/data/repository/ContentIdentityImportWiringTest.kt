@@ -1,5 +1,7 @@
 package com.m1racle.reader.data.repository
 
+import com.m1racle.reader.core.model.ContentSha256
+
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteConstraintException
@@ -220,7 +222,7 @@ class ContentIdentityImportWiringTest {
         fixture.seedLegacyPathA("editable",Uri.fromFile(source))
         val before=fixture.documentDao.getById("editable")!!
         val candidate=fixture.localPdf("edited PDF bytes")
-        val saved=fixture.repository.saveDocumentEdits(before.id,com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),candidate)
+        val saved=fixture.repository.saveDocumentEdits(before.id,com.m1racle.reader.core.model.ContentSha256.of(source),candidate)
         assertEquals(before.id,saved.id); assertEquals(before.lastScrollIndex,saved.lastScrollIndex)
         assertEquals(before.readingProgress,saved.readingProgress)
         assertEquals(1,fixture.documentDao.rows.size); assertEquals(0,fixture.documentDao.replaceCalls)
@@ -236,7 +238,7 @@ class ContentIdentityImportWiringTest {
         val source=fixture.localPdf("original PDF bytes")
         fixture.seedLegacyPathA("editable",Uri.fromFile(source))
         val first=fixture.localPdf("first revision")
-        val local=fixture.repository.saveDocumentEdits("editable",com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),first)
+        val local=fixture.repository.saveDocumentEdits("editable",com.m1racle.reader.core.model.ContentSha256.of(source),first)
         val next=fixture.localPdf("second revision")
         val saved=fixture.repository.saveDocumentEdits(local.id,local.contentSha256!!,next,Uri.fromFile(source))
         assertEquals("second revision",source.readText())
@@ -253,7 +255,7 @@ class ContentIdentityImportWiringTest {
         val candidate=fixture.localPdf("replacement PDF bytes")
         fixture.documentDao.rejectUpdates=true
         var failed=false
-        try { fixture.repository.saveDocumentEdits("editable",com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(source),candidate,Uri.fromFile(source)) }
+        try { fixture.repository.saveDocumentEdits("editable",com.m1racle.reader.core.model.ContentSha256.of(source),candidate,Uri.fromFile(source)) }
         catch (_: IllegalStateException) { failed=true }
         assertTrue(failed); assertEquals("original PDF bytes",source.readText())
         assertEquals(Uri.fromFile(source).toString(),fixture.documentDao.getById("editable")!!.uri)
@@ -307,7 +309,7 @@ class ContentIdentityImportWiringTest {
         val a = "Original".toByteArray()
         val old = fixture.source("content://r37.test/old.md", a)
         fixture.seedLegacyPathA("old", old)
-        val hash = com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(a.inputStream())
+        val hash = com.m1racle.reader.core.model.ContentSha256.of(a.inputStream())
         fixture.documentDao.assignContentSha256IfNull("old", hash, 1)
         fixture.source(old.toString(), "Changed".toByteArray())
         val incoming = fixture.source("content://r37.test/copy.md", a)
@@ -352,7 +354,7 @@ class ContentIdentityImportWiringTest {
         val bytes = "original PDF bytes".toByteArray()
         val old = fixture.source("content://r37.test/old-hashed.pdf", bytes)
         fixture.seedLegacyPathA("hashed-pdf", old)
-        val hash = com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(bytes.inputStream())
+        val hash = com.m1racle.reader.core.model.ContentSha256.of(bytes.inputStream())
         fixture.documentDao.assignContentSha256IfNull("hashed-pdf", hash, 1)
         fixture.source(old.toString(), "changed PDF source".toByteArray())
         val incoming = fixture.source("content://r37.test/restored.pdf", bytes)
@@ -362,7 +364,7 @@ class ContentIdentityImportWiringTest {
         assertEquals("hashed-pdf", document.id)
         assertEquals("file", Uri.parse(document.uri).scheme)
         assertEquals(hash, document.contentSha256)
-        assertEquals(hash, com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(File(Uri.parse(document.uri).path!!)))
+        assertEquals(hash, com.m1racle.reader.core.model.ContentSha256.of(File(Uri.parse(document.uri).path!!)))
         assertEquals(listOf("bookmark-legacy" to document.id), fixture.documentDao.bookmarks)
     }
 
@@ -425,7 +427,7 @@ class ContentIdentityImportWiringTest {
         // one-time migration ran; incoming bytes that differ stay a new book.
         assertNotEquals("old", document.id)
         assertEquals(
-            com.m1racle.reader.pdf.edit.PdfSourceWriteStore.sha256(legacyBytes.inputStream()),
+            com.m1racle.reader.core.model.ContentSha256.of(legacyBytes.inputStream()),
             fixture.documentDao.getById("old")!!.contentSha256,
         )
         assertEquals(2, fixture.documentDao.rows.size)

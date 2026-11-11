@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.annotation
 
-import com.m1racle.reader.data.anchor.NormalizedRect
+import com.m1racle.reader.core.model.NormalizedRect
 import com.m1racle.reader.pdf.PdfSelectablePage
 import com.m1racle.reader.pdf.PdfTextSelectionRange
 import kotlin.math.abs
@@ -19,6 +19,23 @@ data class PdfSelectionHandlePoint(
 data class PdfSelectionActionPlacement(
     val x: Float,
     val y: Float,
+)
+
+/**
+ * Action-bar sizing expressed in page-local (pre-scale) coordinates.
+ *
+ * The annotation layer lives inside the viewport's GPU scale transform, so a
+ * dp-sized child would grow with the page bitmap. Multiplying these values by
+ * the page scale always yields the same on-screen pixels, independent of zoom.
+ * [inverseScale] is applied to the bar's own graphics layer to undo the parent
+ * transform without changing its layout box or selection hit-testing.
+ */
+data class PdfSelectionActionMetrics(
+    val inverseScale: Float,
+    val barWidthPx: Float,
+    val barHeightPx: Float,
+    val gapPx: Float,
+    val marginPx: Float,
 )
 
 /** Page-local geometry shared by drawing and hit testing for the two selection handles. */
@@ -105,6 +122,31 @@ object PdfTextSelectionGeometry {
         val maxY = (heightPx - barHeightPx - marginPx).coerceAtLeast(marginPx)
         val y = (if (above >= marginPx) above else below).coerceIn(marginPx, maxY)
         return PdfSelectionActionPlacement(x, y)
+    }
+
+    /** Guard against a zero/negative scale from an unsettled viewport session. */
+    private const val MIN_PAGE_SCALE = 0.05f
+
+    fun fixedScreenActionBarMetrics(
+        barWidthPx: Float,
+        barHeightPx: Float,
+        gapPx: Float,
+        marginPx: Float,
+        pageScale: Float,
+    ): PdfSelectionActionMetrics {
+        val safeScale = if (pageScale.isFinite() && pageScale > MIN_PAGE_SCALE) {
+            pageScale
+        } else {
+            MIN_PAGE_SCALE
+        }
+        val inverseScale = 1f / safeScale
+        return PdfSelectionActionMetrics(
+            inverseScale = inverseScale,
+            barWidthPx = barWidthPx * inverseScale,
+            barHeightPx = barHeightPx * inverseScale,
+            gapPx = gapPx * inverseScale,
+            marginPx = marginPx * inverseScale,
+        )
     }
 
     private fun NormalizedRect.centerX(): Float = x + width / 2f

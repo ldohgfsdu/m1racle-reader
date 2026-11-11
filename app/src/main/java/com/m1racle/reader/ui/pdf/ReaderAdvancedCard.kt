@@ -95,10 +95,10 @@ import com.m1racle.reader.pdf.thumbnailInitialItemIndex
 import com.m1racle.reader.data.local.PdfPrintPageAnchorEntity
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.pdf.PdfThumbnailLoader
-import com.m1racle.reader.pdf.TextbookOutlineResolver
+import com.m1racle.reader.data.local.TextbookOutlineResolver
 import com.m1racle.reader.pdf.export.ChapterExportFormat
 import com.m1racle.reader.pdf.export.ExportRangePlan
-import com.m1racle.reader.data.local.TextbookOutlineNodeType
+import com.m1racle.reader.core.model.TextbookOutlineNodeType
 import com.m1racle.reader.pdf.export.ExportRangeResolver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -131,6 +131,7 @@ data class OutlineAdvancedData(
     val onRequestEdit: (OutlineEditorState) -> Unit,
     val onDelete: (String) -> Unit,
     val onImportEmbedded: () -> Unit,
+    val isLoading: Boolean = false,
 )
 
 data class ThumbnailsAdvancedData(
@@ -347,7 +348,9 @@ internal fun OutlineAdvancedContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = if (flatAll.isEmpty()) {
+                text = if (params.isLoading && flatAll.isEmpty()) {
+                    stringResource(R.string.pdf_outline_loading)
+                } else if (flatAll.isEmpty()) {
                     stringResource(R.string.pdf_outline_count_empty)
                 } else {
                     stringResource(R.string.pdf_outline_count, flatAll.size)
@@ -362,6 +365,7 @@ internal fun OutlineAdvancedContent(
             )
             TextButton(
                 onClick = params.onImportEmbedded,
+                enabled = !params.isLoading,
                 contentPadding = PaddingValues(horizontal = AdvancedChildLayoutSpec.Space8Dp.dp, vertical = 0.dp),
                 modifier = Modifier.height(AdvancedChildLayoutSpec.TextButtonHeightDp.dp),
             ) {

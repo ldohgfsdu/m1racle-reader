@@ -1,6 +1,8 @@
 package com.m1racle.reader.ui.annotation
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
+
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkWithDocument
@@ -124,7 +126,7 @@ class AnnotationCreationFlowTest {
         val f = flow(highlights, notes)
         assertEquals(AnnotationCreationFlow.Stage.Idle, f.current())
 
-        val selection = TextSelection.PdfSelection(page = 9, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((10f) / (500f), (20f) / (700f), ((110f) - (10f)).coerceAtLeast(0f) / (500f), ((60f) - (20f)).coerceAtLeast(0f) / (700f))), excerpt = "高亮原文")
+        val selection = TextSelection.PdfSelection(page = 9, rects = listOf(com.m1racle.reader.core.model.NormalizedRect((10f) / (500f), (20f) / (700f), ((110f) - (10f)).coerceAtLeast(0f) / (500f), ((60f) - (20f)).coerceAtLeast(0f) / (700f))), excerpt = "高亮原文")
         assertTrue(f.select(selection) is AnnotationCreationFlow.Stage.SelectionReady)
         assertTrue(f.prepareDraft(AnnotationType.HIGHLIGHT) is AnnotationCreationFlow.Stage.DraftReady)
 
@@ -203,7 +205,7 @@ class AnnotationCreationFlowTest {
     @Test
     fun `cancel resets from any stage`() = runTest {
         val f = flow(FakeHighlightDao(), FakeNoteDao())
-        f.select(TextSelection.PdfSelection(page = 2, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((0f) / (400f), (0f) / (400f), ((100f) - (0f)).coerceAtLeast(0f) / (400f), ((100f) - (0f)).coerceAtLeast(0f) / (400f)))))
+        f.select(TextSelection.PdfSelection(page = 2, rects = listOf(com.m1racle.reader.core.model.NormalizedRect((0f) / (400f), (0f) / (400f), ((100f) - (0f)).coerceAtLeast(0f) / (400f), ((100f) - (0f)).coerceAtLeast(0f) / (400f)))))
         f.cancel()
         assertEquals(AnnotationCreationFlow.Stage.Idle, f.current())
         // Idle 上 prepare 失败但不残留脏状态。
@@ -216,7 +218,7 @@ class AnnotationCreationFlowTest {
     fun `double commit is guarded and does not duplicate rows`() = runTest {
         val highlights = FakeHighlightDao()
         val f = flow(highlights, FakeNoteDao())
-        f.select(TextSelection.PdfSelection(page = 1, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((0f) / (200f), (0f) / (200f), ((50f) - (0f)).coerceAtLeast(0f) / (200f), ((50f) - (0f)).coerceAtLeast(0f) / (200f)))))
+        f.select(TextSelection.PdfSelection(page = 1, rects = listOf(com.m1racle.reader.core.model.NormalizedRect((0f) / (200f), (0f) / (200f), ((50f) - (0f)).coerceAtLeast(0f) / (200f), ((50f) - (0f)).coerceAtLeast(0f) / (200f)))))
         f.prepareDraft(AnnotationType.HIGHLIGHT)
         assertTrue(f.commit(nowMs = 1L) is AnnotationCreationFlow.Stage.Committed)
         // 状态已回 Idle：再次 commit 无草稿 → Failed 且不落库。

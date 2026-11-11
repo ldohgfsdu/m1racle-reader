@@ -8,7 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /** Home is a reading entry: L2 hero + light list. Glass only on Dock / FAB / Menu. */
 class HomeLayoutContractTest {
@@ -129,9 +128,7 @@ class HomeLayoutContractTest {
     fun `empty copy waits for the first loaded emission`() {
         val home = homeSource()
         val library = librarySource()
-        val bookmarks = File("app/src/main/java/com/m1racle/reader/ui/hub/BookmarksScreen.kt")
-            .takeIf { it.isFile }
-            ?: File("src/main/java/com/m1racle/reader/ui/hub/BookmarksScreen.kt")
+        val bookmarks = ProductionSource.file("com/m1racle/reader/ui/hub/BookmarksScreen.kt")
         assertTrue(home.contains("uiState.ready && uiState.isEmpty"))
         assertTrue(library.contains("uiState.ready && uiState.documents.isEmpty()"))
         assertTrue(bookmarks.readText().contains("uiState.ready && bookmarks.isEmpty()"))

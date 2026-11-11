@@ -1,6 +1,8 @@
 package com.m1racle.reader.data.repository
 
-import com.m1racle.reader.pdf.edit.PdfSourceWriteStore
+import com.m1racle.reader.core.model.ContentSha256
+import com.m1racle.reader.core.model.DocumentAnchor
+import com.m1racle.reader.core.model.PdfViewportSessionState
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import java.io.FileOutputStream
@@ -17,10 +19,10 @@ import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
 import com.m1racle.reader.data.local.PdfPrintPageAnchorDao
 import com.m1racle.reader.data.local.PdfPrintPageAnchorEntity
-import com.m1racle.reader.data.local.OutlineNodeSource
+import com.m1racle.reader.core.model.OutlineNodeSource
 import com.m1racle.reader.data.local.TextbookOutlineNodeDao
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
-import com.m1racle.reader.data.local.TextbookOutlineNodeType
+import com.m1racle.reader.core.model.TextbookOutlineNodeType
 import com.m1racle.reader.epub.EpubBook
 import com.m1racle.reader.epub.EpubException
 import com.m1racle.reader.epub.EpubPackageImporter
@@ -28,7 +30,7 @@ import com.m1racle.reader.packageimport.ZipPackageImporter
 import com.m1racle.reader.packageimport.rebuildMarkdownPackage
 import com.m1racle.reader.documents.DocumentOutputSave
 import android.provider.DocumentsContract
-import com.m1racle.reader.pdf.TextbookOutlineResolver
+import com.m1racle.reader.data.local.TextbookOutlineResolver
 import com.m1racle.reader.identity.ContentIdentityInput
 import com.m1racle.reader.identity.ContentIdentityResolution
 import com.m1racle.reader.identity.ContentIdentityResolver
@@ -122,14 +124,14 @@ class DocumentRepository(
         val highlightDao = appDb.highlightDao()
         val noteDao = appDb.noteDao()
         val sql = appDb.openHelper.writableDatabase
-        fun moved(kind: String, location: Int, raw: String?): com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock? {
+        fun moved(kind: String, location: Int, raw: String?): com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock? {
             if (kind != "SCROLL_POSITION") return null
             val a = com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver.resolve(kind, location, raw)
-                as? com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock
-                ?: com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock(location, null, null)
+                as? com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock
+                ?: com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock(location, null, null)
             val m = com.m1racle.reader.markdown.MarkdownAnnotationRemapper
                 .remap(oldBlocks, newBlocks, a.blockIndex, a.charStart, a.charEnd) ?: return null
-            val next = com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock(m.blockIndex, m.charStart, m.charEnd)
+            val next = com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock(m.blockIndex, m.charStart, m.charEnd)
             return if (next == a && raw != null) null else next
         }
         highlightDao.listForDocument(documentId).forEach { h ->
@@ -157,9 +159,9 @@ class DocumentRepository(
                 if(sourceTarget!=null) check(pdfSourceWrites.pending().none { it.documentId == id }) { "存在未完成的源文件恢复，请先导出备份；当前修改仍可保存到书库" }
                 val before = documentDao.getById(id) ?: error("文档已移除")
                 check(before.isPdf || before.type == DocumentType.MARKDOWN) { "仅支持 PDF 和独立 Markdown 正文编辑" }
-                val actual = context.contentResolver.openInputStream(Uri.parse(before.uri))?.use(PdfSourceWriteStore::sha256)
+                val actual = context.contentResolver.openInputStream(Uri.parse(before.uri))?.use(ContentSha256::of)
                 check(actual == expectedHash) { "书库文档已发生变化，请重新打开后编辑" }
-                val nextHash = PdfSourceWriteStore.sha256(candidate)
+                val nextHash = ContentSha256.of(candidate)
                 val owner = contentIdentityResolver.findExistingDocument(nextHash)
                 check(owner == null || owner.id == id) { "相同内容已在书库中，请使用另存副本" }
                 val folder = File(context.filesDir,"library/$nextHash/${UUID.randomUUID()}")
@@ -170,7 +172,7 @@ class DocumentRepository(
                 var committed = false
                 try {
                     FileOutputStream(revision).use { out -> candidate.inputStream().use { it.copyTo(out) }; out.fd.sync() }
-                    check(PdfSourceWriteStore.sha256(revision) == nextHash) { "保存文件核验失败" }
+                    check(ContentSha256.of(revision) == nextHash) { "保存文件核验失败" }
                     if (sourceTarget != null) {
                         ticket = pdfSourceWrites.prepare(id,sourceTarget.toString(),before.sourceSha256 ?: expectedHash,revision)
                     }
@@ -272,7 +274,7 @@ class DocumentRepository(
             val source = if (document.type == DocumentType.MARKDOWN_PACKAGE) {
                 val archive = File(packageArchiveDirectory(id), "original.zip")
                 if (archive.isFile) {
-                    check(PdfSourceWriteStore.sha256(archive) == document.contentSha256) { "保留的原始教材包已损坏，未导出" }
+                    check(ContentSha256.of(archive) == document.contentSha256) { "保留的原始教材包已损坏，未导出" }
                     Uri.fromFile(archive)
                 } else {
                     val packages = File(context.filesDir, "packages").canonicalFile
@@ -286,7 +288,7 @@ class DocumentRepository(
             } else Uri.parse(document.uri)
             check(target != source) { "请选择新的导出位置，不能覆盖源文件" }
             val resolver = context.contentResolver
-            val sourceHash = resolver.openInputStream(source)?.use(PdfSourceWriteStore::sha256)
+            val sourceHash = resolver.openInputStream(source)?.use(ContentSha256::of)
                 ?: error("无法读取文档")
             val save = DocumentOutputSave(
                 openSource = { resolver.openInputStream(source) },
@@ -314,12 +316,6 @@ class DocumentRepository(
     internal suspend fun ensureIdentityRuntimeReady() {
         sidecarIdentityMigration.ensureCompleted()
         legacyContentHashMigration.ensureCompleted()
-    }
-
-    suspend fun touchLastOpened(id: String, time: Long = System.currentTimeMillis()) {
-        withContext(Dispatchers.IO) {
-            documentDao.updateLastOpenedAt(id, time)
-        }
     }
 
     /**
@@ -371,7 +367,7 @@ class DocumentRepository(
                 val existing = uriToFile(document.uri)
                 val library = File(context.filesDir, "library").canonicalFile
                 if (existing != null && existing.isFile && ZipPackageImporter.isUnder(existing, library) &&
-                    PdfSourceWriteStore.sha256(existing) == prepared.contentSha256) return document
+                    ContentSha256.of(existing) == prepared.contentSha256) return document
                 // The database hash describes the original identity, even if an old
                 // SAF locator has since changed. Restore that identity from verified
                 // staging rather than exposing the locator's new bytes to its assets.
@@ -604,7 +600,7 @@ class DocumentRepository(
             archiveOwned = true
             val archive = File(archiveDirectory, "original.zip")
             prepared.stagedFile.copyTo(archive, overwrite = false)
-            check(PdfSourceWriteStore.sha256(archive) == prepared.contentSha256) { "原始教材包核验失败" }
+            check(ContentSha256.of(archive) == prepared.contentSha256) { "原始教材包核验失败" }
         } catch (error: Exception) {
             destinationDirectory.deleteRecursively()
             if (archiveOwned) archiveDirectory.deleteRecursively()
@@ -766,12 +762,6 @@ class DocumentRepository(
         }
     }
 
-    suspend fun clearAllOutlineNodes(documentId: String) {
-        withContext(Dispatchers.IO) {
-            textbookOutlineNodeDao.deleteAllForDocument(documentId)
-        }
-    }
-
     suspend fun insertOutlineNodes(nodes: List<TextbookOutlineNodeEntity>) {
         withContext(Dispatchers.IO) {
             importTransactionRunner.run { nodes.forEach { textbookOutlineNodeDao.upsert(it) } }
@@ -779,46 +769,50 @@ class DocumentRepository(
     }
 
     /**
-     * Import embedded PDF outline drafts.
+     * Persist a neutral outline import plan prepared by the caller.
      * @return number of nodes written (0 if idempotent skip).
      */
-    suspend fun importEmbeddedOutline(
-        documentId: String,
-        drafts: List<com.m1racle.reader.pdf.EmbeddedOutlineNodeDraft>,
-        mode: com.m1racle.reader.pdf.OutlineImportMode,
-    ): Int = withContext(Dispatchers.IO) {
-        importTransactionRunner.run {
-            val existing = textbookOutlineNodeDao.listForDocument(documentId)
-            if (com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.isAlreadyImported(drafts, existing) &&
-                mode == com.m1racle.reader.pdf.OutlineImportMode.MERGE
-            ) {
-                return@run 0
-            }
-            // REPLACE always rewrites; MERGE may skip all
-            if (mode == com.m1racle.reader.pdf.OutlineImportMode.REPLACE) {
-                // REPLACE: if identical embedded set already present and no MANUAL nodes, skip
-                val onlyEmbedded = existing.isNotEmpty() &&
-                    existing.all { it.source == com.m1racle.reader.data.local.OutlineNodeSource.PDF_EMBEDDED.name }
-                if (onlyEmbedded &&
-                    com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.isAlreadyImported(drafts, existing) &&
-                    existing.size == drafts.size
+    suspend fun importEmbeddedOutline(plan: com.m1racle.reader.core.model.OutlineImportPlan): Int =
+        withContext(Dispatchers.IO) {
+            importTransactionRunner.run {
+                val existing = textbookOutlineNodeDao.listForDocument(plan.documentId)
+                if (com.m1racle.reader.core.model.OutlineImportRules.isAlreadyImported(
+                        plan.drafts,
+                        existing.map { it.importKey },
+                    ) &&
+                    plan.mode == com.m1racle.reader.core.model.OutlineImportMode.MERGE
                 ) {
                     return@run 0
                 }
-                val plan = com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.buildReplace(documentId, drafts)
-                textbookOutlineNodeDao.deleteAllForDocument(documentId)
-                plan.nodes.forEach { textbookOutlineNodeDao.upsert(it) }
-                return@run plan.inserted
+                if (plan.mode == com.m1racle.reader.core.model.OutlineImportMode.REPLACE) {
+                    val onlyEmbedded = existing.isNotEmpty() &&
+                        existing.all { it.source == OutlineNodeSource.PDF_EMBEDDED.name }
+                    if (onlyEmbedded &&
+                        com.m1racle.reader.core.model.OutlineImportRules.isAlreadyImported(
+                            plan.drafts,
+                            existing.map { it.importKey },
+                        ) &&
+                        existing.size == plan.drafts.size
+                    ) {
+                        return@run 0
+                    }
+                    val written = com.m1racle.reader.data.local.OutlineImportPlanner.buildReplace(
+                        plan.documentId,
+                        plan.drafts,
+                    )
+                    textbookOutlineNodeDao.deleteAllForDocument(plan.documentId)
+                    written.nodes.forEach { textbookOutlineNodeDao.upsert(it) }
+                    return@run written.inserted
+                }
+                val written = com.m1racle.reader.data.local.OutlineImportPlanner.buildMerge(
+                    documentId = plan.documentId,
+                    drafts = plan.drafts,
+                    existing = existing,
+                )
+                written.nodes.forEach { textbookOutlineNodeDao.upsert(it) }
+                written.inserted
             }
-            val plan = com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter.buildMerge(
-                documentId = documentId,
-                drafts = drafts,
-                existing = existing,
-            )
-            plan.nodes.forEach { textbookOutlineNodeDao.upsert(it) }
-            plan.inserted
         }
-    }
 
     // endregion
 
@@ -886,13 +880,13 @@ class DocumentRepository(
         val destDir = java.io.File(context.filesDir, "epubs/$id")
         val book = try {
             kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
-                EpubPackageImporter.openCached(epubFile, destDir, entity.contentSha256 ?: PdfSourceWriteStore.sha256(epubFile))
+                EpubPackageImporter.openCached(epubFile, destDir, entity.contentSha256 ?: ContentSha256.of(epubFile))
             }
         } catch (e: EpubException.Corrupt) {
             // Rebuild once if an otherwise completed cache has lost required files.
             destDir.deleteRecursively()
             kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
-                EpubPackageImporter.openCached(epubFile, destDir, entity.contentSha256 ?: PdfSourceWriteStore.sha256(epubFile))
+                EpubPackageImporter.openCached(epubFile, destDir, entity.contentSha256 ?: ContentSha256.of(epubFile))
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -948,7 +942,7 @@ class DocumentRepository(
      */
     suspend fun updateEpubReadingPosition(
         id: String,
-        anchor: com.m1racle.reader.data.anchor.DocumentAnchor.EpubText?,
+        anchor: com.m1racle.reader.core.model.DocumentAnchor.EpubText?,
         lastScrollIndex: Int,
         lastScrollOffset: Int,
         readingProgress: Float,
@@ -993,7 +987,7 @@ class DocumentRepository(
         }
     }
 
-    suspend fun updatePdfViewportSession(id: String, session: com.m1racle.reader.pdf.PdfViewportSessionState) {
+    suspend fun updatePdfViewportSession(id: String, session: com.m1racle.reader.core.model.PdfViewportSessionState) {
         withContext(Dispatchers.IO) {
             documentDao.updatePdfViewportSession(
                 id, session.version, session.readingMode.toStorage(), session.pageIndex,
@@ -1025,7 +1019,7 @@ class DocumentRepository(
         intraPageFractionEncoded: Int?,
         pageCount: Int?,
         readingProgress: Float?,
-        session: com.m1racle.reader.pdf.PdfViewportSessionState?,
+        session: com.m1racle.reader.core.model.PdfViewportSessionState?,
     ) {
         withContext(Dispatchers.IO) {
             db.withTransaction {
@@ -1136,7 +1130,7 @@ class DocumentRepository(
                     ContentIdentityInput(
                         sourceUri = uri,
                         metadata = resolved,
-                        maximumBytes = ExternalDocumentImporter.MAX_BYTES,
+                        maximumBytes = ExternalDocumentImporter.maximumBytesFor(documentType),
                     ),
                 )
             ) {
@@ -1249,9 +1243,10 @@ sealed class ImportResult {
     data object UnsupportedFormat : ImportResult()
 
     /**
-     * Source exceeded the shared 200 MB import limit
-     * ([com.m1racle.reader.share.ExternalDocumentImporter.MAX_BYTES]) — the
-     * Path-A twin of PrepareOutcome.TooLarge (import policy batch 3).
+     * Source exceeded the format-specific import limit from
+     * ExternalDocumentImporter.maximumBytesFor.
+     * PDF uses the larger cap; every other type keeps the shared cap.
+     * Path-A twin of PrepareOutcome.TooLarge.
      */
     data object SourceTooLarge : ImportResult()
     data object ReadFailed : ImportResult()

@@ -1,5 +1,7 @@
 package com.m1racle.reader.data.anchor
 
+import com.m1racle.reader.core.model.DocumentAnchor
+
 /**
  * R24 标注锚点解析器：负责锚点信息的**保存投影**与**恢复解析**。
  *

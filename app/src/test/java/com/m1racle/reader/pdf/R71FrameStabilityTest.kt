@@ -1,6 +1,9 @@
 package com.m1racle.reader.pdf
 
-import java.io.File
+import com.m1racle.reader.core.model.QualityTier
+import com.m1racle.reader.core.model.ContinuousQualityHysteresis
+import com.m1racle.reader.testing.ProductionSource
+
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -71,7 +74,11 @@ class R71FrameStabilityTest {
     }
 
     @Test fun `aspect metadata is retained across cache map eviction`() {
-        assertTrue(viewportSource().contains("displayedAspects = displayedAspects + acceptedAspects"))
+        assertTrue(viewModelSource().contains("knownPageAspects = knownPageAspects + (pageIndex to aspect)"))
+        assertTrue(viewModelSource().contains("pageAspects = knownPageAspects"))
+        assertFalse(viewModelSource().contains("pageAspects = pageCache.snapshotAspects()"))
+        assertFalse(viewportSource().contains("prune(displayedAspects"))
+        assertTrue(viewportSource().contains("if (geometryMotionActive) settledAspects else state.pageAspects"))
     }
 
     @Test fun `vertical high scheduling uses dedicated hysteresis`() {
@@ -81,9 +88,6 @@ class R71FrameStabilityTest {
     private fun viewportSource(): String = source("ContinuousDocumentViewport.kt")
     private fun viewModelSource(): String = source("PdfViewerViewModel.kt")
 
-    private fun source(name: String): String = listOf(
-        File("app/src/main/java/com/m1racle/reader/ui/pdf/$name"),
-        File("src/main/java/com/m1racle/reader/ui/pdf/$name"),
-        File("../src/main/java/com/m1racle/reader/ui/pdf/$name"),
-    ).first { it.isFile }.readText()
+    private fun source(name: String): String =
+        ProductionSource.text("com/m1racle/reader/ui/pdf/$name")
 }

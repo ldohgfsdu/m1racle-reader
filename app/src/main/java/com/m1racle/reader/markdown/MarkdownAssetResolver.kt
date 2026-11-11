@@ -78,7 +78,7 @@ enum class MarkdownAssetFailure {
 /**
  * Single entry for Markdown image/asset reference resolution.
  * Pure relative/absolute classification does not require Android services;
- * [fromDocument] needs [Context] only to classify app-owned paths.
+ * [fromDocumentUri] needs [Context] only to classify app-owned paths.
  */
 object MarkdownAssetResolver {
 
@@ -102,18 +102,6 @@ object MarkdownAssetResolver {
         val source = document.sourceUri
         return if (document.type == DocumentType.MARKDOWN && source != null && source.startsWith("file:")) source else document.uri
     }
-    /**
-     * Build base location from a library document. No schema fields required.
-     * Never fabricates sibling content:// URIs.
-     */
-    fun fromDocument(context: Context, document: DocumentEntity): MarkdownDocumentBase {
-        return fromDocumentUri(
-            context = context,
-            documentUri = imageBaseUriFor(document),
-            documentType = document.type,
-        )
-    }
-
     fun fromDocumentUri(
         context: Context,
         documentUri: String?,

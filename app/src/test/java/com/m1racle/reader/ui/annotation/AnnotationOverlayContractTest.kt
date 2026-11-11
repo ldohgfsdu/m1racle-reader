@@ -1,6 +1,8 @@
 package com.m1racle.reader.ui.annotation
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
+
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkLocationKind
@@ -97,7 +99,7 @@ class AnnotationOverlayContractTest {
         // 页 9：一个高亮；页 10 与 MD 块：不应出现在页 9 查询里。
         repo.addHighlight(
             "pdf-1",
-            DocumentAnchor.PdfPage(page = 9, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f))),
+            DocumentAnchor.PdfPage(page = 9, rects = listOf(com.m1racle.reader.core.model.NormalizedRect(0.1f, 0.2f, 0.3f, 0.1f))),
             createdAt = 1L,
             excerpt = "sel",
         )

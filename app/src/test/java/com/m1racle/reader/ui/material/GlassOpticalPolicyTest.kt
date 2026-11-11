@@ -1,7 +1,7 @@
 package com.m1racle.reader.ui.material
 
+import com.m1racle.reader.testing.ProductionSource
 import androidx.compose.ui.unit.dp
-import java.io.File
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -58,15 +58,13 @@ class GlassOpticalPolicyTest {
 
     @Test
     fun `renderers honor effective capability and share progressive endpoints`() {
-        val root = listOf(File("src/main/java/com/m1racle/reader/ui"),
-            File("app/src/main/java/com/m1racle/reader/ui")).first { it.isDirectory }
-        val material = File(root, "material/GlassMaterial.kt").readText()
+        val material = ProductionSource.text("com/m1racle/reader/ui/material/GlassMaterial.kt")
         val modifier = material.substring(material.indexOf("fun Modifier.glassMaterial("))
         assertTrue(modifier.indexOf("GlassCapabilityProbe.forSurface(") <
             modifier.indexOf("GlassMaterialEngine.resolve("))
         assertTrue(modifier.contains("sampleBackdrop = sampleBackdrop"))
         assertTrue(modifier.contains("supportsLens = supportsGlassLens(shape)"))
-        val gradient = File(root, "viewer/ReaderGradient.kt").readText()
+        val gradient = ProductionSource.text("com/m1racle/reader/ui/viewer/ReaderGradient.kt")
         assertTrue(gradient.contains("GlassCapability.SOLID_FALLBACK) Modifier"))
         assertTrue(gradient.contains("if (spec.vibrancy) vibrancy()"))
     }

@@ -1,5 +1,8 @@
 package com.m1racle.reader.data.anchor
 
+import com.m1racle.reader.core.model.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
+
 import java.net.URLDecoder
 import java.net.URLEncoder
 

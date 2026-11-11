@@ -1,5 +1,5 @@
 # Historical Room schema checksums describe exact committed bytes.
-app/schemas/** -text
+core/database/schemas/** -text
 *.sh text eol=lf
 gradlew text eol=lf
 *.bat text eol=crlf

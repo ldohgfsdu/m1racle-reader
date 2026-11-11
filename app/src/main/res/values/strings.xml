@@ -69,6 +69,7 @@
     <string name="pdf_outline_subtitle">章节与 PDF 页码</string>
     <string name="pdf_outline_count">共 %1$d 项</string>
     <string name="pdf_outline_count_empty">暂无目录项</string>
+    <string name="pdf_outline_loading">正在读取目录…</string>
     <string name="pdf_outline_here">当前：%1$s</string>
     <string name="pdf_outline_here_none">当前页不属于任何章节</string>
     <string name="pdf_outline_empty">导入 PDF 目录，或手动添加目录项。</string>
@@ -259,7 +260,7 @@
     <string name="home_remove_warning">将清除这份文档的阅读进度、书签、收藏、批注和应用内副本，无法撤销。不会删除原始文件。</string>
     <string name="home_delete_failed">移除失败，文档仍保留在文库中，请重试。</string>
     <string name="home_importing">正在导入…</string>
-    <string name="home_import_too_large">文件超过 %1$d MiB 导入上限，请选择较小的文件。</string>
+    <string name="home_import_too_large">文件过大，PDF 上限 %1$d MiB，其他格式上限 %2$d MiB</string>
     <string name="home_document_information">文件信息</string>
     <string name="home_close_information">关闭</string>
     <string name="material_comparison_section">外观预览</string>

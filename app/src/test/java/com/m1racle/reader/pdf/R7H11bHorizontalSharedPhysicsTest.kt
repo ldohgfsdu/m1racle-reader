@@ -1,14 +1,15 @@
 package com.m1racle.reader.pdf
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class R7H11bHorizontalSharedPhysicsTest {
-    private fun source(name: String): String = File(
-        "src/main/java/com/m1racle/reader/${if (name == "PdfViewerScreen.kt") "ui/pdf" else "pdf"}/$name",
-    ).readText()
+    private fun source(name: String): String = ProductionSource.text(
+        "com/m1racle/reader/${if (name == "PdfViewerScreen.kt") "ui/pdf" else "pdf"}/$name",
+    )
         .replace("\r\n", "\n")
         .replace('\r', '\n')
 
@@ -69,16 +70,23 @@ class R7H11bHorizontalSharedPhysicsTest {
     @Test
     fun `tile and bitmap identity are not pointer input restart keys`() {
         val screen = source("PdfViewerScreen.kt")
-        assertTrue(
-            screen.contains(
-                    ".pointerInput(\n" +
-                    "                        slot.stableId,\n" +
-                    "                        slot.role,\n" +
-                    "                        activeHorizontalPage,\n" +
-                    "                        fittedPage.fittedWidthPx,\n" +
-                    "                        fittedPage.fittedHeightPx,",
+            .substringAfter("internal fun PdfHorizontalPagedArea(")
+        val inputs = Regex("\\.pointerInput\\(([^)]*)\\)").findAll(screen).toList()
+        assertEquals(2, inputs.size)
+        val keys = inputs.map { input ->
+            input.groupValues[1].split(',').map(String::trim).filter(String::isNotEmpty)
+        }
+        assertEquals(
+            listOf(
+                "state.document.id", "activeHorizontalPage",
+                "activePointerLayout.fittedWidthPx", "activePointerLayout.fittedHeightPx",
             ),
+            keys[0],
         )
+        assertEquals(listOf("state.document.id", "activeHorizontalPage"), keys[1])
+        // Input must stay on the viewport, outside every translating physical slot.
+        val slotsStart = screen.indexOf("pageStrip.slots().forEach")
+        assertTrue(slotsStart > inputs.last().range.last)
         assertFalse(screen.contains(".pointerInput(page, scale, currentHorizontalStatePage)"))
     }
 

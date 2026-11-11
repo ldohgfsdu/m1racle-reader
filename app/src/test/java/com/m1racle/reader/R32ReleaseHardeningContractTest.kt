@@ -64,20 +64,21 @@ class R32ReleaseHardeningContractTest {
         assertTrue(database.contains("MIGRATION_14_15"))
         assertTrue(database.contains("MIGRATION_15_16"))
         assertTrue(database.contains("MIGRATION_16_17"))
-        assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/16.json").isFile)
-        assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/17.json").isFile)
-        assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/14.json").isFile)
-        assertTrue(File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase/15.json").isFile)
+        val schemaRoot = "core/database/schemas/com.m1racle.reader.data.local.AppDatabase"
+        assertTrue(File(projectRoot(), "$schemaRoot/16.json").isFile)
+        assertTrue(File(projectRoot(), "$schemaRoot/17.json").isFile)
+        assertTrue(File(projectRoot(), "$schemaRoot/14.json").isFile)
+        assertTrue(File(projectRoot(), "$schemaRoot/15.json").isFile)
         assertTrue(
             File(
                 projectRoot(),
-                "app/schemas/com.m1racle.reader.data.local.AppDatabase/12.json",
+                "$schemaRoot/12.json",
             ).isFile,
         )
         assertTrue(
             File(
                 projectRoot(),
-                "app/schemas/com.m1racle.reader.data.local.AppDatabase/13.json",
+                "$schemaRoot/13.json",
             ).isFile,
         )
         val checklist = File(projectRoot(), "RELEASE_CHECKLIST.md").readText()

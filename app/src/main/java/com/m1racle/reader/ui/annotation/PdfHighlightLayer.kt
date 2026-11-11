@@ -31,6 +31,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -80,6 +82,8 @@ fun PdfHighlightLayer(
     /** Optional direct path into the existing note editor; null hides the note action. */
     onSelectionNoteRequested: ((TextSelection.PdfSelection) -> Unit)? = null,
     selectionSession: PdfTextSelectionSession = remember { PdfTextSelectionSession() },
+    /** GPU scale the viewport applies to the whole page layer this overlay sits in. */
+    pageScale: Float = 1f,
 ) {
     val currentComplete by rememberUpdatedState(onSelectCompleted)
     val currentUnavailable by rememberUpdatedState(onSelectionUnavailable)
@@ -119,6 +123,18 @@ fun PdfHighlightLayer(
     val handleHitRadiusPx = with(density) { 24.dp.toPx() }
     val actionGapPx = with(density) { 8.dp.toPx() }
     val actionMarginPx = with(density) { 8.dp.toPx() }
+    // The action bar is a screen-fixed control. Its dp sizes are converted into
+    // page-local equivalents so the viewport's GPU scale cannot enlarge it.
+    val actionMetrics = PdfTextSelectionGeometry.fixedScreenActionBarMetrics(
+        barWidthPx = actionBarSize.width.toFloat(),
+        barHeightPx = actionBarSize.height.toFloat(),
+        gapPx = actionGapPx,
+        marginPx = actionMarginPx,
+        pageScale = pageScale,
+    )
+    // Pointer-input lambdas capture values; keep the gesture stream alive on
+    // scale changes while still reading the latest metrics.
+    val currentActionMetrics by rememberUpdatedState(actionMetrics)
 
     fun rectOf(item: AnnotationOverlayItem) = item.pdfRectsNormalized().firstOrNull()
 
@@ -142,10 +158,10 @@ fun PdfHighlightLayer(
             selectionRects = currentTextSelection.rects,
             widthPx = layerSize.width.toFloat(),
             heightPx = layerSize.height.toFloat(),
-            barWidthPx = actionBarSize.width.toFloat(),
-            barHeightPx = actionBarSize.height.toFloat(),
-            gapPx = actionGapPx,
-            marginPx = actionMarginPx,
+            barWidthPx = actionMetrics.barWidthPx,
+            barHeightPx = actionMetrics.barHeightPx,
+            gapPx = actionMetrics.gapPx,
+            marginPx = actionMetrics.marginPx,
         )
     } else {
         null
@@ -186,10 +202,10 @@ fun PdfHighlightLayer(
                         selectionRects = selection.rects,
                         widthPx = widthPx,
                         heightPx = heightPx,
-                        barWidthPx = actionBarSize.width.toFloat(),
-                        barHeightPx = actionBarSize.height.toFloat(),
-                        gapPx = actionGapPx,
-                        marginPx = actionMarginPx,
+                        barWidthPx = currentActionMetrics.barWidthPx,
+                        barHeightPx = currentActionMetrics.barHeightPx,
+                        gapPx = currentActionMetrics.gapPx,
+                        marginPx = currentActionMetrics.marginPx,
                     )
                 }
             } else {
@@ -197,9 +213,9 @@ fun PdfHighlightLayer(
             }
             if (actionRect != null &&
                 down.position.x >= actionRect.x &&
-                down.position.x <= actionRect.x + actionBarSize.width &&
+                down.position.x <= actionRect.x + currentActionMetrics.barWidthPx &&
                 down.position.y >= actionRect.y &&
-                down.position.y <= actionRect.y + actionBarSize.height
+                down.position.y <= actionRect.y + currentActionMetrics.barHeightPx
             ) {
                 return@awaitEachGesture
             }
@@ -495,6 +511,14 @@ fun PdfHighlightLayer(
                             // Keep the first measuring pass out of the page's hit area.
                             IntOffset(-10_000, -10_000)
                         }
+                    }
+                    // Undo the viewport's page scale for this control only. The
+                    // offset above stays in page-local coordinates so the bar keeps
+                    // following the selection, while its content stays screen-sized.
+                    .graphicsLayer {
+                        scaleX = actionMetrics.inverseScale
+                        scaleY = actionMetrics.inverseScale
+                        transformOrigin = TransformOrigin(0f, 0f)
                     }
                     .alpha(if (placement != null) 1f else 0f),
                 hasNoteAction = currentSelectionNote != null,

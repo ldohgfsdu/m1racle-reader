@@ -6,7 +6,7 @@ PDF 内置 Outline/Bookmarks → `textbook_outline_nodes`。
 
 - **渲染**：仍用 Android `PdfRenderer`（正文 + 缩略图）
 - **目录解析**：`PdfEmbeddedOutlineParser`（pdfbox-android，只读元数据）
-- **推算 / 导入策略**：`EmbeddedOutlineBuilder` + `PdfEmbeddedOutlineImporter`（纯函数可测）
+- **推算 / 导入策略**：PDF 模块的 `EmbeddedOutlineBuilder` 生成 Draft；`core:model` 的 `OutlineImportRules` 查重；`core:database` 的 `OutlineImportPlanner` 生成 Room 节点。
 
 ## 字段
 

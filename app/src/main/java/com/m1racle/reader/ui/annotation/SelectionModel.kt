@@ -1,7 +1,7 @@
 package com.m1racle.reader.ui.annotation
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
-import com.m1racle.reader.data.anchor.NormalizedRect
+import com.m1racle.reader.core.model.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
 
 /**
  * R25 用户选择区域抽象（交互层瞬时概念，永不持久化）。

@@ -1,5 +1,7 @@
 package com.m1racle.reader.ui.viewer.components
 
+import com.m1racle.reader.core.model.DocumentAnchor
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -297,7 +299,7 @@ private fun buildMarkdownDisplayText(
     highlights.forEach { highlight ->
         val anchor =
             com.m1racle.reader.data.anchor.AnchorCodec.decode(highlight.anchor)
-                as? com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock
+                as? com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock
                 ?: return@forEach
         val start = ((anchor.charStart ?: 0) - annotationOffset).coerceIn(0, searched.length)
         val end = ((anchor.charEnd ?: selectionContext?.plainText?.length ?: (searched.length + annotationOffset)) - annotationOffset).coerceIn(0, searched.length)

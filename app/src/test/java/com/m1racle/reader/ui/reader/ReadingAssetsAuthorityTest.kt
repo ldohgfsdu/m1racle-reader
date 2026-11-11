@@ -4,7 +4,6 @@ import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * R23 仓库权威钉：阅读器书签写入的唯一路径是
@@ -25,7 +24,7 @@ class ReadingAssetsAuthorityTest {
 
     @Test
     fun `controller is constructed in nav graph with per reader coordinate systems`() {
-        val nav = norm(source("app/src/main/java/com/m1racle/reader/ui/navigation/NavGraph.kt").readText())
+        val nav = norm(source("com/m1racle/reader/ui/navigation/NavGraph.kt"))
         val pdfCount = Regex("BookmarkLocationKind.PAGE_INDEX").findAll(nav).count()
         val mdCount = Regex("BookmarkLocationKind.SCROLL_POSITION").findAll(nav).count()
         assertTrue("PDF route must wire PAGE_INDEX controller", pdfCount >= 1)
@@ -35,13 +34,13 @@ class ReadingAssetsAuthorityTest {
 
     @Test
     fun `repository stays the single bookmark writer facade`() {
-        val repo = norm(source("app/src/main/java/com/m1racle/reader/data/repository/ReadingRepository.kt").readText())
+        val repo = norm(source("com/m1racle/reader/data/repository/ReadingRepository.kt"))
         assertTrue(repo.contains("suspend fun toggleBookmark(bookmark: BookmarkEntity): Boolean = transactionRunner.run"))
         assertTrue(repo.contains("bookmarkDao.getAt("))
         assertTrue(repo.contains("bookmarkDao.deleteAt("))
         assertTrue(repo.contains("bookmarkedLocations"))
         val controller = norm(
-            source("app/src/main/java/com/m1racle/reader/ui/reader/ReaderBookmarkController.kt").readText(),
+            source("com/m1racle/reader/ui/reader/ReaderBookmarkController.kt"),
         )
         // 控制器只经由仓库，不绕过到 DAO。
         assertFalse(controller.contains("Dao"))
@@ -50,12 +49,12 @@ class ReadingAssetsAuthorityTest {
         assertFalse(controller.contains("removeBookmarkAt("))
     }
 
-    private fun source(repoRelative: String): File = ProductionSource.projectFile(repoRelative)
+    private fun source(relative: String): String = ProductionSource.text(relative)
 
     /** The reader surface moved from `ui/pdf` to `ui/viewer`; either home is valid. */
     private fun readerSource(name: String): String =
         listOf("ui/pdf/$name", "ui/viewer/$name")
-            .map { ProductionSource.javaRoot().resolve("com/m1racle/reader/$it") }
+            .map { ProductionSource.resolve("com/m1racle/reader/$it") }
             .firstOrNull { it.isFile }?.readText() ?: error("missing reader source $name")
 
     private fun norm(s: String): String = s.replace(Regex("\\s+"), " ")

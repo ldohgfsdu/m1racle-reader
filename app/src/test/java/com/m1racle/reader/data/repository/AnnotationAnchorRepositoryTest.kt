@@ -1,6 +1,8 @@
 package com.m1racle.reader.data.repository
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
+
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkLocationKind
@@ -107,7 +109,7 @@ class AnnotationAnchorRepositoryTest {
         val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val anchor = DocumentAnchor.PdfPage(
             page = 12,
-            rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect(0.2f, 0.3f, 0.4f, 0.1f)),
+            rects = listOf(com.m1racle.reader.core.model.NormalizedRect(0.2f, 0.3f, 0.4f, 0.1f)),
         )
         val id = repo.addHighlight("pdf-1", anchor, createdAt = 10L, excerpt = "原文")
         assertEquals(12, repo.highlightsForDocument("pdf-1").single().location)

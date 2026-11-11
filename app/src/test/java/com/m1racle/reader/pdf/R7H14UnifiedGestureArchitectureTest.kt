@@ -1,5 +1,11 @@
 package com.m1racle.reader.pdf
 
+import com.m1racle.reader.core.model.toCanonicalAnchor
+
+import com.m1racle.reader.core.model.PdfViewportSessionState
+import com.m1racle.reader.testing.ProductionSource
+import com.m1racle.reader.core.model.CanonicalPdfAnchor
+
 import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -44,7 +50,7 @@ class R7H14UnifiedGestureArchitectureTest {
         assertTrue(horizontal.contains("fun restoreViewportSession("))
         assertFalse(horizontal.contains("fun pageCommitTransform()"))
         assertTrue(viewModel.contains("stableSession.toCanonicalAnchor().toViewportSession("))
-        assertTrue(pdfSource("PdfViewportSessionState.kt").contains("data class CanonicalPdfAnchor("))
+        assertTrue(modelSource("PdfViewportSessionState.kt").contains("data class CanonicalPdfAnchor("))
         assertFalse(viewModel.contains("always enters at 1×"))
     }
 
@@ -65,7 +71,7 @@ class R7H14UnifiedGestureArchitectureTest {
         val continuous = uiSource("ContinuousDocumentViewport.kt")
         val screen = uiSource("PdfViewerScreen.kt")
         val viewModel = uiSource("PdfViewerViewModel.kt")
-        val session = pdfSource("PdfViewportSessionState.kt")
+        val session = modelSource("PdfViewportSessionState.kt")
         assertTrue(continuous.contains("currentOnViewportSessionPreview("))
         assertTrue(screen.contains("currentOnViewportSessionPreview(horizontalSession(page))"))
         assertTrue(viewModel.contains("viewportSessionTracker.latestForMode(ready.readingMode)"))
@@ -73,6 +79,7 @@ class R7H14UnifiedGestureArchitectureTest {
         assertTrue(viewModel.contains("never persisted by itself"))
     }
 
-    private fun uiSource(name: String) = File("src/main/java/com/m1racle/reader/ui/pdf/$name").readText()
-    private fun pdfSource(name: String) = File("src/main/java/com/m1racle/reader/pdf/$name").readText()
+    private fun uiSource(name: String) = ProductionSource.text("com/m1racle/reader/ui/pdf/$name")
+    private fun pdfSource(name: String) = ProductionSource.text("com/m1racle/reader/pdf/$name")
+    private fun modelSource(name: String) = ProductionSource.text("com/m1racle/reader/core/model/$name")
 }

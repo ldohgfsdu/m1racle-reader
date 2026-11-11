@@ -348,8 +348,4 @@ class ExternalOpenCoordinator(
             _busy.value = false
         }
     }
-
-    fun dismissError() {
-        _pending.value = null
-    }
 }

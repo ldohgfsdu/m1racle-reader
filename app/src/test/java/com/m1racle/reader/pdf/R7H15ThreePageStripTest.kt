@@ -1,6 +1,6 @@
 package com.m1racle.reader.pdf
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -163,22 +163,20 @@ class R7H15ThreePageStripTest {
     }
 
     @Test
-    fun `REAL 1X moving slot pointer is rebased into stationary viewport coordinates`() {
-        val firstViewportX = ThreePageStripPhysics.pointerXInViewport(
-            localPointerX = 1_000f,
-            role = PageStripSlotRole.CURRENT,
-            viewportWidthPx = width,
-            stripOffsetPx = 0f,
-        )
-        // The finger moved left by 10px while the slot also translated left by 10px. Its local
-        // X remains 1000, but the stationary viewport coordinate must still report the -10px move.
-        val secondViewportX = ThreePageStripPhysics.pointerXInViewport(
-            localPointerX = 1_000f,
-            role = PageStripSlotRole.CURRENT,
-            viewportWidthPx = width,
-            stripOffsetPx = -10f,
-        )
-        assertEquals(-10f, secondViewportX - firstViewportX, 0f)
+    fun `REAL 1X stationary viewport deltas stay one to one while the strip translates`() {
+        var frame = nextDrag(nextBaseReady = true, delta = -10f)
+        assertEquals(-10f, frame.offsetPx, 0f)
+        repeat(36) {
+            val next = ThreePageStripPhysics.drag(
+                transition = frame.transition, displayedOffsetPx = frame.offsetPx,
+                rawDeltaX = -10f, rawDeltaY = 0f, edgeResidualX = 0f,
+                currentPage = 1, pageCount = 3, viewportWidthPx = width,
+                previousBaseReady = true, nextBaseReady = true,
+            )
+            assertEquals(-10f, next.offsetPx - frame.offsetPx, 0f)
+            frame = next
+        }
+        assertEquals(-370f, frame.offsetPx, 0f)
     }
 
     @Test
@@ -221,7 +219,7 @@ class R7H15ThreePageStripTest {
 
     @Test
     fun `production has stable three slots no HorizontalPager and no per frame page index write`() {
-        val screen = File("src/main/java/com/m1racle/reader/ui/pdf/PdfViewerScreen.kt").readText()
+        val screen = ProductionSource.text("com/m1racle/reader/ui/pdf/PdfViewerScreen.kt")
         assertTrue(screen.contains("pageStrip.slots().forEach"))
         assertTrue(screen.contains("key(slot.stableId)"))
         assertTrue(screen.contains("ThreePageStripPhysics.slotTranslationPx("))

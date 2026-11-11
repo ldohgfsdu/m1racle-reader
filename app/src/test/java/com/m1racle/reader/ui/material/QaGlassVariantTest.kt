@@ -1,6 +1,7 @@
 package com.m1racle.reader.ui.material
 
 import com.m1racle.reader.design.RadixColors
+import com.m1racle.reader.testing.ProductionSource
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -134,10 +135,9 @@ class QaGlassVariantTest {
     @Test
     fun coolapkKeepsProductionGeometry() {
         // Material only: variant 2 must not resize the Dock, the "+" or PDF controls.
-        val src = java.io.File("src/main/java/com/m1racle/reader/ui")
-        val dock = java.io.File(src, "hub/GlassDock.kt").readText()
-        val pdf = java.io.File(src, "pdf/PdfViewerScreen.kt").readText()
-        val tokens = java.io.File(src, "home/HomeDesignTokens.kt").readText()
+        val dock = ProductionSource.text("com/m1racle/reader/ui/hub/GlassDock.kt")
+        val pdf = ProductionSource.text("com/m1racle/reader/ui/pdf/PdfViewerScreen.kt")
+        val tokens = ProductionSource.text("com/m1racle/reader/ui/home/HomeDesignTokens.kt")
         listOf("DockHeight", "DockBottomGap", "DockHorizontalMargin", "DockLensExtraWidth",
             "DockImportSize", "DockLabelSizeSp", "PdfControlSize").forEach { name ->
             listOf(dock, pdf, tokens).forEach { assertTrue("QaCoolapk.$name still used", !it.contains("QaCoolapk.$name")) }

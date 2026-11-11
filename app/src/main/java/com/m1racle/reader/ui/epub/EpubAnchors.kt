@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.epub
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.epub.EpubBook
 import com.m1racle.reader.epub.EpubLocation
 import com.m1racle.reader.epub.EpubReadingAnchors

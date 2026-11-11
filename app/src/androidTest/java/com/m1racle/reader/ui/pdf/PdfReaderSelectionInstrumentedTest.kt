@@ -45,7 +45,7 @@ import com.m1racle.reader.data.repository.ReadingRepository
 import com.m1racle.reader.data.repository.RoomRepositoryTransactionRunner
 import com.m1racle.reader.data.repository.SearchRepository
 import com.m1racle.reader.pdf.ContinuousEntryPhase
-import com.m1racle.reader.pdf.PdfReadingMode
+import com.m1racle.reader.core.model.PdfReadingMode
 import com.m1racle.reader.pdf.PdfReadingPrefs
 import com.m1racle.reader.pdf.PdfSelectablePage
 import com.m1racle.reader.pdf.PdfTopBarMode

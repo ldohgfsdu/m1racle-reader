@@ -1,6 +1,12 @@
 package com.m1racle.reader.pdf
 
-import java.io.File
+import com.m1racle.reader.core.model.toCanonicalAnchor
+
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfGesturePhase
+import com.m1racle.reader.core.model.PdfViewportSessionState
+import com.m1racle.reader.testing.ProductionSource
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -191,6 +197,6 @@ class R7H15PlatformScrollAndPageStripTest {
         nextBaseReady = true,
     )
 
-    private fun uiSource(name: String) = File("src/main/java/com/m1racle/reader/ui/pdf/$name").readText()
-    private fun pdfSource(name: String) = File("src/main/java/com/m1racle/reader/pdf/$name").readText()
+    private fun uiSource(name: String) = ProductionSource.text("com/m1racle/reader/ui/pdf/$name")
+    private fun pdfSource(name: String) = ProductionSource.text("com/m1racle/reader/pdf/$name")
 }

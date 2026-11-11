@@ -20,13 +20,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.m1racle.reader.R
-import com.m1racle.reader.pdf.EmbeddedOutlineNodeDraft
-import com.m1racle.reader.pdf.OutlineImportMode
+import com.m1racle.reader.core.model.OutlineImportDraft
+import com.m1racle.reader.core.model.OutlineImportMode
 import com.m1racle.reader.ui.material.GlassAlertDialog
 
 @Composable
 fun EmbeddedOutlineImportDialog(
-    drafts: List<EmbeddedOutlineNodeDraft>,
+    drafts: List<OutlineImportDraft>,
     hasLocalNodes: Boolean,
     alreadyImported: Boolean,
     onImport: (OutlineImportMode) -> Unit,

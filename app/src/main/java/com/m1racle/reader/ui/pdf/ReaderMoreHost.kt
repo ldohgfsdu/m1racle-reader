@@ -170,8 +170,6 @@ object ReaderMoreStateMachine {
         }
     }
 
-    fun onOptionSelected(current: ReaderMoreState): ReaderMoreState = ReaderMoreState.MAIN
-
     /**
      * Open advanced: from Basic → PREPARING (collapse first);
      * from Main → CHILD immediately (canonical bounds available).

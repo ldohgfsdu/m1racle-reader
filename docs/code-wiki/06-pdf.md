@@ -73,7 +73,7 @@ flowchart LR
 
 [PdfTextSelection](../../app/src/main/java/com/m1racle/reader/pdf/PdfTextSelection.kt) 用 PDFBox 提取当前页文字与几何，检查内容提取权限；UI 的 `PdfHighlightGeometry`/`PdfHighlightLayer` 转为归一化多矩形并绘制。没有文本层的扫描件不能据此获得 OCR。
 
-`PdfEmbeddedOutlineParser` 读取嵌入目录，`PdfEmbeddedOutlineImporter.buildReplace/buildMerge()` 生成可持久化节点，并识别导入来源。`TextbookOutlineResolver` 处理业务目录层级和页区间。`PrintPageResolver` 通过人工校准锚点推导印刷页；PDF 页索引始终零基，展示页通常一基，印刷页是另一套语义。
+`PdfEmbeddedOutlineParser` 读取嵌入目录，UI 编排层将其映射为中性 `OutlineImportDraft`；`OutlineImportRules` 统一查重，`OutlineImportPlanner` 在数据库模块生成可持久化节点并识别导入来源。`TextbookOutlineResolver` 处理业务目录层级和页区间。`PrintPageResolver` 通过人工校准锚点推导印刷页；PDF 页索引始终零基，展示页通常一基，印刷页是另一套语义。
 
 ## 章节/标注导出
 

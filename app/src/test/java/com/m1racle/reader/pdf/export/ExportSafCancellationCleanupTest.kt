@@ -460,4 +460,21 @@ class ExportSafCancellationCleanupTest {
         assertTrue(backing.exists())
         assertEquals(1024L, backing.length())
     }
+
+    @Test
+    fun failedDestinationCleanupRemainsFailedAndCanBeRetried() {
+        backing.writeBytes(ByteArray(1024))
+        val destination = SafExportDestination(resolver, destUri)
+        StubDocumentsProvider.failDelete = true
+        assertFalse(destination.cleanupIfUncommitted())
+        assertFalse(destination.cleanupIfUncommitted())
+        assertEquals(2, StubDocumentsProvider.deleteCalls)
+        assertTrue(backing.exists())
+
+        StubDocumentsProvider.failDelete = false
+        assertTrue(destination.cleanupIfUncommitted())
+        assertFalse(backing.exists())
+        assertTrue(destination.cleanupIfUncommitted())
+        assertEquals(3, StubDocumentsProvider.deleteCalls)
+    }
 }

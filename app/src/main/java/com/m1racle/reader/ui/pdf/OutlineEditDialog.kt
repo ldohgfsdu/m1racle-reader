@@ -26,8 +26,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.m1racle.reader.R
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
-import com.m1racle.reader.data.local.TextbookOutlineNodeType
-import com.m1racle.reader.pdf.TextbookOutlineResolver
+import com.m1racle.reader.core.model.TextbookOutlineNodeType
+import com.m1racle.reader.data.local.TextbookOutlineResolver
 import com.m1racle.reader.ui.material.GlassAlertDialog
 import com.m1racle.reader.ui.theme.m1racleReaderOutlinedFieldColors
 

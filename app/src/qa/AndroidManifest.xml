@@ -33,6 +33,20 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.M1racleReader" />
         <activity
+            android:name=".ui.pdf.PdfMotionAspectHarnessActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.M1racleReader" />
+        <activity
+            android:name=".ui.pdf.PdfLatePageCountHarnessActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.M1racleReader" />
+        <activity
+            android:name=".ui.pdf.PdfSafSplitSetupActivity"
+            android:exported="true"
+            android:theme="@style/Theme.M1racleReader" />
+        <activity
             android:name=".ui.viewer.components.MarkdownTableQaActivity"
             android:exported="true"
             android:screenOrientation="portrait"

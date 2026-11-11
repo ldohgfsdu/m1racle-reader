@@ -1,6 +1,7 @@
 package com.m1racle.reader
 
-import java.io.File
+import com.m1racle.reader.testing.ProductionKotlinRoots
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,7 +12,7 @@ class R57AtomicIdentityAuthorityContractTest {
 
     @Test
     fun `historical sidecar runtime is absent and v1 file is migration-only`() {
-        assertFalse(File(mainRoot(), "share/DocumentIdentityIndex.kt").exists())
+        assertFalse(ProductionSource.resolve("com/m1racle/reader/share/DocumentIdentityIndex.kt").exists())
         assertEquals(
             emptyList<String>(),
             sourcesContaining("DocumentIdentityIndex"),
@@ -81,18 +82,17 @@ class R57AtomicIdentityAuthorityContractTest {
     }
 
     private fun sourcesContaining(needle: String): List<String> =
-        mainRoot().walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.readText().contains(needle) }
-            .map { it.relativeTo(mainRoot()).invariantSeparatorsPath }
+        ProductionKotlinRoots.files()
+            .filter { it.readText().contains(needle) }
+            .map { file ->
+                ProductionKotlinRoots.relativePath(file).removePrefix("com/m1racle/reader/")
+            }
             .sorted()
             .toList()
 
-    private fun source(relative: String): String = File(mainRoot(), relative).readText()
+    private fun source(relative: String): String =
+        ProductionSource.text("com/m1racle/reader/$relative")
 
-    private fun mainRoot(): File = listOf(
-        File("app/src/main/java/com/m1racle/reader"),
-        File("src/main/java/com/m1racle/reader"),
-    ).first(File::isDirectory).canonicalFile
 
     private fun String.countText(needle: String): Int = windowed(needle.length).count { it == needle }
 }

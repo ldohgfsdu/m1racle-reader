@@ -13,8 +13,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.m1racle.reader.BuildConfig
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
-import com.m1racle.reader.pdf.PdfReadingMode
-import com.m1racle.reader.pdf.PdfViewportSessionState
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfViewportSessionState
 import com.m1racle.reader.ui.theme.M1racleReaderTheme
 
 /** QA-build-only host for deterministic production horizontal-view interaction acceptance. */

@@ -1,7 +1,11 @@
 package com.m1racle.reader.data.anchor
 
-import com.m1racle.reader.pdf.PdfReadingMode
-import com.m1racle.reader.pdf.PdfViewportSessionState
+import com.m1racle.reader.core.model.PdfReadingPositionCodec
+
+import com.m1racle.reader.core.model.DocumentAnchor
+
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfViewportSessionState
 import org.json.JSONObject
 
 /** A bookmark owns its captured position; later reading progress cannot move it. */
@@ -15,7 +19,7 @@ data class BookmarkTarget(
         val saved = viewport
         return document.copy(
             lastScrollIndex = page,
-            lastScrollOffset = com.m1racle.reader.pdf.PdfReadingPositionCodec.encodeFraction(saved?.pageAnchorYFraction ?: 0f),
+            lastScrollOffset = com.m1racle.reader.core.model.PdfReadingPositionCodec.encodeFraction(saved?.pageAnchorYFraction ?: 0f),
             pdfViewportSessionVersion = saved?.version,
             pdfViewportReadingMode = saved?.readingMode?.name,
             pdfViewportPageIndex = saved?.pageIndex,

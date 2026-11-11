@@ -1,11 +1,11 @@
 package com.m1racle.reader
 
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import java.io.File
 
 /**
  * Host checks that production-facing flags / packaging assumptions hold.
@@ -38,8 +38,7 @@ class ReleaseHygieneHostTest {
 
     @Test
     fun noInternetPermission_inMainManifest() {
-        val manifest = File("src/main/AndroidManifest.xml").takeIf { it.isFile }
-            ?: File("app/src/main/AndroidManifest.xml")
+        val manifest = ProductionSource.projectFile("app/src/main/AndroidManifest.xml")
         assertTrue(manifest.isFile)
         val text = manifest.readText()
         assertFalse(
@@ -51,8 +50,7 @@ class ReleaseHygieneHostTest {
 
     @Test
     fun appDataBackup_isDisabledForLocalOnlyDocuments() {
-        val manifest = File("app/src/main/AndroidManifest.xml").takeIf { it.isFile }
-            ?: File("src/main/AndroidManifest.xml")
+        val manifest = ProductionSource.projectFile("app/src/main/AndroidManifest.xml")
         val text = manifest.readText()
         assertTrue(text.contains("android:allowBackup=\"false\""))
         assertFalse(text.contains("dataExtractionRules"))

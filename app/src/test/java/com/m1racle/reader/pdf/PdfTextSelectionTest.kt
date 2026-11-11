@@ -2,8 +2,8 @@ package com.m1racle.reader.pdf
 
 import androidx.test.core.app.ApplicationProvider
 import com.m1racle.reader.data.anchor.AnchorCodec
-import com.m1racle.reader.data.anchor.DocumentAnchor
-import com.m1racle.reader.data.anchor.NormalizedRect
+import com.m1racle.reader.core.model.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
 import com.m1racle.reader.ui.annotation.PdfHighlightGeometry
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage

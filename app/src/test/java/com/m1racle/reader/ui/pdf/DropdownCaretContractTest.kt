@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.pdf
 
-import com.m1racle.reader.testing.ProductionSource
+import com.m1racle.reader.testing.ProductionKotlinRoots
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -14,13 +14,11 @@ class DropdownCaretContractTest {
             "ArrowDropDown",
             "arrow_drop_down",
         )
-        val root = ProductionSource.javaRoot()
-        val hits = root.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
+        val hits = ProductionKotlinRoots.files()
             .flatMap { file ->
                 val text = file.readText()
                 banned.filter { token -> text.contains(token) }
-                    .map { token -> "${file.relativeTo(root).path}: $token" }
+                    .map { token -> "${file.path}: $token" }
             }
             .toList()
         assertEquals(emptyList<String>(), hits)

@@ -3,7 +3,8 @@ package com.m1racle.reader.pdf.export
 import com.m1racle.reader.data.local.PdfPrintPageAnchorEntity
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.pdf.PrintPageResolver
-import com.m1racle.reader.pdf.TextbookOutlineResolver
+import com.m1racle.reader.pdf.toPrintPageAnchors
+import com.m1racle.reader.data.local.TextbookOutlineResolver
 
 enum class EndPageSource {
     /** 下一同级节点起始页 - 1 */
@@ -169,8 +170,9 @@ object ExportRangeResolver {
             else -> computedSource
         }
 
-        val printStart = PrintPageResolver.resolve(start, printAnchors)
-        val printEnd = PrintPageResolver.resolve(end, printAnchors)
+        val corePrintAnchors = printAnchors.toPrintPageAnchors()
+        val printStart = PrintPageResolver.resolve(start, corePrintAnchors)
+        val printEnd = PrintPageResolver.resolve(end, corePrintAnchors)
 
         return ExportRangePlan(
             node = node,
@@ -251,10 +253,5 @@ enum class ChapterExportFormat {
     fun labelZh(): String = when (this) {
         ZIP_PACKAGE -> "ZIP 处理包（PDF + 元数据 JSON）"
         PDF_ANNOTATED -> "纯 PDF（标注章节与页码）"
-    }
-
-    fun hintZh(): String = when (this) {
-        ZIP_PACKAGE -> "适合下游/Medlearn：含 source.pdf、manifest、目录与校验"
-        PDF_ANNOTATED -> "适合直接阅读分享：首页封面 + 每页页脚章节与页码"
     }
 }

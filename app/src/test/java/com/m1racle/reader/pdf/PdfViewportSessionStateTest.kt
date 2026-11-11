@@ -1,5 +1,9 @@
 package com.m1racle.reader.pdf
 
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfViewportSessionState
+import com.m1racle.reader.core.model.PdfViewportSessionTracker
+
 import org.junit.Assert.*
 import org.junit.Test
 

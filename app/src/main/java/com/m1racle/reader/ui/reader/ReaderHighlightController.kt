@@ -1,5 +1,7 @@
 package com.m1racle.reader.ui.reader
 
+import com.m1racle.reader.core.model.DocumentAnchor
+
 import com.m1racle.reader.data.local.HighlightEntity
 import com.m1racle.reader.data.repository.ReadingRepository
 import com.m1racle.reader.ui.annotation.AnnotationCreationFlow
@@ -35,7 +37,7 @@ class ReaderHighlightController(
         readingRepository.highlightsForDocument(documentId)
 
     /** R27：恢复某条高亮的抽象锚点（Note 关联键来源）。 */
-    suspend fun anchorOf(highlight: HighlightEntity): com.m1racle.reader.data.anchor.DocumentAnchor? {
+    suspend fun anchorOf(highlight: HighlightEntity): com.m1racle.reader.core.model.DocumentAnchor? {
         if (highlight.documentId != documentId) return null
         return com.m1racle.reader.data.anchor.AnnotationAnchorResolvers
             .forLocationKind(highlight.locationKind)
@@ -68,6 +70,4 @@ class ReaderHighlightController(
 
     /** 删除高亮。 */
     suspend fun deleteHighlight(id: Long) = readingRepository.removeHighlight(documentId, id)
-
-    fun currentStage(): AnnotationCreationFlow.Stage = flow.current()
 }

@@ -266,6 +266,53 @@ class ImportSizeLimitBoundaryTest {
     fun boundaryConstant_isExactly200MiB() {
         assertEquals(200L * 1024L * 1024L, ExternalDocumentImporter.MAX_BYTES)
     }
+
+    @Test
+    fun pdfAboveOldCapIsAcceptedByBothPaths() = runBlocking {
+        registerStub("pdf-large")
+        StubContentProvider.row = listOf("large.pdf", ExternalDocumentImporter.MAX_BYTES + 1L)
+        StubContentProvider.type = "application/pdf"
+        val uri = stubUri("pdf-large")
+        assertTrue(installRepository().importDocument(uri) is ImportResult.Success)
+        val prepared = importerWithFakeStream(installRepository(), 64L * 1024L)
+            .prepare(uri, intentType = "application/pdf")
+        assertTrue(prepared is PrepareOutcome.Success)
+        (prepared as PrepareOutcome.Success).prepared.importRequest.content.close()
+    }
+
+    @Test
+    fun pdfTwoGiBHintIsInclusiveOnBothPaths() = runBlocking {
+        registerStub("pdf-two-gib")
+        StubContentProvider.row = listOf("large.pdf", ExternalDocumentImporter.PDF_MAX_BYTES)
+        StubContentProvider.type = "application/pdf"
+        val uri = stubUri("pdf-two-gib")
+        assertTrue(installRepository().importDocument(uri) is ImportResult.Success)
+        val prepared = importerWithFakeStream(installRepository(), 64L * 1024L)
+            .prepare(uri, intentType = "application/pdf")
+        assertTrue(prepared is PrepareOutcome.Success)
+        (prepared as PrepareOutcome.Success).prepared.importRequest.content.close()
+    }
+
+    @Test
+    fun pdfOverTwoGiBIsRejectedBeforeCopyOnBothPaths() = runBlocking {
+        registerStub("pdf-too-large")
+        StubContentProvider.row = listOf("large.pdf", ExternalDocumentImporter.PDF_MAX_BYTES + 1L)
+        StubContentProvider.type = "application/pdf"
+        val uri = stubUri("pdf-too-large")
+        assertEquals(ImportResult.SourceTooLarge, installRepository().importDocument(uri))
+        assertEquals(PrepareOutcome.TooLarge,
+            importerWithFakeStream(installRepository(), 1L).prepare(uri, "application/pdf"))
+    }
+
+    @Test
+    fun onlyPdfUsesTheLargerStreamingLimit() {
+        assertEquals(2L * 1024L * 1024L * 1024L, ExternalDocumentImporter.PDF_MAX_BYTES)
+        for (type in com.m1racle.reader.data.local.DocumentType.entries) {
+            assertEquals(if (type == com.m1racle.reader.data.local.DocumentType.PDF)
+                ExternalDocumentImporter.PDF_MAX_BYTES else ExternalDocumentImporter.MAX_BYTES,
+                ExternalDocumentImporter.maximumBytesFor(type))
+        }
+    }
 }
 
 /** Records upserts; everything else mirrors an empty library. */

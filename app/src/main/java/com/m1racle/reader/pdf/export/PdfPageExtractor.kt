@@ -28,7 +28,10 @@ object PdfPageExtractor {
     }
 
     sealed class ExtractResult {
-        data class Success(val pageCount: Int) : ExtractResult()
+        data class Success(
+            val pageCount: Int,
+            val sourcePageCount: Int = pageCount,
+        ) : ExtractResult()
         data class Failed(val message: String) : ExtractResult()
         data object Cancelled : ExtractResult()
     }
@@ -61,17 +64,19 @@ object PdfPageExtractor {
             } catch (_: Throwable) {
             }
         }
+        var actualSourcePageCount = 0
         try {
             val mem = PdfBoxRuntime.memorySetting()
             sourceStream.use { input ->
                 PDDocument.load(input, mem).use { source ->
                     val srcPages = source.numberOfPages
+                    actualSourcePageCount = srcPages
                     if (endIndex0 >= srcPages) {
                         return@withContext ExtractResult.Failed(
                             "结束页超出源文档 (共 $srcPages 页)",
                         )
                     }
-                    PDDocument().use { dest ->
+                    PDDocument(mem).use { dest ->
                         for (i in 0 until total) {
                             coroutineContext.ensureActive()
                             if (isCancelled()) {
@@ -81,7 +86,10 @@ object PdfPageExtractor {
                             val srcIndex = startIndex0 + i
                             try {
                                 val page = source.getPage(srcIndex)
-                                dest.importPage(page)
+                                val imported = dest.importPage(page)
+                                if (!page.cosObject.containsKey(com.tom_roush.pdfbox.cos.COSName.RESOURCES)) {
+                                    page.resources?.let { imported.resources = it }
+                                }
                             } catch (t: Throwable) {
                                 Log.e(TAG, "importPage failed at $srcIndex", t)
                                 cleanupPartial()
@@ -95,6 +103,7 @@ object PdfPageExtractor {
                             cleanupPartial()
                             return@withContext ExtractResult.Cancelled
                         }
+                        PdfImportedPageLinks.isolate(source, dest, startIndex0)
                         dest.save(outputFile)
                     }
                 }
@@ -116,7 +125,10 @@ object PdfPageExtractor {
                 cleanupPartial()
                 return@withContext ExtractResult.Failed("导出 PDF 无法重新打开校验")
             }
-            ExtractResult.Success(total)
+            ExtractResult.Success(
+                pageCount = total,
+                sourcePageCount = actualSourcePageCount,
+            )
         } catch (e: CancellationException) {
             cleanupPartial()
             ExtractResult.Cancelled

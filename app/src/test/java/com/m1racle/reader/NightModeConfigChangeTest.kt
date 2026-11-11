@@ -1,8 +1,8 @@
 package com.m1racle.reader
 
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Switching system night mode used to recreate [MainActivity], remount the
@@ -13,8 +13,7 @@ class NightModeConfigChangeTest {
 
     @Test
     fun `main activity handles uiMode without recreate`() {
-        val manifest = File("app/src/main/AndroidManifest.xml").takeIf { it.isFile }
-            ?: File("src/main/AndroidManifest.xml")
+        val manifest = ProductionSource.projectFile("app/src/main/AndroidManifest.xml")
         val text = manifest.readText()
         val activity = text.substringAfter("android:name=\".MainActivity\"")
             .substringBefore("</activity>")
@@ -24,9 +23,7 @@ class NightModeConfigChangeTest {
             "MainActivity must handle uiMode so night mode does not remount the reader",
             "uiMode" in handledChanges,
         )
-        val src = File("app/src/main/java/com/m1racle/reader/MainActivity.kt").takeIf { it.isFile }
-            ?: File("src/main/java/com/m1racle/reader/MainActivity.kt")
-        val kotlin = src.readText()
+        val kotlin = ProductionSource.text("com/m1racle/reader/MainActivity.kt")
         assertTrue(kotlin.contains("override fun onConfigurationChanged"))
         assertTrue(kotlin.contains("applyEdgeToEdge()"))
         assertTrue(kotlin.contains("clearContrastScrim"))

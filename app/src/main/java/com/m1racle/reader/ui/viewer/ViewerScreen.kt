@@ -124,7 +124,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.m1racle.reader.BuildConfig
 import com.m1racle.reader.R
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.settings.ReaderSettings
 import com.m1racle.reader.markdown.MarkdownBlock
 import com.m1racle.reader.markdown.MarkdownPerformance
@@ -497,7 +497,7 @@ private fun ViewerSuccessScreen(
                 it.locationKind == "SCROLL_POSITION" && it.location == blockIndex
             }
             val anchor = highlight?.let { highlights.anchorOf(it) }
-                ?: com.m1racle.reader.data.anchor.DocumentAnchor.MarkdownBlock(
+                ?: com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock(
                     blockIndex = blockIndex,
                     charStart = 0,
                     charEnd = plain.length,
@@ -1914,7 +1914,7 @@ private const val TOC_LOG_TAG = "MARKDOWN_TOC"
 
 /** P0-1 批注编辑器目标：锚点 + 既有批注（null = 新建）+ 是否返回管理表。 */
 private data class MarkdownNoteTarget(
-    val anchor: com.m1racle.reader.data.anchor.DocumentAnchor,
+    val anchor: com.m1racle.reader.core.model.DocumentAnchor,
     val note: com.m1racle.reader.data.local.NoteEntity?,
     val returnToManagement: Boolean = false,
 )

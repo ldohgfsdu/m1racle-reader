@@ -6,8 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.m1racle.reader.data.local.AppDatabase
 import com.m1racle.reader.data.local.DocumentEntity
-import com.m1racle.reader.pdf.PdfReadingMode
-import com.m1racle.reader.pdf.PdfViewportSessionState
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfViewportSessionState
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals

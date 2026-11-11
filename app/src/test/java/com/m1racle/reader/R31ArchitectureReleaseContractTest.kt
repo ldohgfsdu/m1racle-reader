@@ -1,5 +1,7 @@
 package com.m1racle.reader
 
+import com.m1racle.reader.core.model.PdfRenderQuality
+
 import com.m1racle.reader.data.local.AppDatabase
 import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
@@ -62,12 +64,34 @@ class R31ArchitectureReleaseContractTest {
             AppDatabase.MIGRATION_16_17,
         )
         assertEquals((1..16).map { it to it + 1 }, migrations.map { it.startVersion to it.endVersion })
-        val schemas = File(projectRoot(), "app/schemas/com.m1racle.reader.data.local.AppDatabase")
+        val schemas = File(
+            projectRoot(),
+            "core/database/schemas/com.m1racle.reader.data.local.AppDatabase",
+        )
             .listFiles()
             .orEmpty()
             .mapNotNull { it.nameWithoutExtension.toIntOrNull() }
             .sorted()
         assertEquals((6..17).toList(), schemas)
+        assertFalse(File(projectRoot(), "app/schemas").exists())
+        val gitAttributes = File(projectRoot(), ".gitattributes").readText()
+        assertTrue(gitAttributes.contains("core/database/schemas/** -text"))
+        assertFalse(gitAttributes.contains("app/schemas/**"))
+        val referenceGenerator = File(
+            projectRoot(),
+            "docs/code-wiki/tools/build_reference.py",
+        ).readText()
+        assertTrue(
+            referenceGenerator.contains(
+                "core/database/src/main/java/com/m1racle/reader/data/local/AppDatabase.kt",
+            ),
+        )
+        assertTrue(
+            referenceGenerator.contains(
+                "core/database/schemas/com.m1racle.reader.data.local.AppDatabase",
+            ),
+        )
+        assertFalse(referenceGenerator.contains("app/schemas/com.m1racle.reader"))
     }
 
     @Test
@@ -85,7 +109,7 @@ class R31ArchitectureReleaseContractTest {
 
     @Test
     fun `removed compatibility-only members stay deleted`() {
-        assertFalse(source("pdf/PdfRenderQuality.kt").contains("MAX_RENDER_WIDTH_PX"))
+        assertFalse(source("core/model/PdfRenderQuality.kt").contains("MAX_RENDER_WIDTH_PX"))
         assertFalse(
             source("ui/viewer/components/MarkdownTableLayout.kt")
                 .contains("maximumWideCompressionFraction"),

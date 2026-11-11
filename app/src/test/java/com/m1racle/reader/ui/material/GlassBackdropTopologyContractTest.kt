@@ -1,5 +1,6 @@
 package com.m1racle.reader.ui.material
 
+import com.m1racle.reader.testing.ProductionKotlinRoots
 import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,11 +26,9 @@ class GlassBackdropTopologyContractTest {
 
     @Test
     fun `all production capture nodes use the guarded ownership boundary`() {
-        val javaRoot = ProductionSource.javaRoot()
-        val directCaptureOwners = javaRoot.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
+        val directCaptureOwners = ProductionKotlinRoots.files()
             .filter { it.readText().contains(Regex("""\.layerBackdrop\s*\(""")) }
-            .map { it.relativeTo(javaRoot).invariantSeparatorsPath }
+            .map { ProductionKotlinRoots.relativePath(it) }
             .toList()
 
         assertEquals(

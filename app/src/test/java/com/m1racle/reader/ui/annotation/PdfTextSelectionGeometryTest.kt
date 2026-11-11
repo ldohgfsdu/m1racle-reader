@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.annotation
 
-import com.m1racle.reader.data.anchor.NormalizedRect
+import com.m1racle.reader.core.model.NormalizedRect
 import com.m1racle.reader.pdf.PdfSelectableGlyph
 import com.m1racle.reader.pdf.PdfSelectableLine
 import com.m1racle.reader.pdf.PdfSelectablePage

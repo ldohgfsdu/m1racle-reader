@@ -1,7 +1,9 @@
 package com.m1racle.reader.ui.reader
 
+import com.m1racle.reader.core.model.NormalizedRect
+
 import com.m1racle.reader.data.anchor.AnchorCodec
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkWithDocument
@@ -125,7 +127,7 @@ class ReaderNoteControllerTest {
         ): HighlightEntity {
             val controller = ReaderHighlightController(repo, documentId)
             controller.commitHighlight(
-                com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(page = page, rects = listOf(com.m1racle.reader.data.anchor.NormalizedRect((10f) / (800f), (20f) / (1131f), ((210f) - (10f)).coerceAtLeast(0f) / (800f), ((120f) - (20f)).coerceAtLeast(0f) / (1131f)))),
+                com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(page = page, rects = listOf(com.m1racle.reader.core.model.NormalizedRect((10f) / (800f), (20f) / (1131f), ((210f) - (10f)).coerceAtLeast(0f) / (800f), ((120f) - (20f)).coerceAtLeast(0f) / (1131f)))),
                 nowMs = createdAt,
             )
             // commitHighlight 内部经 flow 落库；此处直接取 DAO 行。

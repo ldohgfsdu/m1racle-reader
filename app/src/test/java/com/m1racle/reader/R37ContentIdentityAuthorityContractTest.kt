@@ -1,5 +1,7 @@
 package com.m1racle.reader
 
+import com.m1racle.reader.testing.ProductionKotlinRoots
+import com.m1racle.reader.testing.ProductionSource
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -54,18 +56,10 @@ class R37ContentIdentityAuthorityContractTest {
         assertEquals(1, occurrences(repository, "UUID.randomUUID().toString()", commitStart, nextPublicBoundary))
     }
 
-    private fun kotlinSources(): List<File> =
-        mainSourceRoot().walkTopDown()
-            .filter { it.isFile }
-            .filter { it.extension == "kt" }
-            .toList()
+    private fun kotlinSources(): List<File> = ProductionKotlinRoots.files().toList()
 
-    private fun source(relative: String): String = File(mainSourceRoot(), relative).readText()
-
-    private fun mainSourceRoot(): File = listOf(
-        File("app/src/main/java/com/m1racle/reader"),
-        File("src/main/java/com/m1racle/reader"),
-    ).first(File::isDirectory)
+    private fun source(relative: String): String =
+        ProductionSource.text("com/m1racle/reader/$relative")
 
     private fun occurrences(text: String, needle: String, start: Int, end: Int): Int {
         var count = 0

@@ -38,8 +38,12 @@ open class ExternalDocumentImporter(
             ?: repository.contentIdentityResolver
 
     companion object {
-        /** Hard cap shared by Home SAF, VIEW, and SEND. */
+        /** Non-PDF source cap shared by Home SAF, VIEW, and SEND. */
         const val MAX_BYTES: Long = 200L * 1024L * 1024L
+        const val PDF_MAX_BYTES: Long = 2L * 1024L * 1024L * 1024L
+
+        fun maximumBytesFor(documentType: DocumentType): Long =
+            if (documentType == DocumentType.PDF) PDF_MAX_BYTES else MAX_BYTES
 
         /** Single managed-copy filename sanitizer, also consumed by shared commit. */
         internal fun sanitizeFileName(name: String, fallbackExt: String): String {
@@ -100,7 +104,7 @@ open class ExternalDocumentImporter(
                     ContentIdentityInput(
                         sourceUri = sourceUri,
                         metadata = resolved,
-                        maximumBytes = MAX_BYTES,
+                        maximumBytes = maximumBytesFor(documentType),
                     ),
                 )
             ) {

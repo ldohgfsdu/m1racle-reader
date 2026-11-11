@@ -292,9 +292,6 @@ private fun fileNameFromUri(uri: String): String {
     return path.substringAfterLast('/').ifBlank { decoded }
 }
 
-/** List metadata: format  reading progress once. No last-opened time. */
-internal fun formatMeta(document: DocumentEntity): String = formatListMetadata(document)
-
 internal fun formatPdfProgress(document: DocumentEntity): String {
     val pageCount = document.pageCount
     val pageIndex = document.lastScrollIndex.coerceAtLeast(0)

@@ -1,8 +1,8 @@
 package com.m1racle.reader.ui.annotation
 
 import com.m1racle.reader.data.anchor.AnchorCodec
-import com.m1racle.reader.data.anchor.DocumentAnchor
-import com.m1racle.reader.data.anchor.NormalizedRect
+import com.m1racle.reader.core.model.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkWithDocument
@@ -14,7 +14,7 @@ import com.m1racle.reader.data.local.NoteDao
 import com.m1racle.reader.data.local.NoteEntity
 import com.m1racle.reader.data.repository.ReadingRepository
 import com.m1racle.reader.ui.reader.ReaderHighlightController
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -142,12 +142,12 @@ class AnnotationPerformanceContractTest {
 
     @Test
     fun `reader keeps overlay state page-local and management uses one lazy list`() {
-        val screen = source("app/src/main/java/com/m1racle/reader/ui/pdf/PdfViewerScreen.kt")
+        val screen = source("com/m1racle/reader/ui/pdf/PdfViewerScreen.kt")
         assertTrue(screen.contains("var pageItems by remember(state.document.id, page)"))
         assertFalse(screen.contains("pageHighlightItems"))
         assertFalse(screen.contains("mutableStateMapOf<Int, List<AnnotationOverlayItem>>"))
 
-        val sheet = source("app/src/main/java/com/m1racle/reader/ui/annotation/AnnotationsManagementSheet.kt")
+        val sheet = source("com/m1racle/reader/ui/annotation/AnnotationsManagementSheet.kt")
         assertEquals(1, Regex("\\bLazyColumn\\s*\\(").findAll(sheet).count())
     }
 
@@ -180,11 +180,7 @@ class AnnotationPerformanceContractTest {
         )
     }
 
-    private fun source(relativePath: String): String {
-        val candidates = listOf(File(relativePath), File("../$relativePath"))
-        return candidates.firstOrNull { it.isFile }?.readText()
-            ?: error("source not found: $relativePath")
-    }
+    private fun source(relativePath: String): String = ProductionSource.text(relativePath)
 
     private class NoBookmarks : BookmarkDao {
         override suspend fun insert(bookmark: BookmarkEntity): Long = unused()

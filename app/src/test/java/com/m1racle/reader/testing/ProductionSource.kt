@@ -38,7 +38,16 @@ object ProductionSource {
     }
 
     /** Same resolution as [file] without requiring the file to exist, for negative assertions. */
-    fun resolve(relative: String): File = File(javaRoot(), relative)
+    fun resolve(relative: String): File {
+        val candidates = listOf(
+            File(javaRoot(), relative),
+            File(repositoryRoot(), "core/model/src/main/java/$relative"),
+            File(repositoryRoot(), "core/database/src/main/java/$relative"),
+            File(repositoryRoot(), "core/pdf/src/main/java/$relative"),
+        ).filter { it.isFile }
+        check(candidates.size <= 1) { "Multiple production owners for $relative: $candidates" }
+        return candidates.singleOrNull() ?: File(javaRoot(), relative)
+    }
 
     /** [relative] is resolved against the repository root, e.g. `app/build.gradle.kts`. */
     fun projectFile(relative: String): File = File(repositoryRoot(), relative).also {

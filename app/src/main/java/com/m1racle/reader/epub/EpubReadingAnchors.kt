@@ -1,7 +1,7 @@
 package com.m1racle.reader.epub
 
 import com.m1racle.reader.data.anchor.AnchorCodec
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.DocumentEntity
 
 /** Characters of normalized source text stored with an anchor for relocation. */

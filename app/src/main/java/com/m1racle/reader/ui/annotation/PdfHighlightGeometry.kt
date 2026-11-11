@@ -1,6 +1,6 @@
 package com.m1racle.reader.ui.annotation
 
-import com.m1racle.reader.data.anchor.NormalizedRect
+import com.m1racle.reader.core.model.NormalizedRect
 
 /**
  * PDF 高亮显示坐标、逐段命中与操作按钮定位。

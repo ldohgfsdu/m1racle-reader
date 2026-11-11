@@ -4,7 +4,7 @@ import com.m1racle.reader.pdf.edit.PdfBodyEditor
 import com.m1racle.reader.pdf.edit.PdfEditablePage
 import com.m1racle.reader.pdf.edit.PdfEditRejected
 import com.m1racle.reader.pdf.edit.PdfTextKey
-import com.m1racle.reader.pdf.edit.PdfSourceWriteStore
+import com.m1racle.reader.core.model.ContentSha256
 
 import android.app.Application
 import android.net.Uri
@@ -89,7 +89,7 @@ class PdfBodyEditorViewModel(
                             source.outputStream().use { input.copyTo(it) }
                         } ?: error("无法读取原文档")
                     }
-                    originHash = PdfSourceWriteStore.sha256(source)
+                    originHash = ContentSha256.of(source)
                     check(saved.get<String>("originHash")?.let { it == originHash } != false) { "文档已变化，无法恢复旧草稿；请重新打开编辑器" }
                     saved["originHash"] = originHash
                     mutable.value = mutable.value.copy(sourceNeedsUpdate=document.sourceSha256?.let { it != originHash } == true)
@@ -193,7 +193,7 @@ class PdfBodyEditorViewModel(
 
     fun saveCurrent(sourceTarget: Uri? = null) = work {
         try {
-            saved["pendingCommitHash"] = withContext(Dispatchers.IO) { PdfSourceWriteStore.sha256(preview) }
+            saved["pendingCommitHash"] = withContext(Dispatchers.IO) { ContentSha256.of(preview) }
             val result = repository.saveDocumentEdits(documentId,originHash,preview,sourceTarget)
             saved["edits"] = "[]"
             mutable.value = mutable.value.copy(savedDocumentId=result.id,dirty=false)
@@ -209,8 +209,8 @@ class PdfBodyEditorViewModel(
         withContext(Dispatchers.IO) {
             getApplication<Application>().contentResolver.openOutputStream(uri,"wt")?.use { out -> backup.inputStream().use { it.copyTo(out) } }
                 ?: error("无法导出备份")
-            val actual = getApplication<Application>().contentResolver.openInputStream(uri)?.use(PdfSourceWriteStore::sha256)
-            check(actual == PdfSourceWriteStore.sha256(backup)) { "备份导出核验失败，请重试" }
+            val actual = getApplication<Application>().contentResolver.openInputStream(uri)?.use(ContentSha256::of)
+            check(actual == ContentSha256.of(backup)) { "备份导出核验失败，请重试" }
         }
         mutable.value = mutable.value.copy(notice="原文件备份已导出")
     }

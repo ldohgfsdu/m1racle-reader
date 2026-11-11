@@ -2,7 +2,7 @@ package com.m1racle.reader.ui.pdf
 
 /**
  * Batch B-1: retention policy for the continuous viewport's display mirror
- * (`displayedBitmaps` / `displayedMetadata` / `displayedAspects`).
+ * (`displayedBitmaps` / `displayedMetadata`). Dimensions are document metadata.
  *
  * Problem being governed: the mirror was ADDITIVE-ONLY — the ViewModel side
  * windows its bitmap cache to current±1 (`PdfPageBitmapCache.retainOnly`),
@@ -11,8 +11,8 @@ package com.m1racle.reader.ui.pdf
  * therefore accumulated one high-tier bitmap per visited page.
  *
  * Policy: keep a three-page window around the primary anchor page — the exact
- * window the cache and the horizontal three-page strip use — plus, while a
- * pinch-zoom is active, every page still visibly composed under the transform
+ * window the horizontal three-page strip uses — plus every page still visibly
+ * composed under the transform, including short pages at fit width
  * (zoom protection: never blank out what the user is actively looking at).
  * Shrinking itself happens only in SETTLING/IDLE phases at the call site;
  * this object stays pure so the whole contract is JVM-testable.

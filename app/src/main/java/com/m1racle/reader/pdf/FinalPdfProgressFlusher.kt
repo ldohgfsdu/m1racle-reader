@@ -1,5 +1,7 @@
 package com.m1racle.reader.pdf
 
+import com.m1racle.reader.core.model.PdfViewportSessionState
+
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch

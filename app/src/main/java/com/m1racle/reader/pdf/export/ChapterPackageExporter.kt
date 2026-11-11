@@ -53,20 +53,13 @@ class ChapterPackageExporter(
         onState: (ChapterExportState) -> Unit,
     ): ChapterExportState = withContext(Dispatchers.IO) {
         val workDir = File(appContext.cacheDir, "chapter_export_${System.currentTimeMillis()}")
-        var destinationCommitted = false
+        val destination = SafExportDestination(appContext.contentResolver, outputUri)
         try {
             onState(ChapterExportState.Preparing)
             if (!workDir.mkdirs()) {
-                return@withContext fail("无法创建临时目录", workDir, onState)
+                return@withContext fail("无法创建临时目录", workDir, destination, onState)
             }
             throwIfExportCancelled(cancellation) { coroutineContext.isActive }
-            val err = ExportRangeResolver.validateRange(
-                plan.startPageIndex,
-                plan.endPageIndex,
-                // loose upper bound; real check in extractor
-                plan.endPageIndex + 1,
-            )
-            // re-validate with open document later
 
             val sourcePdf = File(workDir, "source.pdf")
             val manifestFile = File(workDir, "manifest.json")
@@ -77,7 +70,7 @@ class ChapterPackageExporter(
             // Hash source while streaming pages from content resolver
             val sourceSha = MessageDigest.getInstance("SHA-256")
             val input = appContext.contentResolver.openInputStream(sourceUri)
-                ?: return@withContext fail("无法打开源 PDF", workDir, onState)
+                ?: return@withContext fail("无法打开源 PDF", workDir, destination, onState)
 
             // Copy source stream to temp for random-access extraction? PDFBox needs full stream.
             // Use temp file of source only if needed — PDDocument.load from stream once.
@@ -102,6 +95,7 @@ class ChapterPackageExporter(
                 return@withContext fail(
                     t.message ?: "读取源 PDF 失败",
                     workDir,
+                    destination,
                     onState,
                 )
             }
@@ -127,12 +121,21 @@ class ChapterPackageExporter(
                 is PdfPageExtractor.ExtractResult.Cancelled ->
                     throw CancellationException("Export cancelled")
                 is PdfPageExtractor.ExtractResult.Failed ->
-                    return@withContext fail(extract.message, workDir, onState)
+                    return@withContext fail(extract.message, workDir, destination, onState)
                 is PdfPageExtractor.ExtractResult.Success -> {
+                    val rangeError = ExportRangeResolver.validateRange(
+                        plan.startPageIndex,
+                        plan.endPageIndex,
+                        extract.sourcePageCount,
+                    )
+                    if (rangeError != null) {
+                        return@withContext fail(rangeError, workDir, destination, onState)
+                    }
                     if (extract.pageCount != plan.pageCount) {
                         return@withContext fail(
                             "页数不一致: plan=${plan.pageCount}, pdf=${extract.pageCount}",
                             workDir,
+                            destination,
                             onState,
                         )
                     }
@@ -158,7 +161,12 @@ class ChapterPackageExporter(
 
             // Validate outline pages in range
             if (!validateOutlineJsonPages(outlineJson, plan.pageCount)) {
-                return@withContext fail("outline.json 页码超出导出范围", workDir, onState)
+                return@withContext fail(
+                    "outline.json 页码超出导出范围",
+                    workDir,
+                    destination,
+                    onState,
+                )
             }
 
             manifestFile.writeText(manifestJson, Charsets.UTF_8)
@@ -198,12 +206,37 @@ class ChapterPackageExporter(
 
             // A successful stream close commits the destination. Any cancellation
             // before this boundary is handled by the outer cleanup path.
+            val expectedArchiveSha = sha256File(zipTmp)
             appContext.contentResolver.openOutputStream(outputUri)?.use { out ->
                 FileInputStream(zipTmp).use { inp ->
                     copyWithExportCancellation(inp, out, cancellation) { coroutineContext.isActive }
                 }
-            } ?: return@withContext fail("无法写入所选位置", workDir, onState)
-            destinationCommitted = true
+            } ?: return@withContext fail(
+                "无法写入所选位置",
+                workDir,
+                destination,
+                onState,
+            )
+            val readbackArchiveSha = appContext.contentResolver.openInputStream(outputUri)?.use { inp ->
+                sha256WithExportCancellation(inp, cancellation) {
+                    coroutineContext.isActive
+                }
+            } ?: return@withContext fail(
+                "无法回读所选位置的 ZIP",
+                workDir,
+                destination,
+                onState,
+            )
+            if (readbackArchiveSha != expectedArchiveSha) {
+                return@withContext fail(
+                    "ZIP 回读校验失败",
+                    workDir,
+                    destination,
+                    onState,
+                )
+            }
+            throwIfExportCancelled(cancellation) { coroutineContext.isActive }
+            destination.markCommitted()
 
             val done = ChapterExportState.Completed(
                 displayName = ExportRangeResolver.defaultZipName(
@@ -215,24 +248,29 @@ class ChapterPackageExporter(
             cleanupDir(workDir)
             done
         } catch (ce: CancellationException) {
-            if (!destinationCommitted) {
-                deleteSafDocumentBestEffort(appContext.contentResolver, outputUri)
-            }
+            destination.cleanupIfUncommitted()
             cancel(workDir, onState)
             throw ce
         } catch (t: Throwable) {
             Log.e("ChapterExport", "export failed", t)
-            fail(t.message ?: "导出失败", workDir, onState)
+            fail(t.message ?: "导出失败", workDir, destination, onState)
         }
     }
 
     private fun fail(
         msg: String,
         workDir: File,
+        destination: SafExportDestination,
         onState: (ChapterExportState) -> Unit,
     ): ChapterExportState {
         cleanupDir(workDir)
-        val s = ChapterExportState.Failed(msg)
+        val cleanupFailed = !destination.cleanupIfUncommitted()
+        val message = if (cleanupFailed) {
+            "$msg；未能删除不完整的目标文件"
+        } else {
+            msg
+        }
+        val s = ChapterExportState.Failed(message)
         onState(s)
         return s
     }

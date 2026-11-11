@@ -6,6 +6,7 @@ import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
 import com.m1racle.reader.markdown.MarkdownAssetResolver
 import com.m1racle.reader.markdown.MarkdownAssetResult
+import com.m1racle.reader.testing.ProductionSource
 import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -51,7 +52,7 @@ class StandaloneMarkdownRelativeImageReproTest {
 
     @Test
     fun viewerDoesNotUseManagedCopyAsImageBase() {
-        val src = File("src/main/java/com/m1racle/reader/ui/viewer/ViewerScreen.kt").readText()
+        val src = ProductionSource.text("com/m1racle/reader/ui/viewer/ViewerScreen.kt")
         assertFalse(
             "ViewerScreen 仍以书库副本 state.document.uri 作为 Markdown 图片基准（F2）",
             Regex("""MarkdownBlockView\(\s*documentUri\s*=\s*state\.document\.uri""").containsMatchIn(src),

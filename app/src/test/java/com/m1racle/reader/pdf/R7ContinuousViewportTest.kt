@@ -1,8 +1,10 @@
 package com.m1racle.reader.pdf
 
+import com.m1racle.reader.core.model.PdfReadingMode
+
 import androidx.compose.ui.graphics.Color
 import com.m1racle.reader.design.RadixColors
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -70,7 +72,9 @@ class R7ContinuousViewportTest {
         val source = viewportSource()
         assertTrue(source.contains("remapStatePreservingViewportTop"))
         assertTrue(source.contains("alignedDocumentState"))
-        assertTrue(source.contains("if (documentState.gestureActive) return@SideEffect"))
+        assertTrue(source.contains("if (geometryMotionActive) return@SideEffect"))
+        assertTrue(source.contains("val geometryMotionActive = documentState.gestureActive || flingActive ||"))
+        assertTrue(source.contains("if (geometryMotionActive) settledAspects else state.pageAspects"))
     }
 
     @Test fun `V2 contact pan is free 2D and only fling drops a near-axis leak`() {
@@ -91,9 +95,6 @@ class R7ContinuousViewportTest {
     private fun screenSource(): String = source("PdfViewerScreen.kt")
     private fun viewportSource(): String = source("ContinuousDocumentViewport.kt")
 
-    private fun source(name: String): String = listOf(
-        File("app/src/main/java/com/m1racle/reader/ui/pdf/$name"),
-        File("src/main/java/com/m1racle/reader/ui/pdf/$name"),
-        File("../src/main/java/com/m1racle/reader/ui/pdf/$name"),
-    ).first { it.isFile }.readText()
+    private fun source(name: String): String =
+        ProductionSource.text("com/m1racle/reader/ui/pdf/$name")
 }

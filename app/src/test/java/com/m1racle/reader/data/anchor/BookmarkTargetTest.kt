@@ -1,7 +1,9 @@
 package com.m1racle.reader.data.anchor
 
-import com.m1racle.reader.pdf.PdfReadingMode
-import com.m1racle.reader.pdf.PdfViewportSessionState
+import com.m1racle.reader.core.model.DocumentAnchor
+
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfViewportSessionState
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith

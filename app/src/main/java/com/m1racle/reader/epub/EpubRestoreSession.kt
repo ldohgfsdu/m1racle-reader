@@ -1,6 +1,6 @@
 package com.m1racle.reader.epub
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 
 /** One book opening. Reflow never resets this session or authorizes anchor writes. */
 class EpubRestoreSession(val result: EpubRestoreResult) {

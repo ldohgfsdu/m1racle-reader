@@ -670,6 +670,9 @@ class R7ConfigurationRecreationInstrumentedTest {
         val oldActivity = composeRule.activity
         val retainedModel = oldActivity.model
         val stableBefore = retainedModel.ready.continuousDocumentState
+        assertEquals(2.5f, stableBefore.scale, 0.001f)
+        assertEquals(80f, stableBefore.scrollX, 0.001f)
+        assertEquals(900f, stableBefore.scrollY, 0.001f)
 
         composeRule.onNodeWithTag("r7-continuous-viewport").assert(
             SemanticsMatcher.expectValue(R7ContinuousScaleKey, stableBefore.scale),

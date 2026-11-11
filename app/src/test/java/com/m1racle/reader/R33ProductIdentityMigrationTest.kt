@@ -55,7 +55,7 @@ class R33ProductIdentityMigrationTest {
 
     @Test
     fun `historical Room schema bytes stay unchanged and v17 is additive`() {
-        val schemaRoot = file("app/schemas/com.m1racle.reader.data.local.AppDatabase")
+        val schemaRoot = file("core/database/schemas/com.m1racle.reader.data.local.AppDatabase")
         val expected = mapOf(
             "6.json" to "c42c8784223ccb6dba45a5a6b9c2d2e1e200cdf636b66d886330ebb9ebc832f3",
             "7.json" to "452eb0cfc58c592c7e995b11f79c57935a81d5879f23d00f5c706846ab375404",

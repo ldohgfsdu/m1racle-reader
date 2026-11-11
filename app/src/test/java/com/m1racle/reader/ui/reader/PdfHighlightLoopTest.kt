@@ -1,6 +1,8 @@
 package com.m1racle.reader.ui.reader
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.NormalizedRect
+
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkWithDocument
@@ -99,7 +101,7 @@ class PdfHighlightLoopTest {
     /** 捕获：与渲染层同一几何入口。 */
     private fun capture(page: Int, l: Float, t: Float, r: Float, b: Float, w: Float, h: Float) =
         com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(page,
-            listOf(com.m1racle.reader.data.anchor.NormalizedRect(l/w,t/h,(r-l)/w,(b-t)/h)))
+            listOf(com.m1racle.reader.core.model.NormalizedRect(l/w,t/h,(r-l)/w,(b-t)/h)))
 
     @Test
     fun `full loop - selection to flow to repository to overlay items`() = runTest {
@@ -169,8 +171,8 @@ class PdfHighlightLoopTest {
         val repo = ReadingRepository(NoBookmarks(), NoFavorites(), FakeHighlightDao(), FakeNoteDao(), com.m1racle.reader.testing.testSearchRepository(), transactionRunner = com.m1racle.reader.testing.ImmediateRepositoryTransactionRunner())
         val controller = ReaderHighlightController(repo,"pdf-1")
         val rects = listOf(
-            com.m1racle.reader.data.anchor.NormalizedRect(.2f,.2f,.3f,.02f),
-            com.m1racle.reader.data.anchor.NormalizedRect(.1f,.3f,.2f,.02f),
+            com.m1racle.reader.core.model.NormalizedRect(.2f,.2f,.3f,.02f),
+            com.m1racle.reader.core.model.NormalizedRect(.1f,.3f,.2f,.02f),
         )
         val selection = com.m1racle.reader.ui.annotation.TextSelection.PdfSelection(3,rects,"first\nsecond")
         val result = controller.commitHighlight(selection) as ReaderHighlightController.CommitResult.Success

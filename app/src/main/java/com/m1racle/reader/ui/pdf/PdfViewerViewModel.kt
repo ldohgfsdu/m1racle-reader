@@ -1,5 +1,7 @@
 package com.m1racle.reader.ui.pdf
 
+import com.m1racle.reader.core.model.OutlineNodeSource
+
 import android.app.Application
 import android.util.Log
 import android.content.pm.ApplicationInfo
@@ -12,27 +14,30 @@ import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.local.DocumentType
 import com.m1racle.reader.data.local.PdfPrintPageAnchorEntity
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
-import com.m1racle.reader.data.local.TextbookOutlineNodeType
+import com.m1racle.reader.core.model.TextbookOutlineNodeType
 import com.m1racle.reader.data.repository.DocumentRepository
 import android.net.Uri
 import com.m1racle.reader.pdf.EmbeddedOutlineBuilder
-import com.m1racle.reader.pdf.EmbeddedOutlineNodeDraft
-import com.m1racle.reader.pdf.OutlineImportMode
+import com.m1racle.reader.core.model.OutlineImportMode
+import com.m1racle.reader.core.model.OutlineImportDraft
+import com.m1racle.reader.core.model.OutlineImportPlan
+import com.m1racle.reader.core.model.OutlineImportRules
+import com.m1racle.reader.pdf.toPrintPageAnchors
 import com.m1racle.reader.pdf.PdfEmbeddedOutlineParser
 import com.m1racle.reader.pdf.BitmapMetadata
 import com.m1racle.reader.pdf.PageBitmapEntry
-import com.m1racle.reader.pdf.PageRenderRole
+import com.m1racle.reader.core.model.PageRenderRole
 import com.m1racle.reader.pdf.PdfPageBitmapCache
 import com.m1racle.reader.pdf.PdfPageRenderer
-import com.m1racle.reader.pdf.PdfReadingMode
-import com.m1racle.reader.pdf.PdfReadingNavigation
+import com.m1racle.reader.core.model.PdfReadingMode
+import com.m1racle.reader.core.model.PdfReadingNavigation
 import com.m1racle.reader.pdf.PdfReadingPrefs
 import com.m1racle.reader.pdf.PdfTopBarMode
-import com.m1racle.reader.pdf.PdfReadingPositionCodec
-import com.m1racle.reader.pdf.PdfRenderQuality
-import com.m1racle.reader.pdf.PdfViewportSessionState
-import com.m1racle.reader.pdf.toCanonicalAnchor
-import com.m1racle.reader.pdf.PdfViewportSessionTracker
+import com.m1racle.reader.core.model.PdfReadingPositionCodec
+import com.m1racle.reader.core.model.PdfRenderQuality
+import com.m1racle.reader.core.model.PdfViewportSessionState
+import com.m1racle.reader.core.model.toCanonicalAnchor
+import com.m1racle.reader.core.model.PdfViewportSessionTracker
 import com.m1racle.reader.pdf.PdfTileEntry
 import com.m1racle.reader.pdf.PdfTileKey
 import com.m1racle.reader.pdf.PdfTileRequest
@@ -49,7 +54,7 @@ import com.m1racle.reader.pdf.FinalPdfProgressSnapshot
 import com.m1racle.reader.pdf.ReadingPosition
 import com.m1racle.reader.pdf.ReadingPositionSource
 import com.m1racle.reader.pdf.ContinuousViewportPolicy
-import com.m1racle.reader.pdf.ContinuousQualityHysteresis
+import com.m1racle.reader.core.model.ContinuousQualityHysteresis
 import com.m1racle.reader.pdf.ContinuousDocumentSession
 import com.m1racle.reader.pdf.ContinuousDocumentState
 import com.m1racle.reader.pdf.ContinuousEntryRestoreState
@@ -59,12 +64,14 @@ import com.m1racle.reader.pdf.ContinuousScrollDirection
 import com.m1racle.reader.pdf.ContinuousScrollPhase
 import com.m1racle.reader.pdf.ContinuousViewportSnapshot
 import com.m1racle.reader.pdf.ContinuousRenderKey
+import com.m1racle.reader.pdf.ContinuousDispatchSignature
+import com.m1racle.reader.pdf.ContinuousViewportDispatchGate
 import com.m1racle.reader.pdf.PdfThumbnailLoader
 import com.m1racle.reader.pdf.PrintPageSection
 import com.m1racle.reader.pdf.PrintPageSectionCatalog
 import com.m1racle.reader.pdf.PrintPageResolver
-import com.m1racle.reader.pdf.QualityTier
-import com.m1racle.reader.pdf.TextbookOutlineResolver
+import com.m1racle.reader.core.model.QualityTier
+import com.m1racle.reader.data.local.TextbookOutlineResolver
 import com.m1racle.reader.pdf.ThreePageStripState
 import com.m1racle.reader.pdf.ZoomPanPhysics
 import com.m1racle.reader.pdf.ZoomPanPhysicsProfile
@@ -75,6 +82,11 @@ import com.m1racle.reader.pdf.export.ExportCancellationToken
 import com.m1racle.reader.pdf.export.ExportRangePlan
 import com.m1racle.reader.pdf.export.ExportRangeResolver
 import com.m1racle.reader.pdf.export.PdfAnnotatedExporter
+import com.m1racle.reader.pdf.export.PdfSplitChapterSource
+import com.m1racle.reader.pdf.export.PdfSplitExporter
+import com.m1racle.reader.pdf.export.PdfSplitPageRange
+import com.m1racle.reader.pdf.export.PdfSplitPlan
+import com.m1racle.reader.pdf.export.PdfSplitState
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -85,6 +97,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -98,7 +111,8 @@ sealed class PdfViewerUiState {
         val pageCount: Int,
         val pageImage: ImageBitmap?,
         val isRendering: Boolean,
-        val renderError: String? = null,
+        /** Missing visible pages must expose retry instead of holding first-frame loading forever. */
+        val pageRenderErrors: Map<Int, String> = emptyMap(),
         /** Anchors for this document (sorted optional). */
         val printAnchors: List<PdfPrintPageAnchorEntity> = emptyList(),
         /** Textbook outline nodes (P0.3A). */
@@ -127,6 +141,7 @@ sealed class PdfViewerUiState {
         /** Width bucket (px) of the latest primary render. */
         val renderWidthBucket: Int = 0,
     ) : PdfViewerUiState() {
+        val renderError: String? get() = pageRenderErrors[pageIndex]
         val pageLabel: String
             get() = if (pageCount <= 0) "—" else "${pageIndex + 1} / $pageCount"
 
@@ -138,7 +153,7 @@ sealed class PdfViewerUiState {
             get() = PrintPageResolver.resolveDetailed(
                 documentId = document.id,
                 pdfPageIndex = printResolvePageIndex,
-                anchors = printAnchors,
+                anchors = printAnchors.toPrintPageAnchors(),
                 sections = printSections,
             )
 
@@ -174,9 +189,15 @@ sealed class PdfViewerUiState {
  * Offer to import PDF embedded bookmarks after open.
  */
 data class EmbeddedOutlineOffer(
-    val drafts: List<EmbeddedOutlineNodeDraft>,
+    val drafts: List<OutlineImportDraft>,
     val hasLocalNodes: Boolean,
     val alreadyImported: Boolean,
+)
+
+data class PdfSplitRequest(
+    val documentDisplayName: String,
+    val pageCount: Int,
+    val chapters: List<PdfSplitChapterSource>,
 )
 
 class PdfViewerViewModel(
@@ -206,6 +227,9 @@ class PdfViewerViewModel(
     private val _uiState = MutableStateFlow<PdfViewerUiState>(PdfViewerUiState.Loading)
     val uiState: StateFlow<PdfViewerUiState> = _uiState.asStateFlow()
 
+    private val outlineScanMutex = Mutex()
+    private val _outlineLoading = MutableStateFlow(false)
+    val outlineLoading: StateFlow<Boolean> = _outlineLoading.asStateFlow()
     private val _embeddedOffer = MutableStateFlow<EmbeddedOutlineOffer?>(null)
     val embeddedOutlineOffer: StateFlow<EmbeddedOutlineOffer?> = _embeddedOffer.asStateFlow()
 
@@ -230,6 +254,12 @@ class PdfViewerViewModel(
     private var pendingExportFormat: ChapterExportFormat = ChapterExportFormat.ZIP_PACKAGE
     private val chapterExporter = ChapterPackageExporter(application.applicationContext)
     private val pdfAnnotatedExporter = PdfAnnotatedExporter(application.applicationContext)
+    private val pdfSplitExporter = PdfSplitExporter(application.applicationContext)
+    private val _splitRequest = MutableStateFlow<PdfSplitRequest?>(null)
+    val splitRequest: StateFlow<PdfSplitRequest?> = _splitRequest.asStateFlow()
+    private val _splitState = MutableStateFlow<PdfSplitState?>(null)
+    val splitState: StateFlow<PdfSplitState?> = _splitState.asStateFlow()
+    private var pendingSplitPlan: PdfSplitPlan? = null
 
     val lastExportFormat: ChapterExportFormat
         get() = pendingExportFormat
@@ -259,6 +289,9 @@ class PdfViewerViewModel(
     private var printSections: List<PrintPageSection> = emptyList()
     private var outlineNodes: List<TextbookOutlineNodeEntity> = emptyList()
     private var documentUri: String? = null
+    // Native page dimensions outlive the bounded bitmap window. Eviction must
+    // never turn a measured page back into placeholder geometry.
+    private var knownPageAspects: Map<Int, Float> = emptyMap()
     private val textSelectionMutex = Mutex()
     private val selectablePages = linkedMapOf<Pair<String,Int>, com.m1racle.reader.pdf.PdfSelectablePage>()
 
@@ -274,7 +307,7 @@ class PdfViewerViewModel(
         result
     }
 
-    private var cachedDrafts: List<EmbeddedOutlineNodeDraft> = emptyList()
+    private var cachedDrafts: List<OutlineImportDraft> = emptyList()
     private var readingMode: PdfReadingMode = PdfReadingMode.default()
     private var showPageButtons: Boolean = true
     private var zoomScale: Float = 1f
@@ -291,6 +324,12 @@ class PdfViewerViewModel(
     private var continuousPhase = ContinuousScrollPhase.IDLE
     private var continuousProtectedPages: Set<Int> = emptySet()
     private var continuousPrimaryPage: Int = 0
+    /**
+     * G1: suppresses the heavy continuous dispatch when a viewport frame carries
+     * no new information. Without it, every scroll frame trims the bitmap cache
+     * and re-plans the whole render queue while the finger is still moving.
+     */
+    private val continuousDispatchGate = ContinuousViewportDispatchGate()
     /** R7.1: completed vertical renders stay cache-pending until transaction settle. */
     private var pendingContinuousCachePublish: Boolean = false
     private val pendingContinuousPages = linkedSetOf<Int>()
@@ -365,7 +404,13 @@ class PdfViewerViewModel(
     private var finalFlushGeneration: Long = 0L
 
     fun onContinuousViewportChanged(snapshot: ContinuousViewportSnapshot) {
-        if (suspendPageSettled) return
+        if (suspendPageSettled) {
+            // Pinch in progress: the continuous hot path is suspended. Forget the
+            // pre-gesture signature so the first frame after the pinch dispatches
+            // instead of being suppressed against stale inputs.
+            continuousDispatchGate.reset()
+            return
+        }
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
         val entryPhase = ready.continuousEntryState.phase
 
@@ -391,14 +436,80 @@ class PdfViewerViewModel(
                     continuousEntryState = continuousEntryRestore.snapshot(),
                 )
             }
+            continuousDispatchGate.reset()
             return
         }
 
-        if (entryPhase != com.m1racle.reader.pdf.ContinuousEntryPhase.READY) return
+        if (entryPhase != com.m1racle.reader.pdf.ContinuousEntryPhase.READY) {
+            // Entry restore has not converged: the viewport is the only authority
+            // on position. Never let a pre-restore signature survive into READY.
+            continuousDispatchGate.reset()
+            return
+        }
+
+        val previousDirection = continuousDirection
         visibleContinuousPages = snapshot.visiblePages
         continuousDirection = snapshot.direction
         continuousPhase = snapshot.phase
         continuousPrimaryPage = snapshot.primaryPage
+
+        // ── G1 hot-path de-duplication ──────────────────────────────
+        // Everything below (cache trim, job cancellation, preview re-plan) is a
+        // pure function of this signature. Advancing scrollY alone does not enter
+        // the signature, so a finger-drag inside one page window dispatches once.
+        val signature = ContinuousDispatchSignature(
+            documentId = ready.document.id,
+            pageCount = ready.pageCount,
+            viewportWidthPx = viewportWidthPx,
+            scale = ready.zoomScale,
+            primaryPage = continuousPrimaryPage,
+            visiblePages = visibleContinuousPages,
+            direction = continuousDirection,
+            phase = continuousPhase,
+            zoomGestureActive = suspendPageSettled,
+            entryPhaseReady = true,
+            generation = pageGenerations.values.maxOrNull() ?: 0L,
+        )
+        // A visible page with neither a bitmap nor a live job must keep re-dispatching:
+        // the every-frame path was also the self-heal that re-requested it.
+        val allVisibleCovered = snapshot.visiblePages.all { page ->
+            pageCache.get(page) != null || cacheJobs[page]?.isActive == true
+        }
+        if (!allVisibleCovered) continuousDispatchGate.reset()
+
+        if (!continuousDispatchGate.shouldDispatch(signature)) {
+            if (isDebuggable) {
+                Log.d(ZOOM_LOG_TAG,
+                    "VIEWPORT_DISPATCH_SUPPRESSED primary=${snapshot.primaryPage} " +
+                    "visible=${snapshot.visiblePages} phase=${snapshot.phase} " +
+                    "direction=${snapshot.direction} " +
+                    "dispatched=${continuousDispatchGate.dispatchCount} " +
+                    "suppressed=${continuousDispatchGate.suppressedCount}")
+            }
+            return
+        }
+
+        // A reversal invalidates jobs queued for the direction the reader abandoned.
+        // They sit ahead of the now-visible page in the serial PdfRenderer queue.
+        val superseded = continuousDispatchGate.supersededOnReversal(
+            jobs = cacheJobKeys,
+            previousDirection = previousDirection,
+            currentDirection = snapshot.direction,
+            visiblePages = snapshot.visiblePages,
+        )
+        if (superseded.isNotEmpty()) {
+            superseded.forEach { page ->
+                cacheJobs.remove(page)?.cancel()
+                cacheJobKeys.remove(page)
+            }
+            if (isDebuggable) {
+                Log.d(ZOOM_LOG_TAG,
+                    "VIEWPORT_REVERSAL_SUPERSEDED pages=$superseded " +
+                    "from=$previousDirection to=${snapshot.direction} " +
+                    "visible=${snapshot.visiblePages}")
+            }
+        }
+
         continuousProtectedPages = ContinuousViewportPolicy.boundedPreviewPages(
             snapshot,
             ready.pageCount,
@@ -563,7 +674,8 @@ class PdfViewerViewModel(
         pageIndex: Int = ready.pageIndex,
         pageImage: ImageBitmap? = ready.pageImage,
         isRendering: Boolean = ready.isRendering,
-        renderError: String? = ready.renderError,
+        renderError: String? = ready.pageRenderErrors[pageIndex],
+        pageRenderErrors: Map<Int, String> = ready.pageRenderErrors,
         readingMode: PdfReadingMode = ready.readingMode,
         showPageButtons: Boolean = ready.showPageButtons,
         zoomScale: Float = this.zoomScale,
@@ -575,11 +687,12 @@ class PdfViewerViewModel(
             pageIndex = pageIndex,
             pageImage = pageImage ?: pageCache.image(pageIndex),
             isRendering = isRendering,
-            renderError = renderError,
+            pageRenderErrors = if (renderError == null) pageRenderErrors - pageIndex
+                else pageRenderErrors + (pageIndex to renderError),
             readingMode = readingMode,
             showPageButtons = showPageButtons,
             pageBitmaps = pageCache.snapshotImages(),
-            pageAspects = pageCache.snapshotAspects(),
+            pageAspects = knownPageAspects,
             pageBitmapMetadata = snapshotPageMetadata(),
             printAnchors = anchors,
             printSections = printSections,
@@ -602,7 +715,8 @@ class PdfViewerViewModel(
         pageIndex: Int = ready.pageIndex,
         pageImage: ImageBitmap? = ready.pageImage,
         isRendering: Boolean = ready.isRendering,
-        renderError: String? = ready.renderError,
+        renderError: String? = ready.pageRenderErrors[pageIndex],
+        pageRenderErrors: Map<Int, String> = ready.pageRenderErrors,
         readingMode: PdfReadingMode = ready.readingMode,
         showPageButtons: Boolean = ready.showPageButtons,
         pageBitmaps: Map<Int, ImageBitmap> = ready.pageBitmaps,
@@ -620,7 +734,8 @@ class PdfViewerViewModel(
         pageIndex = pageIndex,
         pageImage = pageImage,
         isRendering = isRendering,
-        renderError = renderError,
+        pageRenderErrors = if (renderError == null) pageRenderErrors - pageIndex
+            else pageRenderErrors + (pageIndex to renderError),
         readingMode = readingMode,
         showPageButtons = showPageButtons,
         pageBitmaps = pageBitmaps,
@@ -1139,6 +1254,9 @@ class PdfViewerViewModel(
         readingMode = mode
         readingPrefs.setMode(documentId, mode)
         viewportSessionTracker.commit(modeSession)
+        // Mode switch changes the render plan without changing the viewport
+        // signature, so the gate must forget the previous mode's frame.
+        continuousDispatchGate.reset()
         when (mode) {
             PdfReadingMode.HORIZONTAL_PAGED -> {
                 // The target adapter receives the same document-session scale and page anchor.
@@ -1294,7 +1412,12 @@ class PdfViewerViewModel(
         if (ready.readingMode == PdfReadingMode.HORIZONTAL_PAGED) {
             ensureHorizontalStripAround(center, ready)
         } else {
-            ensurePreviewAround(center)
+            // A composed prefetch page must not move the cache's primary
+            // window away from the actual viewport. Several placeholders may
+            // ask in the same frame, especially with short/landscape pages.
+            ensurePreviewAround(
+                if (visibleContinuousPages.isEmpty()) center else continuousPrimaryPage,
+            )
         }
     }
 
@@ -1651,6 +1774,8 @@ class PdfViewerViewModel(
             return
         }
         clearTerminalExportDialogIfAny()
+        _splitState.value = null
+        _splitRequest.value = null
         val plan = ExportRangeResolver.plan(
             node = node,
             nodes = outlineNodes,
@@ -1662,6 +1787,7 @@ class PdfViewerViewModel(
     }
 
     private fun isExportRunning(): Boolean {
+        if (exportJob?.isActive == true) return true
         val st = _exportState.value
         return st is ChapterExportState.Preparing ||
             st is ChapterExportState.CopyingPages ||
@@ -1701,8 +1827,76 @@ class PdfViewerViewModel(
         beginExportNode(node)
     }
 
-    fun dismissExportPlan() {
-        _exportPlan.value = null
+    fun beginSplit() {
+        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
+        if (isExportRunning()) {
+            _importMessage.value = "正在导出，请等待完成或先取消"
+            return
+        }
+        clearTerminalExportDialogIfAny()
+        _splitState.value = null
+        pendingSplitPlan = null
+        _splitRequest.value = PdfSplitRequest(
+            documentDisplayName = ready.document.displayName,
+            pageCount = ready.pageCount,
+            chapters = outlineNodes.map { node ->
+                val plan = ExportRangeResolver.plan(node, outlineNodes, ready.pageCount, anchors)
+                PdfSplitChapterSource(node.id, node.title, plan.pathTitles,
+                    PdfSplitPageRange(plan.startPageIndex, plan.endPageIndex))
+            },
+        )
+    }
+
+    fun dismissSplitRequest() {
+        _splitRequest.value = null
+        pendingSplitPlan = null
+    }
+
+    fun prepareSplit(plan: PdfSplitPlan): Boolean {
+        val ready = _uiState.value as? PdfViewerUiState.Ready ?: return false
+        if (isExportRunning() || plan.sourcePageCount != ready.pageCount || plan.parts.isEmpty()) return false
+        pendingSplitPlan = plan
+        _splitRequest.value = null
+        return true
+    }
+
+    fun runSplitToDirectory(outputDirectoryUri: Uri) {
+        if (isExportRunning()) return
+        val plan = pendingSplitPlan ?: return
+        val source = documentUri ?: return
+        val generation = exportStateGate.begin()
+        val cancellation = ExportCancellationToken()
+        activeExportCancellation = cancellation
+        _splitState.value = PdfSplitState.Preparing(plan.parts.size, plan.totalPages)
+        exportJob = viewModelScope.launch {
+            val onState: (PdfSplitState) -> Unit = {
+                if (exportStateGate.isCurrent(generation)) _splitState.value = it
+            }
+            try {
+                val result = pdfSplitExporter.export(
+                    sourceUri = Uri.parse(source), plan = plan,
+                    outputDirectoryUri = outputDirectoryUri,
+                    cancellation = cancellation, onState = onState,
+                )
+                onState(result)
+            } catch (cancelled: CancellationException) {
+                // The exporter reports cleanup before rethrowing cancellation.
+                throw cancelled
+            } catch (error: Exception) {
+                onState(PdfSplitState.Failed(error.message ?: "拆分失败", outputCleanupFailed = false))
+            }
+        }
+    }
+
+    fun cancelSplit() {
+        activeExportCancellation?.cancel()
+        exportJob?.cancel()
+    }
+
+    fun dismissSplitState() {
+        if (isExportRunning()) return
+        _splitState.value = null
+        pendingSplitPlan = null
     }
 
     fun dismissExportState() {
@@ -1816,8 +2010,9 @@ class PdfViewerViewModel(
         _embeddedOffer.value = EmbeddedOutlineOffer(
             drafts = cachedDrafts,
             hasLocalNodes = outlineNodes.isNotEmpty(),
-            alreadyImported = com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter
-                .isAlreadyImported(cachedDrafts, outlineNodes),
+            alreadyImported = OutlineImportRules.isAlreadyImported(
+                cachedDrafts, outlineNodes.map { it.importKey },
+            ),
         )
     }
 
@@ -1826,6 +2021,7 @@ class PdfViewerViewModel(
      * Auto-open path skips when embedded outline already imported.
      */
     fun rescanEmbeddedOutline() {
+        if (_outlineLoading.value) return
         val ready = _uiState.value as? PdfViewerUiState.Ready ?: return
         val uri = documentUri ?: ready.document.uri
         viewModelScope.launch {
@@ -1849,9 +2045,7 @@ class PdfViewerViewModel(
         viewModelScope.launch {
             try {
                 val written = repository.importEmbeddedOutline(
-                    documentId = documentId,
-                    drafts = drafts,
-                    mode = mode,
+                    OutlineImportPlan(documentId, drafts, mode),
                 )
                 reloadOutlineIntoState()
                 _embeddedOffer.value = null
@@ -1896,6 +2090,7 @@ class PdfViewerViewModel(
             printSections = emptyList()
             outlineNodes = emptyList()
             documentUri = null
+            knownPageAspects = emptyMap()
             pageCache.clear()
             tilePublishJob?.cancel(); tilePublishJob = null
             pendingTileSwaps.clear()
@@ -1920,6 +2115,8 @@ class PdfViewerViewModel(
             cacheJobs.values.forEach { it.cancel() }
             cacheJobs.clear()
             cacheJobKeys.clear()
+            continuousDispatchGate.reset()
+            continuousDispatchGate.resetCounters()
             renderJob?.cancel()
             renderJob = null
             zoomSettleJob?.cancel()
@@ -2002,15 +2199,15 @@ class PdfViewerViewModel(
                         entity.pdfViewportGeneration != null
                     ) {
                         PdfViewportSessionState(
-                            version = entity.pdfViewportSessionVersion,
+                            version = requireNotNull(entity.pdfViewportSessionVersion),
                             readingMode = PdfReadingMode.fromStorage(entity.pdfViewportReadingMode),
-                            pageIndex = entity.pdfViewportPageIndex,
-                            pageAnchorXFraction = entity.pdfPageAnchorXFraction,
-                            pageAnchorYFraction = entity.pdfPageAnchorYFraction,
-                            viewportAnchorXFraction = entity.pdfViewportAnchorXFraction,
-                            viewportAnchorYFraction = entity.pdfViewportAnchorYFraction,
-                            scale = entity.pdfViewportScale,
-                            generation = entity.pdfViewportGeneration,
+                            pageIndex = requireNotNull(entity.pdfViewportPageIndex),
+                            pageAnchorXFraction = requireNotNull(entity.pdfPageAnchorXFraction),
+                            pageAnchorYFraction = requireNotNull(entity.pdfPageAnchorYFraction),
+                            viewportAnchorXFraction = requireNotNull(entity.pdfViewportAnchorXFraction),
+                            viewportAnchorYFraction = requireNotNull(entity.pdfViewportAnchorYFraction),
+                            scale = requireNotNull(entity.pdfViewportScale),
+                            generation = requireNotNull(entity.pdfViewportGeneration),
                         ).normalized(pageCount, restored)
                     } else null
                     viewportSessionTracker.seed(persistedViewportSession)
@@ -2024,34 +2221,59 @@ class PdfViewerViewModel(
                     } else {
                         continuousEntryRestore.markReadyWithoutRestore()
                     }
+                    // Publish the first reading surface atomically with a complete base.
+                    // Otherwise the viewport starts white and exposes individual detail tiles
+                    // while their shared renderer is still preparing the whole-page preview.
+                    val entryPage = persistedViewportSession?.pageIndex ?: restored
+                    val entryWidth = PdfRenderQuality.targetWidthPx(viewportWidthPx, QualityTier.SCROLL_PREVIEW)
+                    val entryRender = renderer.renderPage(entryPage, entryWidth)
+                    if (entryRender !is PdfPageRenderer.RenderResult.Success) {
+                        _uiState.value = PdfViewerUiState.Error(
+                            displayName = entity.displayName,
+                            message = when (entryRender) {
+                                is PdfPageRenderer.RenderResult.Failed -> entryRender.message
+                                PdfPageRenderer.RenderResult.OutOfMemory -> "内存不足，无法渲染该页"
+                                else -> "页面渲染失败"
+                            },
+                        )
+                        return@launch
+                    }
+                    pageGenerations[entryPage] = 1L
+                    knownPageAspects = mapOf(entryPage to
+                        (entryRender.pageSize.height.toFloat() / entryRender.pageSize.width))
+                    pageCache.put(entryPage, PageBitmapEntry(
+                        image = entryRender.image,
+                        widthBucket = entryWidth,
+                        tier = QualityTier.SCROLL_PREVIEW,
+                        generation = 1L,
+                        aspectHw = entryRender.pageSize.height.toFloat() / entryRender.pageSize.width,
+                    ), primaryIndex = entryPage)
                     _uiState.value = PdfViewerUiState.Ready(
                         document = openedDocument!!,
-                        pageIndex = restored,
+                        pageIndex = entryPage,
                         pageCount = pageCount,
-                        pageImage = null,
-                        isRendering = readingMode == PdfReadingMode.HORIZONTAL_PAGED,
+                        pageImage = entryRender.image,
+                        isRendering = false,
                         printAnchors = anchors,
                         printSections = printSections,
                         outlineNodes = outlineNodes,
                         readingMode = readingMode,
                         showPageButtons = showPageButtons,
-                        pageBitmaps = emptyMap(),
-                        pageAspects = emptyMap(),
+                        pageBitmaps = pageCache.snapshotImages(),
+                        pageAspects = knownPageAspects,
+                        pageBitmapMetadata = snapshotPageMetadata(),
                         zoomScale = zoomScale,
                         continuousDocumentState = continuousDocumentSession.stableState,
                         viewportSessionState = persistedViewportSession,
                         tileDocumentGeneration = tileDocumentGeneration,
                         continuousEntryState = continuousEntryRestore.snapshot(),
                         qualityTier = qualityTier,
-                        renderWidthBucket = PdfRenderQuality.targetWidthPx(
-                            viewportWidthPx,
-                            QualityTier.PREVIEW,
-                        ),
+                        renderWidthBucket = entryWidth,
                     )
                     when (readingMode) {
-                        PdfReadingMode.HORIZONTAL_PAGED -> requestRender(restored)
+                        PdfReadingMode.HORIZONTAL_PAGED -> requestRender(entryPage)
                         PdfReadingMode.VERTICAL_CONTINUOUS -> {
-                            ensurePreviewAround(restored)
+                            ensurePreviewAround(entryPage)
                         }
                     }
                     // Warm thumbnail renderer in background (does not pre-render pages).
@@ -2066,7 +2288,6 @@ class PdfViewerViewModel(
                     // Skip heavy PDFBox when this document already has imported embedded nodes.
                     launch {
                         try {
-                            kotlinx.coroutines.delay(400)
                             detectEmbeddedOutline(
                                 uri = entity.uri,
                                 pageCount = pageCount,
@@ -2105,12 +2326,14 @@ class PdfViewerViewModel(
         pageCount: Int,
         force: Boolean,
     ) {
+        if (!outlineScanMutex.tryLock()) return
+        _outlineLoading.value = true
         try {
             // Lightweight path: already imported embedded bookmarks → skip PDFBox re-load.
             // User can still force via [rescanEmbeddedOutline].
             if (!force) {
                 val embeddedCount = outlineNodes.count {
-                    it.source == com.m1racle.reader.data.local.OutlineNodeSource.PDF_EMBEDDED.name
+                    it.source == com.m1racle.reader.core.model.OutlineNodeSource.PDF_EMBEDDED.name
                 }
                 if (embeddedCount > 0) {
                     cachedDrafts = emptyList()
@@ -2122,15 +2345,20 @@ class PdfViewerViewModel(
             when (val parsed = PdfEmbeddedOutlineParser.parse(appContext, uri)) {
                 is PdfEmbeddedOutlineParser.ParseResult.Success -> {
                     val drafts = try {
-                        EmbeddedOutlineBuilder.inferEndPages(parsed.entries, pageCount)
-                    } catch (_: Throwable) {
+                        withContext(Dispatchers.Default) {
+                            EmbeddedOutlineBuilder.inferEndPages(parsed.entries, pageCount)
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
                         emptyList()
                     }
                     cachedDrafts = drafts
                     if (drafts.isEmpty()) return
                     val already = try {
-                        com.m1racle.reader.pdf.PdfEmbeddedOutlineImporter
-                            .isAlreadyImported(drafts, outlineNodes)
+                        OutlineImportRules.isAlreadyImported(
+                            drafts, outlineNodes.map { it.importKey },
+                        )
                     } catch (_: Throwable) {
                         false
                     }
@@ -2139,8 +2367,17 @@ class PdfViewerViewModel(
                         _importMessage.value =
                             "已解析目录，其中 ${parsed.unresolvedDestinations} 项页码为近似值"
                     }
-                    // Prompt when not fully imported yet, or when local tree empty (fresh).
-                    if (!already || outlineNodes.isEmpty() || force) {
+                    // First open quietly merges into the existing tree. Manual nodes
+                    // survive, and the canonical Ready state updates as soon as stored.
+                    if (!force) {
+                        if (!already) {
+                            repository.importEmbeddedOutline(OutlineImportPlan(
+                                documentId, drafts, OutlineImportMode.MERGE,
+                            ))
+                            reloadOutlineIntoState()
+                        }
+                        _embeddedOffer.value = null
+                    } else {
                         _embeddedOffer.value = EmbeddedOutlineOffer(
                             drafts = drafts,
                             hasLocalNodes = outlineNodes.isNotEmpty(),
@@ -2161,10 +2398,15 @@ class PdfViewerViewModel(
                     _importMessage.value = parsed.message
                 }
             }
-        } catch (_: Throwable) {
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
             cachedDrafts = emptyList()
             _embeddedOffer.value = null
             _importMessage.value = "目录解析异常"
+        } finally {
+            _outlineLoading.value = false
+            outlineScanMutex.unlock()
         }
     }
 
@@ -2221,8 +2463,9 @@ class PdfViewerViewModel(
                         pageImage = existing.image,
                         isRendering = false,
                         renderError = null,
+                        pageRenderErrors = ready.pageRenderErrors - pageIndex,
                         pageBitmaps = pageCache.snapshotImages(),
-                        pageAspects = pageCache.snapshotAspects(),
+                        pageAspects = knownPageAspects,
                         pageBitmapMetadata = snapshotPageMetadata(),
                         renderWidthBucket = existing.widthBucket,
                     )
@@ -2289,8 +2532,10 @@ class PdfViewerViewModel(
                         Log.d(ZOOM_LOG_TAG, "ZOOM_QUALITY_READY page=$pageIndex tier=$forceTier widthBucket=$widthForJob " +
                             "renderDurationMs=${readyAt - renderStartedAt} timestamp=$readyAt")
                     }
-                    val aspect = pageCache.aspect(pageIndex)
-                        ?: (result.pageSize.height.toFloat() / result.pageSize.width.toFloat())
+                    val aspect = result.pageSize.height.toFloat() / result.pageSize.width.toFloat()
+                    if (knownPageAspects[pageIndex] != aspect) {
+                        knownPageAspects = knownPageAspects + (pageIndex to aspect)
+                    }
                     val entry = PageBitmapEntry(
                         image = result.image,
                         widthBucket = widthForJob,
@@ -2338,7 +2583,8 @@ class PdfViewerViewModel(
                             current.pageImage
                         },
                         isRendering = false,
-                        renderError = null,
+                        renderError = if (current.pageIndex == pageIndex) null else current.renderError,
+                        pageRenderErrors = current.pageRenderErrors - pageIndex,
                     )
                     if (isDebuggable && current.readingMode == PdfReadingMode.VERTICAL_CONTINUOUS) {
                         Log.d(ZOOM_LOG_TAG, "ZOOM_QUALITY_SWAP page=$pageIndex tier=$forceTier widthBucket=$widthForJob " +
@@ -2346,51 +2592,20 @@ class PdfViewerViewModel(
                     }
                 }
                 is PdfPageRenderer.RenderResult.Failed -> {
-                    // Keep old bitmap; never flash white/loading if we have one.
-                    if (current.pageIndex == pageIndex &&
-                        pageCache.image(pageIndex) == null &&
-                        current.pageImage == null
-                    ) {
-                        _uiState.value = ReadyBase(
-                            current,
-                            isRendering = false,
-                            renderError = result.message,
-                        )
-                    }
+                    publishPageRenderFailure(current, pageIndex, result.message)
                 }
                 PdfPageRenderer.RenderResult.OutOfMemory -> {
                     // Bounded OOM recovery: trim page cache headroom, surface an
                     // explicit error only when nothing is on screen, never loop.
                     Log.w(ZOOM_LOG_TAG, "PAGE_OOM: full-page bitmap allocation failed, trimming cache")
                     pageCache.trimMemory()
-                    if (current.pageIndex == pageIndex &&
-                        pageCache.image(pageIndex) == null &&
-                        current.pageImage == null
-                    ) {
-                        _uiState.value = ReadyBase(
-                            current,
-                            isRendering = false,
-                            renderError = "内存不足，无法渲染该页",
-                        )
-                    }
+                    publishPageRenderFailure(current, pageIndex, "内存不足，无法渲染该页")
                 }
                 PdfPageRenderer.RenderResult.Closed,
                 PdfPageRenderer.RenderResult.InvalidPage,
                 -> {
-                    if (current.pageIndex == pageIndex &&
-                        pageCache.image(pageIndex) == null &&
-                        current.pageImage == null
-                    ) {
-                        _uiState.value = ReadyBase(
-                            current,
-                            isRendering = false,
-                            renderError = if (result is PdfPageRenderer.RenderResult.Closed) {
-                                "PDF 已关闭"
-                            } else {
-                                "页码无效"
-                            },
-                        )
-                    }
+                    publishPageRenderFailure(current, pageIndex,
+                        if (result is PdfPageRenderer.RenderResult.Closed) "PDF 已关闭" else "页码无效")
                 }
             }
         }
@@ -2405,6 +2620,14 @@ class PdfViewerViewModel(
         if (horizontalPrimary) {
             renderJob = job
         }
+    }
+
+    private fun publishPageRenderFailure(current: PdfViewerUiState.Ready, page: Int, message: String) {
+        if (current.pageBitmaps[page] != null) return // Keep the last complete base on upgrade failure.
+        _uiState.value = current.copy(
+            isRendering = if (current.pageIndex == page) false else current.isRendering,
+            pageRenderErrors = current.pageRenderErrors + (page to message),
+        )
     }
 
     private fun schedulePersist(
@@ -2558,6 +2781,8 @@ class PdfViewerViewModel(
         primaryUpgradeJob?.cancel(); primaryUpgradeJob = null
         zoomSettleJob?.cancel(); zoomSettleJob = null
         persistJob?.cancel(); persistJob = null
+        activeExportCancellation?.cancel()
+        exportJob?.cancel()
 
         // 3. Issue idempotent close on applicationScope — never runBlocking on
         //    main thread. closeAsync acquires the renderer/thumbnail mutex on

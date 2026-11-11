@@ -103,8 +103,4 @@ object ReaderMoreTransitions {
         } else {
             ReaderMoreState.MAIN
         }
-
-    /** True when inline progress must be forced to 0 before Child morph. */
-    fun mustCollapseInlineForChild(current: ReaderMoreState): Boolean =
-        current.isChild() || current.isInline()
 }

@@ -104,8 +104,6 @@ class GlassInteractionContext {
     // ── 状态事件 ───────────────────────────────────────────────────────────
 
     fun beginHover(): Boolean = transitionTo(GlassInteractionState.HOVER)
-    fun endHover(): Boolean = transitionTo(GlassInteractionState.IDLE)
-
     /** 按下；若指针尚未登记，视为在当前位置按下。 */
     fun press(): Boolean = transitionTo(GlassInteractionState.PRESSED)
 

@@ -1,5 +1,7 @@
 package com.m1racle.reader.ui.annotation
 
+import com.m1racle.reader.core.model.DocumentAnchor
+
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -7,13 +9,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
-import com.m1racle.reader.data.anchor.NormalizedRect
+import com.m1racle.reader.core.model.NormalizedRect
 import com.m1racle.reader.pdf.PdfSelectableGlyph
 import com.m1racle.reader.pdf.PdfSelectableLine
 import com.m1racle.reader.pdf.PdfSelectablePage
@@ -65,11 +68,19 @@ class PdfTextHighlightGestureTest {
         consumeInitial: Boolean = false,
         recordParentTaps: Boolean = false,
         selectablePage: PdfSelectablePage? = page,
+        pageScale: Float = 1f,
     ) {
         rule.setContent {
             Box(
                 Modifier
                     .size(300.dp,400.dp)
+                    // Mirrors both reading modes: the annotation layer sits inside
+                    // the viewport's page-scale transform.
+                    .graphicsLayer {
+                        scaleX = pageScale
+                        scaleY = pageScale
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                    }
                     .then(if (recordParentTaps) Modifier.recordParentTaps() else Modifier),
             ) {
                 Box(
@@ -82,6 +93,7 @@ class PdfTextHighlightGestureTest {
                         items = items,
                         selectionEnabled = enabled,
                         textPage = selectablePage,
+                        pageScale = pageScale,
                         onSelectionUnavailable = {},
                         onSelectCompleted = { saved += it },
                         modifier = Modifier.testTag("page"),
@@ -94,10 +106,59 @@ class PdfTextHighlightGestureTest {
             }
         }
     }
+
+    /** On-screen width of a node, i.e. after every parent transform. */
+    private fun visualWidthDp(tag: String): Float =
+        rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.width / rule.density.density
+
+    @Test fun actionBarKeepsScreenSizeWhileThePageIsZoomed() {
+        val scale = androidx.compose.runtime.mutableFloatStateOf(1f)
+        rule.setContent {
+            Box(
+                Modifier
+                    .size(300.dp, 400.dp)
+                    .graphicsLayer {
+                        scaleX = scale.floatValue
+                        scaleY = scale.floatValue
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                    },
+            ) {
+                PdfHighlightLayer(
+                    pageIndex = 0,
+                    items = emptyList(),
+                    selectionEnabled = true,
+                    textPage = page,
+                    pageScale = scale.floatValue,
+                    onSelectionUnavailable = {},
+                    onSelectCompleted = { saved += it },
+                    modifier = Modifier.testTag("page"),
+                    onSelectionNoteRequested = { notedSelections += it },
+                )
+            }
+        }
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width * .15f, height * .22f)); advanceEventTime(700); up()
+        }
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+        val unzoomed = visualWidthDp("pdf-selection-actions")
+
+        rule.runOnIdle { scale.floatValue = 2.5f }
+        rule.waitForIdle()
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+        val zoomed = visualWidthDp("pdf-selection-actions")
+
+        // The menu must not grow with the page: same on-screen dp at 1x and 2.5x.
+        assertEquals(
+            "action bar must stay screen-sized under page zoom (1x=$unzoomed, 2.5x=$zoomed)",
+            unzoomed,
+            zoomed,
+            1.0f,
+        )
+    }
     @Test fun singleCharacterHighlightCanBeDeletedWithoutHittingNoteAction() {
         val rect=NormalizedRect(.1f,.2f,.02f,.04f)
         var deleted=0;var noted=0
-        show(items=listOf(AnnotationOverlayItem(7,AnnotationType.HIGHLIGHT,com.m1racle.reader.data.anchor.DocumentAnchor.PdfPage(0,listOf(rect)),"A")),
+        show(items=listOf(AnnotationOverlayItem(7,AnnotationType.HIGHLIGHT,com.m1racle.reader.core.model.DocumentAnchor.PdfPage(0,listOf(rect)),"A")),
             delete={ _,_->deleted++ },note={ _,_->noted++ })
         rule.onNodeWithTag("page").performTouchInput { click(Offset(width*.11f,height*.22f)) }
         rule.onNodeWithTag("page").performTouchInput {

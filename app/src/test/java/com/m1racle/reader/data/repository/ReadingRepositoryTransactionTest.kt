@@ -2,7 +2,7 @@ package com.m1racle.reader.data.repository
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.*
 import java.io.IOException
 import kotlinx.coroutines.runBlocking

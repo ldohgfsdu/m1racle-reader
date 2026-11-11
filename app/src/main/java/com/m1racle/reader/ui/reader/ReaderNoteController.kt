@@ -1,7 +1,7 @@
 package com.m1racle.reader.ui.reader
 
 import com.m1racle.reader.data.anchor.AnnotationAnchorResolvers
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.NoteEntity
 import com.m1racle.reader.data.repository.ReadingRepository
 

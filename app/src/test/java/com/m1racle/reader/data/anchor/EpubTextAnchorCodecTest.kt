@@ -1,5 +1,7 @@
 package com.m1racle.reader.data.anchor
 
+import com.m1racle.reader.core.model.DocumentAnchor
+
 import com.m1racle.reader.data.local.BookmarkLocationKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

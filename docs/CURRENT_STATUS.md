@@ -1,15 +1,13 @@
 # 当前状态
 
-2026-10-31：正式签名、压缩 Release **1.0.0 / 90，Room17**。开发仓库 D:/03_M1racle Reader/reader-ui-release-20261025，分支 codex/reader-stability-20261030；本机构建使用 reader-env-local.ps1 的 $readerRepository。原 reader 与 reader-audit-fixes-20261024 工作树保留。
+2026-11-06：当前开发与构建仓库为 D:/03_M1racle Reader/reader-ui-release-20261025。当前源码与正式交付均为 **1.0.0 / 94，Room17**。
 
-90 修复 PDF 与 Markdown 长按逐字选择、两端句柄、高亮和批注；正文短点整组隐藏/显示阅读控件，有选区时先取消选择。PDF 新会话默认全屏沉浸并隐藏控件。滚动显隐沿用原方向、距离阈值和分阶段行为。继承 89 稳定性修复及 87 界面品牌基线。详见 [本轮实现与真机证据](TEXT_SELECTION_AND_IMMERSION_20261031.md)。
+正式包：[M1racle-Reader-1.0.0-94.apk](</D:/03_M1racle Reader/apk/M1racle-Reader-1.0.0-94.apk>)，**26.44 MiB**（27725374 bytes）。SHA-256：`F674B911D4B0A5B9296A07C4E4F7396CC058192B77144F61F3478455FA28F81E`。使用生产证书签名，代码与资源压缩开启，签名和 16 KiB 对齐核验通过；构建输出、Outbox、本地交付、模拟器已安装包及 Download 副本摘要一致。
 
-唯一交付：D:/03_M1racle Reader/apk/M1racle-Reader-1.0.0-90.apk，27638646 字节（26.36 MiB）。SHA-256：450E5AD033F2DE19DC6E2CB5F7A301C0724D9C889E8C8D1298194F9649B22F2F。生产签名、16KiB 对齐、R8 / 资源压缩、35 个 assets 同源校验通过，无 INTERNET、非 debuggable，保留 profileable shell=true。构建、Outbox、交付、手机已安装包与 Download 摘要一致。
+本轮交付包含目录防循环、选字菜单缩放修正，完成 core:model / core:database / core:pdf 边界；PDF 导入上限为 2 GiB，采用流式复制、文件随机读取和磁盘临时缓冲。修复拖动、惯性、点按、首次布局及重建恢复中的坐标跳动。阅读菜单支持按章节层级或固定页数直接拆分 PDF，包含范围选择、进度、取消、输出回读与失败清理。
 
-同源 QA 单元测试 1880 项、Release 单元测试 1717 项，均 0 failures / 0 errors，各 2 项既有环境跳过；lint 0 errors / 179 warnings / 6 hints。最终物理手机隔离 QA 原生回归 **47/47 通过**，0 failures / 0 skips / 0 timeouts，覆盖选字、标注保存重开、句柄、显隐、旋转、翻页缩放、视口锚点、瓦片像素和数据隔离。未放宽字符、位置、历史分支或像素断言。
+本轮状态 **READY_WITH_LIMITATIONS**：implemented 完成；automated_verified 为 QA 1926 / Release 1762 项单测零失败、零错误，各 2 项既有环境跳过；四模块 lint 零错误、187 条警告。59 项原生测试零失败、零跳过，3 项时序用例额外两轮均通过。实际章节 / 页数拆分的 7 份 PDF 经独立工具逐页核验，192 个输出页面与源页文字和渲染完全一致。最终正式包保留数据安装、冷启动、首页、设置、PDF 阅读及实际 2 + 1 页拆分检查通过，未见 Reader 崩溃或 ANR。
 
-Xiaomi 17 Pro（25098PN5AC，Android SDK36，db04f865）已从正式 85 保留数据覆盖安装 90，firstInstallTime 仍为 2026-08-31 16:14:37。既有 PDF 保持 44/97 页，默认沉浸、整组点击显隐和重开通过；真实中文文字层长按及句柄拖动通过。Markdown 真实中文单字选择、菜单与句柄、点击显隐通过，继续阅读仍为 84%；既有 EPUB 正文打开，进度仍为 9%。生产文档未新增标注，持久化高亮/批注回归在隔离 QA 合成资料中完成。
+device_verified 仅限 API35 软件图形渲染模拟器。当前未连接物理手机，本轮未完成手机安装或人工阅读手感验收。模拟器帧时间仍偏高，不能宣称手机流畅度已验收。大文件原生证据为至少 224 MiB 的合法稀疏 PDF 和 2000 页页树，不等同于完整 2 GiB 或高密度图像实书验收。
 
-手机系统方向 0/0、字体比例 1.1 与测试前一致；正式进程崩溃缓冲无 fatal。模拟器已正常关闭，保留其数据。本轮没有做性能对照采集；真实拼音输入法、持续滚动手感、性能、TalkBack 和厂商长截图仍待专门验收。89 的模拟器帧统计保留为历史诊断，不作为本轮真机性能结论。
-
-本轮 implemented / automated_verified / physical_phone device_verified 已完成，human_acceptance 仍 pending。扫描 PDF 没有文字层时不支持逐字选择，OCR 不在范围。源码与文档本地保存，未推送、未公开发布。证据：D:/03_M1racle Reader/output/reading-selection-20261030；[89 状态归档](history/CURRENT_STATUS_89_before_text_selection_20261031.md)。
+最终编译输入冻结为 **source-final-v94，705 项（core 137 项）**，原生测试、单测、正式构建及交付前后清单一致。该源码基线已提交到当前分支；生成目录与 `__pycache__` 已排除。两个旧工作树仍保留，不覆盖当前工作树。详见 [本轮报告](PDF_LARGE_FILE_SPLIT_20261106.md)；证据目录 D:/03_M1racle Reader/output/pdf-large-split-20261106。93 的状态保留于 [交付状态归档](history/CURRENT_STATUS_93_before_large_pdf_20261106.md)。

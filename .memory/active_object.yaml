@@ -1,21 +1,25 @@
-id: READER_TEXT_SELECTION_AND_IMMERSION_20261030
+id: READER_PDF_LARGE_FILE_SPLIT_20261106
 priority: P1
-status: complete
+status: ready_with_limitations
 scope:
-  - PDF and Markdown long-press character selection, handles, highlights and notes
-  - Tap toggles all reader chrome while preserving scroll-driven visibility
-  - New PDF sessions open immersive with controls hidden
-  - Isolated QA and signed Release verification
-  - Recoverable source baseline and current documentation
+  - Finish model, Room database and PDF core module boundaries
+  - Preserve source WIP and freeze a reproducible compiled-input baseline
+  - Large PDF streaming intake and bounded rendering
+  - Stable page geometry throughout drag, fling and cache eviction
+  - Direct PDF splitting by chapter or page count with readback and cleanup
+  - Unit tests, static checks and isolated emulator verification
+  - Same-source signed compressed Release 94 delivery
 constraints:
-  - Preserve existing reader and reader-audit-fixes-20261024 worktrees
+  - Preserve existing worktrees and prior task changes
   - Never clear or uninstall com.m1racle.reader
-  - Physical-phone and human acceptance require a connected physical device
 verification:
-  baseline_release_version_code: 89
-  current_candidate: 90
-  physical_phone: device_verified
-  native_phone_tests: 47_passed_0_failed_0_skipped
-  human_acceptance: pending
+  previous_delivered_release: 93
+  target_release: 94
+  tests: qa_1926_release_1762_zero_failures_two_existing_skips_each_lint_zero_errors
+  emulator: native_59_passed_two_timing_repeats_release_install_cold_smoke_and_split_verified
+  physical_phone: disconnected_not_verified_this_run
+  delivered_release: 94
+  source_baseline: source-final-v94_705_inputs_core_137_unchanged
+  pending: physical_phone_reading_feel_and_representative_graphics_heavy_large_books
 state_source: docs/CURRENT_STATUS.md
-evidence: D:/03_M1racle Reader/output/reading-selection-20261030
+evidence: D:/03_M1racle Reader/output/pdf-large-split-20261106

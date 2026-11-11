@@ -2,7 +2,7 @@ package com.m1racle.reader.ui.epub
 
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.anchor.EpubTextAnchorResolver
 import com.m1racle.reader.data.settings.ContentPaddingLevel
 import com.m1racle.reader.data.settings.ReaderSettings

@@ -1,6 +1,6 @@
 package com.m1racle.reader.data.repository
 
-import com.m1racle.reader.data.anchor.DocumentAnchor
+import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.local.BookmarkDao
 import com.m1racle.reader.data.local.BookmarkEntity
 import com.m1racle.reader.data.local.BookmarkWithDocument
@@ -15,7 +15,7 @@ import com.m1racle.reader.data.local.NoteEntity
 import com.m1racle.reader.data.local.SearchContentType
 import com.m1racle.reader.testing.TestSearchIndexDao
 import com.m1racle.reader.ui.navigation.Routes
-import java.io.File
+import com.m1racle.reader.testing.ProductionSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
@@ -160,10 +160,8 @@ class SearchExperienceIntegrationTest {
         assertTrue(screen.contains("result.content"))
     }
 
-    private fun source(relative: String): String = listOf(
-        File("app/src/main/java/com/m1racle/reader/$relative"),
-        File("src/main/java/com/m1racle/reader/$relative"),
-    ).first { it.isFile }.readText()
+    private fun source(relative: String): String =
+        ProductionSource.text("com/m1racle/reader/$relative")
 
     private fun document(id: String, title: String, type: DocumentType) = DocumentEntity(
         id = id,

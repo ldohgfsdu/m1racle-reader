@@ -14,9 +14,6 @@ object MarkdownLinkRouter {
         data class External(val uri: String) : Action()
     }
 
-    fun isInPageAnchor(destination: String): Boolean =
-        destination.trimStart().startsWith("#")
-
     /**
      * Classify a link destination from [InlineMarkdownParser] annotations.
      * Empty or blank destinations are treated as external no-ops at the call site.

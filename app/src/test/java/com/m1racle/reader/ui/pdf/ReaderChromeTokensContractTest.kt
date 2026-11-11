@@ -15,12 +15,10 @@ class ReaderChromeTokensContractTest {
 
     @Test
     fun `menu text has no independent geometric animation`() {
-        val root = listOf(File("src/main/java/com/m1racle/reader/ui/pdf"),
-            File("app/src/main/java/com/m1racle/reader/ui/pdf")).first { it.isDirectory }
-        val main = File(root, "ReaderMoreHost.kt").readText()
+        val main = sourceFile("ReaderMoreHost.kt").readText()
         assertFalse(main.contains("contentScale"))
         assertTrue(main.contains("wrapContentWidth(Alignment.End, unbounded = true)"))
-        val nested = File(root, "AnchoredNestedPopover.kt").readText()
+        val nested = sourceFile("AnchoredNestedPopover.kt").readText()
         assertFalse(nested.contains("bodySlidePx"))
         assertFalse(nested.contains("translationY ="))
     }

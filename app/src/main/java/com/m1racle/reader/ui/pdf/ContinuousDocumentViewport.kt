@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -94,11 +95,11 @@ import com.m1racle.reader.pdf.PdfViewportMotion
 import com.m1racle.reader.pdf.TilePriority
 import com.m1racle.reader.pdf.DisplayMergeResult
 import com.m1racle.reader.pdf.DisplayedBitmap
-import com.m1racle.reader.pdf.QualityTier
-import com.m1racle.reader.pdf.PdfViewportSessionState
+import com.m1racle.reader.core.model.QualityTier
+import com.m1racle.reader.core.model.PdfViewportSessionState
 import com.m1racle.reader.pdf.ReadingPosition
 import com.m1racle.reader.pdf.ReadingPositionSource
-import com.m1racle.reader.pdf.PdfReadingMode
+import com.m1racle.reader.core.model.PdfReadingMode
 import com.m1racle.reader.pdf.ZoomPanPhysics
 import com.m1racle.reader.pdf.ZoomPanPhysicsProfile
 import com.m1racle.reader.pdf.ZoomPanPoint
@@ -140,10 +141,11 @@ internal fun ContinuousDocumentViewport(
     onRetryPage: (Int) -> Unit,
     onViewportSessionSettled: (PdfViewportSessionState) -> Unit = {},
     onViewportSessionPreview: (PdfViewportSessionState) -> Unit = {},
+    onInitialFrameReady: () -> Unit = {},
     onTilePlan: (PdfTilePlan) -> Unit = {},
     tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
     gestureCoordinatorOverride: ContinuousGestureCoordinator? = null,
-    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
+    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int, Float) -> Unit = { _, _ -> },
     isTextSelectionGestureActive: () -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
@@ -196,8 +198,6 @@ internal fun ContinuousDocumentViewport(
     var interaction by remember(documentId) { mutableStateOf(ContinuousInteractionTransaction()) }
     var displayedBitmaps by remember(documentId) { mutableStateOf(state.pageBitmaps) }
     var pendingBitmaps by remember(documentId) { mutableStateOf(emptyMap<Int, ImageBitmap>()) }
-    var displayedAspects by remember(documentId) { mutableStateOf(state.pageAspects) }
-    var pendingAspects by remember(documentId) { mutableStateOf(emptyMap<Int, Float>()) }
     // P0B1: per-page quality metadata for display merge policy
     var displayedMetadata by remember(documentId) { mutableStateOf(state.pageBitmapMetadata) }
     var pendingMetadata by remember(documentId) { mutableStateOf(emptyMap<Int, BitmapMetadata>()) }
@@ -237,38 +237,71 @@ internal fun ContinuousDocumentViewport(
         )
     }
     val gestureCoordinator = gestureCoordinatorOverride ?: ownedGestureCoordinator
-    val geometry = remember(state.pageCount, viewportSize.width, displayedAspects) {
+    // A pointer gesture and an OverScroller both integrate deltas against the
+    // geometry at their start. Late page sizes must not replace that coordinate
+    // space mid-motion; publish them together at rest and remap the anchor once.
+    val geometryMotionActive = documentState.gestureActive || flingActive ||
+        interaction.phase == ContinuousInteractionPhase.PINCHING ||
+        interaction.phase == ContinuousInteractionPhase.SETTLING
+    var settledAspects by remember(documentId) { mutableStateOf(state.pageAspects) }
+    var settledPageCount by remember(documentId) { mutableIntStateOf(state.pageCount) }
+    val geometryAspects = if (geometryMotionActive) settledAspects else state.pageAspects
+    val geometryPageCount = if (geometryMotionActive) settledPageCount else state.pageCount
+    val geometry = remember(geometryPageCount, viewportSize.width, geometryAspects) {
         ContinuousDocumentGeometry.create(
-            pageCount = state.pageCount,
+            pageCount = geometryPageCount,
             basePageWidth = viewportSize.width.toFloat().coerceAtLeast(1f),
-            aspects = displayedAspects,
+            aspects = geometryAspects,
             pageGap = with(density) { 1.dp.toPx() },
         )
     }
-    var geometryEpoch by remember(documentId) { mutableStateOf(geometry) }
+    // The 1px pre-measure placeholder is not a document coordinate epoch.
+    // Remapping a retained transform through it can clamp the reader to the
+    // final page on first layout or Activity recreation.
+    var geometryEpoch by remember(documentId) { mutableStateOf<ContinuousDocumentGeometry?>(null) }
+    val previousGeometry = geometryEpoch
     var viewportEpoch by remember(documentId) { mutableStateOf(IntSize.Zero) }
+    // Explicit restore/jump/resize intent outlives late neighbor metadata.
+    // Otherwise preserving a top point on a different, still-resizing page
+    // can displace the actual saved reading point in a short target page.
+    var layoutAnchor by remember(documentId) { mutableStateOf<PdfViewportSessionState?>(null) }
+    val retainedLayoutAnchor = layoutAnchor
     val viewportResized = viewportEpoch.width > 0 && viewportEpoch.height > 0 &&
         viewportSize.width > 0 && viewportSize.height > 0 && viewportEpoch != viewportSize
-    val alignedDocumentState = if (
-        (geometryEpoch !== geometry || viewportResized) &&
-        geometryEpoch.pageCount == geometry.pageCount &&
-        viewportSize.width > 0 &&
-        viewportSize.height > 0
+    val alignedDocumentState = if (viewportSize.width <= 0 || viewportSize.height <= 0) {
+        documentState
+    } else if (previousGeometry == null) {
+        geometry.clamp(documentState, viewportSize.width.toFloat(), viewportSize.height.toFloat())
+    } else if (
+        (previousGeometry !== geometry || viewportResized) &&
+        previousGeometry.pageCount > 0 && geometry.pageCount > 0
     ) {
-        if (viewportEpoch.width > 0 && viewportEpoch.height > 0) {
-            // Resize and late native page dimensions both rebuild geometry.
-            // Preserve the measured reading center: preserving only the top
-            // moves a restored page-local anchor when its aspect arrives later.
-            val anchor = geometryEpoch.viewportSessionAtAnchor(
+        if (viewportResized) {
+            // Rotation/viewport resize preserves the reading center. Late page
+            // metadata instead preserves the existing top reading line below.
+            val anchor = previousGeometry.viewportSessionAtAnchor(
                 documentState, viewportEpoch.width.toFloat(), viewportEpoch.height.toFloat(), 0L,
             )
             geometry.restoreViewportSession(
                 anchor, documentState, viewportSize.width.toFloat(), viewportSize.height.toFloat(),
             )
+        } else if (retainedLayoutAnchor != null) {
+            geometry.restoreViewportSession(
+                retainedLayoutAnchor, documentState,
+                viewportSize.width.toFloat(), viewportSize.height.toFloat(),
+            )
+        } else if (previousGeometry.pageCount != geometry.pageCount) {
+            val topAnchor = previousGeometry.viewportSessionAtAnchor(
+                documentState, viewportSize.width.toFloat(), viewportSize.height.toFloat(), 0L,
+                viewportAnchorYFraction = 0f,
+            )
+            geometry.restoreViewportSession(
+                topAnchor, documentState, viewportSize.width.toFloat(), viewportSize.height.toFloat(),
+            )
         } else {
             // A real page aspect replacing a placeholder keeps the top edge.
             geometry.remapStatePreservingViewportTop(
-                geometryEpoch,
+                previousGeometry,
                 documentState,
                 viewportSize.width.toFloat(),
                 viewportSize.height.toFloat(),
@@ -278,12 +311,22 @@ internal fun ContinuousDocumentViewport(
         documentState
     }
     SideEffect {
+        if (!geometryMotionActive) {
+            settledAspects = state.pageAspects
+            settledPageCount = state.pageCount
+        }
         if ((geometryEpoch !== geometry || viewportEpoch != viewportSize) &&
             viewportSize.width > 0 && viewportSize.height > 0
         ) {
             // Mid-gesture writes fight the pointer epoch (baseTransform + absolute
             // delta) and jump the page; keep remapping for render only until lift.
-            if (documentState.gestureActive) return@SideEffect
+            if (geometryMotionActive) return@SideEffect
+            if (viewportResized && previousGeometry != null) {
+                layoutAnchor = previousGeometry.viewportSessionAtAnchor(
+                    documentState, viewportEpoch.width.toFloat(), viewportEpoch.height.toFloat(),
+                    System.nanoTime(),
+                )
+            }
             geometryEpoch = geometry
             viewportEpoch = viewportSize
             if (alignedDocumentState != documentState) {
@@ -297,6 +340,18 @@ internal fun ContinuousDocumentViewport(
                         ),
                     ),
                 )
+                if (state.continuousEntryState.phase == ContinuousEntryPhase.READY) {
+                    currentOnDocumentStateSettled(
+                        alignedDocumentState,
+                        geometry.pageAtViewportCenter(alignedDocumentState, viewportSize.height.toFloat()),
+                    )
+                    currentOnViewportSessionSettled(
+                        geometry.viewportSessionAtAnchor(
+                            alignedDocumentState, viewportSize.width.toFloat(),
+                            viewportSize.height.toFloat(), System.nanoTime(),
+                        ),
+                    )
+                }
             }
         }
     }
@@ -325,14 +380,11 @@ internal fun ContinuousDocumentViewport(
         val phase = interaction.phase
         val newBitmaps = state.pageBitmaps
         val newMetadata = state.pageBitmapMetadata
-        val newAspects = state.pageAspects
 
         val accepted = mutableMapOf<Int, ImageBitmap>()
         val acceptedMeta = mutableMapOf<Int, BitmapMetadata>()
-        val acceptedAspects = mutableMapOf<Int, Float>()
         val newPending = mutableMapOf<Int, ImageBitmap>()
         val newPendingMeta = mutableMapOf<Int, BitmapMetadata>()
-        val newPendingAspects = mutableMapOf<Int, Float>()
 
         for ((page, bitmap) in newBitmaps) {
             val meta = newMetadata[page] ?: BitmapMetadata(QualityTier.SCROLL_PREVIEW, 0)
@@ -348,9 +400,6 @@ internal fun ContinuousDocumentViewport(
                 DisplayMergeResult.ACCEPT -> {
                     accepted[page] = bitmap
                     acceptedMeta[page] = meta
-                    if (page in newAspects && page !in displayedAspects) {
-                        acceptedAspects[page] = newAspects[page]!!
-                    }
                     if (isDebuggable) {
                         Log.d(tag, "DISPLAY_BITMAP_ACCEPT pageIndex=$page " +
                             "oldTier=${displayedMeta?.tier} newTier=${meta.tier} " +
@@ -381,9 +430,6 @@ internal fun ContinuousDocumentViewport(
                     @Suppress("UNCHECKED_CAST")
                     newPending[page] = winner.bitmap as ImageBitmap
                     newPendingMeta[page] = winner.metadata
-                    if (winner.bitmap === bitmap && page in newAspects && page !in displayedAspects) {
-                        newPendingAspects[page] = newAspects[page]!!
-                    }
                     if (isDebuggable) {
                         Log.d(tag, "DISPLAY_BITMAP_PENDING pageIndex=$page " +
                             "oldTier=${displayedMeta?.tier} newTier=${meta.tier} " +
@@ -397,29 +443,28 @@ internal fun ContinuousDocumentViewport(
         if (accepted.isNotEmpty()) {
             displayedBitmaps = displayedBitmaps + accepted
             displayedMetadata = displayedMetadata + acceptedMeta
-            displayedAspects = displayedAspects + acceptedAspects
         }
         if (newPending.isNotEmpty()) {
             pendingBitmaps = pendingBitmaps + newPending
             pendingMetadata = pendingMetadata + newPendingMeta
-            pendingAspects = pendingAspects + newPendingAspects
         }
     }
 
     val currentGeometry by rememberUpdatedState(geometry)
     val geometryReady = viewportSize.width > 0 && viewportSize.height > 0 && state.pageCount > 0 &&
-        geometry.pageCount == state.pageCount && geometry.baseDocumentHeight > 0f
+        geometry.pageCount == geometryPageCount && geometry.baseDocumentHeight > 0f
     val currentGeometryReady by rememberUpdatedState(geometryReady)
     val currentViewportSize by rememberUpdatedState(viewportSize)
     val currentTileDocumentGeneration by rememberUpdatedState(state.tileDocumentGeneration)
 
-    // Batch B-1: display-mirror retention — shrink displayedBitmaps/Metadata/
-    // Aspects to the anchor±1 window (+ visibly composed pages during pinch)
+    // Bound the bitmap display mirror. Page dimensions belong to the document
+    // and are never pruned with these images.
     // once gestures settle. The cache side already windows itself; without this
     // the mirror grew one bitmap per visited page for the whole composition.
     LaunchedEffect(
         displayedBitmaps,
         pendingBitmaps,
+        state.pageBitmaps,
         interaction.phase,
         lastAnchorPage,
         documentState.scale,
@@ -430,28 +475,27 @@ internal fun ContinuousDocumentViewport(
                 interaction.phase == ContinuousInteractionPhase.SETTLING
         if (!phaseAllowsPrune || !currentGeometryReady || geometry.pageCount <= 0) return@LaunchedEffect
         val anchor = lastAnchorPage.coerceIn(0, geometry.pageCount - 1)
-        val zoomComposed = if (documentState.scale > 1f) {
-            geometry.composedPages(
-                documentState.copy(gestureActive = false),
-                currentViewportSize.height.toFloat(),
-                prefetchPages = 0,
-            ).toSet()
-        } else {
-            emptySet()
-        }
+        // Several short/landscape pages can be visible even at fit width.
+        // Every visible base survives pruning, regardless of zoom.
+        val visibleComposed = geometry.composedPages(
+            documentState.copy(gestureActive = false),
+            currentViewportSize.height.toFloat(),
+            prefetchPages = 0,
+        ).toSet()
         val keep = DisplayedBitmapRetentionPolicy.retentionSet(
             anchorPage = anchor,
             pageCount = geometry.pageCount,
-            zoomComposed = zoomComposed,
-        )
+            zoomComposed = visibleComposed,
+        ) + state.pageBitmaps.keys
+        // The VM's bounded prefetch cache owns these incoming images. Dropping
+        // them here only to re-accept the same snapshot makes placeholders
+        // repeatedly request new windows and can keep an idle viewport busy.
         val prunedDisplayed = DisplayedBitmapRetentionPolicy.prune(displayedBitmaps, keep)
         if (prunedDisplayed !== displayedBitmaps) {
             displayedBitmaps = prunedDisplayed
             displayedMetadata = DisplayedBitmapRetentionPolicy.prune(displayedMetadata, keep)
-            displayedAspects = DisplayedBitmapRetentionPolicy.prune(displayedAspects, keep)
             pendingBitmaps = DisplayedBitmapRetentionPolicy.prune(pendingBitmaps, keep)
             pendingMetadata = DisplayedBitmapRetentionPolicy.prune(pendingMetadata, keep)
-            pendingAspects = DisplayedBitmapRetentionPolicy.prune(pendingAspects, keep)
         }
     }
 
@@ -650,29 +694,6 @@ internal fun ContinuousDocumentViewport(
         onDispose { viewportSignal.close() }
     }
 
-    LaunchedEffect(viewportSize, geometry, interactionActive) {
-        if (interactionActive ||
-            currentEntryState.phase != ContinuousEntryPhase.READY ||
-            viewportSize.width <= 0 || viewportSize.height <= 0
-        ) {
-            if (isDebuggable && !interactionActive && currentEntryState.phase != ContinuousEntryPhase.READY) {
-                Log.d(tag, "FLATTEN_GATE_REJECT reason=notReady phase=${currentEntryState.phase}")
-            }
-            return@LaunchedEffect
-        }
-        val clamped = geometry.clamp(
-            documentState.copy(gestureActive = false),
-            viewportSize.width.toFloat(),
-            viewportSize.height.toFloat(),
-        )
-        if (clamped != documentState) {
-            documentState = clamped
-            publishViewportSnapshot(clamped)
-            val page = geometry.pageAtViewportCenter(clamped, viewportSize.height.toFloat())
-            currentOnDocumentStateSettled(clamped, page)
-        }
-    }
-
     fun update(next: ContinuousDocumentState): ContinuousDocumentState {
         val clamped = currentGeometry.clamp(
             next,
@@ -762,6 +783,15 @@ internal fun ContinuousDocumentViewport(
             generation = target.generation,
         )
         if (targetVisible && anchorVisible) {
+            val viewportAnchorYFraction = session?.viewportAnchorYFraction ?: if (
+                target.intraPageFraction == 0f && target.source == ReadingPositionSource.EXTERNAL_NAVIGATION
+            ) 0f else 0.5f
+            layoutAnchor = geometry.viewportSessionAtAnchor(
+                applied, viewportSize.width.toFloat(), viewportSize.height.toFloat(),
+                System.nanoTime(),
+                viewportAnchorXFraction = session?.viewportAnchorXFraction ?: 0.5f,
+                viewportAnchorYFraction = viewportAnchorYFraction,
+            )
             appliedEntryGeneration = target.generation
             if (isDebuggable && target.source == ReadingPositionSource.MODE_SWITCH_RESTORE) {
                 Log.d(
@@ -907,6 +937,18 @@ internal fun ContinuousDocumentViewport(
         viewportSize.height.toFloat(),
         prefetchPages = 0,
     )
+    var initialFrameReported by remember(documentId) { mutableStateOf(false) }
+    SideEffect {
+        if (!initialFrameReported && viewportSize.width > 0 && viewportSize.height > 0 &&
+            currentEntryState.phase == ContinuousEntryPhase.READY &&
+            !actualVisibleRange.isEmpty() && actualVisibleRange.all {
+                displayedBitmaps[it] != null || state.pageRenderErrors[it] != null
+            }
+        ) {
+            initialFrameReported = true
+            onInitialFrameReady()
+        }
+    }
     val visiblePages = when {
         interactionActive -> interaction.stableVisiblePages
         actualVisibleRange.isEmpty() -> emptySet()
@@ -982,13 +1024,14 @@ internal fun ContinuousDocumentViewport(
                 interactionPhase = interaction.phase,
                 flingActive = flingActive,
                 visiblePages = currentVisiblePages,
+                geometryReady = currentGeometryReady,
             )
         }.collect { inputs ->
             inputs // emission gate only; the body below reads live state.
             if (systemCaptureInProgress) return@collect
             // During a transformed document gesture only last-good bitmaps are moved by GPU.
             // Re-entering IDLE below is what resumes existing R3 preview/HIGH scheduling.
-            if (currentEntryState.phase != ContinuousEntryPhase.READY ||
+            if (!currentGeometryReady || currentEntryState.phase != ContinuousEntryPhase.READY ||
                 currentInteractionActive || (documentState.gestureActive && documentState.scale > 1.001f)
             ) {
                 return@collect
@@ -1042,12 +1085,12 @@ internal fun ContinuousDocumentViewport(
         }
     }
 
-    LaunchedEffect(primaryPage, documentState.gestureActive, flingActive, interaction.phase) {
+    LaunchedEffect(primaryPage, geometryReady, currentEntryState.phase, documentState.gestureActive, flingActive, interaction.phase) {
         if (isDebuggable) {
             Log.d(tag, "VIEWPORT_PAGE_CANDIDATE primaryPage=$primaryPage gestureActive=${documentState.gestureActive} " +
                 "flingActive=$flingActive interactionPhase=${interaction.phase} entryPhase=${currentEntryState.phase}")
         }
-        if (currentEntryState.phase == ContinuousEntryPhase.READY &&
+        if (geometryReady && currentEntryState.phase == ContinuousEntryPhase.READY &&
             !documentState.gestureActive && !flingActive && !interactionActive && !systemCaptureInProgress
         ) {
             onPageSettled(
@@ -1064,15 +1107,19 @@ internal fun ContinuousDocumentViewport(
         }
     }
 
-    LaunchedEffect(pageJump?.id, viewportSize.width) {
+    LaunchedEffect(pageJump?.id, viewportSize, currentEntryState.phase) {
         if (currentEntryState.phase != ContinuousEntryPhase.READY) return@LaunchedEffect
         val request = pageJump ?: return@LaunchedEffect
-        if (request.id == consumedJumpId || viewportSize.width <= 0) return@LaunchedEffect
+        if (request.id == consumedJumpId || viewportSize.width <= 0 || viewportSize.height <= 0) return@LaunchedEffect
         consumedJumpId = request.id
         cancelFling()
         val target = request.targetPageIndex.coerceIn(0, (state.pageCount - 1).coerceAtLeast(0))
         val jumped = update(
             documentState.copy(scrollY = geometry.pageTop(target) * documentState.scale),
+        )
+        layoutAnchor = geometry.viewportSessionAtAnchor(
+            jumped, viewportSize.width.toFloat(), viewportSize.height.toFloat(), System.nanoTime(),
+            viewportAnchorYFraction = 0f,
         )
         if (!gestureCoordinator.isActive) {
             currentOnDocumentStateSettled(jumped, target)
@@ -1094,6 +1141,7 @@ internal fun ContinuousDocumentViewport(
                 // Publish the same viewport transform to Android's system long screenshot API.
                 // No second scroll state or application screenshot/export path is needed.
                 scrollByOffset { delta ->
+                    layoutAnchor = null
                     cancelFling()
                     val before = documentState.scrollY
                     val next = update(documentState.copy(scrollY = before + delta.y, gestureActive = false))
@@ -1120,8 +1168,15 @@ internal fun ContinuousDocumentViewport(
                         controller = sharedGestureController,
                         pass = PointerEventPass.Initial,
                     ) { down ->
+                    layoutAnchor = null
                     val velocityTracker = VelocityTracker()
+                    var hasFlingTravel = false
+                    val flingTouchSlopPx = android.view.ViewConfiguration.get(context).scaledTouchSlop
                     cancelFling()
+                    // DOWN owns the geometry epoch immediately, including a
+                    // stationary hold that interrupts a fling. Waiting for MOVE
+                    // lets late page dimensions commit under an active pointer.
+                    documentState = documentState.copy(gestureActive = true)
                     sharedGestureController.beginGesture(
                         currentTransform = ZoomPanTransform(
                             scale = documentState.scale,
@@ -1139,8 +1194,8 @@ internal fun ContinuousDocumentViewport(
                         },
                         overscrollPolicy = ZoomPanPhysicsProfile.ContinuousOverscrollPolicy,
                     )
-                    velocityTracker.addPosition(down.uptimeMillis, down.position)
-                    publishViewportSnapshot(documentState.copy(gestureActive = true))
+                    velocityTracker.addPointerInputChange(down)
+                    publishViewportSnapshot(documentState)
                     var twoFinger = false
                     var pinchUsed = false
                     var gestureCapture: ContinuousGestureCapture? = null
@@ -1150,6 +1205,16 @@ internal fun ContinuousDocumentViewport(
                         // A page's long press or selection handle owns this pointer stream.
                         // Leave it unconsumed for the text layer without changing scroll physics.
                         if (currentTextSelectionGestureActive()) continue
+                        // The framework consumes original/historical MOVE data
+                        // and resets on a stationary UP. Do not synthesize an
+                        // UP position: it can distort or reverse the fitted speed.
+                        if (!twoFinger) {
+                            event.changes.firstOrNull {
+                                it.id == down.id && it.previousPressed && !it.pressed
+                            }?.let { released ->
+                                velocityTracker.addPointerInputChange(released)
+                            }
+                        }
                         val pressed = event.changes.filter { it.pressed }
                         if (pressed.size >= 2) {
                             tileFocusViewport = if(pressed.size>=2) Offset((pressed[0].position.x+pressed[1].position.x)/2f,(pressed[0].position.y+pressed[1].position.y)/2f) else null
@@ -1272,7 +1337,10 @@ internal fun ContinuousDocumentViewport(
                             if (!twoFinger || gestureCapture != null) {
                                 if (!twoFinger) {
                                     cancelFling()
-                                    velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                    if ((change.position - down.position).getDistance() >= flingTouchSlopPx) {
+                                        hasFlingTravel = true
+                                    }
+                                    velocityTracker.addPointerInputChange(change)
                                     // P0B1: track drag phase for display merge policy
                                     if (!dragStarted) {
                                         interaction = ContinuousInteractionReducer.dragStart(interaction)
@@ -1358,7 +1426,6 @@ internal fun ContinuousDocumentViewport(
                                 // commit per page, no intermediate downgrade-then-upgrade.
                                 val committed = mutableMapOf<Int, ImageBitmap>()
                                 val committedMeta = mutableMapOf<Int, BitmapMetadata>()
-                                val committedAspects = mutableMapOf<Int, Float>()
                                 val requiredAtCommit = currentGeometry.composedPages(
                                     documentState.copy(gestureActive = false),
                                     viewportSize.height.toFloat(),
@@ -1377,9 +1444,6 @@ internal fun ContinuousDocumentViewport(
                                         @Suppress("UNCHECKED_CAST")
                                         committed[page] = winner.bitmap as ImageBitmap
                                         committedMeta[page] = winner.metadata
-                                        if (page in pendingAspects) {
-                                            committedAspects[page] = pendingAspects[page]!!
-                                        }
                                         if (isDebuggable) {
                                             Log.d(tag, "BITMAP_SWAP interactionId=$settlingId pageIndex=$page " +
                                                 "snapshotVersion=${capture.snapshot.version} generation=$settlingGeneration " +
@@ -1393,11 +1457,9 @@ internal fun ContinuousDocumentViewport(
                                 if (committed.isNotEmpty()) {
                                     displayedBitmaps = displayedBitmaps + committed
                                     displayedMetadata = displayedMetadata + committedMeta
-                                    displayedAspects = displayedAspects + committedAspects
                                 }
                                 pendingBitmaps = emptyMap()
                                 pendingMetadata = emptyMap()
-                                pendingAspects = emptyMap()
                                 interaction = ContinuousInteractionReducer.settleCommit(interaction)
                                 val stable = documentState.copy(gestureActive = false)
                                 val settledPrimary = currentGeometry.pageAtViewportCenter(
@@ -1435,11 +1497,14 @@ internal fun ContinuousDocumentViewport(
                             publishViewportSnapshot(ended)
                             dragStarted = false
                         }
-                        val velocity = velocityTracker.calculateVelocity()
-                        val fling = ContinuousLayoutMath.dominantAxisFlingVelocity(
-                            velocity.x,
-                            velocity.y,
-                        )
+                        val fling = if (hasFlingTravel) {
+                            val velocity = velocityTracker.calculateVelocity()
+                            ContinuousLayoutMath.dominantAxisFlingVelocity(velocity.x, velocity.y)
+                        } else {
+                            // Sub-slop taps still follow the finger but cannot
+                            // launch a fling from a noisy release-time fit.
+                            0f to 0f
+                        }
                         startFling(Offset(fling.first, fling.second))
                     }
                 }
@@ -1460,6 +1525,7 @@ internal fun ContinuousDocumentViewport(
                 val bitmap = displayedBitmaps[page]
                 DocumentPage(
                     pageAnnotation = pageAnnotation,
+                    pageScale = renderDocumentState.scale,
                     documentId = documentId,
                     page = page,
                     pageCount = state.pageCount,
@@ -1469,7 +1535,7 @@ internal fun ContinuousDocumentViewport(
                     isDebuggable = isDebuggable,
                     onEnsure = { onEnsureAround(page) },
                     onRetry = { onRetryPage(page) },
-                    hasError = page == state.pageIndex && state.renderError != null,
+                    hasError = state.pageRenderErrors[page] != null,
                     tiles = tileIndex.forPage(page),
                     showBaseLayer = showBaseLayer,
                     tileOverlayAlpha = detailTileOverlayAlpha,
@@ -1503,6 +1569,7 @@ private data class ContinuousViewportDriveInputs(
     val interactionPhase: ContinuousInteractionPhase,
     val flingActive: Boolean,
     val visiblePages: Set<Int>,
+    val geometryReady: Boolean,
 )
 
 /** Pre-grouped drawable tiles for one overlay publication (P1-7 hot-path index). */
@@ -1557,7 +1624,7 @@ internal fun ContinuousGestureLifecycleEffect(
 }
 
 @Composable
-private fun DocumentPage(
+internal fun DocumentPage(
     documentId: Any,
     page: Int,
     pageCount: Int,
@@ -1572,7 +1639,8 @@ private fun DocumentPage(
     showBaseLayer: Boolean,
     tileOverlayAlpha: Float,
     showTileDiagnostics: Boolean,
-    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int) -> Unit = {},
+    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int, Float) -> Unit = { _, _ -> },
+    pageScale: Float = 1f,
 ) {
     val drawnTileKeys = remember(documentId, page) { mutableSetOf<com.m1racle.reader.pdf.PdfTileKey>() }
     val paperFilter = pdfPaperFilter()
@@ -1615,7 +1683,9 @@ private fun DocumentPage(
                 }
             }
         }
-        if ((showBaseLayer && bitmap != null) || tiles.isNotEmpty()) Canvas(Modifier.fillMaxSize()) {
+        // Detail tiles refine a complete page, never a partially painted white surface.
+        // The explicit tile-only diagnostic mode remains available in QA.
+        if ((showBaseLayer && bitmap != null) || (!showBaseLayer && tiles.isNotEmpty())) Canvas(Modifier.fillMaxSize()) {
             if (showBaseLayer && bitmap != null) {
                 drawImage(
                     image = bitmap,
@@ -1661,8 +1731,9 @@ private fun DocumentPage(
                 }
             }
         }
-        // R26.1 标注覆盖/选择层：渲染在页面内容之上（同页局部坐标系）。
-        pageAnnotation(page)
+        // R26.1 标注覆盖/选择层：渲染在页面内容之上（同页局部坐标系）；
+        // 选中操作菜单按屏幕固定尺寸反缩放。
+        pageAnnotation(page, pageScale)
       }
     }
 }

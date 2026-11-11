@@ -12,7 +12,19 @@ internal data class H1NormalizedPointer(
     val y: Float,
 )
 
-/** Deterministic QA-only multi-pointer MotionEvent traces backed by UiAutomation injection. */
+/**
+ * One injected pointer sample as the test intended it (pre-clamp, pre-resample).
+ * G1-3 pairs these with published viewport frames by event time so the measured
+ * content displacement can be divided by the exact input displacement.
+ */
+internal data class H1InjectedPointerFrame(
+    val eventTimeMs: Long,
+    val actionMasked: Int,
+    val normX: Float,
+    val normY: Float,
+)
+
+/** QA-only fixed pointer paths with real injection timestamps, backed by UiAutomation. */
 internal class H1QaMotionEventTrace(
     private val instrumentation: Instrumentation,
     private val viewport: Rect,
@@ -21,6 +33,15 @@ internal class H1QaMotionEventTrace(
 ) {
     private var downTimeMs = 0L
     private var eventTimeMs = 0L
+    internal val lastInjectedEventTimeMs: Long get() = eventTimeMs
+    private val injectedLog = mutableListOf<H1InjectedPointerFrame>()
+
+    /** Every injected sample in order; kept for after-the-fact gain analysis. */
+    internal fun injectedFrames(): List<H1InjectedPointerFrame> = injectedLog.toList()
+
+    internal fun clearInjectedFrames() {
+        injectedLog.clear()
+    }
 
     fun pinch1To2Point5(movingCentroid: Boolean = false) {
         val leftStart = H1NormalizedPointer(0, 0.42f, 0.36f)
@@ -331,7 +352,9 @@ internal class H1QaMotionEventTrace(
 
     private fun advance() {
         SystemClock.sleep(frameIntervalMs)
-        eventTimeMs += frameIntervalMs
+        // Synchronous injection can itself span several display frames. Adding only
+        // the requested sleep makes later events stale and distorts native resampling.
+        eventTimeMs = SystemClock.uptimeMillis()
     }
 
     private fun inject(
@@ -358,6 +381,14 @@ internal class H1QaMotionEventTrace(
             }
         }
         val action = actionMasked or (actionIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+        pointers.firstOrNull()?.let { first ->
+            injectedLog += H1InjectedPointerFrame(
+                eventTimeMs = eventTimeMs,
+                actionMasked = actionMasked,
+                normX = first.x,
+                normY = first.y,
+            )
+        }
         val event = MotionEvent.obtain(
             downTimeMs,
             eventTimeMs,
