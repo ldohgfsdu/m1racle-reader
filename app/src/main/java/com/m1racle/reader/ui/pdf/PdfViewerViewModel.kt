@@ -53,6 +53,7 @@ import com.m1racle.reader.pdf.FinalPdfProgressFlusher
 import com.m1racle.reader.pdf.FinalPdfProgressSnapshot
 import com.m1racle.reader.pdf.ReadingPosition
 import com.m1racle.reader.pdf.ReadingPositionSource
+import com.m1racle.reader.pdf.resolvePdfEntryRestore
 import com.m1racle.reader.pdf.ContinuousViewportPolicy
 import com.m1racle.reader.core.model.ContinuousQualityHysteresis
 import com.m1racle.reader.pdf.ContinuousDocumentSession
@@ -2210,12 +2211,23 @@ class PdfViewerViewModel(
                             generation = requireNotNull(entity.pdfViewportGeneration),
                         ).normalized(pageCount, restored)
                     } else null
-                    viewportSessionTracker.seed(persistedViewportSession)
+                    // Progress is the authority for the entry page; a viewport
+                    // session only refines the anchor when it agrees. This keeps a
+                    // stale session from moving the reader back to an older page
+                    // and from being written back as the new progress.
+                    val entryRestore = resolvePdfEntryRestore(
+                        progressPageIndex = persistedPosition.pageIndex,
+                        progressIntraPageFraction = persistedPosition.intraPageFraction,
+                        session = persistedViewportSession,
+                        pageCount = pageCount,
+                        readingMode = readingMode,
+                    )
+                    viewportSessionTracker.seed(entryRestore.session)
                     if (readingMode == PdfReadingMode.VERTICAL_CONTINUOUS) {
                         continuousEntryRestore.requestRestore(
-                            pageIndex = persistedViewportSession?.pageIndex ?: persistedPosition.pageIndex,
-                            intraPageFraction = persistedViewportSession?.pageAnchorYFraction ?: persistedPosition.intraPageFraction,
-                            source = if (persistedViewportSession != null) ReadingPositionSource.ZOOM_SESSION_RESTORE else ReadingPositionSource.STARTUP_RESTORE,
+                            pageIndex = entryRestore.pageIndex,
+                            intraPageFraction = entryRestore.intraPageFraction,
+                            source = if (entryRestore.session != null) ReadingPositionSource.ZOOM_SESSION_RESTORE else ReadingPositionSource.STARTUP_RESTORE,
                             pageCount = pageCount,
                         )
                     } else {
@@ -2224,7 +2236,7 @@ class PdfViewerViewModel(
                     // Publish the first reading surface atomically with a complete base.
                     // Otherwise the viewport starts white and exposes individual detail tiles
                     // while their shared renderer is still preparing the whole-page preview.
-                    val entryPage = persistedViewportSession?.pageIndex ?: restored
+                    val entryPage = entryRestore.pageIndex
                     val entryWidth = PdfRenderQuality.targetWidthPx(viewportWidthPx, QualityTier.SCROLL_PREVIEW)
                     val entryRender = renderer.renderPage(entryPage, entryWidth)
                     if (entryRender !is PdfPageRenderer.RenderResult.Success) {
@@ -2264,7 +2276,7 @@ class PdfViewerViewModel(
                         pageBitmapMetadata = snapshotPageMetadata(),
                         zoomScale = zoomScale,
                         continuousDocumentState = continuousDocumentSession.stableState,
-                        viewportSessionState = persistedViewportSession,
+                        viewportSessionState = entryRestore.session,
                         tileDocumentGeneration = tileDocumentGeneration,
                         continuousEntryState = continuousEntryRestore.snapshot(),
                         qualityTier = qualityTier,
