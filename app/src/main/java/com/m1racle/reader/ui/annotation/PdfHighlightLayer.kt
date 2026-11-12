@@ -68,6 +68,8 @@ fun PdfHighlightLayer(
     items: List<AnnotationOverlayItem>,
     selectionEnabled: Boolean,
     textPage: PdfSelectablePage? = null,
+    /** True while this page's text extraction is still running. */
+    textLoading: Boolean = false,
     onSelectionUnavailable: () -> Unit = {},
     onSelectCompleted: (TextSelection.PdfSelection) -> Unit,
     modifier: Modifier = Modifier,
@@ -86,6 +88,8 @@ fun PdfHighlightLayer(
     pageScale: Float = 1f,
 ) {
     val currentComplete by rememberUpdatedState(onSelectCompleted)
+    val currentTextPage by rememberUpdatedState(textPage)
+    val currentTextLoading by rememberUpdatedState(textLoading)
     val currentUnavailable by rememberUpdatedState(onSelectionUnavailable)
     val currentDelete by rememberUpdatedState(onDeleteRequested)
     val currentNote by rememberUpdatedState(onNoteRequested)
@@ -101,6 +105,28 @@ fun PdfHighlightLayer(
     }
     var layerSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
     var actionBarSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
+    // A long press that lands before this page's text extraction finishes is
+    // remembered here and completed once the text arrives, so the user never has
+    // to long-press twice.
+    var pendingPress by remember(pageIndex) { mutableStateOf<Offset?>(null) }
+
+    LaunchedEffect(textPage, pendingPress) {
+        val press = pendingPress ?: return@LaunchedEffect
+        val page = textPage ?: return@LaunchedEffect
+        pendingPress = null
+        if (layerSize.width <= 0 || layerSize.height <= 0) return@LaunchedEffect
+        if (page.lines.isEmpty()) {
+            currentUnavailable()
+            return@LaunchedEffect
+        }
+        val hit = page.hit(
+            press.x / layerSize.width,
+            press.y / layerSize.height,
+            tolerance = page.height * 0.006f,
+        ) ?: return@LaunchedEffect
+        selectedId = null
+        selectionSession.setSelection(pageIndex, PdfTextSelectionRange(hit, hit))
+    }
 
     BackHandler(enabled = selectionRange != null) {
         selectionSession.clear()
@@ -171,13 +197,12 @@ fun PdfHighlightLayer(
         pageIndex,
         items,
         selectionEnabled,
-        textPage,
         density,
         selectionSession,
     ) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
-            val page = textPage
+            val page = currentTextPage
             val widthPx = size.width.toFloat()
             val heightPx = size.height.toFloat()
 
@@ -337,6 +362,12 @@ fun PdfHighlightLayer(
             }
 
             if (!selectionEnabled) return@awaitEachGesture
+            if (page == null && currentTextLoading) {
+                // Text extraction is still running: remember the press and finish
+                // the selection when the text arrives instead of dropping it.
+                pendingPress = down.position
+                return@awaitEachGesture
+            }
             if (page == null || page.lines.isEmpty()) {
                 currentUnavailable()
                 return@awaitEachGesture

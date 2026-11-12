@@ -40,6 +40,7 @@ class PdfTextHighlightGestureTest {
     private val notedSelections=mutableListOf<TextSelection.PdfSelection>()
     private val ownership=mutableListOf<Boolean>()
     private val parentTaps=mutableListOf<Offset>()
+    private val unavailable=mutableListOf<Unit>()
     private val page=PdfSelectablePage(0,300f,400f,listOf(
         PdfSelectableLine(listOf(PdfSelectableGlyph("A",NormalizedRect(.1f,.2f,.15f,.05f)),PdfSelectableGlyph("B",NormalizedRect(.25f,.2f,.15f,.05f))),.1f,.4f),
         PdfSelectableLine(listOf(PdfSelectableGlyph("C",NormalizedRect(.1f,.4f,.15f,.05f)),PdfSelectableGlyph("D",NormalizedRect(.25f,.4f,.15f,.05f))),.1f,.4f),
@@ -94,7 +95,7 @@ class PdfTextHighlightGestureTest {
                         selectionEnabled = enabled,
                         textPage = selectablePage,
                         pageScale = pageScale,
-                        onSelectionUnavailable = {},
+                        onSelectionUnavailable = { unavailable += Unit },
                         onSelectCompleted = { saved += it },
                         modifier = Modifier.testTag("page"),
                         onDeleteRequested = delete,
@@ -296,5 +297,74 @@ class PdfTextHighlightGestureTest {
             down(Offset(width*.8f,height*.7f));advanceEventTime(700);moveTo(Offset(width*.32f,height*.42f));up()
         }
         rule.runOnIdle { assertTrue(saved.isEmpty()) }
+    }
+
+    @Test fun longPressBeforeTextIsReadyWaitsAndContinuesTheSameGesture() {
+        val ready = androidx.compose.runtime.mutableStateOf<PdfSelectablePage?>(null)
+        val loading = androidx.compose.runtime.mutableStateOf(true)
+        rule.setContent {
+            Box(Modifier.size(300.dp, 400.dp)) {
+                PdfHighlightLayer(
+                    pageIndex = 0,
+                    items = emptyList(),
+                    selectionEnabled = true,
+                    textPage = ready.value,
+                    textLoading = loading.value,
+                    onSelectionUnavailable = { unavailable += Unit },
+                    onSelectCompleted = { saved += it },
+                    modifier = Modifier.testTag("page"),
+                )
+            }
+        }
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width * .15f, height * .22f)); advanceEventTime(700); up()
+        }
+        rule.runOnIdle {
+            assertTrue("no re-press prompt while extraction is pending", unavailable.isEmpty())
+        }
+        rule.runOnIdle { ready.value = page; loading.value = false }
+        rule.waitForIdle()
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+        rule.onNodeWithTag("pdf-selection-action-highlight").performClick()
+        rule.runOnIdle { assertEquals("A", saved.single().excerpt) }
+    }
+
+    @Test fun longPressOnScannedPageWithoutTextReportsOnceInsteadOfWaiting() {
+        val scanned = PdfSelectablePage(0, 300f, 400f, emptyList(), "此页没有可选择的横排文字，扫描页暂不支持文字高亮")
+        val ready = androidx.compose.runtime.mutableStateOf<PdfSelectablePage?>(null)
+        val loading = androidx.compose.runtime.mutableStateOf(true)
+        rule.setContent {
+            Box(Modifier.size(300.dp, 400.dp)) {
+                PdfHighlightLayer(
+                    pageIndex = 0,
+                    items = emptyList(),
+                    selectionEnabled = true,
+                    textPage = ready.value,
+                    textLoading = loading.value,
+                    onSelectionUnavailable = { unavailable += Unit },
+                    onSelectCompleted = { saved += it },
+                    modifier = Modifier.testTag("page"),
+                )
+            }
+        }
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width * .15f, height * .22f)); advanceEventTime(700); up()
+        }
+        rule.runOnIdle { assertTrue(unavailable.isEmpty()) }
+        rule.runOnIdle { ready.value = scanned; loading.value = false }
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertEquals(1, unavailable.size)
+            assertTrue(saved.isEmpty())
+        }
+        rule.onNodeWithTag("pdf-selection-actions").assertDoesNotExist()
+    }
+
+    @Test fun longPressWithNoTextSourceReportsUnavailable() {
+        show(selectablePage = null)
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width*.15f,height*.22f));advanceEventTime(700);up()
+        }
+        rule.runOnIdle { assertEquals(1, unavailable.size); assertTrue(saved.isEmpty()) }
     }
 }

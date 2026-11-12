@@ -785,11 +785,14 @@ fun PdfViewerScreen(
                     mutableStateOf<com.m1racle.reader.pdf.PdfSelectablePage?>(null)
                 }
                 var textError by remember(state.document.uri, page) { mutableStateOf<String?>(null) }
+                var textLoading by remember(state.document.uri, page) { mutableStateOf(true) }
                 LaunchedEffect(state.document.uri, page) {
+                    textLoading = true
                     try {
                         textPage = viewModel.selectableText(page)
                     } catch (e: kotlinx.coroutines.CancellationException) { throw e }
                     catch (_: Exception) { textError = "此页文字读取失败，请重新打开文档后重试" }
+                    finally { textLoading = false }
                 }
                 if (highlightController != null) {
                     PdfHighlightLayer(
@@ -797,13 +800,14 @@ fun PdfViewerScreen(
                         items = pageItems,
                         selectionEnabled = true,
                         textPage = textPage,
+                        textLoading = textLoading,
                         pageScale = pageScale,
                         selectionSession = textSelectionSession,
                         onSelectionGestureActiveChanged = { active ->
                             if (active) textSelectionGestures[page] = Unit else textSelectionGestures.remove(page)
                         },
                         onSelectionUnavailable = {
-                            scope.launch { snackbarHostState.showSnackbar(textError ?: textPage?.unavailableReason ?: "正在读取此页文字，请稍后长按选择") }
+                            scope.launch { snackbarHostState.showSnackbar(textError ?: textPage?.unavailableReason ?: "此页暂时无法选择文字") }
                         },
                         onSelectCompleted = { pendingSelection = it },
                         onSelectionNoteRequested = if (noteController != null) ({ selection ->
