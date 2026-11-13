@@ -41,8 +41,14 @@ jobs:
       - name: Verify bundled offline Markdown editor matches source
         run: ./gradlew :app:verifyMarkdownEditorBundle --no-daemon --max-workers=1 --console=plain
 
-      - name: Full QA and Release unit suites plus production lint
-        run: ./gradlew :app:testQaUnitTest :app:testReleaseUnitTest :app:lintRelease --no-daemon --max-workers=1 --console=plain
+      # CI runner has more memory than the constrained local Windows setup.
+      # Override Gradle's 384 MiB metaspace cap only for these CI invocations:
+      # run 43418148592 ended with OutOfMemoryError: Metaspace in lintAnalyzeRelease.
+      - name: Full QA and Release unit suites
+        run: ./gradlew :app:testQaUnitTest :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
+
+      - name: Production release lint
+        run: ./gradlew :app:lintRelease --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
 
       - name: Preserve test and lint evidence on pass or failure
         if: always()
