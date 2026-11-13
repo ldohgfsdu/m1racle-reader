@@ -51,8 +51,7 @@ jobs:
           disable-animations: true
           script: |
             set -eu
-            manager=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
-            "$manager" "platforms;android-37.0" "build-tools;36.0.0" --channel=3
+            sdkmanager "platforms;android-37.0" "build-tools;36.0.0" --channel=3
             printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
             chmod +x gradlew
             ./gradlew :app:assembleQa --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
