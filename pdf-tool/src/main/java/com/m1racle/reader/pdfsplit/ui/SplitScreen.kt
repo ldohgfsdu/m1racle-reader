@@ -91,6 +91,17 @@ fun SplitScreen(
                 SourceCard(state, onPickPdf) { fullName = it }
                 RuleCard(state, vm)
 
+                state.run.cleanupWarning?.let { warning ->
+                    InfoCard(title = "未清理文件") {
+                        Text(
+                            text = warning,
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            color = Palette.warning,
+                        )
+                    }
+                }
+
                 if (state.run.error != null && state.run.phase != RunPhase.RUNNING) {
                     InfoCard(title = "上次运行") {
                         Text(
@@ -1281,11 +1292,21 @@ private fun BottomDock(state: SplitUiState, vm: SplitViewModel, onHelp: () -> Un
                 text = when {
                     state.cleaningUp -> "已取消，正在清理未完成的文件…"
                     state.run.phase == RunPhase.DONE -> "已生成 ${state.run.outputs.size} 个文件，可逐项预览"
+                    state.run.phase == RunPhase.CANCELLED &&
+                        state.run.detail.isNotBlank() -> state.run.detail
                     else -> state.blockedReason
                         ?: "预计生成 ${state.preview.fileCount} 个 PDF"
                 },
                 fontSize = 11.sp,
-                color = if (state.blockedReason != null) Palette.warning else Palette.textSecondary,
+                color = if (
+                    state.blockedReason != null ||
+                    state.run.phase == RunPhase.CANCELLED &&
+                    state.run.detail.contains("残留")
+                ) {
+                    Palette.warning
+                } else {
+                    Palette.textSecondary
+                },
             )
             Spacer(Modifier.height(8.dp))
         }

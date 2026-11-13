@@ -1,6 +1,8 @@
 package com.m1racle.reader.ui.documents
 
 import android.annotation.SuppressLint
+import android.os.Handler
+import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -30,12 +32,19 @@ internal object MarkdownEditorOrigin {
 
 internal class MarkdownEditorController {
     var webView: WebView? = null
-    private var snapshotToken = 0
+        set(value) {
+            if (field === value) return
+            cancelSnapshot()
+            field = value
+        }
+    private var snapshotSequence = 0L
+    private var activeSnapshotToken = 0L
+    private val snapshotHandler = Handler(Looper.getMainLooper())
     private var snapshotTimeout: Runnable? = null
     var ready by mutableStateOf(false)
         internal set
     internal val snapshotPending: Boolean
-        get() = snapshotToken != 0
+        get() = activeSnapshotToken != 0L
 
     fun command(command: String) { if (ready) webView?.evaluateJavascript("window.ReaderMarkdown.$command", null) }
     fun setMode(source: Boolean, accepted: () -> Unit, composing: () -> Unit) {
@@ -47,38 +56,33 @@ internal class MarkdownEditorController {
         }
     }
     fun detach() {
-        val current = webView
-        snapshotTimeout?.let { current?.removeCallbacks(it) }
-        snapshotTimeout = null
-        snapshotToken = 0
+        cancelSnapshot()
         ready = false
         webView = null
     }
     fun snapshot(onSnapshot: (String) -> Unit, onComposing: () -> Unit, onUnavailable: () -> Unit) {
         val current = webView
-        if (current == null || !ready || snapshotToken != 0) {
+        if (current == null || !ready || activeSnapshotToken != 0L) {
             onUnavailable()
             return
         }
-        val token = snapshotToken + 1
-        snapshotToken = token
+        snapshotSequence += 1
+        if (snapshotSequence == 0L) snapshotSequence = 1L
+        val token = snapshotSequence
+        activeSnapshotToken = token
         val timeout = Runnable {
-            if (snapshotToken != token) return@Runnable
-            snapshotToken = 0
+            if (activeSnapshotToken != token || webView !== current) return@Runnable
+            activeSnapshotToken = 0L
             snapshotTimeout = null
             onUnavailable()
         }
         snapshotTimeout = timeout
-        current.postDelayed(timeout, SNAPSHOT_TIMEOUT_MS)
+        snapshotHandler.postDelayed(timeout, SNAPSHOT_TIMEOUT_MS)
         current.evaluateJavascript("JSON.stringify({composing:window.ReaderMarkdown.isComposing(),markdown:window.ReaderMarkdown.getMarkdown()})") { encoded ->
-            if (snapshotToken != token) return@evaluateJavascript
-            snapshotToken = 0
-            current.removeCallbacks(timeout)
+            if (activeSnapshotToken != token || webView !== current) return@evaluateJavascript
+            activeSnapshotToken = 0L
+            snapshotHandler.removeCallbacks(timeout)
             snapshotTimeout = null
-            if (webView !== current) {
-                onUnavailable()
-                return@evaluateJavascript
-            }
             val snapshot = runCatching { JSONObject(org.json.JSONTokener(encoded).nextValue() as String) }.getOrNull()
             if (snapshot == null) {
                 onUnavailable()
@@ -88,6 +92,12 @@ internal class MarkdownEditorController {
                 onSnapshot(snapshot.getString("markdown"))
             }
         }
+    }
+
+    private fun cancelSnapshot() {
+        snapshotTimeout?.let(snapshotHandler::removeCallbacks)
+        snapshotTimeout = null
+        activeSnapshotToken = 0L
     }
 
     private companion object {

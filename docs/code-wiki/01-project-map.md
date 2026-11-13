@@ -12,13 +12,13 @@ M1racle Reader 是 Android 本地文档阅读器，应用包名和 Kotlin namesp
 
 **权限细节：**当前 [Manifest](../../app/src/main/AndroidManifest.xml) 声明了 `MANAGE_EXTERNAL_STORAGE`。通常导入走系统文件选择器；文档工具的全盘扫描需要用户在系统设置授予所有文件访问权限。因此不能沿用旧 README 中“只有主动选中文件才能读取”的绝对描述。
 
-不应推断的能力：正文全文索引、OCR、云同步、完整 HTML/CSS 浏览器渲染、完整 EPUB 标准支持、通用 PDF 排版编辑器。Markdown 编辑相关源文件存在，但当前导航图未接入对应页面；详见 [UI 与工具](08-ui-and-tools.md)。
+不应推断的能力：正文全文索引、OCR、云同步、完整 HTML/CSS 浏览器渲染、完整 EPUB 标准支持、通用 PDF 排版编辑器。Markdown 当前页编辑已接入阅读页，完成后原地返回阅读，不创建独立编辑路由；详见 [UI 与工具](08-ui-and-tools.md)。
 
 ## 工作区和 Git 工程
 
 ```text
 D:/03_M1racle Reader/
-├── reader/                      Git 仓库与 Android Gradle 工程
+├── reader-ui-release-20261025/ 当前 Git 仓库与 Android Gradle 工程
 ├── reader-env-local.ps1          本机环境配置
 ├── reader-build-local.ps1        本机构建、签名注入、条件式设备交付
 ├── reader-emulator-local.ps1     模拟器与隔离 QA 准备
@@ -30,16 +30,15 @@ D:/03_M1racle Reader/
 └── novel-audit-1.10.0/           独立 Python 工具，未接入 Android 构建
 ```
 
-外围目录不是 Gradle 模块。位于 `output/` 的 Readium/其他阅读器源码不代表主应用依赖了它们。工作区根原有 `CODE_WIKI.md` 是先前文档，当前入口为 [仓库内 Code Wiki](../../CODE_WIKI.md)。
+外围目录不是当前 Gradle 模块或当前源码。位于 `output/` 的 Readium/其他阅读器源码不代表主应用依赖了它们。仓库根 [CODE_WIKI.md](../../CODE_WIKI.md) 是入口页，完整文档从 [Wiki 首页](README.md) 开始。
 
 ## 工程内部布局
 
 ```text
-reader/
+reader-ui-release-20261025/
 ├── app/                     应用模块
 │   ├── build.gradle.kts     Android 配置、依赖、门禁、Outbox
 │   ├── version.properties   显式版本身份
-│   ├── schemas/             Room v6 起的导出快照
 │   └── src/
 │       ├── main/            公共生产代码、资源、Manifest
 │       ├── production/      debug/release/benchmark 共用替代实现
@@ -49,6 +48,11 @@ reader/
 │       ├── testQa/          仅依赖 QA 夹具/调参 UI 的 JVM 测试
 │       ├── testRelease/     Release 专属标志契约测试
 │       └── androidTest/     设备仪器测试
+├── core/
+│   ├── model/               跨层 PDF/锚点模型
+│   ├── database/            Room 实体、DAO、迁移与导出 schema
+│   └── pdf/                 PDF 渲染、几何、瓦片、文字选择等核心
+├── pdf-tool/                独立 PDF 拆分应用；不编入 Reader APK
 ├── benchmark/               独立 com.android.test 性能模块
 ├── scripts/                 验证、安装、夹具、备份与性能脚本
 ├── testdata/                文档、相对资源等测试输入
@@ -57,12 +61,14 @@ reader/
 └── .external_outbox/        构建产物；不提交 Git
 ```
 
-`settings.gradle.kts` 只包含 `:app` 与 `:benchmark`。以下是 **app 内的包级模块**，不是独立 Gradle library。
+`settings.gradle.kts` 包含 `:app`、`:benchmark`、`:core:model`、`:core:database`、`:core:pdf` 与独立的 `:pdf-tool`。下表同时列出物理模块与关键包边界。
 
-| 包/目录 | 主要职责 | 主要入口 |
+| 模块/包 | 主要职责 | 主要入口 |
 |---|---|---|
-| 根包 | Application 依赖组装、Activity、刷新率策略 | `M1racleReaderApplication`、`MainActivity` |
-| `data/local` | Room 实体、DAO、迁移 | `AppDatabase` |
+| `:app` 根包 | Application 依赖组装、Activity、刷新率策略 | `M1racleReaderApplication`、`MainActivity` |
+| `:core:database` / `data/local` | Room 实体、DAO、迁移 | `AppDatabase` |
+| `:core:model` | 跨层文档锚点、PDF 阅读模式与渲染质量模型 | `DocumentAnchor`、`PdfReadingMode` |
+| `:core:pdf` | 平台 PDF 渲染、几何、手势、瓦片和文字选择 | `PdfPageRenderer`、`PdfTextSelection` |
 | `data/repository` | 文档、阅读资产和搜索写入边界 | `DocumentRepository`、`ReadingRepository`、`SearchRepository` |
 | `data/anchor` | 跨格式位置模型、编码和投影 | `DocumentAnchor`、`AnchorCodec`、`BookmarkTarget` |
 | `data/settings` | DataStore、阅读设置和导入字体 | `ReaderSettingsRepository`、`ReaderFontRepository` |
@@ -71,12 +77,13 @@ reader/
 | `packageimport` | Markdown ZIP 安全解包与入口选择 | `ZipPackageImporter` |
 | `markdown`、`highlight`、`image`、`search` | Markdown 文本模型、语法着色、本地图和文内搜索 | `MarkdownParser`、`LocalImageLoader`、`DocumentSearch` |
 | `epub` | EPUB 包、XHTML、内容锚点和恢复 | `EpubPackageImporter`、`EpubReadingAnchors` |
-| `pdf`、`pdf/edit`、`pdf/export` | 渲染、几何、资源管理、正文编辑和导出 | `PdfPageRenderer`、`PdfBodyEditor`、`ChapterPackageExporter` |
+| `pdf`、`pdf/edit`、`pdf/export` | app 内的 PDF 会话、正文编辑和导出；底层渲染核心在 `:core:pdf` | `PdfViewerViewModel`、`PdfBodyEditor`、`ChapterPackageExporter` |
 | `documents` | 新建/合并/加密/转换、扫描、草稿存储 | `DocumentTools`、`DocumentDiscovery` |
 | `ui` | Compose 页面、ViewModel、导航、控制器、主题与材质 | `M1racleReaderNavGraph` |
+| `:pdf-tool` | 独立拆分应用的 SAF、页段规划、拆分与清理 UI | `PdfRangeSplitter`、`SplitViewModel` |
 
 ## 文档冲突的处理
 
 产品范围读 [PRD](../PRD.md) 与 [全清单授权](../FULL_BACKLOG_20261009.md)；视觉要求读 [design.md](../../design.md)；当前交付和验证状态读 [CURRENT_STATUS](../CURRENT_STATUS.md)。阶段报告用于解释某次变更，不自动代表现状。
 
-静态代码对旧概述的几项纠正：PDF 位图后端为平台 `PdfRenderer`；PDFBox 也用于文字、编辑和导出，不能仅写“元数据”；EPUB 已有 Slide/Continuous/Curl；Markdown 编辑源文件存在但当前无导航入口；所有文件访问权限已声明；源码依赖并非严格的五层单向图。
+静态代码对旧概述的几项纠正：PDF 位图后端为平台 `PdfRenderer`；PDFBox 也用于文字、编辑和导出，不能仅写“元数据”；EPUB 已有 Slide/Continuous/Curl；所有文件访问权限已声明；源码依赖并非严格的五层单向图。Markdown 当前页编辑已接入阅读页导航，具体以当前导航和 [Markdown 章节](05-markdown.md) 为准。

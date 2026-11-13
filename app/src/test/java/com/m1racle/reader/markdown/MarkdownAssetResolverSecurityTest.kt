@@ -48,6 +48,12 @@ class MarkdownAssetResolverSecurityTest {
     }
 
     @Test
+    fun percentDecodeOnce_preservesLiteralSupplementaryUnicode() {
+        assertEquals("图 😀.png", MarkdownAssetResolver.percentDecodeOnce("图%20😀.png"))
+        assertEquals("😀/🖼️.png", MarkdownAssetResolver.percentDecodeOnce("😀%2F🖼️.png"))
+    }
+
+    @Test
     fun percentDecodeOnce_singlePass_doubleEncodedDotDot() {
         // %252e%252e → %2e%2e (literal), not ..
         assertEquals("%2e%2e", MarkdownAssetResolver.percentDecodeOnce("%252e%252e"))
@@ -118,6 +124,36 @@ class MarkdownAssetResolverSecurityTest {
         assertTrue(f is MarkdownAssetResult.Resolved)
         assertTrue(both is MarkdownAssetResult.Resolved)
         assertEquals(File(root, "image.png").canonicalPath, pathOf(q))
+    }
+
+    @Test
+    fun encoded_query_and_fragment_characters_are_filename_characters() {
+        val root = tmp.newFolder("encoded_qf")
+        val entry = File(root, "doc.md").also { it.writeText("#") }
+        png(File(root, "a#b.png"))
+        val base = fileBase(root, entry)
+
+        val hash = MarkdownAssetResolver.resolve(base, "a%23b.png?raw=1#preview")
+
+        assertTrue("$hash", hash is MarkdownAssetResult.Resolved)
+        assertEquals(File(root, "a#b.png").canonicalPath, pathOf(hash))
+        assertEquals(
+            listOf("a?b.png"),
+            MarkdownAssetResolver.normalizeRelativeSegments("a%3Fb.png#preview"),
+        )
+    }
+
+    @Test
+    fun file_uri_round_trip_preserves_emoji_and_reserved_characters() {
+        val root = tmp.newFolder("emoji_uri")
+        val file = File(root, "图#😀.png").also { png(it) }
+
+        val uri = MarkdownAssetResolver.fileToUriString(file)
+        assertEquals(file.canonicalPath, MarkdownAssetResolver.filePathFromDocumentUri(uri))
+        assertEquals(
+            file.canonicalPath,
+            MarkdownAssetResolver.filePathFromDocumentUri("$uri?download=1#preview"),
+        )
     }
 
     @Test

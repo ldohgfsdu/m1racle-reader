@@ -1,6 +1,6 @@
 # 功能分层与验证入口
 
-当前交付版本、摘要和真机结论只看[CURRENT_STATUS.md](CURRENT_STATUS.md)；本轮证据见[稳定性矩阵](STABILIZATION_20261013.md)，授权范围见[FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md)。本表说明职责，不代表所有新功能已经验收。
+当前交付版本、摘要和真机结论只看[CURRENT_STATUS.md](CURRENT_STATUS.md)；当前修复证据见[审查修复报告](AUDIT_FIXES_20261113.md)，历史稳定性基线见[稳定性矩阵](STABILIZATION_20261013.md)，授权范围见[FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md)。本表说明职责，不代表所有新功能已经验收。
 
 | 层级 | 职责与唯一状态 | 实际入口 |
 |---|---|---|
@@ -14,9 +14,9 @@
 | 玻璃与动效 | 背景只录制正文，控件在同级采样；按压与回弹使用统一材质参数 | `ui/material/`、`ui/hub/`、`ui/viewer/ReaderGradient.kt` |
 | 文件工具与输出 | 创建、合并、加密、提取；显式选择新文件并回读核验，原文件不被处理工具覆盖 | `documents/DocumentTools.kt`、`ui/documents/DocumentToolsScreen.kt`、`ui/home/DocumentOperations.kt` |
 | 系统长截图 | 复用 Compose/Android ScrollCapture；自定义 PDF 视口暴露同一滚动状态的系统语义，捕获期间不保存临时位置；没有应用内截图工具 | `ui/viewer/ViewerScreen.kt`、`ui/pdf/ContinuousDocumentViewport.kt`、`ui/epub/EpubReaderContent.kt` |
-| Markdown 编辑 | 按用户最新决定等待 M1racle Note；保存研发代码，当前无导航入口 | `ui/documents/MarkdownEditorScreen.kt`、`documents/MarkdownDraftStore.kt` |
+| Markdown 编辑 | 已接入 Note 的 CodeMirror 引擎；阅读页顶栏原地进入，完成后回到同一文档；原生层负责快照、保存与退出 | `ui/documents/MarkdownWebEditor.kt`、`ui/documents/MarkdownEditorScreen.kt`、`documents/MarkdownDraftStore.kt`、`reader-markdown-editor/` |
 
-所有路径均相对于 `app/src/main/java/com/m1racle/reader/`。正式产品保持离线，无网络权限；所有文件访问由用户在系统设置主动授予。扫描不进入其他应用私有目录。
+表内 UI 与仓库路径相对于 `app/src/main/java/com/m1racle/reader/`；共享模型位于 `core/model/src/main/java/com/m1racle/reader/`，Room 位于 `core/database/src/main/java/com/m1racle/reader/data/local/`，PDF 内核位于 `core/pdf/src/main/java/com/m1racle/reader/pdf/`，Web 编辑器源码位于仓库根 `reader-markdown-editor/`。正式产品保持离线，无网络权限；所有文件访问由用户在系统设置主动授予。扫描不进入其他应用私有目录。
 
 ## 开发与发布
 

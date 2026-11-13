@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="material_comparison_hint">按住玻璃查看按压效果，移动背景观察透色。仅用于预览。</string>
+    <string name="material_comparison_pdf">PDF 原版玻璃</string>
+    <string name="material_comparison_dock">底栏玻璃</string>
+    <string name="material_comparison_selection">选中滑块</string>
+    <string name="material_comparison_move">移动背景</string>
+    <string name="material_comparison_position_percent">%1$d%%</string>
+    <string name="material_comparison_sample">阅读 Aa 123</string>
+    <string name="material_comparison_press">按住预览</string>
+    <string name="material_comparison_background">背景</string>
+    <string name="material_comparison_pattern">图案</string>
+    <string name="material_comparison_text">文字</string>
+    <string name="material_comparison_background_text">阅读 Aa 0123456789</string>
+</resources>

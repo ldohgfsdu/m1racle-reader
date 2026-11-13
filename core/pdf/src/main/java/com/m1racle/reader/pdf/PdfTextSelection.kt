@@ -12,6 +12,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 
 /** Glyphs are in displayed crop-box coordinates; line order comes from PDFBox text extraction. */
@@ -39,6 +40,9 @@ data class PdfTextSelectionRange(
     }
 }
 
+/** A dragged range start is right-inclusive; its end is left-inclusive. */
+enum class PdfSelectionEdge { START, END }
+
 data class PdfSelectablePage(
     val page: Int,
     val width: Float,
@@ -48,20 +52,96 @@ data class PdfSelectablePage(
 ) {
     data class Hit(val line: Int, val glyph: Int)
 
-    fun hit(x: Float, y: Float, tolerance: Float = 0f): Hit? {
-        var best: Hit? = null
-        var distance = Float.POSITIVE_INFINITY
-        lines.forEachIndexed { line, value -> value.glyphs.forEachIndexed { glyph, g ->
-            if (g.text.isBlank()) return@forEachIndexed
-            val r = g.rect
-            val dx = max(max(r.x - x, x - r.x - r.width), 0f) * width
-            val dy = max(max(r.y - y, y - r.y - r.height), 0f) * height
-            val d = dx * dx + dy * dy
-            if (d < distance && (tolerance < 0 || d <= tolerance * tolerance)) {
-                best = Hit(line, glyph); distance = d
+    /**
+     * Snap a page point to one glyph.
+     *
+     * A finger inside a line's vertical band always stays on that line and only moves
+     * horizontally, which is what makes a drag along one line predictable. Points between
+     * lines fall back to the nearest glyph, weighting vertical distance above horizontal so
+     * a column sharing a baseline is still resolved by its horizontal gap.
+     */
+    fun hit(
+        x: Float,
+        y: Float,
+        tolerance: Float = 0f,
+        prefer: Hit? = null,
+        edge: PdfSelectionEdge? = null,
+        oppositeEndpoint: Hit? = null,
+    ): Hit? {
+        if (!x.isFinite() || !y.isFinite()) return null
+        val xPts = x * width
+        val yPts = y * height
+        var inBand: Hit? = null
+        var inBandGap = Float.POSITIVE_INFINITY
+        var outside: Hit? = null
+        var outsideScore = Float.POSITIVE_INFINITY
+        lines.forEachIndexed { lineIndex, line ->
+            var top = Float.POSITIVE_INFINITY
+            var bottom = Float.NEGATIVE_INFINITY
+            line.glyphs.forEach { g ->
+                if (g.text.isBlank()) return@forEach
+                top = minOf(top, g.rect.y * height)
+                bottom = maxOf(bottom, (g.rect.y + g.rect.height) * height)
             }
-        } }
-        return best
+            if (top > bottom) return@forEachIndexed
+            var glyphIndex = -1
+            var dx = Float.POSITIVE_INFINITY
+            line.glyphs.forEachIndexed { index, g ->
+                if (g.text.isBlank()) return@forEachIndexed
+                val left = g.rect.x * width
+                val right = (g.rect.x + g.rect.width) * width
+                val gap = when {
+                    xPts < left -> left - xPts
+                    xPts > right -> xPts - right
+                    else -> 0f
+                }
+                val candidate = Hit(lineIndex, index)
+                // Range edges change sides immediately when a drag crosses the fixed
+                // endpoint. Deciding from the prospective line/glyph avoids an UP-time
+                // one-character correction caused by the previous event's handle role.
+                val boundary = if (edge != null && oppositeEndpoint != null) {
+                    when {
+                        lineIndex < oppositeEndpoint.line -> PdfSelectionEdge.START
+                        lineIndex > oppositeEndpoint.line -> PdfSelectionEdge.END
+                        index <= oppositeEndpoint.glyph && glyphIndex <= oppositeEndpoint.glyph -> PdfSelectionEdge.START
+                        index >= oppositeEndpoint.glyph && glyphIndex >= oppositeEndpoint.glyph -> PdfSelectionEdge.END
+                        else -> edge
+                    }
+                } else edge
+                val winsTie = when (boundary) {
+                    PdfSelectionEdge.START -> index > glyphIndex
+                    PdfSelectionEdge.END -> glyphIndex < 0 || index < glyphIndex
+                    null -> candidate == prefer
+                }
+                if (gap < dx || (gap == dx && winsTie)) {
+                    dx = gap
+                    glyphIndex = index
+                }
+            }
+            if (glyphIndex < 0) return@forEachIndexed
+            val dy = when {
+                yPts < top -> top - yPts
+                yPts > bottom -> yPts - bottom
+                else -> 0f
+            }
+            if (tolerance >= 0f && hypot(dx, dy) > tolerance) return@forEachIndexed
+            if (dy == 0f) {
+                val candidate = Hit(lineIndex, glyphIndex)
+                if (dx < inBandGap || (dx == inBandGap && candidate == prefer)) {
+                    inBandGap = dx
+                    inBand = candidate
+                }
+            } else {
+                val vertical = dy * 2f
+                val score = dx * dx + vertical * vertical
+                val candidate = Hit(lineIndex, glyphIndex)
+                if (score < outsideScore || (score == outsideScore && candidate == prefer)) {
+                    outsideScore = score
+                    outside = candidate
+                }
+            }
+        }
+        return inBand ?: outside
     }
 
     fun validRange(anchor: Hit, focus: Hit): PdfTextSelectionRange? =

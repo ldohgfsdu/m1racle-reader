@@ -86,6 +86,18 @@ sealed interface SplitEvent {
 
 class PdfSplitFailure(message: String) : IOException(message)
 
+class SplitCancelledException(
+    val cleanup: SplitCleanupResult,
+    cause: CancellationException,
+) : CancellationException(cause.message) {
+    init { initCause(cause) }
+}
+
+class PdfSplitCleanupException(
+    val cleanup: SplitCleanupResult,
+    cause: Exception,
+) : IOException(cause.message ?: "拆分失败", cause)
+
 /**
  * Lightweight, parseable timing traces. `adb logcat -s M1PDF` gives per-part
  * phase costs plus process CPU time and die temperature, so speed claims can be
@@ -240,7 +252,8 @@ class PdfRangeSplitter(
         }
 
         val totalPages = parts.sumOf { it.pageCount }
-        val createdUris = Collections.synchronizedList(ArrayList<Uri>(parts.size))
+        val createdOutputs =
+            Collections.synchronizedList(ArrayList<CreatedOutput<Uri>>(parts.size))
         val results = arrayOfNulls<SplitOutput>(parts.size)
         // Longest-part-first scheduling. With page-order dispatch the 165-page
         // chapter starts only after nine small parts; by then every other worker
@@ -306,6 +319,19 @@ class PdfRangeSplitter(
 
         var succeeded = false
         var staged: PdfBoxSetup.StagedSource? = null
+        var cleanupResult: SplitCleanupResult? = null
+        var cleanupStartedAt: Long? = null
+
+        suspend fun cleanupCreatedOutputs(): SplitCleanupResult {
+            if (cleanupStartedAt == null) {
+                cleanupStartedAt = SystemClock.elapsedRealtime()
+            }
+            val snapshot = synchronized(createdOutputs) { createdOutputs.toList() }
+            return cleanCreatedOutputsNonCancellable(snapshot) { uri ->
+                DocumentsContract.deleteDocument(appContext.contentResolver, uri)
+            }
+        }
+
         try {
             val stageStart = SystemClock.elapsedRealtime()
             PdfBoxSetup.ensureInit(appContext)
@@ -371,7 +397,9 @@ class PdfRangeSplitter(
                                         onStage = { stage, pageInPart ->
                                             publish(index, stage, pageInPart)
                                         },
-                                        onCreate = { created -> createdUris.add(created) },
+                                        onCreate = { created ->
+                                            createdOutputs += CreatedOutput(part.outputName, created)
+                                        },
                                     )
                                     results[index] = SplitOutput(
                                         displayName = part.outputName,
@@ -397,22 +425,22 @@ class PdfRangeSplitter(
                 }
             }
 
+            val outputs = results.map { requireNotNull(it) { "拆分结果不完整" } }
             succeeded = true
-            results.map { requireNotNull(it) { "拆分结果不完整" } }
+            outputs
+        } catch (cancelled: CancellationException) {
+            cleanupResult = cleanupCreatedOutputs()
+            throw SplitCancelledException(cleanupResult, cancelled)
+        } catch (error: Exception) {
+            cleanupResult = cleanupCreatedOutputs()
+            throw PdfSplitCleanupException(cleanupResult, error)
         } finally {
-            val cleanupStart = SystemClock.elapsedRealtime()
-            // The user must see "已取消" immediately; cleanup still runs, but in
-            // a non-cancellable context so it cannot be cut short by the very
-            // cancellation that triggered it.
+            val cleanupStart = cleanupStartedAt ?: SystemClock.elapsedRealtime()
+            // Finish cleanup despite cancellation. The terminal UI receives the
+            // actual result rather than announcing success before deletion ends.
             withContext(NonCancellable) {
-                if (!succeeded) {
-                    synchronized(createdUris) {
-                        createdUris.forEach { uri ->
-                            runCatching {
-                                DocumentsContract.deleteDocument(appContext.contentResolver, uri)
-                            }
-                        }
-                    }
+                if (!succeeded && cleanupResult == null) {
+                    cleanupResult = cleanupCreatedOutputs()
                 }
                 staged?.takeIf { it.temporary }?.file?.delete()
             }
@@ -420,6 +448,9 @@ class PdfRangeSplitter(
                 "run end totalMs=${SystemClock.elapsedRealtime() - runStart} " +
                     "cpuMs=${SplitDiagnostics.cpuMs() - cpuStart} " +
                     "cleanupMs=${SystemClock.elapsedRealtime() - cleanupStart} " +
+                    "cleanupAttempted=${cleanupResult?.attempted ?: 0} " +
+                    "cleanupDeleted=${cleanupResult?.deleted ?: 0} " +
+                    "cleanupResidual=${cleanupResult?.failures?.size ?: 0} " +
                     "finished=${finishedParts.get()}/${parts.size} " +
                     "tempC=${SplitDiagnostics.tempCelsius()}",
             )

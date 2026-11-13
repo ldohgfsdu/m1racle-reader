@@ -4,7 +4,7 @@
 
 ## 数据库结构
 
-[AppDatabase](../../app/src/main/java/com/m1racle/reader/data/local/AppDatabase.kt) 是 Room v17 数据库，显式注册 v1→v17 迁移，没有配置破坏性迁移兜底。完整字段、主键、索引、外键来自 [v17 数据库字典](reference/database-schema.md)。
+[AppDatabase](../../core/database/src/main/java/com/m1racle/reader/data/local/AppDatabase.kt) 是 Room v17 数据库，显式注册 v1→v17 迁移，没有配置破坏性迁移兜底。完整字段、主键、索引、外键来自 [v17 数据库字典](reference/database-schema.md)。
 
 ```mermaid
 erDiagram
@@ -64,7 +64,7 @@ erDiagram
 
 ## 跨格式锚点
 
-[DocumentAnchor](../../app/src/main/java/com/m1racle/reader/data/anchor/DocumentAnchor.kt) 是密度和渲染分辨率无关的定位模型。
+[DocumentAnchor](../../core/model/src/main/java/com/m1racle/reader/core/model/DocumentAnchor.kt) 是密度和渲染分辨率无关的定位模型。
 
 | 类型 | 定位信息 | 使用场景 |
 |---|---|---|

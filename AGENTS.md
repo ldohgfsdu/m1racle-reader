@@ -1,12 +1,12 @@
 # M1racle Reader
 
-2026-10-09用户明确要求实现全部积压清单，当前范围以[全清单授权与验收](docs/FULL_BACKLOG_20261009.md)为补充；以下旧范围的Markdown编辑/更多阅读方式限制不阻止本轮已授权工作。
+现行范围以 `docs/PRD.md` 与[全清单授权与验收](docs/FULL_BACKLOG_20261009.md)为准；2026-10-24 授权的当前页 Markdown 编辑已接入 Note 编辑引擎。当前版本与验证状态只看 `docs/CURRENT_STATUS.md`。
 
-Android 本地优先文档阅读器：Markdown + PDF。
+Android 本地优先文档阅读器：Markdown、PDF 与有限 EPUB。
 
 ## Scope
 
-Follow `docs/PRD.md`（含 2026-09-07 用户授权的 PDF 正文编辑范围补充，2026-09-19 用户授权的 EPUB 有限阅读范围补充）：本地 Markdown + PDF + 有限 EPUB 阅读及有限 PDF 正文编辑；Markdown 编辑、云同步、正文全文索引等明确不做。
+本地 Markdown、PDF 与有限 EPUB 阅读，当前页 Markdown 编辑及有限 PDF 正文编辑。保留文档标题与标注搜索；云同步、账号和文档正文全文索引不在范围内。早期“Markdown 编辑不做”的说明已由后续明确授权取代。
 
 - No INTERNET permission
 - No ads / analytics / accounts / cloud sync
@@ -36,7 +36,7 @@ Follow `docs/PRD.md`（含 2026-09-07 用户授权的 PDF 正文编辑范围补�
 
 ## 界面禁止项（2026-10-30）
 
-界面按成熟阅读器的克制来做。下面这些 AI slop 一律不做。通用词汇用本机用户级技能 `/impeccable`（[pbakaus/impeccable](https://github.com/pbakaus/impeccable) 4.8.0，不在本仓库）。Reader 是 Android Compose，网页检测器扫不到 Kotlin。本节的下拉小图标禁令以这里为准，该检测目录不覆盖这一条。
+界面按成熟阅读器的克制来做。下面这些 AI slop 一律不做。通用词汇参考 [pbakaus/impeccable](https://github.com/pbakaus/impeccable)；历史记录中的 4.8.0 `/impeccable` 不是当前已验证可调用的本机入口。若要使用外部技能，先在当次可用技能目录定位并读取实际 `SKILL.md`，记录其路径与版本；未定位时直接执行本节规则，不虚构命令或取消设计要求。Reader 是 Android Compose，网页检测器不能替代 Kotlin 界面检查。本节的下拉小图标禁令以这里为准。
 
 最严重的一条：下拉菜单按钮不要画下拉小图标。选择器、菜单按钮、`ExposedDropdownMenu`、`Spinner` 不要加 `arrow_drop_down`、`ExposedDropdownMenuDefaults.TrailingIcon` 或同类小箭头。控件本身已经是下拉，这个图标必须去掉。国内产品普遍留着它，Reader 不留。
 
@@ -83,11 +83,11 @@ Follow `docs/PRD.md`（含 2026-09-07 用户授权的 PDF 正文编辑范围补�
 
 ## 构建后交付（强制，无需提示）
 
-**每次 `assembleRelease` 成功后，确认 Outbox Release 来自本次构建，再自动执行：**
+**每次 `assembleRelease` 成功后，确认构建输出与 Outbox Release 的 SHA-256 一致，再按执行环境自动交付：**
 
-```bash
-cp .external_outbox/m1racle-reader-release-latest.apk /storage/emulated/0/Download/m1racle-reader-release-latest.apk
-```
+- Windows / Linux 宿主：先查询 `adb devices -l`，有唯一在线设备才用 `adb -s <serial> push` 写入手机 Download；多设备须明确目标。
+- Android 本机 shell：只有当前进程确实能访问目标共享存储时，才使用本机 `cp`。
+- 无在线设备且无共享存储挂载：保留本机 Outbox 与正式交付文件，手机传输、安装与验收均记为 pending；不能把宿主上的同名目录当手机。
 
 - 路径固定：设备端 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk` 可直接安装
 - **覆盖旧文件，无需用户额外提示**
@@ -98,7 +98,7 @@ cp .external_outbox/m1racle-reader-release-latest.apk /storage/emulated/0/Downlo
 **Read:** `docs/DEVICE_INSTALL_AND_ADB_TEST.md` and `docs/APK_DELIVERY.md`.
 
 - Check `adb devices` first. Only `device` state allows auto-install/smoke.
-- If offline: copy release APK to `/storage/emulated/0/Download/` and ask human to install; **do not mark device smoke as PASS**.
+- If offline: keep the current Release locally and mark device transfer/install/smoke pending. Android-local copy is allowed only with actual shared-storage access; **do not mark device smoke as PASS**.
 - Only deliver the release minify package: `.external_outbox/m1racle-reader-release-latest.apk`; no Debug or QA delivery. Measure the actual APK size.
 - Helper: `bash scripts/install-release-outbox.sh`
 

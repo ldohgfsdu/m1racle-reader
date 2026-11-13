@@ -218,6 +218,7 @@ import com.m1racle.reader.ui.annotation.AnnotationOverlayItem
 import com.m1racle.reader.ui.annotation.AnnotationsManagementSheet
 import com.m1racle.reader.ui.annotation.NoteEditDialog
 import com.m1racle.reader.ui.annotation.PdfHighlightLayer
+import com.m1racle.reader.ui.annotation.PdfSelectionLoupeSource
 import com.m1racle.reader.ui.annotation.PdfTextSelectionSession
 import com.m1racle.reader.ui.material.GlassBackdropHost
 import com.m1racle.reader.ui.material.GlassBackdropSource
@@ -774,7 +775,12 @@ fun PdfViewerScreen(
                 )
             }
 
-            val pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int, Float) -> Unit = { page, pageScale ->
+            val pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(
+                page: Int,
+                pageScale: Float,
+                pageBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+                paperInverted: Boolean,
+            ) -> Unit = { page, pageScale, pageBitmap, paperInverted ->
                 var pageItems by remember(state.document.id, page) {
                     mutableStateOf<List<AnnotationOverlayItem>>(emptyList())
                 }
@@ -803,6 +809,11 @@ fun PdfViewerScreen(
                         textLoading = textLoading,
                         pageScale = pageScale,
                         selectionSession = textSelectionSession,
+                        loupeSource = pageBitmap?.let {
+                            PdfSelectionLoupeSource(it, pdfPaperFilter())
+                        },
+                        paperColor = if (paperInverted) RadixColors.Black else RadixColors.White,
+                        darkPaper = paperInverted,
                         onSelectionGestureActiveChanged = { active ->
                             if (active) textSelectionGestures[page] = Unit else textSelectionGestures.remove(page)
                         },
@@ -2273,7 +2284,12 @@ internal fun PdfHorizontalPagedArea(
     tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
     onZoomGestureActive: (Boolean) -> Unit = {},
     onEnsureAround: (Int) -> Unit = {},
-    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int, Float) -> Unit = { _, _ -> },
+    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(
+        page: Int,
+        pageScale: Float,
+        pageBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+        paperInverted: Boolean,
+    ) -> Unit = { _, _, _, _ -> },
     isTextSelectionGestureActive: () -> Boolean = { false },
     qaProbe: HorizontalInteractionProbe? = null,
 ) {
@@ -3611,7 +3627,7 @@ internal fun PdfHorizontalPagedArea(
                                 }
                                 // R26/R27 标注覆盖层：与页面图像共享局部坐标并随页面变换；
                                 // 其中的选中操作菜单按屏幕固定尺寸反缩放。
-                                pageAnnotation(page, pageTransformScale)
+                                pageAnnotation(page, pageTransformScale, bmp, paperFilter != null)
                             }
                         }
                     }

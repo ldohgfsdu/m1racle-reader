@@ -51,7 +51,7 @@ class MarkdownAnnotationDriftAfterEditReproTest {
         val start = src.indexOf("suspend fun saveDocumentEdits(")
         val next = Regex("""\n\s*(private |internal )?(suspend )?fun """).find(src, start + 30)?.range?.first ?: src.length
         val body = src.substring(start, next)
-        val touches = listOf("highlightDao", "noteDao", "remapMarkdown", "rebaseAnnotations").any { body.contains(it) }
+        val touches = listOf("highlightDao", "noteDao", "remapMarkdown", "rebaseMarkdownAssets").any { body.contains(it) }
         assertFalse("saveDocumentEdits 未处理批注行（F1：Markdown 批注不随正文修订重定位）", !touches)
     }
 }

@@ -335,14 +335,14 @@ object MarkdownAssetResolver {
             return null
         }
 
-        // One percent-decode only (does not treat '+' as space).
-        // Strip query/fragment so they never participate in filesystem location.
-        val onceDecoded = percentDecodeOnce(trimmed).replace('\\', '/')
-        val pathOnly = onceDecoded
+        // Strip raw query/fragment before decoding so encoded `?` / `#` remain filename characters.
+        val rawPath = trimmed
             .substringBefore('#')
             .substringBefore('?')
             .trim()
-        if (pathOnly.isEmpty()) return null
+        if (rawPath.isEmpty()) return null
+        // One percent-decode only (does not treat '+' as space).
+        val pathOnly = percentDecodeOnce(rawPath).replace('\\', '/')
         if (pathOnly.startsWith("/")) return null
         if (pathOnly.contains("://")) return null
         if (pathOnly.startsWith("//")) return null
@@ -381,6 +381,7 @@ object MarkdownAssetResolver {
         if (!raw.contains('%')) return raw
         val bytes = ByteArrayOutputStream(raw.length)
         var i = 0
+        var literalStart = 0
         val s = raw
         while (i < s.length) {
             val c = s[i]
@@ -388,15 +389,21 @@ object MarkdownAssetResolver {
                 val hi = Character.digit(s[i + 1], 16)
                 val lo = Character.digit(s[i + 2], 16)
                 if (hi >= 0 && lo >= 0) {
+                    if (literalStart < i) {
+                        val literal = s.substring(literalStart, i).toByteArray(StandardCharsets.UTF_8)
+                        bytes.write(literal, 0, literal.size)
+                    }
                     bytes.write((hi shl 4) + lo)
                     i += 3
+                    literalStart = i
                     continue
                 }
             }
-            // Preserve as UTF-8 bytes of the code unit sequence already in the string.
-            val utf = c.toString().toByteArray(StandardCharsets.UTF_8)
-            bytes.write(utf, 0, utf.size)
             i++
+        }
+        if (literalStart < s.length) {
+            val literal = s.substring(literalStart).toByteArray(StandardCharsets.UTF_8)
+            bytes.write(literal, 0, literal.size)
         }
         return String(bytes.toByteArray(), StandardCharsets.UTF_8)
     }
@@ -438,6 +445,7 @@ object MarkdownAssetResolver {
             t.startsWith("file:") -> t.removePrefix("file:")
             else -> return null
         }
+        p = p.substringBefore('#').substringBefore('?')
         p = percentDecodeOnce(p)
         if (p.isEmpty()) return null
         // A file URI uses /C:/ on Windows; the filesystem uses C:\.

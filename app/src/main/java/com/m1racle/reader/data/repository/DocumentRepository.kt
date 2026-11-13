@@ -11,6 +11,9 @@ import android.content.Intent
 import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
 import androidx.room.RoomDatabase
+import com.m1racle.reader.data.anchor.BookmarkTarget
+import com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver
+import com.m1racle.reader.data.local.BookmarkLocationKind
 import com.m1racle.reader.data.local.AppDatabase
 import com.m1racle.reader.data.local.DocumentAliasDao
 import com.m1racle.reader.data.local.DocumentAliasEntity
@@ -42,6 +45,8 @@ import com.m1racle.reader.identity.RoomSidecarAliasMigrationTransaction
 import com.m1racle.reader.identity.SidecarIdentityMigrationFiles
 import com.m1racle.reader.identity.SidecarIdentityMigrationV1
 import com.m1racle.reader.identity.SidecarIdentityV1Reader
+import com.m1racle.reader.markdown.MarkdownAnnotationRemapper
+import com.m1racle.reader.markdown.MarkdownParser
 import com.m1racle.reader.share.ExternalDocumentImporter
 import com.m1racle.reader.share.ExternalUriMetadata
 import com.m1racle.reader.share.ProviderMetadata
@@ -110,44 +115,92 @@ class DocumentRepository(
         )
     }
 
-    /**
-     * 正文修订后把 Markdown 高亮/笔记的块锚映射到新修订（与指针更新同一事务）。
-     * 旧修订读不到时保持原样。
-     */
-    private suspend fun rebaseAnnotations(documentId: String, oldUri: String, candidate: File) {
+    /** 正文修订后在同一事务迁移高亮、笔记、书签及其搜索投影。 */
+    private suspend fun rebaseMarkdownAssets(documentId: String, oldUri: String, candidate: File) {
         val oldText = runCatching {
             context.contentResolver.openInputStream(Uri.parse(oldUri))?.use { it.readBytes().toString(Charsets.UTF_8) }
         }.getOrNull() ?: return
-        val oldBlocks = com.m1racle.reader.markdown.MarkdownParser.parse(oldText).blocks
-        val newBlocks = com.m1racle.reader.markdown.MarkdownParser.parse(candidate.readText(Charsets.UTF_8)).blocks
+        val oldBlocks = MarkdownParser.parse(oldText).blocks
+        val newBlocks = MarkdownParser.parse(candidate.readText(Charsets.UTF_8)).blocks
         val appDb = db as? AppDatabase ?: return
         val highlightDao = appDb.highlightDao()
         val noteDao = appDb.noteDao()
+        val bookmarkDao = appDb.bookmarkDao()
         val sql = appDb.openHelper.writableDatabase
-        fun moved(kind: String, location: Int, raw: String?): com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock? {
-            if (kind != "SCROLL_POSITION") return null
-            val a = com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver.resolve(kind, location, raw)
-                as? com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock
-                ?: com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock(location, null, null)
-            val m = com.m1racle.reader.markdown.MarkdownAnnotationRemapper
-                .remap(oldBlocks, newBlocks, a.blockIndex, a.charStart, a.charEnd) ?: return null
-            val next = com.m1racle.reader.core.model.DocumentAnchor.MarkdownBlock(m.blockIndex, m.charStart, m.charEnd)
-            return if (next == a && raw != null) null else next
+        val alignment = MarkdownAnnotationRemapper.alignment(oldBlocks, newBlocks)
+        fun moved(
+            kind: String,
+            location: Int,
+            raw: String?,
+            fallbackToLocation: Boolean,
+        ): DocumentAnchor.MarkdownBlock? {
+            if (kind != BookmarkLocationKind.SCROLL_POSITION.name) return null
+            val anchor = MarkdownBlockAnchorResolver.resolve(kind, location, raw)
+                as? DocumentAnchor.MarkdownBlock
+                ?: if (fallbackToLocation) DocumentAnchor.MarkdownBlock(location) else return null
+            val mapped = MarkdownAnnotationRemapper.remap(
+                alignment,
+                oldBlocks,
+                newBlocks,
+                anchor.blockIndex,
+                anchor.charStart,
+                anchor.charEnd,
+            ) ?: return null
+            return DocumentAnchor.MarkdownBlock(
+                mapped.blockIndex,
+                mapped.charStart,
+                mapped.charEnd,
+            )
         }
         highlightDao.listForDocument(documentId).forEach { h ->
-            val a = moved(h.locationKind, h.location, h.anchor) ?: return@forEach
-            val p = com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver.project(a)
+            val a = moved(h.locationKind, h.location, h.anchor, fallbackToLocation = h.anchor == null)
+                ?: return@forEach
+            val p = MarkdownBlockAnchorResolver.project(a)
             sql.execSQL(
                 "UPDATE highlights SET location = ?, anchor = ? WHERE id = ? AND documentId = ?",
                 arrayOf<Any?>(p.location, p.encoded, h.id, documentId),
             )
+            searchRepository.index(h.copy(location = p.location, anchor = p.encoded))
         }
         noteDao.listForDocument(documentId).forEach { n ->
-            val a = moved(n.locationKind, n.location, n.anchor) ?: return@forEach
-            val p = com.m1racle.reader.data.anchor.MarkdownBlockAnchorResolver.project(a)
+            val a = moved(n.locationKind, n.location, n.anchor, fallbackToLocation = n.anchor == null)
+                ?: return@forEach
+            val p = MarkdownBlockAnchorResolver.project(a)
             sql.execSQL(
                 "UPDATE notes SET location = ?, anchor = ? WHERE id = ? AND documentId = ?",
                 arrayOf<Any?>(p.location, p.encoded, n.id, documentId),
+            )
+            searchRepository.index(n.copy(location = p.location, anchor = p.encoded))
+        }
+        bookmarkDao.listForDocumentAllKinds(documentId).forEach { bookmark ->
+            val bookmarkAnchor = BookmarkTarget.decode(bookmark.anchor)?.anchor
+            val a = if (bookmarkAnchor is DocumentAnchor.MarkdownBlock) {
+                MarkdownAnnotationRemapper.remap(
+                    alignment,
+                    oldBlocks,
+                    newBlocks,
+                    bookmarkAnchor.blockIndex,
+                    bookmarkAnchor.charStart,
+                    bookmarkAnchor.charEnd,
+                )?.let {
+                    DocumentAnchor.MarkdownBlock(it.blockIndex, it.charStart, it.charEnd)
+                }
+            } else {
+                moved(
+                    bookmark.locationKind,
+                    bookmark.location,
+                    bookmark.anchor,
+                    fallbackToLocation = bookmark.anchor == null,
+                )
+            } ?: return@forEach
+            val p = MarkdownBlockAnchorResolver.project(a)
+            val encoded = if (bookmark.anchor?.startsWith("{") == true) {
+                val target = BookmarkTarget.decode(bookmark.anchor) ?: return@forEach
+                BookmarkTarget(a, target.scrollOffset, target.viewport).encode()
+            } else p.encoded
+            sql.execSQL(
+                "UPDATE bookmarks SET location = ?, anchor = ? WHERE id = ? AND documentId = ?",
+                arrayOf<Any?>(p.location, encoded, bookmark.id, documentId),
             )
         }
     }
@@ -188,7 +241,7 @@ class DocumentRepository(
                                 sourceUri=sourceTarget?.toString() ?: current.sourceUri,
                                 sourceSha256=if(sourceTarget!=null) nextHash else current.sourceSha256 ?: expectedHash)
                             documentDao.updateDocument(updated)
-                            if (before.type == DocumentType.MARKDOWN) rebaseAnnotations(id, before.uri, candidate)
+                            if (before.type == DocumentType.MARKDOWN) rebaseMarkdownAssets(id, before.uri, candidate)
                             searchRepository.index(updated,indexedAt=System.currentTimeMillis())
                             updated
                         }.also { committed = true }

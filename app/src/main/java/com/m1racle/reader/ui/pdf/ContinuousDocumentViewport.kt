@@ -145,7 +145,12 @@ internal fun ContinuousDocumentViewport(
     onTilePlan: (PdfTilePlan) -> Unit = {},
     tileOverlaySnapshots: StateFlow<TileOverlaySnapshot>? = null,
     gestureCoordinatorOverride: ContinuousGestureCoordinator? = null,
-    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int, Float) -> Unit = { _, _ -> },
+    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(
+        page: Int,
+        pageScale: Float,
+        pageBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+        paperInverted: Boolean,
+    ) -> Unit = { _, _, _, _ -> },
     isTextSelectionGestureActive: () -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
@@ -1639,7 +1644,12 @@ internal fun DocumentPage(
     showBaseLayer: Boolean,
     tileOverlayAlpha: Float,
     showTileDiagnostics: Boolean,
-    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(Int, Float) -> Unit = { _, _ -> },
+    pageAnnotation: @Composable androidx.compose.foundation.layout.BoxScope.(
+        page: Int,
+        pageScale: Float,
+        pageBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+        paperInverted: Boolean,
+    ) -> Unit = { _, _, _, _ -> },
     pageScale: Float = 1f,
 ) {
     val drawnTileKeys = remember(documentId, page) { mutableSetOf<com.m1racle.reader.pdf.PdfTileKey>() }
@@ -1733,7 +1743,7 @@ internal fun DocumentPage(
         }
         // R26.1 标注覆盖/选择层：渲染在页面内容之上（同页局部坐标系）；
         // 选中操作菜单按屏幕固定尺寸反缩放。
-        pageAnnotation(page, pageScale)
+        pageAnnotation(page, pageScale, bitmap, paperFilter != null)
       }
     }
 }

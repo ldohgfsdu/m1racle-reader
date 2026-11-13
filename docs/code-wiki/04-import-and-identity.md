@@ -41,7 +41,7 @@ sequenceDiagram
 
 | 入口/类型 | 职责 |
 |---|---|
-| [DocumentType](../../app/src/main/java/com/m1racle/reader/data/local/DocumentType.kt) | `isAllowedImport()` 与 `resolve()` 综合 MIME、文件名和路径；生产格式 MARKDOWN/PDF/EPUB/MARKDOWN_PACKAGE |
+| [DocumentType](../../core/database/src/main/java/com/m1racle/reader/data/local/DocumentType.kt) | `isAllowedImport()` 与 `resolve()` 综合 MIME、文件名和路径；生产格式 MARKDOWN/PDF/EPUB/MARKDOWN_PACKAGE |
 | [ExternalUriMetadata](../../app/src/main/java/com/m1racle/reader/share/ExternalUriMetadata.kt) | 解析显示名、大小和 MIME，避免将缺失的大小误当作零 |
 | [ProviderMetadataSource](../../app/src/main/java/com/m1racle/reader/share/ProviderMetadataSource.kt) | 隔离 provider 元数据读取，支持测试异常或冲突来源 |
 | [ExternalIntentUri](../../app/src/main/java/com/m1racle/reader/share/ExternalIntentUri.kt) | 从 VIEW/SEND、stream/ClipData 提取 URI，处理授权语义 |

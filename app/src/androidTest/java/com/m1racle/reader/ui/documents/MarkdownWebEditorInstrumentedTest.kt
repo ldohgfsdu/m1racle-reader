@@ -35,7 +35,11 @@ class MarkdownWebEditorInstrumentedTest {
             rule.runOnUiThread {
                 controller.setMode(source, accepted = {
                     switched.set(true)
-                    controller.snapshot({ snapshot.set(it) }, { error.set("Unexpected composition") })
+                    controller.snapshot(
+                        { snapshot.set(it) },
+                        { error.set("Unexpected composition") },
+                        { error.set("Editor snapshot unavailable") },
+                    )
                 }, composing = { error.set("Unexpected composition") })
             }
             rule.waitUntil(10_000) { snapshot.get() != null || error.get() != null }

@@ -9,20 +9,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'reader-script-contracts.ps1')
 $readerRepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-$readerCompiledRoots = @('app', 'benchmark', 'core', 'gradle', 'reader-markdown-editor')
-$readerCompiledRootFiles = @(
-    'build.gradle.kts',
-    'settings.gradle.kts',
-    'gradle.properties',
-    'gradlew',
-    'gradlew.bat'
-)
-$readerExcludedRootFiles = @(
-    'local.properties',
-    'keystore.properties'
-)
-$readerExcludedExtensions = @('.jks', '.keystore', '.p12', '.pfx', '.apk', '.ap_', '.aab')
 
 function ConvertTo-ReaderRepositoryPath([string]$FullPath) {
     $readerRelative = [IO.Path]::GetRelativePath($readerRepositoryRoot, $FullPath).Replace('\', '/')
@@ -33,14 +21,7 @@ function ConvertTo-ReaderRepositoryPath([string]$FullPath) {
 }
 
 function Test-ReaderCompiledInput([string]$RelativePath) {
-    $readerSegments = @($RelativePath.Split('/'))
-    if ($readerSegments -contains 'build' -or $readerSegments -contains 'node_modules' -or $readerSegments -contains 'dist') {
-        return $false
-    }
-    $readerName = $readerSegments[-1]
-    if ($readerName -in $readerExcludedRootFiles -or $readerName -like '*.sha256') { return $false }
-    if ([IO.Path]::GetExtension($readerName).ToLowerInvariant() -in $readerExcludedExtensions) { return $false }
-    return ($readerSegments[0] -in $readerCompiledRoots -or $RelativePath -in $readerCompiledRootFiles)
+    return Test-ReaderSourceBaselineInput $RelativePath
 }
 
 function Get-ReaderCompiledInputs {

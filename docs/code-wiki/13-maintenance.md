@@ -15,11 +15,11 @@
 维护工具使用 Python 3.10 及以上，只依赖标准库。在仓库根执行：
 
 ```powershell
-python docs/code-wiki/tools/build_reference.py
-python docs/code-wiki/tools/build_reference.py --check
+python tools/refresh-code-wiki.py
+python tools/refresh-code-wiki.py --check
 ```
 
-第一个命令更新自动参考：source-index、test-index、package-dependencies、database-schema、snapshot。第二个命令不改生产代码，校验 Wiki 的相对链接、源码行号、受标注的 API 名称及当前引用源摘要；机器结果写入 `reference/validation.json`。链接校验不会执行文档代码块，也不会构建、安装或联网。
+根入口转发到 `docs/code-wiki/tools/build_reference.py`。第一个命令更新当前自动参考并立即校验：source-index、test-index、package-dependencies、database-schema、snapshot。第二个命令不改生成物，只校验 Wiki 的相对链接、源码行号、受标注的 API 名称及当前引用源摘要；结果写入 `reference/validation-current.json`。结果把 `links`、`api_names` 与 `reference_freshness` 分开报告；并行源码改动可能使 freshness 为 stale，不能拿旧链接 PASS 代替最终重新生成。旧 `reference/validation.json` 是 2026-10-14 的 74 快照记录，必须保持原样，不能复用其 PASS 作为当前结论。链接校验不会执行文档代码块，也不会构建、安装或联网。
 
 手写章节需要在代码变更后人工更新，不能仅重新生成索引就声称全部叙述保持准确。版本升级时同时复核入口基准、数据库版本、能力范围与构建说明。
 
@@ -38,7 +38,7 @@ python docs/code-wiki/tools/build_reference.py --check
 
 ## 当前需保留的实现区别
 
-- Markdown 编辑文件存在但未接入当前导航。
+- Markdown 编辑已从阅读页进入，不创建独立编辑路由。
 - EPUB 锚点模型可表达更多信息，但搜索、批注、书签消费链路不能因此自动视为完备。
 - 搜索索引是普通 LIKE 表，只覆盖标题/摘录/笔记；文内 Markdown 搜索是另一条路径。
 - 普通文档具有应用私有读取副本，外部源身份与读取修订分别记录。

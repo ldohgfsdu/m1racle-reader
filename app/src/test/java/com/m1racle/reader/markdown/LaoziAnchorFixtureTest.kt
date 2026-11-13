@@ -5,35 +5,21 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
-import java.io.File
 
 /**
- * Offline parse of the human-acceptance 老子 fixture when present on the host/device FS.
- * Skips (not fails) if the file is unavailable in CI.
+ * Cross-platform parse of a small, synthetic fixture with the same anchor/TOC shapes
+ * as the human-acceptance 老子 document.
  */
 class LaoziAnchorFixtureTest {
 
-    private val fixtureCandidates = listOf(
-        "/storage/emulated/0/Download/老子（帛书精堪版）-整理排版版.md",
-        "/storage/emulated/0/老子（帛书精堪版）-整理排版版.md",
-    )
-
-    private fun loadFixture(): String? {
-        for (path in fixtureCandidates) {
-            val f = File(path)
-            if (f.isFile && f.canRead()) return f.readText()
-        }
-        return null
-    }
+    private fun loadFixture(): String = requireNotNull(
+        javaClass.getResource("/fixtures/laozi-anchor-minimal.md"),
+    ).readText(Charsets.UTF_8)
 
     @Test
     fun laozi_fixture_anchorsAndTocPlainTitles() {
-        val source = loadFixture()
-        assumeTrue("老子整理排版版 fixture not mounted", source != null)
-
-        val result = MarkdownParser.parse(source!!)
+        val result = MarkdownParser.parse(loadFixture())
 
         // HTML empty anchors not visible as paragraphs
         val visible = result.blocks.joinToString("\n") {
@@ -88,7 +74,9 @@ class LaoziAnchorFixtureTest {
             result.ignoredTrailingHtmlAnchors.isEmpty(),
         )
 
-        // Duplicate registration of same HTML id should not explode; last wins is OK
-        assertTrue(result.anchorRegistry.size > 80)
+        assertTrue(result.anchorRegistry.contains("德篇"))
+        assertTrue(result.anchorRegistry.contains("道篇"))
+        assertTrue(result.anchorRegistry.contains("chapter-01"))
+        assertTrue(result.anchorRegistry.contains("chapter-02"))
     }
 }

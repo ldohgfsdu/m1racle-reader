@@ -7,6 +7,9 @@
 | 主题 | 文件 | 说明 |
 |---|---|---|
 | 当前状态 | [CURRENT_STATUS.md](CURRENT_STATUS.md) | 版本、验证基线、已交付产物、设备验收状态、未决项 |
+| PDF 选区 Acrobat 对照 | [PDF_SELECTION_ACROBAT_20261113.md](PDF_SELECTION_ACROBAT_20261113.md) | 用户参考图、实色方角手柄、边界拖动、缩放阈值与 97 验证边界 |
+| 全仓审查修复 | [AUDIT_FIXES_20261113.md](AUDIT_FIXES_20261113.md) | A1、A2、B1–B23 逐项处理、96 候选源码与产物、同源验证和设备验收边界 |
+| PDF 选字交互重做 | [PDF_SELECTION_INTERACTION_20261113.md](PDF_SELECTION_INTERACTION_20261113.md) | 95 正式包、按行字符吸附、手柄外移与 44dp 触控、拖动放大镜、未完成的实机对照 |
 | PDF 大文件、滑动与拆分导出 | [PDF_LARGE_FILE_SPLIT_20261106.md](PDF_LARGE_FILE_SPLIT_20261106.md) | 94 正式包交付、三层模块边界、章节/页数拆分、回读清理、同源验证、59 项原生测试和正式包模拟器检查；当前验收以 CURRENT_STATUS 为准 |
 | PDF 目录后台导入与 93 交付（历史） | [PDF_AUTOMATIC_OUTLINE_20261031.md](PDF_AUTOMATIC_OUTLINE_20261031.md) | 默认后台合并、读取开销、40/40 模拟器回归、93 手机安装与实际目录验收边界 |
 | 92 PDF 首屏与横向输入基线 | [PDF_INPUT_ROUTING_20261031.md](PDF_INPUT_ROUTING_20261031.md) | 92 正式包、固定视口手势入口、39/39 原生回归与同源交付；[91 首屏实现](PDF_FIRST_FRAME_20261031.md) 保留底图与可见邻页依据 |
@@ -28,7 +31,7 @@
 | 工作台取消与正式版复验 | [WORKBENCH_REMOVAL_20261013.md](WORKBENCH_REMOVAL_20261013.md) | 按用户最新决定彻底删除工作台；保留当前 iOS 参考材质，复验 QA / Release |
 | 全清单实现 | [FULL_BACKLOG_20261009.md](FULL_BACKLOG_20261009.md) | 用户当前范围与每项验证状态；独立 Markdown 编辑已按 2026-10-24 授权接入 Note 引擎 |
 | 功能分层和验证入口 | [FEATURE_LAYERS_AND_VERIFICATION.md](FEATURE_LAYERS_AND_VERIFICATION.md) | 模块职责、开发检查和正式发布流程 |
-| Code Wiki | [代码百科入口](../CODE_WIKI.md) · [分篇目录](code-wiki/README.md) | 74工作树的架构与模块索引；77顶栏最新差异见下列连续过渡报告，不替代当前状态 |
+| Code Wiki | [代码百科入口](../CODE_WIKI.md) · [分篇目录](code-wiki/README.md) | 当前源码、模块与测试导航；历史 74 快照验证独立保留，不替代当前交付与验收状态 |
 
 以上入口冲突时，以用户当前指令优先，PRD 定范围、AGENTS.md 定工程规则、design.md 定设计要求、CURRENT_STATUS 定已验证现状。
 

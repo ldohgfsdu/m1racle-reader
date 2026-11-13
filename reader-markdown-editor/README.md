@@ -7,7 +7,9 @@ This directory is the rebuildable source of the Reader Markdown WebView bundle. 
 The build script first uses `reader-markdown-editor/node_modules` from this Reader project. If that directory is absent, it can reuse an existing Note dependency tree for this development pass:
 
 ```powershell
-cd "D:\03_M1racle Reader\reader-audit-fixes-20261024"
+# Run from the current Reader repository (the directory containing AGENTS.md).
+# From reader-markdown-editor/, first run: Set-Location ..
+if (-not (Test-Path .\app\version.properties)) { throw 'Run from the Reader repository root.' }
 node reader-markdown-editor\scripts\build.mjs
 node reader-markdown-editor\scripts\verify.mjs
 ```

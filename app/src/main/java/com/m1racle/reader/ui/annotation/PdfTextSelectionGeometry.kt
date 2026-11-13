@@ -1,9 +1,9 @@
 package com.m1racle.reader.ui.annotation
 
 import com.m1racle.reader.core.model.NormalizedRect
+import com.m1racle.reader.pdf.PdfSelectionEdge
 import com.m1racle.reader.pdf.PdfSelectablePage
 import com.m1racle.reader.pdf.PdfTextSelectionRange
-import kotlin.math.abs
 
 enum class PdfSelectionHandle {
     ANCHOR,
@@ -12,8 +12,15 @@ enum class PdfSelectionHandle {
 
 data class PdfSelectionHandlePoint(
     val handle: PdfSelectionHandle,
+    /** Centre of the round body, also the centre of the touch target. */
     val x: Float,
     val y: Float,
+    /** Square corner attached directly to the selected glyph boundary. */
+    val tipX: Float,
+    val tipY: Float,
+    val isLeft: Boolean,
+    val above: Boolean,
+    val radiusPx: Float,
 )
 
 data class PdfSelectionActionPlacement(
@@ -41,6 +48,12 @@ data class PdfSelectionActionMetrics(
 /** Page-local geometry shared by drawing and hit testing for the two selection handles. */
 object PdfTextSelectionGeometry {
 
+    /**
+     * Android selection handles attach a square corner to the text edge, with
+     * the round body outside the selection. Start/end identities follow the
+     * pointer even when the ordered range reverses. Boundary adjustment moves
+     * the body or changes its side; it never moves the text attachment point.
+     */
     fun handles(
         page: PdfSelectablePage,
         range: PdfTextSelectionRange,
@@ -48,32 +61,37 @@ object PdfTextSelectionGeometry {
         heightPx: Float,
         visualRadiusPx: Float,
     ): List<PdfSelectionHandlePoint> {
-        if (widthPx <= 0f || heightPx <= 0f || visualRadiusPx <= 0f) return emptyList()
+        if (!widthPx.isFinite() || !heightPx.isFinite() || !visualRadiusPx.isFinite() ||
+            widthPx <= 0f || heightPx <= 0f || visualRadiusPx <= 0f
+        ) return emptyList()
         if (page.validRange(range.anchor, range.focus) == null) return emptyList()
         val (first, last) = range.ordered()
         val firstRect = page.lines[first.line].glyphs[first.glyph].rect
         val lastRect = page.lines[last.line].glyphs[last.glyph].rect
-        val inset = visualRadiusPx.coerceAtMost(minOf(widthPx, heightPx) / 2f)
-        val usableWidth = (widthPx - inset * 2f).coerceAtLeast(0f)
-        var startX = (firstRect.x * widthPx).coerceIn(inset, widthPx - inset)
-        var endX = ((lastRect.x + lastRect.width) * widthPx).coerceIn(inset, widthPx - inset)
-        if (abs(endX - startX) < visualRadiusPx * 2f) {
-            val center = ((startX + endX) / 2f).coerceIn(inset, widthPx - inset)
-            val halfGap = (visualRadiusPx * 0.75f).coerceAtMost(usableWidth / 2f)
-            startX = (center - halfGap).coerceIn(inset, widthPx - inset)
-            endX = (center + halfGap).coerceIn(inset, widthPx - inset)
-        }
-        val startY = ((firstRect.y + firstRect.height / 2f) * heightPx)
-            .coerceIn(inset, heightPx - inset)
-        val endY = ((lastRect.y + lastRect.height / 2f) * heightPx)
-            .coerceIn(inset, heightPx - inset)
+        val radius = visualRadiusPx.coerceAtMost(minOf(widthPx, heightPx) / 4f)
+        val diameter = radius * 2f
         val anchorIsFirst = range.anchor == first
-        val startHandle = if (anchorIsFirst) PdfSelectionHandle.ANCHOR else PdfSelectionHandle.FOCUS
-        val endHandle = if (anchorIsFirst) PdfSelectionHandle.FOCUS else PdfSelectionHandle.ANCHOR
-        return listOf(
-            PdfSelectionHandlePoint(startHandle, startX, startY),
-            PdfSelectionHandlePoint(endHandle, endX, endY),
-        )
+        fun point(rect: NormalizedRect, start: Boolean): PdfSelectionHandlePoint {
+            val tipX = ((if (start) rect.x else rect.x + rect.width) * widthPx)
+                .coerceIn(0f, widthPx)
+            val leftFits = tipX >= diameter
+            val rightFits = tipX + diameter <= widthPx
+            val isLeft = if (start) leftFits || !rightFits else !rightFits && leftFits
+            val above = (rect.y + rect.height) * heightPx + diameter > heightPx
+            val tipY = (if (above) rect.y else rect.y + rect.height) * heightPx
+            val handle = if (start == anchorIsFirst) PdfSelectionHandle.ANCHOR else PdfSelectionHandle.FOCUS
+            return PdfSelectionHandlePoint(
+                handle = handle,
+                x = tipX + if (isLeft) -radius else radius,
+                y = tipY + if (above) -radius else radius,
+                tipX = tipX,
+                tipY = tipY,
+                isLeft = isLeft,
+                above = above,
+                radiusPx = radius,
+            )
+        }
+        return listOf(point(firstRect, true), point(lastRect, false))
     }
 
     fun hitHandle(
@@ -85,7 +103,27 @@ object PdfTextSelectionGeometry {
         heightPx: Float,
         visualRadiusPx: Float,
         hitRadiusPx: Float,
-    ): PdfSelectionHandle? {
+    ): PdfSelectionHandle? = hitHandlePoint(
+        page = page,
+        range = range,
+        x = x,
+        y = y,
+        widthPx = widthPx,
+        heightPx = heightPx,
+        visualRadiusPx = visualRadiusPx,
+        hitRadiusPx = hitRadiusPx,
+    )?.handle
+
+    fun hitHandlePoint(
+        page: PdfSelectablePage,
+        range: PdfTextSelectionRange,
+        x: Float,
+        y: Float,
+        widthPx: Float,
+        heightPx: Float,
+        visualRadiusPx: Float,
+        hitRadiusPx: Float,
+    ): PdfSelectionHandlePoint? {
         if (hitRadiusPx <= 0f) return null
         val maxDistanceSquared = hitRadiusPx * hitRadiusPx
         return handles(page, range, widthPx, heightPx, visualRadiusPx)
@@ -97,7 +135,68 @@ object PdfTextSelectionGeometry {
             .filter { it.second <= maxDistanceSquared }
             .minByOrNull { it.second }
             ?.first
-            ?.handle
+    }
+
+    /**
+     * The controlled glyph centre keeps vertical dragging on its text line. Horizontal
+     * dragging uses the glyph edge, so changing character widths cannot add a fixed bias.
+     */
+    fun handleGlyphCenter(
+        page: PdfSelectablePage,
+        range: PdfTextSelectionRange,
+        handle: PdfSelectionHandle,
+        widthPx: Float,
+        heightPx: Float,
+    ): androidx.compose.ui.geometry.Offset? {
+        if (widthPx <= 0f || heightPx <= 0f) return null
+        if (page.validRange(range.anchor, range.focus) == null) return null
+        val hit = when (handle) {
+            PdfSelectionHandle.ANCHOR -> range.anchor
+            PdfSelectionHandle.FOCUS -> range.focus
+        }
+        val rect = page.lines[hit.line].glyphs[hit.glyph].rect
+        return androidx.compose.ui.geometry.Offset(
+            x = (rect.x + rect.width / 2f) * widthPx,
+            y = (rect.y + rect.height / 2f) * heightPx,
+        )
+    }
+
+    fun hitGlyphForHandleDrag(
+        page: PdfSelectablePage,
+        range: PdfTextSelectionRange,
+        handle: PdfSelectionHandle,
+        preferred: PdfSelectablePage.Hit? = null,
+        downX: Float,
+        downY: Float,
+        currentX: Float,
+        currentY: Float,
+        widthPx: Float,
+        heightPx: Float,
+    ): PdfSelectablePage.Hit? {
+        val glyphCenter = handleGlyphCenter(page, range, handle, widthPx, heightPx) ?: return null
+        if (widthPx <= 0f || heightPx <= 0f) return null
+        val endpoint = preferred ?: when (handle) {
+            PdfSelectionHandle.ANCHOR -> range.anchor
+            PdfSelectionHandle.FOCUS -> range.focus
+        }
+        val original = when (handle) {
+            PdfSelectionHandle.ANCHOR -> range.anchor
+            PdfSelectionHandle.FOCUS -> range.focus
+        }
+        val originalIsStart = (handle == PdfSelectionHandle.ANCHOR) == (range.anchor == range.ordered().first)
+        val rect = page.lines[original.line].glyphs[original.glyph].rect
+        val boundaryX = (rect.x + if (originalIsStart) 0f else rect.width) * widthPx
+        return page.hit(
+            x = (currentX + boundaryX - downX) / widthPx,
+            y = (currentY + glyphCenter.y - downY) / heightPx,
+            tolerance = -1f,
+            prefer = endpoint,
+            edge = if (originalIsStart) PdfSelectionEdge.START else PdfSelectionEdge.END,
+            oppositeEndpoint = when (handle) {
+                PdfSelectionHandle.ANCHOR -> range.focus
+                PdfSelectionHandle.FOCUS -> range.anchor
+            },
+        )
     }
 
     fun actionBarPlacement(

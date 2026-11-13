@@ -10,7 +10,7 @@
 
 1. **先判断 ADB 是否在线**（`adb devices` 有 `device`）。
 2. **在线** → 自动 `install -r` + 冷启动冒烟。
-3. **离线** → **不要假装已测**；把 APK 拷到手机 `Download/`，写明路径，请人手动安装。
+3. **离线** → 本机保留本次 APK，手机传输、安装和冒烟记为 pending。仅 Android 本机 shell 确实能访问共享存储时，才可本机复制到 Download。
 4. 用户交付只用 **Release（minify）**，不主动构建或交付 Debug；签名缺失不降级，详见 [AGENTS.md 构建类型规则](../AGENTS.md#构建类型用户明确要求2026-09-15)。包体以本次测量为准。
 
 ---
@@ -28,7 +28,7 @@ adb devices -l
 |------|------|------------|
 | 有一行 `… device` | **已连接** | 可 install + 自动化点测 |
 | 仅 `unauthorized` | 未授权调试 | 提示人在手机点「允许 USB/无线调试」 |
-| 空列表 / 只有 offline | **未连接** | 走手动安装路径，**禁止**声称 device test 通过 |
+| 空列表 / 只有 offline | **未连接** | 本机交付 APK，手机传输和安装 pending，**禁止**声称 device test 通过 |
 | `adb: not found` | 环境无 adb | 同上 + 说明缺工具 |
 
 **判定代码语义（伪代码）：**
@@ -74,7 +74,7 @@ bash scripts/install-release-outbox.sh /path/to/app.apk
 
 | 变体 | Gradle | 包名 | 典型体积 | 用途 |
 |------|--------|------|----------|------|
-| **release** | `:app:assembleRelease` | `com.m1racle.reader` | **~10–11MB**（R8 on） | **交付 / 人工验收默认** |
+| **release** | `:app:assembleRelease` | `com.m1racle.reader` | 以本次实测为准（R8 on） | **交付 / 人工验收默认** |
 | qa | `:app:assembleQa` | `com.m1racle.reader.qa` | ~70MB | 隔离测试沙箱 |
 | debug | `:app:assembleDebug` | `com.m1racle.reader` | ~70MB | 仅保留能力，用户未明确要求时禁止使用 |
 | benchmark | `:app:assembleBenchmark` | `com.m1racle.reader.benchmark` | 较大 | Macrobenchmark |
@@ -103,17 +103,18 @@ bash scripts/install-release-outbox.sh /path/to/app.apk
 - 菜单 **发件箱** 也会扫该目录
 - **不要**把整仓/7z 大备份丢进手机公共 inbox（见清理约定）
 
-### 2.3 推荐交付路径（ADB 离线时）
+### 2.3 按执行环境交付
 
 | 步骤 | 动作 |
 |------|------|
 | 1 | 确认有 ` .external_outbox/m1racle-reader-release-latest.apk`（或先 `assembleRelease`） |
-| 2 | 复制到手机：`/storage/emulated/0/Download/m1racle-reader-release-latest.apk`（或历史名 `m1racle-reader-release.apk`） |
-| 3 | 在报告里写：**ADB=offline；已放 Download；请手动安装** |
+| 2 | 宿主有唯一在线设备时用 `adb -s <serial> push`；多设备先明确目标；离线时仅保留本机产物 |
+| 3 | 报告分别记录本机交付、手机传输、安装；没有执行传输就写 pending，不能写“已放 Download” |
 | 4 | **不要**把「未装机」写成 PASS |
 
 ```bash
-# 示例：ADB 离线时的交付
+# 仅适用于 Android 本机 shell，且已确认该路径是手机共享存储。
+# Windows / Linux 宿主 ADB 离线时不能执行此命令完成手机传输。
 cp -f .external_outbox/m1racle-reader-release-latest.apk \
   /storage/emulated/0/Download/m1racle-reader-release-latest.apk
 ```
@@ -261,7 +262,7 @@ adb -s "$DEV" shell dumpsys window | rg -i 'mCurrentFocus' | head -3
 | Release 构建输出 | `app/build/outputs/apk/release/app-release.apk` |
 | 手机手动安装目录 | `/storage/emulated/0/Download/` |
 | 收件箱（输入，非 APK） | `/storage/emulated/0/inbox/M1racle Reader/` |
-| 交付规则（摘要） | `docs/APK_DELIVERY.md`（与 `dist/APK_DELIVERY.md` 同步意图） |
+| 交付规则（摘要） | `docs/APK_DELIVERY.md` |
 | 数据安全 | `docs/ANDROID_TEST_DATA_SAFETY.md` |
 
 ---

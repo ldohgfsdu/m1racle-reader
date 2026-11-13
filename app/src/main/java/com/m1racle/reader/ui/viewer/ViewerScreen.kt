@@ -2,7 +2,6 @@ package com.m1racle.reader.ui.viewer
 
 import com.m1racle.reader.ui.components.readerHairlineBorder
 import com.m1racle.reader.ui.theme.M1racleReaderTheme
-import android.os.Trace
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalContext
@@ -1867,30 +1866,16 @@ private suspend fun scrollToBlockIndex(
     val target = listHeaderCount + blockIndex
     val maxIndex = listHeaderCount + blockCount - 1
     if (target !in 0..maxIndex) return
-    // Trace only around non-suspending work: animateScrollToItem is suspend and
-    // can cancel mid-frame; lint UnclosedTrace requires begin/end without suspend gap.
     val mode = anchorJumpMode(listState.firstVisibleItemIndex, target)
     try {
-        when (mode) {
-            AnchorJumpMode.Direct -> {
-                Trace.beginSection("AnchorJump")
-                try {
-                    listState.scrollToItem(target, scrollOffset)
-                } finally {
-                    Trace.endSection()
-                }
-            }
-            AnchorJumpMode.Animated -> {
-                // Section wraps only the call site start; end after resume in same
-                // coroutine via try/finally (cancellation still runs finally).
-                Trace.beginSection("AnchorJump")
-                try {
-                    listState.animateScrollToItem(target, scrollOffset)
-                } finally {
-                    Trace.endSection()
-                }
+        traceAnchorJump {
+            when (mode) {
+                AnchorJumpMode.Direct -> listState.scrollToItem(target, scrollOffset)
+                AnchorJumpMode.Animated -> listState.animateScrollToItem(target, scrollOffset)
             }
         }
+    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        throw cancelled
     } catch (_: Exception) {
         // Ignore races from rapid clicks / disposed list.
     }

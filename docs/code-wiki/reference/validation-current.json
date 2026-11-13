@@ -1,0 +1,37 @@
+{
+  "status": "pass",
+  "checks": {
+    "links": "pass",
+    "api_names": "pass",
+    "reference_freshness": "pass"
+  },
+  "checked_at": "2026-11-13T14:47:01+08:00",
+  "repository_root": "D:/03_M1racle Reader/reader-ui-release-20261025",
+  "git_head": "e2c8cb4",
+  "markdown_files": 19,
+  "relative_links": 3700,
+  "source_links": 3608,
+  "missing_links": 0,
+  "outside_repository_links": [],
+  "forbidden_source_targets": [],
+  "curated_api_names": 116,
+  "input_sha256": "3ed4bd2f4859fb29d0fe7655b73bccbe4e9ff5e2ea3a53e2c90f3893ecaaa03a",
+  "reference_fingerprint_stale": false,
+  "historical_validation_sha256": "a354c0c77418453839f7a6388c4a49cce45c54927e009271065eeddb71bd07e2",
+  "repaired_baseline": {
+    "recorded_at": "2026-11-13",
+    "missing_relative_links": 872,
+    "source_index_missing": 755,
+    "test_index_missing": 106,
+    "handwritten_missing": 11,
+    "unique_migrated_source_files": 59,
+    "unique_missing_targets": 112,
+    "historical_removed_sources": [
+      "app/src/main/java/com/m1racle/reader/pdf/PdfChromePrefs.kt",
+      "app/src/main/java/com/m1racle/reader/ui/common/StatusBarProtection.kt"
+    ]
+  },
+  "scope": "Static current-repository Code Wiki checks only; no build, tests, lint, install or device verification. The historical validation.json is not reused.",
+  "boundary": "Current links target the checked working tree. Historical validation.json remains an unmodified 74-snapshot record. output/, old worktrees and prior APK artifacts are not current source targets. The outside-repository host helper reader-env-local.ps1 is documented as plain code text and is not a source link.",
+  "errors": []
+}

@@ -135,4 +135,74 @@ class PdfTextSelectionTest {
         }
         Unit
     }
+
+    @Test fun horizontalDragStaysOnItsLine() {
+        val page=fixture()
+        val line0=page.lines[0].glyphs.first().rect
+        val line1=page.lines[1].glyphs.first().rect
+        // A finger in the first line's band, drifting toward the second line's left edge,
+        // must still resolve to the first line.
+        val betweenX=line1.x+line1.width/2f
+        val inBandY=line0.y+line0.height*0.9f
+        val hit=page.hit(betweenX,inBandY)!!
+        assertEquals(0,hit.line)
+        // Dropping into the second line's own band moves there, so multi-line selection works.
+        val next=page.hit(betweenX,line1.y+line1.height/2f)!!
+        assertEquals(1,next.line)
+    }
+
+    @Test fun nearestGlyphWinsWithinOneLine() {
+        val page=fixture()
+        val glyphs=page.lines[0].glyphs
+        val target=glyphs[3].rect
+        val hit=page.hit(target.x+target.width/2f,target.y+target.height/2f)!!
+        assertEquals(0,hit.line)
+        assertEquals(3,hit.glyph)
+    }
+
+    @Test fun sharedGlyphBoundaryKeepsThePreferredEndpoint() {
+        val adjacent=PdfSelectablePage(
+            page=0,
+            width=400f,
+            height=600f,
+            lines=listOf(
+                PdfSelectableLine(
+                    glyphs=listOf(
+                        PdfSelectableGlyph("A",NormalizedRect(.1f,.2f,.1f,.05f)),
+                        PdfSelectableGlyph("B",NormalizedRect(.2f,.2f,.1f,.05f)),
+                    ),
+                    flowLeft=.1f,
+                    flowRight=.3f,
+                ),
+            ),
+        )
+        val b=PdfSelectablePage.Hit(0,1)
+        assertEquals(b,adjacent.hit(.2f,.225f,prefer=b))
+    }
+
+    @Test fun lineBoundsFollowTheSelectedGlyphsNotTheWholeLine() {
+        val page=fixture()
+        val partial=page.selection(PdfSelectablePage.Hit(0,2),PdfSelectablePage.Hit(0,2))
+        val whole=page.selection(PdfSelectablePage.Hit(0,0),PdfSelectablePage.Hit(0,page.lines[0].glyphs.lastIndex))
+        val glyph=page.lines[0].glyphs[2].rect
+        assertEquals(glyph.x,partial.anchor.rects.single().x,0.00001f)
+        assertEquals(glyph.width,partial.anchor.rects.single().width,0.00001f)
+        assertTrue(partial.anchor.rects.single().width < whole.anchor.rects.single().width)
+    }
+    @Test fun rangeEdgesChooseTheirOwnSideOfASharedBoundary() {
+        val page = PdfSelectablePage(0, 100f, 100f, listOf(PdfSelectableLine(listOf(
+            PdfSelectableGlyph("W", NormalizedRect(0.1f, 0.2f, 0.5f, 0.1f)),
+            PdfSelectableGlyph("i", NormalizedRect(0.6f, 0.2f, 0.05f, 0.1f)),
+            PdfSelectableGlyph("j", NormalizedRect(0.65f, 0.2f, 0.05f, 0.1f)),
+        ), 0.1f, 0.7f)))
+        assertEquals(PdfSelectablePage.Hit(0, 1), page.hit(.6f, .25f, edge = PdfSelectionEdge.START))
+        assertEquals(PdfSelectablePage.Hit(0, 0), page.hit(.6f, .25f, edge = PdfSelectionEdge.END))
+        assertEquals(PdfSelectablePage.Hit(0, 1), page.hit(.65f, .25f, edge = PdfSelectionEdge.END))
+        assertEquals(PdfSelectablePage.Hit(0, 2), page.hit(.65f, .25f, edge = PdfSelectionEdge.START))
+        assertEquals(PdfSelectablePage.Hit(0, 1), page.hit(.65f, .25f,
+            edge = PdfSelectionEdge.START, oppositeEndpoint = PdfSelectablePage.Hit(0, 0)))
+        assertEquals(PdfSelectablePage.Hit(0, 1), page.hit(.6f, .25f,
+            edge = PdfSelectionEdge.END, oppositeEndpoint = PdfSelectablePage.Hit(0, 2)))
+    }
+
 }

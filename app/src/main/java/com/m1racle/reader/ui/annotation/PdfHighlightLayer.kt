@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -86,6 +87,10 @@ fun PdfHighlightLayer(
     selectionSession: PdfTextSelectionSession = remember { PdfTextSelectionSession() },
     /** GPU scale the viewport applies to the whole page layer this overlay sits in. */
     pageScale: Float = 1f,
+    /** Page bitmap already on screen; the drag loupe magnifies these exact pixels. */
+    loupeSource: PdfSelectionLoupeSource? = null,
+    paperColor: Color = Color.White,
+    darkPaper: Boolean = false,
 ) {
     val currentComplete by rememberUpdatedState(onSelectCompleted)
     val currentTextPage by rememberUpdatedState(textPage)
@@ -105,29 +110,13 @@ fun PdfHighlightLayer(
     }
     var layerSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
     var actionBarSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
-    // A long press that lands before this page's text extraction finishes is
-    // remembered here and completed once the text arrives, so the user never has
-    // to long-press twice.
-    var pendingPress by remember(pageIndex) { mutableStateOf<Offset?>(null) }
-
-    LaunchedEffect(textPage, pendingPress) {
-        val press = pendingPress ?: return@LaunchedEffect
-        val page = textPage ?: return@LaunchedEffect
-        pendingPress = null
-        if (layerSize.width <= 0 || layerSize.height <= 0) return@LaunchedEffect
-        if (page.lines.isEmpty()) {
-            currentUnavailable()
-            return@LaunchedEffect
-        }
-        val hit = page.hit(
-            press.x / layerSize.width,
-            press.y / layerSize.height,
-            tolerance = page.height * 0.006f,
-        ) ?: return@LaunchedEffect
-        selectedId = null
-        selectionSession.setSelection(pageIndex, PdfTextSelectionRange(hit, hit))
-    }
-
+    // Pointer position and snapped glyph of the in-progress drag. Drives the loupe so the
+    // user can see the characters their finger covers; null whenever no drag is running.
+    var loupeFocus by remember(pageIndex) { mutableStateOf<Offset?>(null) }
+    var loupeHit by remember(pageIndex) { mutableStateOf<PdfSelectablePage.Hit?>(null) }
+    // A long press released while extraction was still running gets one feedback
+    // message when extraction finishes. It never recreates a selection after UP.
+    var pendingUnavailable by remember(pageIndex) { mutableStateOf(false) }
     BackHandler(enabled = selectionRange != null) {
         selectionSession.clear()
     }
@@ -142,11 +131,15 @@ fun PdfHighlightLayer(
     LaunchedEffect(items) {
         if (selectedId != null && items.none { it.id == selectedId }) selectedId = null
     }
+    LaunchedEffect(textPage, pendingUnavailable) {
+        if (!pendingUnavailable) return@LaunchedEffect
+        val page = textPage ?: return@LaunchedEffect
+        pendingUnavailable = false
+        if (page.lines.isEmpty()) currentUnavailable()
+    }
 
     val density = LocalDensity.current
     val badgeRadiusPx = with(density) { 18.dp.toPx() }
-    val handleRadiusPx = with(density) { 9.dp.toPx() }
-    val handleHitRadiusPx = with(density) { 24.dp.toPx() }
     val actionGapPx = with(density) { 8.dp.toPx() }
     val actionMarginPx = with(density) { 8.dp.toPx() }
     // The action bar is a screen-fixed control. Its dp sizes are converted into
@@ -158,9 +151,16 @@ fun PdfHighlightLayer(
         marginPx = actionMarginPx,
         pageScale = pageScale,
     )
+    // Handles are page-local drawings too: convert their screen sizes back so they keep
+    // the same visual and touch size at every zoom level.
+    val screenToPage = actionMetrics.inverseScale
+    val handleRadiusPx = with(density) { 12.5.dp.toPx() } * screenToPage
+    val handleHitRadiusPx = with(density) { 22.dp.toPx() } * screenToPage
     // Pointer-input lambdas capture values; keep the gesture stream alive on
     // scale changes while still reading the latest metrics.
     val currentActionMetrics by rememberUpdatedState(actionMetrics)
+    val currentHandleRadiusPx by rememberUpdatedState(handleRadiusPx)
+    val currentHandleHitRadiusPx by rememberUpdatedState(handleHitRadiusPx)
 
     fun rectOf(item: AnnotationOverlayItem) = item.pdfRectsNormalized().firstOrNull()
 
@@ -202,6 +202,8 @@ fun PdfHighlightLayer(
     ) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
+            // Pointer positions are page-local, before the viewport's zoom transform.
+            val gestureTouchSlop = viewConfiguration.touchSlop * currentActionMetrics.inverseScale
             val page = currentTextPage
             val widthPx = size.width.toFloat()
             val heightPx = size.height.toFloat()
@@ -248,24 +250,27 @@ fun PdfHighlightLayer(
             // A visible handle owns the pointer immediately, even before the long-press timeout.
             val handleDown = if (selectionEnabled && page != null) {
                 selectionRange?.let { range ->
-                    PdfTextSelectionGeometry.hitHandle(
+                    PdfTextSelectionGeometry.hitHandlePoint(
                         page = page,
                         range = range,
                         x = down.position.x,
                         y = down.position.y,
                         widthPx = widthPx,
                         heightPx = heightPx,
-                        visualRadiusPx = handleRadiusPx,
-                        hitRadiusPx = handleHitRadiusPx,
+                        visualRadiusPx = currentHandleRadiusPx,
+                        hitRadiusPx = currentHandleHitRadiusPx,
                     )
                 }
             } else {
                 null
             }
             if (handleDown != null && page != null && selectionRange != null) {
-                val previous = selectionRange
-                var active = selectionRange!!
+                val previous = selectionRange ?: return@awaitEachGesture
+                var active = previous
                 var cancelled = false
+                // The loupe only earns its place once the finger actually moves; a plain
+                // tap on a handle must not flash a magnifier.
+                var moved = false
                 setOwnership(true)
                 try {
                     while (true) {
@@ -275,18 +280,39 @@ fun PdfHighlightLayer(
                             cancelled = true
                             break
                         }
-                        val hit = page.hit(
-                            change.position.x / widthPx,
-                            change.position.y / heightPx,
-                            tolerance = -1f,
-                        )
-                        if (hit != null) {
-                            val next = when (handleDown) {
-                                PdfSelectionHandle.ANCHOR -> active.copy(anchor = hit)
-                                PdfSelectionHandle.FOCUS -> active.copy(focus = hit)
+                        if (!moved &&
+                            (change.position - down.position).getDistance() > gestureTouchSlop
+                        ) {
+                            moved = true
+                        }
+                        if (moved) {
+                            // Keep the original vertical offset to the line centre, and
+                            // track horizontal movement from the selected text boundary.
+                            val hit = PdfTextSelectionGeometry.hitGlyphForHandleDrag(
+                                page = page,
+                                range = previous,
+                                handle = handleDown.handle,
+                                preferred = when (handleDown.handle) {
+                                    PdfSelectionHandle.ANCHOR -> active.anchor
+                                    PdfSelectionHandle.FOCUS -> active.focus
+                                },
+                                downX = down.position.x,
+                                downY = down.position.y,
+                                currentX = change.position.x,
+                                currentY = change.position.y,
+                                widthPx = widthPx,
+                                heightPx = heightPx,
+                            )
+                            if (hit != null) {
+                                val next = when (handleDown.handle) {
+                                    PdfSelectionHandle.ANCHOR -> active.copy(anchor = hit)
+                                    PdfSelectionHandle.FOCUS -> active.copy(focus = hit)
+                                }
+                                active = next
+                                selectionSession.setSelection(pageIndex, next)
+                                loupeFocus = change.position
+                                loupeHit = hit
                             }
-                            active = next
-                            selectionSession.setSelection(pageIndex, next)
                         }
                         if (!change.pressed) {
                             keepSelection(active, page)
@@ -296,6 +322,8 @@ fun PdfHighlightLayer(
                         change.consume()
                     }
                 } finally {
+                    loupeFocus = null
+                    loupeHit = null
                     if (cancelled) {
                         selectionSession.restoreAfterCancellation(pageIndex, active, previous)
                     }
@@ -311,7 +339,7 @@ fun PdfHighlightLayer(
                     val event = awaitPointerEvent()
                     val change = event.changes.firstOrNull { it.id == down.id }
                     if (change == null || event.changes.count { it.pressed } > 1 ||
-                        (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                        (change.position - down.position).getDistance() > gestureTouchSlop
                     ) {
                         cancelled = true
                     } else if (!change.pressed) {
@@ -362,31 +390,47 @@ fun PdfHighlightLayer(
             }
 
             if (!selectionEnabled) return@awaitEachGesture
-            if (page == null && currentTextLoading) {
-                // Text extraction is still running: remember the press and finish
-                // the selection when the text arrives instead of dropping it.
-                pendingPress = down.position
-                return@awaitEachGesture
-            }
-            if (page == null || page.lines.isEmpty()) {
+            if (widthPx <= 0f || heightPx <= 0f) return@awaitEachGesture
+            val fingerPx = with(density) { 28.dp.toPx() }
+
+            fun hitStart(owner: PdfSelectablePage): PdfSelectablePage.Hit? =
+                owner.hit(
+                    down.position.x / widthPx,
+                    down.position.y / heightPx,
+                    tolerance = fingerPx / heightPx * owner.height,
+                )
+
+            val readyAtLongPress = currentTextPage
+            if (readyAtLongPress == null && !currentTextLoading) {
                 currentUnavailable()
                 return@awaitEachGesture
             }
-            if (widthPx <= 0f || heightPx <= 0f) return@awaitEachGesture
-            val start = page.hit(
-                down.position.x / widthPx,
-                down.position.y / heightPx,
-                tolerance = page.height * 0.006f,
-            ) ?: return@awaitEachGesture
 
             val previous = selectionRange
-            var active = PdfTextSelectionRange(start, start)
+            var ownerPage: PdfSelectablePage? = null
+            var active: PdfTextSelectionRange? = null
             var kept = false
             var gestureCancelled = false
-            selectionSession.setSelection(pageIndex, active)
-            selectedId = null
+            // Long press alone selects a word; the loupe belongs to the drag that follows,
+            // so a press-and-lift does not flash a magnifier.
+            var moved = false
+
+            fun beginSelection(owner: PdfSelectablePage): Boolean {
+                if (owner.lines.isEmpty()) return false
+                val start = hitStart(owner) ?: return false
+                ownerPage = owner
+                active = PdfTextSelectionRange(start, start)
+                selectionSession.setSelection(pageIndex, active)
+                selectedId = null
+                return true
+            }
+
             setOwnership(true)
             try {
+                if (readyAtLongPress != null && !beginSelection(readyAtLongPress)) {
+                    currentUnavailable()
+                    return@awaitEachGesture
+                }
                 while (true) {
                     val event = awaitPointerEvent()
                     val change = event.changes.firstOrNull { it.id == down.id }
@@ -394,26 +438,60 @@ fun PdfHighlightLayer(
                         gestureCancelled = true
                         break
                     }
-                    val hit = page.hit(
+                    if (active == null) {
+                        val latestPage = currentTextPage
+                        if (latestPage != null) {
+                            if (!beginSelection(latestPage)) {
+                                currentUnavailable()
+                                change.consume()
+                                break
+                            }
+                        } else if (!currentTextLoading) {
+                            currentUnavailable()
+                            change.consume()
+                            break
+                        } else {
+                            if (!change.pressed) {
+                                pendingUnavailable = true
+                                change.consume()
+                                break
+                            }
+                            change.consume()
+                            continue
+                        }
+                    }
+                    val owner = ownerPage ?: break
+                    val selection = active ?: break
+                    if (!moved &&
+                        (change.position - down.position).getDistance() > gestureTouchSlop
+                    ) {
+                        moved = true
+                    }
+                    val hit = owner.hit(
                         change.position.x / widthPx,
                         change.position.y / heightPx,
                         tolerance = -1f,
+                        prefer = selection.focus,
                     )
                     if (hit != null) {
-                        active = active.copy(focus = hit)
-                        selectionSession.setSelection(pageIndex, active)
+                        active = selection.copy(focus = hit)
+                        selectionSession.setSelection(pageIndex, active!!)
+                        if (moved) loupeHit = hit
                     }
+                    if (moved) loupeFocus = change.position
                     if (!change.pressed) {
                         change.consume()
-                        keepSelection(active, page)
+                        keepSelection(active!!, owner)
                         kept = true
                         break
                     }
                     change.consume()
                 }
             } finally {
+                loupeFocus = null
+                loupeHit = null
                 if (!kept || gestureCancelled) {
-                    selectionSession.restoreAfterCancellation(pageIndex, active, previous)
+                    active?.let { selectionSession.restoreAfterCancellation(pageIndex, it, previous) }
                 }
                 setOwnership(false)
             }
@@ -502,13 +580,19 @@ fun PdfHighlightLayer(
 
                     val activeRange = selectionRange
                     val activePage = textPage
+                    val activeRects = if (activeRange != null && activePage != null) {
+                        activePage.selection(activeRange).anchor.rects
+                    } else {
+                        emptyList()
+                    }
                     if (activeRange != null && activePage != null) {
-                        activePage.selection(activeRange).anchor.rects.forEach { rect ->
+                        val fillBlend = if (darkPaper) BlendMode.Screen else BlendMode.Multiply
+                        activeRects.forEach { rect ->
                             drawRect(
-                                color = SelectionPreview,
+                                color = PdfSelectionFill,
                                 topLeft = Offset(rect.x * w, rect.y * h),
                                 size = Size(rect.width * w, rect.height * h),
-                                blendMode = BlendMode.Multiply,
+                                blendMode = fillBlend,
                             )
                         }
                         PdfTextSelectionGeometry.handles(
@@ -519,11 +603,16 @@ fun PdfHighlightLayer(
                             visualRadiusPx = handleRadiusPx,
                         ).forEach { handle ->
                             val center = Offset(handle.x, handle.y)
-                            drawCircle(RadixColors.White, handleRadiusPx, center)
-                            drawCircle(
-                                RadixColors.Blue9,
-                                radius = handleRadiusPx * 0.64f,
-                                center = center,
+                            // Standard Android handle: circle plus the corner attached
+                            // to the text. The corner is mirrored for the left endpoint.
+                            drawCircle(PdfSelectionHandleFill, handle.radiusPx, center)
+                            drawRect(
+                                color = PdfSelectionHandleFill,
+                                topLeft = Offset(
+                                    if (handle.isLeft) handle.x else handle.tipX,
+                                    if (handle.above) handle.y else handle.tipY,
+                                ),
+                                size = Size(handle.radiusPx, handle.radiusPx),
                             )
                         }
                     }
@@ -578,8 +667,58 @@ fun PdfHighlightLayer(
                 heightPx = layerSize.height.toFloat(),
                 visualRadiusPx = handleRadiusPx,
             ).forEach { handle ->
-                SelectionHandleSemantics(handle, handleHitRadiusPx)
+                SelectionHandleSemantics(handle, handleHitRadiusPx, screenToPage)
             }
+        }
+
+        val focus = loupeFocus
+        val source = loupeSource
+        val hit = loupeHit
+        if (focus != null && hit != null && source != null && activePage != null && gestureOwned) {
+            // Fixed on-screen size: dp -> page-local px, so zoom never changes the loupe.
+            val loupeWidthPx = with(density) { PdfSelectionLoupeWidth.toPx() } * screenToPage
+            val loupeHeightPx = with(density) { PdfSelectionLoupeHeight.toPx() } * screenToPage
+            val gapPx = with(density) { PdfSelectionLoupeGap.toPx() } * screenToPage
+            val marginPx = with(density) { 8.dp.toPx() } * screenToPage
+            val maxX = (layerSize.width - loupeWidthPx - marginPx).coerceAtLeast(marginPx)
+            val maxY = (layerSize.height - loupeHeightPx - marginPx).coerceAtLeast(marginPx)
+            val loupeX = (focus.x - loupeWidthPx / 2f).coerceIn(marginPx, maxX)
+            // Prefer above the finger; drop below only when the page top would clip it.
+            val aboveY = focus.y - gapPx - loupeHeightPx
+            val loupeY = if (aboveY >= marginPx) {
+                aboveY
+            } else {
+                (focus.y + gapPx).coerceIn(marginPx, maxY)
+            }
+            val hitGlyphRect = activePage.lines
+                .getOrNull(hit.line)
+                ?.glyphs
+                ?.getOrNull(hit.glyph)
+                ?.rect
+            PdfSelectionLoupe(
+                pageBitmap = source.bitmap,
+                colorFilter = source.colorFilter,
+                pageWidthPx = layerSize.width.toFloat(),
+                pageHeightPx = layerSize.height.toFloat(),
+                focusPagePx = Offset(
+                    x = (hitGlyphRect?.let { (it.x + it.width / 2f) * layerSize.width } ?: focus.x),
+                    y = focus.y,
+                ),
+                hitGlyphRect = hitGlyphRect,
+                selectedRects = activeRange?.let { activePage.selection(it).anchor.rects }.orEmpty(),
+                paperColor = paperColor,
+                darkPaper = darkPaper,
+                inverseScale = screenToPage,
+                modifier = Modifier
+                    .offset { IntOffset(loupeX.roundToInt(), loupeY.roundToInt()) }
+                    // Page-local size so the viewport's GPU scale turns it back into a fixed
+                    // on-screen size; the loupe's own zoom is relative to that screen size.
+                    .size(
+                        width = with(density) { loupeWidthPx.toDp() },
+                        height = with(density) { loupeHeightPx.toDp() },
+                    )
+                    .testTag("pdf-selection-loupe"),
+            )
         }
     }
 }
@@ -673,10 +812,8 @@ private fun SelectionActionButton(
 private fun androidx.compose.foundation.layout.BoxScope.SelectionHandleSemantics(
     handle: PdfSelectionHandlePoint,
     hitRadiusPx: Float,
+    inverseScale: Float,
 ) {
-    val density = LocalDensity.current
-    val diameter = with(density) { (hitRadiusPx * 2f).toDp() }
-    val half = hitRadiusPx
     val label = when (handle.handle) {
         PdfSelectionHandle.ANCHOR -> "调整选区起点"
         PdfSelectionHandle.FOCUS -> "调整选区终点"
@@ -687,16 +824,17 @@ private fun androidx.compose.foundation.layout.BoxScope.SelectionHandleSemantics
     }
     Box(
         modifier = Modifier
-            .offset {
-                IntOffset(
-                    x = (handle.x - half).roundToInt(),
-                    y = (handle.y - half).roundToInt(),
-                )
+            .graphicsLayer {
+                // Keep fractional page coordinates: rounding before zoom displaces
+                // the accessible centre and makes a 44dp box grow to 45dp at 2.5x.
+                translationX = handle.x - hitRadiusPx
+                translationY = handle.y - hitRadiusPx
+                scaleX = inverseScale
+                scaleY = inverseScale
+                transformOrigin = TransformOrigin(0f, 0f)
             }
-            .size(diameter)
+            .size(44.dp)
             .semantics { contentDescription = label }
             .testTag(tag),
     )
 }
-
-private val SelectionPreview = RadixColors.Blue9.copy(alpha = 0.20f)

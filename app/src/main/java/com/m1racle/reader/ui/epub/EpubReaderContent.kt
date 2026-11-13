@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.onSizeChanged
@@ -336,11 +337,16 @@ internal fun EpubReaderContent(
             Box(Modifier.fillMaxSize().background(background)) {
                 // Only paper and content are captured. Controls remain siblings
                 // so their glass never samples itself or duplicates its icons.
-                val scrollFromReading = if (mode == EpubReadingMode.Slide) pager.currentPage - readingPage + pager.currentPageOffsetFraction else 0f
-                val backingPaper = if (scrollFromReading < 0f) lerp(background,
-                    if (LocalReaderDarkTheme.current) RadixColors.GrayDark3 else RadixColors.Gray2,
-                    1f - (1f - kotlin.math.abs(scrollFromReading).coerceIn(0f, 1f)).let { it * it }) else background
-                GlassBackdropSource(backdrop, Modifier.fillMaxSize().background(backingPaper)) {
+                val slide = mode == EpubReadingMode.Slide
+                val dark = LocalReaderDarkTheme.current
+                val pagePaper = if (dark) RadixColors.GrayDark3 else RadixColors.Gray2
+                GlassBackdropSource(backdrop, Modifier.fillMaxSize().drawBehind {
+                    val scrollFromReading = if (slide) pager.currentPage - readingPage +
+                        pager.currentPageOffsetFraction else 0f
+                    drawRect(if (scrollFromReading < 0f) lerp(background, pagePaper,
+                        1f - (1f - kotlin.math.abs(scrollFromReading).coerceIn(0f, 1f)).let { it * it })
+                    else background)
+                }) {
                     Box(Modifier.fillMaxSize().onSizeChanged { sheetWidth = it.width }) {
                         // Measure the text viewport, while the animated sheet spans the whole page.
                         Box(
@@ -358,24 +364,31 @@ internal fun EpubReaderContent(
                         }
                         if (ready != null && ready.pages.isNotEmpty()) {
                             val pageContent: @Composable (Int) -> Unit = { index ->
-                                val turn = if (mode == EpubReadingMode.Slide) epubPageTurnLayer(
-                                    pager.getOffsetDistanceInPages(index), pager.currentPageOffsetFraction,
-                                    pager.currentPage, readingPage, sheetWidth.toFloat(),
-                                ) else EpubPageTurnLayer(0f, 0f, 0f)
-                                val paper = lerp(background,
-                                    if (LocalReaderDarkTheme.current) RadixColors.GrayDark3 else RadixColors.Gray2,
-                                    turn.paperLift)
+                                val turn: () -> EpubPageTurnLayer = {
+                                    if (slide) epubPageTurnLayer(
+                                        // A retained layer can draw once after reflow shrinks
+                                        // pageCount. Use the same distance without validating
+                                        // its retiring index against the new layout's count.
+                                        index - pager.currentPage - pager.currentPageOffsetFraction,
+                                        pager.currentPageOffsetFraction,
+                                        pager.currentPage,
+                                        readingPage,
+                                        sheetWidth.toFloat(),
+                                    ) else EpubPageTurnLayer(0f, 0f, 0f)
+                                }
                                 Box(
                                     Modifier.fillMaxSize()
-                                        .zIndex(turn.zIndex)
-                                        .graphicsLayer { translationX = turn.translationX }
+                                        .zIndex(if (slide) -index.toFloat() else 0f)
+                                        .graphicsLayer { translationX = turn().translationX }
                                         .graphicsLayer {
+                                            shadowElevation = 12.dp.toPx() * turn().edgeShadow
                                             shape = deviceCorners.shape()
-                                            shadowElevation = 12.dp.toPx() * turn.edgeShadow
                                             clip = true
                                         }
-                                        .background(paper)
-                                        .epubPaperEdge(deviceCorners, turn.zIndex > 0f, LocalReaderDarkTheme.current, turn.edgeShadow)
+                                        .drawBehind {
+                                            drawRect(lerp(background, pagePaper, turn().paperLift))
+                                        }
+                                        .epubPaperEdge(deviceCorners, dark) { turn().edgeShadow }
                                         .testTag("epub-sheet-$index"),
                                 ) {
                                     Box(Modifier.fillMaxSize()

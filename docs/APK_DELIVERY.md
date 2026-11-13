@@ -42,7 +42,8 @@ release 是唯一交付包，位于 outbox 根目录；测试变体（qa / debug
 
 ### 手机 Download
 
-- ADB **离线**时：复制 release 到 `/storage/emulated/0/Download/m1racle-reader-release-latest.apk` 供手动安装
+- Windows / Linux 宿主有唯一在线 ADB 设备时：`adb -s <serial> push <本次Outbox包> /storage/emulated/0/Download/m1racle-reader-release-latest.apk`。
+- ADB 离线时：本机保留 Outbox / 正式包，手机传输与安装记为 pending。只有 Android 本机 shell 已能访问共享存储时才用 `cp`，宿主不能直接复制到手机路径。
 - Debug / QA / benchmark：不作为用户交付包，不复制到 Download
 - 仅在本次 Release 构建成功并确认 Outbox 产物已更新后复制；旧包不得作为本次改动交付。
 - 详见 `DEVICE_INSTALL_AND_ADB_TEST.md`

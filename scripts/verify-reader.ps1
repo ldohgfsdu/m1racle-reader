@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $readerRepo = Split-Path -Parent $PSScriptRoot
 $readerRunner = Join-Path $readerRepo 'gradlew.bat'
-if ($PrepareDeviceTests -and $Mode -ne 'Full') { throw '-PrepareDeviceTests requires -Mode Full.' }
+. (Join-Path $PSScriptRoot 'reader-script-contracts.ps1')
 $readerLogDirectory = Join-Path $readerRepo 'output/verification'
 [IO.Directory]::CreateDirectory($readerLogDirectory) | Out-Null
 $readerLog = Join-Path $readerLogDirectory ("{0}-{1}.log" -f $Mode.ToLowerInvariant(), (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -20,29 +20,24 @@ try {
         [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     $readerArguments = @('--max-workers=1', '--no-daemon',
         '-Pkotlin.compiler.execution.strategy=in-process')
-    if ($Mode -eq 'Reading') {
-        $readerTasks = @(':app:testQaUnitTest', '--tests', '*BookmarkTargetTest', '--tests', '*ReaderTopBarScrollStateTest',
-            '--tests', '*ReaderProgressWheelTest', '--tests', '*PdfHighlightLoopTest', '--tests', '*DocumentSearchUnicodeOffsetTest',
-            '--tests', '*MigrationV15ToV16Test')
-    } else {
-        $readerTasks = @(
-            ':core:model:testReleaseUnitTest', ':core:database:testReleaseUnitTest', ':core:pdf:testReleaseUnitTest',
-            ':core:model:lintRelease', ':core:database:lintRelease', ':core:pdf:lintRelease',
-            ':pdf-tool:testDebugUnitTest', ':pdf-tool:lintRelease',
-            ':app:testQaUnitTest', ':app:testReleaseUnitTest', ':app:lintRelease'
-        )
-        if ($Mode -eq 'Release') { $readerTasks += ':app:assembleRelease' }
-        elseif ($PrepareDeviceTests) { $readerTasks += @(':app:assembleQa', ':app:assembleQaAndroidTest') }
-    }
     $readerArguments += @('--console=plain') + $GradleArguments
     Write-Host "Verification: $Mode. Evidence: $readerLog"
     Push-Location $readerRepo
     try {
-        & $readerRunner @readerTasks @readerArguments *> $readerLog
+        $readerInvocations = @(New-ReaderVerificationInvocation -Mode $Mode -PrepareDeviceTests:$PrepareDeviceTests -CommonArguments $readerArguments)
+        if ($readerInvocations.Count -eq 0) { throw "Verification route returned no Gradle invocations for $Mode." }
+        for ($readerRunIndex = 0; $readerRunIndex -lt $readerInvocations.Count; $readerRunIndex++) {
+            $readerRunArguments = $readerInvocations[$readerRunIndex]
+            if ($readerRunIndex -eq 0) {
+                & $readerRunner @readerRunArguments *> $readerLog
+            } else {
+                & $readerRunner @readerRunArguments *>> $readerLog
+            }
+            $readerExit = $LASTEXITCODE
+            if ($readerExit -ne 0) { throw "Verification failed ($readerExit). See $readerLog" }
+        }
     } finally { Pop-Location }
-    $readerExit = $LASTEXITCODE
     Get-Content -LiteralPath $readerLog -Tail 24
-    if ($readerExit -ne 0) { throw "Verification failed ($readerExit). See $readerLog" }
     if ($Mode -eq 'Release') {
         $readerBuiltApk = Join-Path $readerRepo 'app/build/outputs/apk/release/app-release.apk'
         $readerOutboxApk = Join-Path $readerRepo '.external_outbox/m1racle-reader-release-latest.apk'

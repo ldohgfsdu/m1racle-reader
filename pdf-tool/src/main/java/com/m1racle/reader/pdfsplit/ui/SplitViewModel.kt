@@ -20,8 +20,10 @@ import com.m1racle.reader.pdfsplit.split.PdfBoxSetup
 import com.m1racle.reader.pdfsplit.split.PdfChapterDetector
 import com.m1racle.reader.pdfsplit.split.PdfOutlineReader
 import com.m1racle.reader.pdfsplit.split.PdfProbe
+import com.m1racle.reader.pdfsplit.split.PdfSplitCleanupException
 import com.m1racle.reader.pdfsplit.split.PdfRangeSplitter
 import com.m1racle.reader.pdfsplit.split.SafOutputDirectory
+import com.m1racle.reader.pdfsplit.split.SplitCancelledException
 import com.m1racle.reader.pdfsplit.split.SplitEvent
 import com.m1racle.reader.pdfsplit.split.SplitOutput
 import com.m1racle.reader.pdfsplit.split.SplitPart
@@ -98,6 +100,7 @@ data class RunState(
     val finished: Int = 0,
     val total: Int = 0,
     val error: String? = null,
+    val cleanupWarning: String? = null,
 )
 
 /** A written output opened for visual verification: first + last page. */
@@ -808,23 +811,36 @@ class SplitViewModel(
                     )
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                val cleanup = (cancelled as? SplitCancelledException)?.cleanup
                 _state.update {
                     it.copy(
                         run = it.run.copy(
                             phase = RunPhase.CANCELLED,
                             headline = "已取消",
-                            detail = "写入中的文件已清理",
+                            detail = cleanup?.userMessage() ?: "已取消；清理结果未知",
+                            cleanupWarning = cleanup
+                                ?.takeUnless { it.isComplete }
+                                ?.userMessage(),
                         ),
                     )
                 }
                 throw cancelled
             } catch (error: Exception) {
+                val cleanup = (error as? PdfSplitCleanupException)?.cleanup
+                val failure = error.message ?: "拆分失败"
                 _state.update {
                     it.copy(
                         run = RunState(
                             phase = RunPhase.FAILED,
                             headline = "失败",
-                            error = error.message ?: "拆分失败",
+                            error = if (cleanup == null) {
+                                failure
+                            } else {
+                                "$failure；${cleanup.userMessage()}"
+                            },
+                            cleanupWarning = cleanup
+                                ?.takeUnless { it.isComplete }
+                                ?.userMessage(),
                         ),
                     )
                 }

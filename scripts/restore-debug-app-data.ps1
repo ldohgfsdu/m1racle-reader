@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "app-data-safety-common.ps1")
+. (Join-Path $PSScriptRoot "reader-script-contracts.ps1")
 $adb = Resolve-AdbPath $AdbPath
 $backup = (Resolve-Path -LiteralPath $BackupDirectory).Path
 $manifestPath = Join-Path $backup "manifest.json"
@@ -69,6 +70,7 @@ $null = Invoke-AdbText $adb @("shell", "monkey", "-p", $PackageName, "-c", "andr
 Start-Sleep -Seconds 2
 $pidValue = Invoke-AdbText $adb @("shell", "pidof", $PackageName)
 if (-not $pidValue.Trim()) { throw "Restored application did not start: $PackageName" }
+$roomOpenStatus = 'not_run'
 if ($PackageName -eq $script:QaApplicationId) {
     $instrumentation = "$PackageName.test/androidx.test.runner.AndroidJUnitRunner"
     $result = Invoke-AdbText $adb @(
@@ -77,5 +79,6 @@ if ($PackageName -eq $script:QaApplicationId) {
     )
     Write-Host $result
     if ($result -notmatch "OK \(1 test\)") { throw "QA Room-open verification instrumentation did not pass." }
+    $roomOpenStatus = Get-ReaderRoomOpenStatus $PackageName $script:QaApplicationId -VerificationPassed
 }
-Write-Host "RESTORE_COMPLETE applicationId=$PackageName process=$($pidValue.Trim()) manifestAndHashes=verified roomOpen=verified"
+Write-Host (Get-ReaderRestoreCompletionEvidence $PackageName $pidValue.Trim() $roomOpenStatus)

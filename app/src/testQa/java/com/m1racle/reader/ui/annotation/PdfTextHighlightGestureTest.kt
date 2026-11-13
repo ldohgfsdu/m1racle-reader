@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -70,7 +71,11 @@ class PdfTextHighlightGestureTest {
         recordParentTaps: Boolean = false,
         selectablePage: PdfSelectablePage? = page,
         pageScale: Float = 1f,
+        loupeSource: PdfSelectionLoupeSource? = null,
+        selectionRange: PdfTextSelectionRange? = null,
     ) {
+        val selectionSession = PdfTextSelectionSession()
+        if (selectionRange != null) selectionSession.setSelection(0, selectionRange)
         rule.setContent {
             Box(
                 Modifier
@@ -95,6 +100,8 @@ class PdfTextHighlightGestureTest {
                         selectionEnabled = enabled,
                         textPage = selectablePage,
                         pageScale = pageScale,
+                        loupeSource = loupeSource,
+                        selectionSession = selectionSession,
                         onSelectionUnavailable = { unavailable += Unit },
                         onSelectCompleted = { saved += it },
                         modifier = Modifier.testTag("page"),
@@ -208,10 +215,13 @@ class PdfTextHighlightGestureTest {
                 range,
                 width.toFloat(),
                 height.toFloat(),
-                9f*rule.density.density,
+                12.5f*rule.density.density,
             ).single { it.handle == PdfSelectionHandle.FOCUS }
+            val bRect=page.lines[0].glyphs[1].rect
+            val bEndTipX=(bRect.x+bRect.width)*page.width
             down(Offset(focus.x,focus.y));advanceEventTime(50)
-            moveTo(Offset(width*.325f,height*.225f));up()
+            // The END body follows the pointer delta from A's right edge to B's right edge.
+            moveTo(Offset(focus.x+bEndTipX-focus.tipX,focus.y));up()
         }
         rule.runOnIdle {
             assertTrue(saved.isEmpty())
@@ -220,6 +230,151 @@ class PdfTextHighlightGestureTest {
         rule.onNodeWithTag("pdf-selection-actions").assertExists()
         rule.onNodeWithTag("pdf-selection-action-highlight").performClick()
         rule.runOnIdle { assertEquals("AB",saved.single().excerpt) }
+    }
+    @Test fun tappingTheStartHandleDoesNotTurnBIntoAB() {
+        show()
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width*.325f,height*.225f));advanceEventTime(700);up()
+        }
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+
+        rule.onNodeWithTag("page").performTouchInput {
+            val range=PdfTextSelectionRange(PdfSelectablePage.Hit(0,1),PdfSelectablePage.Hit(0,1))
+            val anchor=PdfTextSelectionGeometry.handles(
+                page,
+                range,
+                width.toFloat(),
+                height.toFloat(),
+                12.5f*rule.density.density,
+            ).single { it.handle == PdfSelectionHandle.ANCHOR }
+            down(Offset(anchor.x,anchor.y));advanceEventTime(50);up()
+        }
+
+        rule.onNodeWithTag("pdf-selection-action-highlight").performClick()
+        rule.runOnIdle { assertEquals("B",saved.single().excerpt) }
+    }
+    @Test fun handleTouchTargetsStay44dpAtTwoAndAHalfTimesZoom() {
+        val scale = androidx.compose.runtime.mutableFloatStateOf(1f)
+        val session = PdfTextSelectionSession().apply {
+            setSelection(0, PdfTextSelectionRange(PdfSelectablePage.Hit(0, 0), PdfSelectablePage.Hit(0, 1)))
+        }
+        rule.setContent {
+            Box(
+                Modifier
+                    .size(300.dp, 400.dp)
+                    .graphicsLayer {
+                        scaleX = scale.floatValue
+                        scaleY = scale.floatValue
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                    },
+            ) {
+                PdfHighlightLayer(
+                    pageIndex = 0,
+                    items = emptyList(),
+                    selectionEnabled = true,
+                    textPage = page,
+                    pageScale = scale.floatValue,
+                    selectionSession = session,
+                    onSelectCompleted = { saved += it },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        val unzoomedAnchor = visualWidthDp("pdf-selection-handle-anchor")
+        val unzoomedFocus = visualWidthDp("pdf-selection-handle-focus")
+        rule.runOnIdle { scale.floatValue = 2.5f }
+        rule.waitForIdle()
+        val zoomedAnchor = visualWidthDp("pdf-selection-handle-anchor")
+        val zoomedFocus = visualWidthDp("pdf-selection-handle-focus")
+
+        assertEquals(44f, unzoomedAnchor, .5f)
+        assertEquals(44f, unzoomedFocus, .5f)
+        assertEquals(44f, zoomedAnchor, .5f)
+        assertEquals(44f, zoomedFocus, .5f)
+    }
+    @Test fun externalSessionPrewarmsReverseSelectionAndDraggingAnchorKeepsIdentity() {
+        show(
+            consumeInitial = true,
+            selectionRange = PdfTextSelectionRange(
+                PdfSelectablePage.Hit(0, 1),
+                PdfSelectablePage.Hit(0, 0),
+            ),
+        )
+        val anchorBounds = rule.onNodeWithTag("pdf-selection-handle-anchor").fetchSemanticsNode().boundsInRoot
+        val focusBounds = rule.onNodeWithTag("pdf-selection-handle-focus").fetchSemanticsNode().boundsInRoot
+        assertTrue(anchorBounds.center.x > focusBounds.center.x)
+        val aRect=page.lines[0].glyphs[0].rect
+        val aEndTipX=(aRect.x+aRect.width)*page.width
+        val pageNode = rule.onNodeWithTag("page").fetchSemanticsNode()
+        val pageOrigin = pageNode.boundsInRoot.topLeft
+        val reverseAnchor=PdfTextSelectionGeometry.handles(
+            page,
+            PdfTextSelectionRange(PdfSelectablePage.Hit(0,1),PdfSelectablePage.Hit(0,0)),
+            pageNode.layoutInfo.coordinates.size.width.toFloat(),
+            pageNode.layoutInfo.coordinates.size.height.toFloat(),
+            12.5f*rule.density.density,
+        ).single { it.handle == PdfSelectionHandle.ANCHOR }
+
+        rule.onNodeWithTag("page").performTouchInput {
+            down(anchorBounds.center - pageOrigin)
+            advanceEventTime(50)
+            moveTo(Offset(
+                anchorBounds.center.x-pageOrigin.x+aEndTipX-reverseAnchor.tipX,
+                anchorBounds.center.y-pageOrigin.y,
+            ))
+            up()
+        }
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+        rule.onNodeWithTag("pdf-selection-action-highlight").performClick()
+        rule.runOnIdle { assertEquals("A", saved.single().excerpt) }
+    }
+    @Test fun tapOnHandleBodyDoesNotCommitOrMoveTheEndpoint() {
+        show(
+            selectionRange = PdfTextSelectionRange(
+                PdfSelectablePage.Hit(0, 0),
+                PdfSelectablePage.Hit(0, 1),
+            ),
+        )
+        val anchorBefore = rule.onNodeWithTag("pdf-selection-handle-anchor").fetchSemanticsNode().boundsInRoot
+        val focusBefore = rule.onNodeWithTag("pdf-selection-handle-focus").fetchSemanticsNode().boundsInRoot
+        rule.onNodeWithTag("page").performTouchInput { click(anchorBefore.center) }
+        rule.runOnIdle { assertTrue(saved.isEmpty()) }
+        val anchorAfter = rule.onNodeWithTag("pdf-selection-handle-anchor").fetchSemanticsNode().boundsInRoot
+        val focusAfter = rule.onNodeWithTag("pdf-selection-handle-focus").fetchSemanticsNode().boundsInRoot
+        assertEquals(anchorBefore, anchorAfter)
+        assertEquals(focusBefore, focusAfter)
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+    }
+    @Test fun draggingStartPastEndDoesNotWaitForUpToCorrectAffinity() {
+        show(
+            consumeInitial = true,
+            selectionRange = PdfTextSelectionRange(
+                PdfSelectablePage.Hit(0, 0),
+                PdfSelectablePage.Hit(0, 0),
+            ),
+        )
+        val anchor = PdfTextSelectionGeometry.handles(
+            page,
+            PdfTextSelectionRange(PdfSelectablePage.Hit(0, 0), PdfSelectablePage.Hit(0, 0)),
+            300f,
+            400f,
+            12.5f * rule.density.density,
+        ).single { it.handle == PdfSelectionHandle.ANCHOR }
+        val bRect=page.lines[0].glyphs[1].rect
+        val bEndTipX=(bRect.x+bRect.width)*page.width
+
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(anchor.x, anchor.y))
+            advanceEventTime(50)
+            moveTo(Offset(anchor.x+bEndTipX-anchor.tipX, anchor.y))
+        }
+        val duringCrossing = rule.onNodeWithTag("pdf-selection-handle-anchor").fetchSemanticsNode().boundsInRoot
+        val fixedFocus = rule.onNodeWithTag("pdf-selection-handle-focus").fetchSemanticsNode().boundsInRoot
+        assertTrue("dragged anchor must cross its fixed focus", duringCrossing.center.x > fixedFocus.center.x)
+
+        rule.onNodeWithTag("page").performTouchInput { up() }
+        rule.onNodeWithTag("pdf-selection-action-highlight").performClick()
+        rule.runOnIdle { assertEquals("AB", saved.single().excerpt) }
     }
     @Test fun noteActionUsesDirectSelectionCallbackWithoutStyleDialog() {
         show(selectionNote = { notedSelections += it })
@@ -299,9 +454,10 @@ class PdfTextHighlightGestureTest {
         rule.runOnIdle { assertTrue(saved.isEmpty()) }
     }
 
-    @Test fun longPressBeforeTextIsReadyWaitsAndContinuesTheSameGesture() {
+    @Test fun longPressBeforeTextIsReadyContinuesMoveAndUpInTheSameGesture() {
         val ready = androidx.compose.runtime.mutableStateOf<PdfSelectablePage?>(null)
         val loading = androidx.compose.runtime.mutableStateOf(true)
+        val ownership = mutableListOf<Boolean>()
         rule.setContent {
             Box(Modifier.size(300.dp, 400.dp)) {
                 PdfHighlightLayer(
@@ -312,21 +468,61 @@ class PdfTextHighlightGestureTest {
                     textLoading = loading.value,
                     onSelectionUnavailable = { unavailable += Unit },
                     onSelectCompleted = { saved += it },
+                    onSelectionGestureActiveChanged = { ownership += it },
                     modifier = Modifier.testTag("page"),
                 )
             }
         }
         rule.onNodeWithTag("page").performTouchInput {
-            down(Offset(width * .15f, height * .22f)); advanceEventTime(700); up()
+            down(Offset(width * .15f, height * .22f)); advanceEventTime(700)
         }
+        rule.mainClock.advanceTimeBy(700)
         rule.runOnIdle {
             assertTrue("no re-press prompt while extraction is pending", unavailable.isEmpty())
+            assertEquals("the long press must start before publishing ready", listOf(true), ownership)
         }
         rule.runOnIdle { ready.value = page; loading.value = false }
         rule.waitForIdle()
+        rule.onNodeWithTag("page").performTouchInput {
+            moveTo(Offset(width * .325f, height * .225f)); up()
+        }
         rule.onNodeWithTag("pdf-selection-actions").assertExists()
+        rule.runOnIdle { assertEquals(listOf(true, false), ownership) }
         rule.onNodeWithTag("pdf-selection-action-highlight").performClick()
-        rule.runOnIdle { assertEquals("A", saved.single().excerpt) }
+        rule.runOnIdle { assertEquals("AB", saved.single().excerpt) }
+    }
+
+    @Test fun textReadyBeforeLongPressTimeoutStillUsesTheOriginalPointerStream() {
+        val ready = androidx.compose.runtime.mutableStateOf<PdfSelectablePage?>(null)
+        val loading = androidx.compose.runtime.mutableStateOf(true)
+        val ownership = mutableListOf<Boolean>()
+        rule.setContent {
+            Box(Modifier.size(300.dp, 400.dp)) {
+                PdfHighlightLayer(
+                    pageIndex = 0,
+                    items = emptyList(),
+                    selectionEnabled = true,
+                    textPage = ready.value,
+                    textLoading = loading.value,
+                    onSelectionUnavailable = { unavailable += Unit },
+                    onSelectCompleted = { saved += it },
+                    onSelectionGestureActiveChanged = { ownership += it },
+                    modifier = Modifier.testTag("page"),
+                )
+            }
+        }
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width * .15f, height * .22f)); advanceEventTime(100)
+        }
+        rule.runOnIdle { ready.value = page; loading.value = false }
+        rule.onNodeWithTag("page").performTouchInput {
+            advanceEventTime(700)
+            moveTo(Offset(width * .325f, height * .225f)); up()
+        }
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+        rule.runOnIdle { assertEquals(listOf(true,false),ownership) }
+        rule.onNodeWithTag("pdf-selection-action-highlight").performClick()
+        rule.runOnIdle { assertEquals("AB",saved.single().excerpt) }
     }
 
     @Test fun longPressOnScannedPageWithoutTextReportsOnceInsteadOfWaiting() {
@@ -366,5 +562,97 @@ class PdfTextHighlightGestureTest {
             down(Offset(width*.15f,height*.22f));advanceEventTime(700);up()
         }
         rule.runOnIdle { assertEquals(1, unavailable.size); assertTrue(saved.isEmpty()) }
+    }
+
+    @Test fun zoomedHandleStartsDraggingAtTheSameScreenTouchSlop() {
+        show(
+            pageScale = 2.5f,
+            loupeSource = PdfSelectionLoupeSource(StubImageBitmap, colorFilter = null),
+            selectionRange = PdfTextSelectionRange(PdfSelectablePage.Hit(0, 0), PdfSelectablePage.Hit(0, 0)),
+        )
+        val pageBounds = rule.onNodeWithTag("page").fetchSemanticsNode().boundsInRoot
+        val handleBounds = rule.onNodeWithTag("pdf-selection-handle-focus").fetchSemanticsNode().boundsInRoot
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val physicalSlop = android.view.ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+        rule.onNodeWithTag("page").performTouchInput {
+            down(handleBounds.center - pageBounds.topLeft)
+            moveBy(Offset(0f, physicalSlop * 1.25f))
+        }
+        rule.onNodeWithTag("pdf-selection-loupe").assertExists()
+        rule.runOnIdle { assertTrue(saved.isEmpty()) }
+        rule.onNodeWithTag("page").performTouchInput { up() }
+        rule.onNodeWithTag("pdf-selection-loupe").assertDoesNotExist()
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+    }
+
+    @Test fun draggingASelectionShowsTheLoupeAndReleasingHidesIt() {
+        show(loupeSource = PdfSelectionLoupeSource(StubImageBitmap, colorFilter = null))
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width*.15f,height*.22f));advanceEventTime(700)
+            moveTo(Offset(width*.32f,height*.22f))
+        }
+        rule.onNodeWithTag("pdf-selection-loupe").assertExists()
+        rule.onNodeWithTag("page").performTouchInput { up() }
+        rule.onNodeWithTag("pdf-selection-loupe").assertDoesNotExist()
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+    }
+
+    @Test fun loupeDoesNotAppearWithoutPagePixels() {
+        show()
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width*.15f,height*.22f));advanceEventTime(700)
+            moveTo(Offset(width*.2f,height*.22f))
+        }
+        rule.onNodeWithTag("pdf-selection-loupe").assertDoesNotExist()
+        rule.onNodeWithTag("page").performTouchInput { up() }
+    }
+
+    @Test fun longPressWithoutMovementDoesNotFlashTheLoupe() {
+        show(loupeSource = PdfSelectionLoupeSource(StubImageBitmap, colorFilter = null))
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width*.15f,height*.22f));advanceEventTime(700);up()
+        }
+        rule.onNodeWithTag("pdf-selection-loupe").assertDoesNotExist()
+        rule.onNodeWithTag("pdf-selection-actions").assertExists()
+    }
+
+    @Test fun handleDragAlsoShowsTheLoupe() {
+        show(loupeSource = PdfSelectionLoupeSource(StubImageBitmap, colorFilter = null))
+        rule.onNodeWithTag("page").performTouchInput {
+            down(Offset(width*.15f,height*.22f));advanceEventTime(700);up()
+        }
+        rule.onNodeWithTag("pdf-selection-loupe").assertDoesNotExist()
+        rule.onNodeWithTag("page").performTouchInput {
+            val range=PdfTextSelectionRange(PdfSelectablePage.Hit(0,0),PdfSelectablePage.Hit(0,0))
+            val focus=PdfTextSelectionGeometry.handles(
+                page, range, width.toFloat(), height.toFloat(), 12.5f*rule.density.density,
+            ).single { it.handle == PdfSelectionHandle.FOCUS }
+            val bRect=page.lines[0].glyphs[1].rect
+            val bEndTipX=(bRect.x+bRect.width)*page.width
+            down(Offset(focus.x,focus.y));advanceEventTime(50)
+            moveTo(Offset(focus.x+bEndTipX-focus.tipX,focus.y))
+        }
+        rule.onNodeWithTag("pdf-selection-loupe").assertExists()
+        rule.onNodeWithTag("page").performTouchInput { up() }
+        rule.onNodeWithTag("pdf-selection-loupe").assertDoesNotExist()
+    }
+
+    /** Robolectric's LEGACY graphics cannot allocate real bitmaps; only size is read here. */
+    private object StubImageBitmap : androidx.compose.ui.graphics.ImageBitmap {
+        override val width = 60
+        override val height = 80
+        override val config = androidx.compose.ui.graphics.ImageBitmapConfig.Argb8888
+        override val colorSpace = androidx.compose.ui.graphics.colorspace.ColorSpaces.Srgb
+        override val hasAlpha = true
+        override fun readPixels(
+            buffer: IntArray,
+            startX: Int,
+            startY: Int,
+            width: Int,
+            height: Int,
+            bufferOffset: Int,
+            stride: Int,
+        ) = Unit
+        override fun prepareToDraw() = Unit
     }
 }

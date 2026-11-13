@@ -8,7 +8,7 @@
 
 需要 JDK 17、Gradle Wrapper 9.5.0、Android SDK Platform 对应 compileSdk 37、Build Tools 36.0.0 与 platform-tools。系统最低 Android 12/API 31。先按本机 SDK Manager 确认可用的 Platform 37 包名称；工作区旧 README 使用 `platforms;android-37.0` 的安装包写法。
 
-本工作区 [reader-env-local.ps1](../../../reader-env-local.ps1) 将 JAVA_HOME、GRADLE_USER_HOME、ANDROID_HOME/ANDROID_SDK_ROOT 与 AVD 目录配置到 `.build-tools/`，并检查 Java、ADB 和 Wrapper 缓存。脚本在仓库外，因此只克隆 `reader/` 时需要自行提供等价工具链。
+本工作区宿主脚本 `D:\03_M1racle Reader\reader-env-local.ps1` 将 JAVA_HOME、GRADLE_USER_HOME、ANDROID_HOME/ANDROID_SDK_ROOT 与 AVD 目录配置到 `.build-tools/`，并检查 Java、ADB 和 Wrapper 缓存。该 helper 位于当前仓库外，不是源码链接；只克隆当前仓库时需要自行提供等价工具链。
 
 ## 本工作区 Windows 入口
 
@@ -27,7 +27,7 @@
 
 `Reader构建.cmd` 是参数透传包装；脚本没有自动 bump versionCode，版本须通过 `app/version.properties` 显式修改。
 
-统一检查脚本在 `reader/` 执行：
+统一检查脚本在当前仓库 `reader-ui-release-20261025/` 执行：
 
 ```powershell
 .\scripts\verify-reader.ps1 -Mode Reading

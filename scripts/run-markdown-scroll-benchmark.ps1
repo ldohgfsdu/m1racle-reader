@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$AdbPath,
+    [string]$Aapt2Path,
     [string]$Serial,
     [string]$ApkPath = "app\build\outputs\apk\qa\app-qa.apk",
     [string]$OutputRoot = "dist\performance"
@@ -8,6 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "app-data-safety-common.ps1")
+. (Join-Path $PSScriptRoot "reader-script-contracts.ps1")
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $targetApplicationId = "com.m1racle.reader.qa"
@@ -21,25 +23,20 @@ if ($targetApplicationId -ne $script:QaApplicationId) {
     throw "REFUSED: only applicationId=$($script:QaApplicationId) is allowed."
 }
 
-$adb = Resolve-AdbPath $AdbPath
-$adbPrefix = @()
-if ($Serial) { $adbPrefix = @("-s", $Serial) }
-function Adb([string[]]$Arguments) {
-    Invoke-AdbText $adb ($adbPrefix + $Arguments)
-}
-
 $resolvedApk = Join-Path $projectRoot $ApkPath
 if ([System.IO.Path]::IsPathRooted($ApkPath)) { $resolvedApk = $ApkPath }
 if (-not (Test-Path -LiteralPath $resolvedApk -PathType Leaf)) {
     throw "QA APK not found: $resolvedApk. Run :app:assembleQa first."
 }
+$resolvedAapt2 = Resolve-ReaderAapt2Path $Aapt2Path $projectRoot
+$actualApplicationId = Assert-ReaderQaApkIdentity $resolvedAapt2 $resolvedApk $targetApplicationId
+Write-Host "MARKDOWN_BENCHMARK_APK applicationId=$actualApplicationId path=$resolvedApk"
 
-$metadataPath = Join-Path (Split-Path -Parent $resolvedApk) "output-metadata.json"
-if (Test-Path -LiteralPath $metadataPath) {
-    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-    if ([string]$metadata.applicationId -ne $targetApplicationId) {
-        throw "REFUSED: APK metadata applicationId=$($metadata.applicationId), expected $targetApplicationId."
-    }
+$adb = Resolve-AdbPath $AdbPath
+$adbPrefix = @()
+if ($Serial) { $adbPrefix = @("-s", $Serial) }
+function Adb([string[]]$Arguments) {
+    Invoke-AdbText $adb ($adbPrefix + $Arguments)
 }
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -54,6 +51,10 @@ try {
     $install = Adb (@("install", "-r", $resolvedApk))
     if ($install -notmatch "Success") { throw "QA install failed: $install" }
     $installedQa = $true
+    $installedApplicationId = Adb @("shell", "dumpsys", "package", $targetApplicationId)
+    if ($installedApplicationId -notmatch "Package \[$([regex]::Escape($targetApplicationId))\]") {
+        throw "REFUSED: installed package identity does not match $targetApplicationId."
+    }
     if ((Adb @("shell", "pm", "path", $protectedApplicationId)) -match "package:") {
         Write-Host "MAIN_PACKAGE_SAFETY applicationId=$protectedApplicationId remainsInstalled=true"
     }

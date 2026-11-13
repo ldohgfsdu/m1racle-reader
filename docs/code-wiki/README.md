@@ -1,14 +1,14 @@
 # Code Wiki 阅读入口
 
-这套中文文档说明 M1racle Reader 的实际代码结构、关键接口、数据流、依赖与运行方式。初次分析：2026-10-13；最近同步：**2026-10-14（Asia/Shanghai）**。
+这套中文文档说明 M1racle Reader 的实际代码结构、关键接口、数据流、依赖与运行方式。初次分析：2026-10-13；最近同步：**2026-11-13（Asia/Shanghai）**。
 
 ## 基准与事实来源
 
-- Git 工程根：工作区的 `reader/`；本文中的工程路径均相对此目录。
-- 源码版本以 [扫描基准](reference/snapshot.md) 为准；实际交付及验证范围以 [当前状态](../CURRENT_STATUS.md) 为准，源码版本号不证明整个工作区已进入对应APK。
+- 当前 Git 工程根：`D:/03_M1racle Reader/reader-ui-release-20261025`。本文中的工程路径均相对此目录，旧工作树、`output/` 与既有 APK 不作为当前源码链接目标。
+- 当前源码规模、版本、HEAD 与摘要以 [扫描基准](reference/snapshot.md) 为准；实际交付及验证范围以 [当前状态](../CURRENT_STATUS.md) 为准，源码版本号不证明整个工作区已进入对应 APK。
 - `AppDatabase` 与导出的 `17.json`：数据库版本 17，共 9 张业务表。
-- 当前分析包含未提交修改；HEAD 为 `1150aa6`。本 Wiki 不把 HEAD 当作完整工作树快照。
-- 核心分析对象为生产源码、构建配置、Manifest、测试代码与本机运行脚本；外围 `output/` 中的第三方研究仓库、虚拟环境、缓存和备份不计入应用代码。
+- 当前分析包含未提交修改；具体 HEAD 以 [扫描基准](reference/snapshot.md) 为准。本 Wiki 不把 HEAD 当作完整工作树快照。
+- 核心分析对象为当前 `app`、`core/model`、`core/database`、`core/pdf`、独立 `pdf-tool`、`benchmark`、构建配置、Manifest、测试与本机运行脚本；外围 `output/` 中的第三方研究仓库、虚拟环境、缓存和备份不计入当前源码。
 - 各源集文件数、文本行数与输入摘要统一见 [生成信息](reference/snapshot.md)，只描述扫描时的规模，不衡量复杂度或测试质量。
 
 ## 文档目录
@@ -33,11 +33,11 @@
 
 | 参考 | 用途 |
 |---|---|
-| [源码索引](reference/source-index.md) | 覆盖 main、production、qa、debug 及 benchmark 源码，列出文件、声明与非 private 函数定位 |
-| [包依赖索引](reference/package-dependencies.md) | 根据显式内部 import 汇总包级依赖；与理想分层区分 |
+| [源码索引](reference/source-index.md) | 覆盖当前 app、core、pdf-tool 与 benchmark 的生产源码，列出文件、声明与非 private 函数定位 |
+| [包依赖索引](reference/package-dependencies.md) | 根据当前生产源码的显式内部 import 汇总包级依赖；与理想分层区分 |
 | [数据库字典](reference/database-schema.md) | 从 Room v17 导出文件读取字段、类型、空值、索引、外键 |
-| [测试索引](reference/test-index.md) | 全部测试文件及文本 `@Test` 数量，按源集与包组织 |
-| [扫描与验证信息](reference/snapshot.md) | 版本、规模、生成时间、源码摘要和静态校验结果入口 |
+| [测试索引](reference/test-index.md) | 当前 app、core、pdf-tool 与 benchmark 的测试文件及文本 `@Test` 数量，按源集与包组织 |
+| [扫描与验证信息](reference/snapshot.md) | 当前版本、规模、生成时间、源码摘要和本轮静态校验结果入口 |
 
 建议首次阅读顺序：01 → 02 → 03 → 04 → 需要研究的阅读器 → 10 → 11。带具体问题接手时，从 12 的调用链或源码索引进入。
 
@@ -49,4 +49,4 @@
 
 Wiki 生成后的应用验证和修复另见 [稳定性核查](../STABILIZATION_20261013.md)；其运行结果不混入本 Wiki 静态引用校验的统计。
 
-本Wiki最初索引来自74工作树，当前交付和验收以 [CURRENT_STATUS](../CURRENT_STATUS.md) 为准。顶栏说明已更新为77原生高斯连续过渡；全量和52项原生、正式日夜模拟器流程通过，手机77和用户最终观感待验。见 [77报告](../MARKDOWN_TOPBAR_NATIVE_TRANSITION_20261014.md)。
+本 Wiki 最初索引来自 74 工作树，保留其历史正文与 [旧 validation.json](reference/validation.json) 作为追溯材料；旧索引中的迁移源码路径已更新到当前模块位置，真正移除的源码只保留明确标注的历史代码路径。当前源码索引、规模和静态引用结果分别以 [source-index](reference/source-index.md)、[snapshot](reference/snapshot.md) 和 [validation-current.json](reference/validation-current.json) 为准。旧 `validation.json` 的 PASS 不属于本轮结果。当前交付和验收仍以 [CURRENT_STATUS](../CURRENT_STATUS.md) 为准；历史 77 报告见 [原生高斯连续过渡](../MARKDOWN_TOPBAR_NATIVE_TRANSITION_20261014.md)。
