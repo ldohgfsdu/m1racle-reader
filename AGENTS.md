@@ -93,6 +93,10 @@ Android 本地优先文档阅读器：Markdown、PDF 与有限 EPUB。
 - **覆盖旧文件，无需用户额外提示**
 - 这是构建流程的一部分，不是可选操作
 
+## GitHub 自动正式发版
+
+仅允许 master 上显式 `[publish]` 提交或 workflow_dispatch 的 `publish=true` 触发。完整发布门禁见 [RELEASE_AUTOMATION](docs/RELEASE_AUTOMATION.md)；无原正式签名密钥、递增版本、真实测试或远端回读时不得公开发布。CI 测试及工作流配置本身不构成一次新 APK 发版。
+
 ## Device install / ADB (required for any real-device claim)
 
 **Read:** `docs/DEVICE_INSTALL_AND_ADB_TEST.md` and `docs/APK_DELIVERY.md`.
