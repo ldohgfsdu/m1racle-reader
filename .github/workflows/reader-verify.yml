@@ -1,0 +1,60 @@
+name: Reader QA and Release verification
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reader-verify-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Install exact Android SDK requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          manager=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          test -x "$manager"
+          "$manager" "platforms;android-37" "build-tools;36.0.0"
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+
+      - name: Verify bundled offline Markdown editor matches source
+        run: ./gradlew :app:verifyMarkdownEditorBundle --no-daemon --max-workers=1 --console=plain
+
+      - name: Full QA and Release unit suites plus production lint
+        run: ./gradlew :app:testQaUnitTest :app:testReleaseUnitTest :app:lintRelease --no-daemon --max-workers=1 --console=plain
+
+      - name: Preserve test and lint evidence on pass or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reader-qa-release-verification-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            app/build/test-results/testQaUnitTest/
+            app/build/test-results/testReleaseUnitTest/
+            app/build/reports/tests/
+            app/build/reports/lint-results-release.*
+            core/pdf/build/test-results/
+            core/pdf/build/reports/
