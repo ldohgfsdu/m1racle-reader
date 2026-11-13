@@ -9,25 +9,70 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
-  group: reader-verify-${{ github.ref }}
-  cancel-in-progress: false
+  group: reader-verify-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  # Only superseded PR revisions may be cancelled. Every master commit must finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code_changed: ${{ steps.scope.outputs.code_changed }}
+    steps:
+      # Do not use workflow-level paths-ignore: a skipped required workflow check
+      # remains pending. Keep the final "verify" check present on docs-only PRs.
+      - name: Detect documentation-only PR changes
+        id: scope
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "code_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # API pagination handles PRs with more than 100 changed files.
+          changed_files=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename')
+          if [[ -z "$changed_files" ]]; then
+            # Fail closed: never skip validation if the changed-file list is empty.
+            echo "code_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          code_changed=false
+          while IFS= read -r file; do
+            case "$file" in
+              README|README.*|docs/*) ;;
+              *) code_changed=true; break ;;
+            esac
+          done <<< "$changed_files"
+          echo "code_changed=$code_changed" >> "$GITHUB_OUTPUT"
+          if [[ "$code_changed" == "false" ]]; then
+            echo "Documentation-only PR: expensive Android jobs skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  unit-tests:
+    needs: changes
+    if: ${{ needs.changes.outputs.code_changed == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
-
+      # setup-gradle already manages Gradle dependencies/caches. Do not also
+      # enable setup-java's Gradle cache.
       - uses: gradle/actions/setup-gradle@v6
-
       - name: Install exact Android SDK requirements
         shell: bash
         run: |
@@ -37,20 +82,11 @@ jobs:
           "$manager" "platforms;android-37.0" "build-tools;36.0.0" --channel=3
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
           chmod +x gradlew
-
-      - name: Verify bundled offline Markdown editor matches source
-        run: ./gradlew :app:verifyMarkdownEditorBundle --no-daemon --max-workers=1 --console=plain
-
       # CI runner has more memory than the constrained local Windows setup.
-      # Override Gradle's 384 MiB metaspace cap only for these CI invocations:
-      # run 43418148592 ended with OutOfMemoryError: Metaspace in lintAnalyzeRelease.
-      - name: Full QA and Release unit suites
-        run: ./gradlew :app:testQaUnitTest :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
-
-      - name: Production release lint
-        run: ./gradlew :app:lintRelease --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
-
-      - name: Preserve test and lint evidence on pass or failure
+      # The 1024 MiB metaspace limit avoids the historic lintAnalyzeRelease OOM.
+      - name: Verify Markdown bundle and run QA/Release unit suites
+        run: ./gradlew :app:verifyMarkdownEditorBundle :app:testQaUnitTest :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
+      - name: Preserve unit-test evidence on pass or failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -61,6 +97,71 @@ jobs:
             app/build/test-results/testQaUnitTest/
             app/build/test-results/testReleaseUnitTest/
             app/build/reports/tests/
-            app/build/reports/lint-results-release.*
             core/pdf/build/test-results/
             core/pdf/build/reports/
+
+  lint:
+    needs: changes
+    if: ${{ needs.changes.outputs.code_changed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Install exact Android SDK requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          manager=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          test -x "$manager"
+          "$manager" "platforms;android-37.0" "build-tools;36.0.0" --channel=3
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+      - name: Production release lint
+        run: ./gradlew :app:lintRelease --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
+      - name: Preserve lint evidence on pass or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reader-qa-release-lint-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            app/build/reports/lint-results-release.*
+
+  verify:
+    # Preserve the existing required-check name as the aggregation gate.
+    if: always()
+    needs: [changes, unit-tests, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all applicable verification jobs to pass
+        shell: bash
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CODE_CHANGED: ${{ needs.changes.outputs.code_changed }}
+          TEST_RESULT: ${{ needs.unit-tests.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "Changed-file detection failed."
+            exit 1
+          fi
+          if [[ "$CODE_CHANGED" == "false" &&
+                "$TEST_RESULT" == "skipped" &&
+                "$LINT_RESULT" == "skipped" ]]; then
+            echo "Documentation-only PR verified without Android builds."
+            exit 0
+          fi
+          if [[ "$CODE_CHANGED" != "true" ||
+                "$TEST_RESULT" != "success" ||
+                "$LINT_RESULT" != "success" ]]; then
+            echo "Full verification incomplete: tests=$TEST_RESULT lint=$LINT_RESULT"
+            exit 1
+          fi
+          echo "Unit tests and release lint both passed."
