@@ -12,7 +12,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: reader-verify-${{ github.ref }}
+  group: reader-verify-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   # Only superseded PR revisions may be cancelled. Every master commit must finish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -82,12 +82,10 @@ jobs:
           "$manager" "platforms;android-37.0" "build-tools;36.0.0" --channel=3
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
           chmod +x gradlew
-      - name: Verify bundled offline Markdown editor matches source
-        run: ./gradlew :app:verifyMarkdownEditorBundle --no-daemon --max-workers=1 --console=plain
       # CI runner has more memory than the constrained local Windows setup.
       # The 1024 MiB metaspace limit avoids the historic lintAnalyzeRelease OOM.
-      - name: Full QA and Release unit suites
-        run: ./gradlew :app:testQaUnitTest :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
+      - name: Verify Markdown bundle and run QA/Release unit suites
+        run: ./gradlew :app:verifyMarkdownEditorBundle :app:testQaUnitTest :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
       - name: Preserve unit-test evidence on pass or failure
         if: always()
         uses: actions/upload-artifact@v4
