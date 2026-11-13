@@ -1,0 +1,67 @@
+name: Reader QA emulator baseline
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "app/src/main/**"
+      - "app/build.gradle.kts"
+      - "tools/reader_qa_baseline.py"
+      - "tools/tests/test_reader_qa_baseline.py"
+      - ".github/workflows/reader-qa-emulator.yml"
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reader-qa-emulator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test startup timing and UI negative controls
+        run: python3 -m unittest discover -s tools/tests -p 'test_reader_qa_baseline.py' -v
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Allow KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build isolated QA and capture actual emulator startup and home screens
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -eu
+            sdkmanager "platforms;android-37.0" "build-tools;36.0.0" --channel=3
+            printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+            chmod +x gradlew
+            ./gradlew :app:assembleQa --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
+            python3 tools/reader_qa_baseline.py --apk app/build/outputs/apk/qa/app-qa.apk
+
+      - name: Upload startup measurements, light/dark screenshots and device logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reader-qa-emulator-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: output/reader-qa-baseline/
