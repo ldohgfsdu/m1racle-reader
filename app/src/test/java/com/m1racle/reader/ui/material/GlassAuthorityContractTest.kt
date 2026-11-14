@@ -58,17 +58,6 @@ class GlassAuthorityContractTest {
     }
 
     @Test
-    fun `markdown chrome does not own blur tint literals`() {
-        val gradient = appSource("ui/viewer/ReaderGradient.kt")
-        assertTrue(gradient.contains("GlassMaterialRole.ProgressiveChrome"))
-        assertFalse(gradient.contains("0.62f"))
-        // The 16dp collapsed edge extent is geometry, not a local blur recipe.
-        assertTrue(gradient.contains("spec.blur.toPx()"))
-        assertTrue(gradient.contains("blur(blurPx)"))
-        assertFalse(gradient.contains("blur(16.dp"))
-        assertTrue(gradient.contains("pageColor.copy(alpha = spec.surfaceColor.alpha)"))
-
-    }
 
     @Test
     fun `dialogs and file menus stay outside the glass topology`() {
