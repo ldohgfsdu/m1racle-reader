@@ -84,28 +84,8 @@ jobs:
           chmod +x gradlew
       # CI runner has more memory than the constrained local Windows setup.
       # The 1024 MiB metaspace limit avoids the historic lintAnalyzeRelease OOM.
-      - name: Verify Markdown bundle and run the Release unit suite
-        run: ./gradlew :app:verifyMarkdownEditorBundle :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
-      # The Release suite above already executed every class declared in
-      # app/src/test under production BuildConfig flags. Re-running those same
-      # cases as the QA variant repeated 1309 tests for no additional signal,
-      # so this task is scoped to the classes that exist only in app/src/testQa
-      # (Robolectric host and Compose UI tests). The list is derived from the
-      # source tree, so adding a QA test needs no workflow edit.
-      - name: Run the QA-only unit suite
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t classes < <( { grep -rl '@Test' app/src/testQa --include='*.kt' || true; } \
-            | sed -e 's#^app/src/testQa/java/##' -e 's#/#.#g' -e 's#\.kt$##' | sort )
-          if [ "${#classes[@]}" -eq 0 ]; then
-            echo "No QA-only test classes found under app/src/testQa." >&2
-            exit 1
-          fi
-          echo "QA-only classes: ${#classes[@]}"
-          args=()
-          for c in "${classes[@]}"; do args+=(--tests "$c"); done
-          ./gradlew :app:testQaUnitTest "${args[@]}" --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
+      - name: Verify Markdown bundle and run QA/Release unit suites
+        run: ./gradlew :app:verifyMarkdownEditorBundle :app:testQaUnitTest :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
       - name: Preserve unit-test evidence on pass or failure
         if: always()
         uses: actions/upload-artifact@v4
