@@ -58,8 +58,6 @@ class GlassAuthorityContractTest {
     }
 
     @Test
-
-    @Test
     fun `dialogs and file menus stay outside the glass topology`() {
         val dialog = appSource("ui/material/GlassAlertDialog.kt")
         assertTrue(dialog.contains("GlassMaterialRole.Dialog"))
