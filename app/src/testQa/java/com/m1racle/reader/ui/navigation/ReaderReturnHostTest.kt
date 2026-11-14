@@ -140,7 +140,8 @@ class ReaderReturnHostTest {
 
     @Test fun closingAnyReaderNeverLeavesOutgoingReaderBehindNewDock() {
         start()
-        for (route in listOf(Routes.viewer("absent"), Routes.pdfViewer("absent"), Routes.epubViewer("absent"))) {
+        // The Markdown viewer route no longer exists; PDF and EPUB are the remaining readers.
+        for (route in listOf(Routes.pdfViewer("absent"), Routes.epubViewer("absent"))) {
             rule.runOnIdle { nav.navigate(route) }
             rule.waitForIdle()
             rule.onNodeWithTag("dock-import").assertDoesNotExist()
@@ -150,7 +151,7 @@ class ReaderReturnHostTest {
                 rule.mainClock.advanceTimeByFrame()
                 if (rule.onAllNodesWithTag("dock-import").fetchSemanticsNodes().isNotEmpty()) rule.runOnIdle {
                     assertTrue("outgoing reader must be disposed when hub dock appears",
-                        nav.visibleEntries.value.none { it.destination.route in listOf(Routes.VIEWER, Routes.PDF_VIEWER, Routes.EPUB_VIEWER) })
+                        nav.visibleEntries.value.none { it.destination.route in listOf(Routes.PDF_VIEWER, Routes.EPUB_VIEWER) })
                 }
             }
             rule.mainClock.autoAdvance = true

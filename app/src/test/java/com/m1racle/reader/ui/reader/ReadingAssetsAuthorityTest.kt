@@ -13,7 +13,8 @@ class ReadingAssetsAuthorityTest {
 
     @Test
     fun `reader screens never touch dao - only the controller`() {
-        for (name in listOf("PdfViewerScreen.kt", "ViewerScreen.kt")) {
+        // Only the PDF reader survives; the Markdown reader was retired with batch A.
+        for (name in listOf("PdfViewerScreen.kt")) {
             val src = norm(readerSource(name))
             assertFalse("$name must not import DAOs", src.contains("data.local.BookmarkDao"))
             assertFalse("$name must not use ReadingRepository directly", src.contains("ReadingRepository"))
@@ -26,9 +27,7 @@ class ReadingAssetsAuthorityTest {
     fun `controller is constructed in nav graph with per reader coordinate systems`() {
         val nav = norm(source("com/m1racle/reader/ui/navigation/NavGraph.kt"))
         val pdfCount = Regex("BookmarkLocationKind.PAGE_INDEX").findAll(nav).count()
-        val mdCount = Regex("BookmarkLocationKind.SCROLL_POSITION").findAll(nav).count()
         assertTrue("PDF route must wire PAGE_INDEX controller", pdfCount >= 1)
-        assertTrue("Markdown route must wire SCROLL_POSITION controller", mdCount >= 1)
         assertTrue(nav.contains("ReaderBookmarkController("))
     }
 

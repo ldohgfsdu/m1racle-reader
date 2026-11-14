@@ -116,17 +116,13 @@ class SearchExperienceIntegrationTest {
 
     @Test
     fun `search routes round trip canonical anchors and reuse reader authorities`() {
+        // Markdown anchors left with the Markdown reader; PDF is the surviving coordinate system.
         val pdf = DocumentAnchor.PdfPage(page = 12)
-        val markdown = DocumentAnchor.MarkdownBlock(blockIndex = 8, charStart = 1, charEnd = 5)
         assertEquals(pdf, Routes.decodeAnchor(Routes.pdfViewer("pdf", pdf).substringAfter("anchor=")))
-        assertEquals(markdown, Routes.decodeAnchor(Routes.viewer("md", markdown).substringAfter("anchor=")))
-        assertEquals("viewer/md", Routes.viewer("md"))
 
         val nav = source("ui/navigation/NavGraph.kt")
-        val viewer = source("ui/viewer/ViewerScreen.kt")
         val pdfViewer = source("ui/pdf/PdfViewerScreen.kt")
         assertTrue(nav.contains("openDocument(navController, document, result.anchor)"))
-        assertTrue(viewer.contains("scrollToBlockIndex("))
         assertTrue(pdfViewer.contains("viewModel.goToPage(target.page)"))
     }
 

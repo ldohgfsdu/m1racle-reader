@@ -82,9 +82,6 @@ class GlassAuthorityContractTest {
         assertFalse(row.contains("GlassMaterialEngine"))
         assertFalse(row.contains("GlassMaterialRole.Dock"))
         assertFalse(row.contains(".glassMaterial("))
-        val viewer = appSource("ui/viewer/ViewerScreen.kt")
-        assertTrue(viewer.contains("sampleBackdrop = false"))
-        assertTrue(viewer.contains("GlassMaterialRole.ExpandedMenu"))
     }
 
     @Test
@@ -111,7 +108,8 @@ class GlassAuthorityContractTest {
         val outlinedIcons = Regex("leadingIcon\\s*=\\s*\\{ Icon\\(Icons\\.Outlined\\.").findAll(source).count()
         val divider = source.indexOf("HorizontalDivider(")
         val remove = source.indexOf("Icons.Outlined.RemoveCircleOutline")
-        return outlinedIcons >= 5 && divider >= 0 && remove > divider
+        // Four actions remain after "编辑正文" retired with the Markdown reader.
+        return outlinedIcons >= 4 && divider >= 0 && remove > divider
     }
 
     private fun appSource(relative: String): String =

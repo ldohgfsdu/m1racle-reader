@@ -17,7 +17,7 @@ class R33ProductIdentityMigrationTest {
 
         assertTrue(appBuild.contains("namespace = \"com.m1racle.reader\""))
         assertTrue(appBuild.contains("applicationId = \"com.m1racle.reader\""))
-        assertTrue(benchmarkBuild.contains("namespace = \"com.m1racle.reader.benchmark\""))
+        assertTrue(benchmarkBuild.contains("namespace = \"com.m1racle.reader.benchmark.host\""))
         assertTrue(settings.contains("rootProject.name = \"m1racle-reader\""))
     }
 

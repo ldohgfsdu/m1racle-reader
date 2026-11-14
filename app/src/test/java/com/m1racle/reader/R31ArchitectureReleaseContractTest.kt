@@ -110,10 +110,6 @@ class R31ArchitectureReleaseContractTest {
     @Test
     fun `removed compatibility-only members stay deleted`() {
         assertFalse(source("core/model/PdfRenderQuality.kt").contains("MAX_RENDER_WIDTH_PX"))
-        assertFalse(
-            source("ui/viewer/components/MarkdownTableLayout.kt")
-                .contains("maximumWideCompressionFraction"),
-        )
     }
 
     private fun projectRoot(): File = ProductionSource.repositoryRoot()

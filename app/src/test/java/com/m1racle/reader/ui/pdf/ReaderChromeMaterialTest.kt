@@ -184,7 +184,8 @@ class ReaderChromeMaterialTest {
         val outlinedIcons = Regex("leadingIcon\\s*=\\s*\\{ Icon\\(Icons\\.Outlined\\.").findAll(source).count()
         val divider = source.indexOf("HorizontalDivider(")
         val remove = source.indexOf("Icons.Outlined.RemoveCircleOutline")
-        return outlinedIcons >= 5 && divider >= 0 && remove > divider
+        // Four actions remain after "编辑正文" retired with the Markdown reader.
+        return outlinedIcons >= 4 && divider >= 0 && remove > divider
     }
 
     private fun source(name: String): String = appSource(

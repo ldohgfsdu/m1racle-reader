@@ -64,9 +64,6 @@ class GlassOpticalPolicyTest {
             modifier.indexOf("GlassMaterialEngine.resolve("))
         assertTrue(modifier.contains("sampleBackdrop = sampleBackdrop"))
         assertTrue(modifier.contains("supportsLens = supportsGlassLens(shape)"))
-        val gradient = ProductionSource.text("com/m1racle/reader/ui/viewer/ReaderGradient.kt")
-        assertTrue(gradient.contains("GlassCapability.SOLID_FALLBACK) Modifier"))
-        assertTrue(gradient.contains("if (spec.vibrancy) vibrancy()"))
     }
 
     @Test
