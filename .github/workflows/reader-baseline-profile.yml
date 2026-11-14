@@ -19,6 +19,7 @@ on:
     branches: [chore/deps-prune-20261108]
     paths:
       - ".github/workflows/reader-baseline-profile.yml"
+      - "benchmark/build.gradle.kts"
       - "benchmark/src/main/java/com/m1racle/reader/benchmark/BaselineProfileGenerator.kt"
 
 permissions:
@@ -59,7 +60,10 @@ jobs:
           disable-animations: true
           script: |
             set -eu
-            ./gradlew :benchmark:connectedBenchmarkAndroidTest --no-daemon --max-workers=1 --console=plain "-Pandroid.testInstrumentationRunnerArguments.class=com.m1racle.reader.benchmark.BaselineProfileGenerator" "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
+            ./gradlew :benchmark:connectedBenchmarkAndroidTest --no-daemon --max-workers=1 --console=plain \
+              "-Pandroid.testInstrumentationRunnerArguments.class=com.m1racle.reader.benchmark.BaselineProfileGenerator" \
+              "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR" \
+              "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
       - name: Locate the generated profile
         if: always()
         run: find . -name "baseline-prof*.txt" -newermt "-3 hours" -print -exec wc -l {} \;

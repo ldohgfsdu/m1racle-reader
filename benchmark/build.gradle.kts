@@ -3,7 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "com.m1racle.reader.benchmark"
+    // The instrumentation APK takes its package from the namespace, so it must not
+    // collide with the app-under-test package. :app's benchmark variant installs as
+    // com.m1racle.reader.benchmark (applicationIdSuffix), and sharing that name made
+    // the test APK install fail with INSTALL_FAILED_VERSION_DOWNGRADE.
+    namespace = "com.m1racle.reader.benchmark.host"
     compileSdk = 37
 
     defaultConfig {
