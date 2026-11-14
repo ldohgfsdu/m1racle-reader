@@ -12,6 +12,14 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "37 4 * * 1"
+  # Bootstrap trigger: GitHub only exposes workflow_dispatch for workflows that
+  # exist on the default branch. Until this file lands on master, a push that
+  # touches the generator or this workflow runs it. Remove once merged.
+  push:
+    branches: [chore/deps-prune-20261108]
+    paths:
+      - ".github/workflows/reader-baseline-profile.yml"
+      - "benchmark/src/main/java/com/m1racle/reader/benchmark/BaselineProfileGenerator.kt"
 
 permissions:
   contents: read
