@@ -143,7 +143,7 @@ fun HubSettingsScreen(
     }
 
     if (appearance && repository != null) {
-        com.m1racle.reader.ui.viewer.components.ReaderSettingsSheet(
+        com.m1racle.reader.ui.components.ReaderSettingsSheet(
             settings = settings,
             onFontScale = { update { repository.updateFontScale(it) } },
             onLineHeightScale = { update { repository.updateLineHeightScale(it) } },

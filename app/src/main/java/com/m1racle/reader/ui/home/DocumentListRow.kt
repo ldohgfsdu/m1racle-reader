@@ -142,7 +142,6 @@ internal fun DocumentActionsMenu(
     var renaming by rememberSaveable(document.id) { mutableStateOf(false) }
     var renameText by rememberSaveable(document.id) { mutableStateOf(document.displayName) }
     val operations = LocalDocumentOperations.current
-    val editor = com.m1racle.reader.ui.documents.LocalDocumentEditor.current
     val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument(
             if (document.type == com.m1racle.reader.data.local.DocumentType.MARKDOWN_PACKAGE) "application/zip"
@@ -213,11 +212,6 @@ internal fun DocumentActionsMenu(
         tonalElevation = 0.dp,
         shadowElevation = 6.dp,
     ) {
-        if (editor != null && document.type == com.m1racle.reader.data.local.DocumentType.MARKDOWN) {
-            DropdownMenuItem(text = { DocumentMenuLabel("编辑正文") },
-                leadingIcon = { Icon(Icons.Outlined.Edit, null, Modifier.size(20.dp)) },
-                onClick = { onDismissRequest(); editor(document.id) })
-        }
         if (operations != null) {
             DropdownMenuItem(text = { DocumentMenuLabel("重命名") },
                 leadingIcon = { Icon(Icons.Outlined.DriveFileRenameOutline, null, Modifier.size(20.dp)) },

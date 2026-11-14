@@ -24,7 +24,7 @@ import com.m1racle.reader.epub.*
 import com.m1racle.reader.ui.material.GlassCapability
 import com.m1racle.reader.ui.material.LocalGlassCapability
 import com.m1racle.reader.ui.theme.M1racleReaderTheme
-import com.m1racle.reader.ui.viewer.components.ReaderDisplaySettings
+import com.m1racle.reader.ui.components.ReaderDisplaySettings
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

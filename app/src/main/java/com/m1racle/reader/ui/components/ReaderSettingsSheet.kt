@@ -1,4 +1,4 @@
-package com.m1racle.reader.ui.viewer.components
+package com.m1racle.reader.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState

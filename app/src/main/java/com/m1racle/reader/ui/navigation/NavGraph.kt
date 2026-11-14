@@ -68,8 +68,6 @@ import com.m1racle.reader.ui.pdf.PdfViewerScreen
 import com.m1racle.reader.ui.pdf.PdfViewerViewModel
 import com.m1racle.reader.ui.search.SearchScreen
 import com.m1racle.reader.ui.search.SearchViewModel
-import com.m1racle.reader.ui.viewer.ViewerScreen
-import com.m1racle.reader.ui.viewer.ViewerViewModel
 import java.util.UUID
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -121,9 +119,11 @@ object Routes {
 private fun viewerRouteFor(document: DocumentEntity, anchor: DocumentAnchor? = null): String = when (document.type) {
     DocumentType.PDF -> Routes.pdfViewer(document.id, anchor)
     DocumentType.EPUB -> Routes.epubViewer(document.id)
+    // Unreachable: openDocument returns before this for Markdown. Kept exhaustive so a new
+    // document type cannot silently fall through to the wrong reader.
     DocumentType.MARKDOWN,
     DocumentType.MARKDOWN_PACKAGE,
-    -> Routes.viewer(document.id, anchor)
+    -> Routes.HOME
 }
 
 /**
@@ -144,6 +144,9 @@ private fun openDocument(
     document: DocumentEntity,
     anchor: DocumentAnchor? = null,
 ) {
+    // Markdown reading is out of scope: documents of that type stay listed (their rows and
+    // reading history are user data) but no longer open a reader.
+    if (document.type == DocumentType.MARKDOWN || document.type == DocumentType.MARKDOWN_PACKAGE) return
     navController.popBackStack(Routes.HOME, inclusive = false)
     navController.navigate(viewerRouteFor(document, anchor)) { launchSingleTop = true }
 }
@@ -232,9 +235,6 @@ fun M1racleReaderNavGraph(
         visibleEntries.all { HubDestination.isTopLevelRoute(it.destination.route) }
     CompositionLocalProvider(
         com.m1racle.reader.ui.home.LocalDocumentOperations provides documentOperations,
-        com.m1racle.reader.ui.documents.LocalDocumentEditor provides { id ->
-            navController.navigate(Routes.viewer(id) + "?edit=true") { launchSingleTop = true }
-        },
     ) {
     HubDockMotionProvider(selected = selectedHub) {
         Box(modifier = modifier.fillMaxSize()) {
@@ -367,91 +367,6 @@ fun M1racleReaderNavGraph(
                         com.m1racle.reader.ui.documents.DocumentToolsScreen(repository,
                             onBack = { navController.popBackStack() },
                             onOpen = { openDocument(navController, it) })
-                    }
-
-                    composable(
-                        route = Routes.VIEWER,
-                        arguments = listOf(
-                            navArgument("documentId") {
-                                type = NavType.StringType
-                            },
-                            navArgument("anchor") {
-                                type = NavType.StringType
-                                nullable = true
-                                defaultValue = null
-                            },
-                            navArgument("edit") { type = NavType.BoolType; defaultValue = false },
-                        ),
-                    ) { entry ->
-                        val documentId = entry.arguments?.getString("documentId").orEmpty()
-                        val initialAnchor = Routes.decodeAnchor(entry.arguments?.getString("anchor"))
-                        val sessionId = remember(documentId) { "md-$documentId-${UUID.randomUUID()}" }
-                        // R23 书签中介：Markdown 使用 SCROLL_POSITION 坐标系。
-                        val bookmarkController = remember(documentId) {
-                            readingRepo?.let {
-                                com.m1racle.reader.ui.reader.ReaderBookmarkController(
-                                    readingRepository = it,
-                                    documentId = documentId,
-                                    locationKind = com.m1racle.reader.data.local.BookmarkLocationKind.SCROLL_POSITION,
-                                )
-                            }
-                        }
-                        // P0-1 标注中介：复用与 PDF 同一 Controller → Repository → Anchor 链。
-                        val highlightController = remember(documentId) {
-                            readingRepo?.let {
-                                com.m1racle.reader.ui.reader.ReaderHighlightController(
-                                    readingRepository = it,
-                                    documentId = documentId,
-                                )
-                            }
-                        }
-                        val noteController = remember(documentId) {
-                            readingRepo?.let {
-                                com.m1racle.reader.ui.reader.ReaderNoteController(
-                                    readingRepository = it,
-                                    documentId = documentId,
-                                )
-                            }
-                        }
-                        val viewerViewModel: ViewerViewModel = viewModel(
-                            factory = ViewerViewModel.Factory(
-                                documentId = documentId,
-                                repository = repository,
-                                readerSettingsRepository = readerSettingsRepository,
-                            ),
-                        )
-                        // Single active session: register open/close for external replace bookkeeping.
-                        DisposableEffect(documentId, sessionId, viewerViewModel) {
-                            val c = coordinator
-                            c?.onViewerOpened(documentId, sessionId)
-                            c?.progressFlushHook = { _ ->
-                                // Markdown leave paths flush position; hook is an order barrier only.
-                            }
-                            onDispose {
-                                if (c != null && c.activeViewerSessionId.value == sessionId) {
-                                    c.progressFlushHook = null
-                                }
-                                c?.onViewerClosed(documentId, sessionId)
-                            }
-                        }
-                        CompositionLocalProvider(
-                            com.m1racle.reader.ui.documents.LocalReaderDocumentId provides documentId,
-                        ) {
-                        ViewerScreen(
-                            viewModel = viewerViewModel,
-                            repository = repository,
-                            startEditing = entry.arguments?.getBoolean("edit") == true,
-                            onEditingChanged = { entry.savedStateHandle["markdownEditing"] = it },
-                            onBack = {
-                                navController.popBackStack(Routes.HOME, inclusive = false)
-                            },
-                            bookmarkController = bookmarkController,
-                            highlightController = highlightController,
-                            noteController = noteController,
-                            initialAnchor = initialAnchor,
-                            initialBookmark = Routes.decodeBookmark(entry.arguments?.getString("anchor")),
-                        )
-                        }
                     }
 
                     composable(
