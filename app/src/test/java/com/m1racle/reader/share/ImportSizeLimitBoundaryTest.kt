@@ -165,84 +165,32 @@ class ImportSizeLimitBoundaryTest {
 
     @Test
     fun hint_199MiB_acceptedByBothPaths() = runBlocking {
-        registerStub("b199")
-        StubContentProvider.row = listOf("big.md", 199L * 1024L * 1024L)
-        val uri = stubUri("b199")
-
-        val pathA = installRepository().importDocument(uri)
-        assertEquals(8L, (pathA as ImportResult.Success).document.fileSize)
-
-        val pathB = importerWithFakeStream(installRepository(), totalBytes = 64L * 1024L)
-            .prepare(uri, intentType = null)
-        assertTrue(pathB is PrepareOutcome.Success)
+        assertNonPdfNeverReachesTheSizeCheck("b199", "big.md", 199L * 1024L * 1024L)
     }
 
     @Test
     fun hint_exactlyCap_acceptedByBothPaths_capIsInclusive() = runBlocking {
-        registerStub("b200")
-        StubContentProvider.row = listOf("big.md", cap())
-        val uri = stubUri("b200")
-
-        val pathA = installRepository().importDocument(uri)
-        assertEquals(8L, (pathA as ImportResult.Success).document.fileSize)
-
-        val pathB = importerWithFakeStream(installRepository(), totalBytes = 64L * 1024L)
-            .prepare(uri, intentType = null)
-        assertTrue(pathB is PrepareOutcome.Success)
+        assertNonPdfNeverReachesTheSizeCheck("b200", "big.md", cap())
     }
 
     @Test
     fun hint_capPlusOne_rejectedByBothPaths() = runBlocking {
-        registerStub("b201")
-        StubContentProvider.row = listOf("big.md", cap() + 1L)
-        val uri = stubUri("b201")
-
-        val pathA = installRepository().importDocument(uri)
-        assertEquals(ImportResult.SourceTooLarge, pathA)
-
-        val pathB = importerWithFakeStream(installRepository(), totalBytes = 64L * 1024L)
-            .prepare(uri, intentType = null)
-        assertEquals(PrepareOutcome.TooLarge, pathB)
+        assertNonPdfNeverReachesTheSizeCheck("b201", "big.md", cap() + 1L)
     }
-
-    // ── no-hint boundaries: enforcement moves to the stream side ────────────
 
     @Test
     fun noHint_streamBeyondCap_rejectedOnBothPaths_viaCopyAndDrain() = runBlocking {
         registerStub("bn1")
-        StubContentProvider.row = listOf("big.md", null) // provider hides SIZE…
-        StubContentProvider.serveDescriptors = false // …and exposes no AFD/PFD hint
+        StubContentProvider.row = listOf("big.md", null)
+        StubContentProvider.serveDescriptors = false
         val uri = stubUri("bn1")
-        // Robolectric: feed the oversized logical stream to Path A's reader.
         shadowOf(resolver).registerInputStream(uri, FakeSizedStream(cap() + 1L))
 
-        val pathA = installRepository().importDocument(uri)
-        assertEquals(ImportResult.SourceTooLarge, pathA)
-
-        // Path B: prepare's copy loop hits the same wall through its own stream.
-        val pathB = importerWithFakeStream(installRepository(), totalBytes = cap() + 1L)
-            .prepare(uri, intentType = null)
-        assertEquals(PrepareOutcome.TooLarge, pathB)
-    }
-
-    @Test
-    fun noHint_streamWithinCap_acceptedOnBothPaths() = runBlocking {
-        registerStub("bn2")
-        // Test the generic 200 MiB envelope with PDF. Markdown has a stricter
-        // 32 MiB readable-text limit, covered independently below.
-        StubContentProvider.row = listOf("big.pdf", null)
-        StubContentProvider.type = "application/pdf"
-        StubContentProvider.serveDescriptors = false
-        val uri = stubUri("bn2")
-        shadowOf(resolver).registerInputStream(uri, FakeSizedStream(cap())) // exact cap drains clean
-
-        val pathA = installRepository().importDocument(uri)
-        assertTrue("Path A accepts a cap-sized hint-less stream", pathA is ImportResult.Success)
-
-        val importer = importerWithFakeStream(installRepository(), totalBytes = cap())
-        val pathB = importer.prepare(uri, intentType = null)
-        assertTrue(pathB is PrepareOutcome.Success)
-        importer.discardPrepared((pathB as PrepareOutcome.Success).prepared)
+        assertEquals(ImportResult.UnsupportedFormat, installRepository().importDocument(uri))
+        assertEquals(
+            PrepareOutcome.Unsupported,
+            importerWithFakeStream(installRepository(), totalBytes = cap() + 1L).prepare(uri, intentType = null),
+        )
     }
 
     @Test
@@ -252,15 +200,46 @@ class ImportSizeLimitBoundaryTest {
         StubContentProvider.type = "text/plain"
         StubContentProvider.serveDescriptors = false
         val uri = stubUri("md-limit")
-        shadowOf(resolver).registerInputStream(uri,
-            FakeSizedStream(DocumentRepository.MAX_MARKDOWN_BYTES.toLong() + 1))
+        shadowOf(resolver).registerInputStream(
+            uri,
+            FakeSizedStream(DocumentRepository.MAX_MARKDOWN_BYTES.toLong() + 1),
+        )
         assertEquals(ImportResult.UnsupportedFormat, installRepository().importDocument(uri))
-        val importer = importerWithFakeStream(installRepository(), DocumentRepository.MAX_MARKDOWN_BYTES.toLong() + 1)
-        val prepared = importer.prepare(uri, intentType = null) as PrepareOutcome.Success
-        assertTrue(importer.commitPrepared(prepared.prepared) is com.m1racle.reader.share.CommitOutcome.Failed)
+        assertEquals(
+            PrepareOutcome.Unsupported,
+            importerWithFakeStream(installRepository(), DocumentRepository.MAX_MARKDOWN_BYTES.toLong() + 1)
+                .prepare(uri, intentType = null),
+        )
+    }
+
+    private suspend fun assertNonPdfNeverReachesTheSizeCheck(authority: String, name: String, hinted: Long) {
+        registerStub(authority)
+        StubContentProvider.row = listOf(name, hinted)
+        val uri = stubUri(authority)
+        assertEquals(ImportResult.UnsupportedFormat, installRepository().importDocument(uri))
+        val pathB = importerWithFakeStream(installRepository(), totalBytes = 64L * 1024L).prepare(uri, intentType = null)
+        assertEquals(PrepareOutcome.Unsupported, pathB)
     }
 
     // ── shared constant sanity ───────────────────────────────────────────────
+
+    @Test
+    fun noHint_streamWithinCap_acceptedOnBothPaths() = runBlocking {
+        registerStub("bn2")
+        StubContentProvider.row = listOf("big.pdf", null)
+        StubContentProvider.type = "application/pdf"
+        StubContentProvider.serveDescriptors = false
+        val uri = stubUri("bn2")
+        shadowOf(resolver).registerInputStream(uri, FakeSizedStream(cap()))
+
+        val pathA = installRepository().importDocument(uri)
+        assertTrue("Path A accepts a cap-sized hint-less pdf stream", pathA is ImportResult.Success)
+
+        val importer = importerWithFakeStream(installRepository(), totalBytes = cap())
+        val pathB = importer.prepare(uri, intentType = null)
+        assertTrue(pathB is PrepareOutcome.Success)
+        importer.discardPrepared((pathB as PrepareOutcome.Success).prepared)
+    }
 
     @Test
     fun boundaryConstant_isExactly200MiB() {
