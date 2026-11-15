@@ -88,17 +88,22 @@ object Routes {
     const val SEARCH = "search"
     const val DOCUMENT_TOOLS = "document-tools"
 
-    fun viewer(documentId: String, anchor: DocumentAnchor? = null): String =
-        routeWithAnchor("viewer/$documentId", anchor)
-
     fun pdfViewer(documentId: String, anchor: DocumentAnchor? = null): String =
         routeWithAnchor("pdf/$documentId", anchor)
 
     fun epubViewer(documentId: String): String = "epub/$documentId"
 
-    fun bookmark(document: DocumentEntity, target: com.m1racle.reader.data.anchor.BookmarkTarget): String {
-        val base = when { document.isPdf -> "pdf"; document.isEpub -> "epub"; else -> "viewer" }
-        return "$base/${document.id}?anchor=${URLEncoder.encode(target.encode(), StandardCharsets.UTF_8.name())}"
+    /**
+     * Bookmark destination, or null when [document] is not a PDF.
+     *
+     * A null return means "do not navigate": the Markdown and EPUB readers are
+     * retired, and their routes now only exist as tombstones so an old back
+     * stack can be restored. Sending a user from a bookmark tap into a
+     * tombstone would look like the document opened and then failed.
+     */
+    fun bookmark(document: DocumentEntity, target: com.m1racle.reader.data.anchor.BookmarkTarget): String? {
+        if (!document.isPdf) return null
+        return "pdf/${document.id}?anchor=${URLEncoder.encode(target.encode(), StandardCharsets.UTF_8.name())}"
     }
 
     fun decodeBookmark(raw: String?): com.m1racle.reader.data.anchor.BookmarkTarget? =
@@ -118,9 +123,9 @@ object Routes {
 /** 按文档类型选择既有阅读路由（Home/Library/书签跳转共用）。 */
 private fun viewerRouteFor(document: DocumentEntity, anchor: DocumentAnchor? = null): String = when (document.type) {
     DocumentType.PDF -> Routes.pdfViewer(document.id, anchor)
-    DocumentType.EPUB -> Routes.epubViewer(document.id)
-    // Unreachable: openDocument returns before this for Markdown. Kept exhaustive so a new
-    // document type cannot silently fall through to the wrong reader.
+    // Unreachable: openDocument returns before this for every non-PDF type. Kept exhaustive so
+    // a new document type cannot silently fall through to a reader that does not exist.
+    DocumentType.EPUB,
     DocumentType.MARKDOWN,
     DocumentType.MARKDOWN_PACKAGE,
     -> Routes.HOME
@@ -190,8 +195,11 @@ fun M1racleReaderNavGraph(
         if (uri != null) homeViewModel.onImportDocument(uri)
     }
     val launchImport = {
-        importLauncher.launch(arrayOf("text/*", "application/pdf", "application/epub+zip",
-            "application/zip", "application/x-zip-compressed", "application/octet-stream"))
+        // PDF only. The gate in DocumentType.isAllowedImport still refuses
+        // anything else that arrives by intent, drag or a provider that ignores
+        // the filter; this list only stops the picker from offering formats the
+        // product does not read.
+        importLauncher.launch(arrayOf("application/pdf"))
     }
     LaunchedEffect(homeViewModel, resources) {
         homeViewModel.events.collect { event ->
@@ -341,16 +349,26 @@ fun M1racleReaderNavGraph(
                             viewModel = bookmarksViewModel,
                             onOpenDocument = { bookmark ->
                                 scope.launch {
-                                    repository.getDocumentById(bookmark.documentId)?.let { document ->
-                                        val target = com.m1racle.reader.data.anchor.BookmarkTarget.decode(bookmark.anchor)
-                                            ?: com.m1racle.reader.data.anchor.BookmarkTarget(
-                                                if (document.isPdf) DocumentAnchor.PdfPage(bookmark.location)
-                                                else DocumentAnchor.MarkdownBlock((bookmark.location - 1).coerceAtLeast(0)),
-                                                scrollOffset = bookmark.offset?.toInt()?.coerceAtLeast(0) ?: 0,
-                                            )
-                                        navController.popBackStack(Routes.HOME, inclusive = false)
-                                        navController.navigate(Routes.bookmark(document, target)) { launchSingleTop = true }
+                                    val document = repository.getDocumentById(bookmark.documentId)
+                                    if (document == null) {
+                                        // Row outlived its document; nothing to open and no route to invent.
+                                        snackbar.showSnackbar(resources.getString(R.string.error_read_failed))
+                                        return@launch
                                     }
+                                    if (!document.isPdf) {
+                                        // Historical bookmark on a retired format. The row stays; the tap is refused
+                                        // here so it never reaches a tombstone destination.
+                                        snackbar.showSnackbar(resources.getString(R.string.bookmark_unsupported_format))
+                                        return@launch
+                                    }
+                                    val target = com.m1racle.reader.data.anchor.BookmarkTarget.decode(bookmark.anchor)
+                                        ?: com.m1racle.reader.data.anchor.BookmarkTarget(
+                                            DocumentAnchor.PdfPage(bookmark.location),
+                                            scrollOffset = bookmark.offset?.toInt()?.coerceAtLeast(0) ?: 0,
+                                        )
+                                    val route = Routes.bookmark(document, target) ?: return@launch
+                                    navController.popBackStack(Routes.HOME, inclusive = false)
+                                    navController.navigate(route) { launchSingleTop = true }
                                 }
                             },
                             onNavigateHub = { destination ->
@@ -375,36 +393,42 @@ fun M1racleReaderNavGraph(
                             onOpen = { openDocument(navController, it) })
                     }
 
+                    // Retired readers: route registered, reader gone.
+                    //
+                    // Navigation resolves a saved back stack by route name. If these two routes
+                    // were removed outright, restoring a stack saved by a build that still had
+                    // the Markdown or EPUB reader would throw and kill the process on launch.
+                    // Keeping the route costs one screen with no state; deleting it trades a
+                    // rare crash for a smaller graph, which is the wrong trade.
+                    composable(
+                        route = Routes.VIEWER,
+                        arguments = listOf(
+                            navArgument("documentId") { type = NavType.StringType },
+                            navArgument("anchor") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                            navArgument("edit") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) {
+                        UnsupportedDocumentScreen(
+                            onBack = { navController.popBackStack(Routes.HOME, inclusive = false) },
+                        )
+                    }
+
                     composable(
                         route = Routes.EPUB_VIEWER,
                         arguments = listOf(
-                            navArgument("documentId") {
-                                type = NavType.StringType
-                            },
+                            navArgument("documentId") { type = NavType.StringType },
                         ),
-                    ) { entry ->
-                        val documentId = entry.arguments?.getString("documentId").orEmpty()
-                        val sessionId = remember(documentId) { "epub-$documentId-${UUID.randomUUID()}" }
-                        DisposableEffect(documentId, sessionId, coordinator) {
-                            val c = coordinator
-                            c?.onViewerOpened(documentId, sessionId)
-                            c?.progressFlushHook = { _ ->
-                                // EPUB leave paths flush position; hook is an order barrier only.
-                            }
-                            onDispose {
-                                if (c != null && c.activeViewerSessionId.value == sessionId) {
-                                    c.progressFlushHook = null
-                                }
-                                c?.onViewerClosed(documentId, sessionId)
-                            }
-                        }
-                        com.m1racle.reader.ui.epub.EpubReaderScreen(
-                            documentId = documentId,
-                            repository = repository,
-                            readerSettingsRepository = readerSettingsRepository,
-                            onBack = {
-                                navController.popBackStack(Routes.HOME, inclusive = false)
-                            },
+                    ) {
+                        UnsupportedDocumentScreen(
+                            onBack = { navController.popBackStack(Routes.HOME, inclusive = false) },
                         )
                     }
 

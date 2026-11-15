@@ -20,8 +20,6 @@ import android.graphics.Insets
 import android.view.View
 import android.view.WindowInsets
 import androidx.compose.ui.platform.LocalView
-import com.m1racle.reader.data.local.DocumentEntity
-import kotlinx.coroutines.runBlocking
 import java.io.File
 import androidx.room.Room
 import com.m1racle.reader.data.local.AppDatabase
@@ -57,7 +55,7 @@ class ReaderReturnHostTest {
         rule.waitForIdle()
         db.close()
     }
-    private fun start(withEpub: Boolean = false) {
+    private fun start() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         // Model a mounted shared volume with all-files access denied, as on a
         // fresh install. Robolectric does not create this framework volume.
@@ -76,15 +74,6 @@ class ReaderReturnHostTest {
         val search = SearchRepository(db.searchIndexDao())
         val repository = DocumentRepository(app, db, db.documentDao(), db.pdfPrintPageAnchorDao(),
             db.textbookOutlineNodeDao(), search)
-        if (withEpub) {
-            val fixture = File("src/test/resources/fixtures/epub/sample-epub2.epub")
-                .takeIf { it.isFile } ?: File("app/src/test/resources/fixtures/epub/sample-epub2.epub")
-            assertTrue(fixture.isFile)
-            runBlocking {
-                db.documentDao().insertDocument(DocumentEntity("return-epub", "Return EPUB", fixture.toURI().toString(),
-                    "application/epub+zip", fixture.length(), 1, 1, 0, 0, 0f, null, 0, "EPUB"))
-            }
-        }
         rule.setContent {
             view = LocalView.current
             nav = rememberNavController()
@@ -99,8 +88,8 @@ class ReaderReturnHostTest {
         rule.waitForIdle()
     }
 
-    @Test fun loadedEpubReturnsToAStationaryHomeWhileNativeStatusBarReappears() {
-        start(withEpub = true)
+    @Test fun retiredReaderRouteReturnsToAStationaryHomeWhileNativeStatusBarReappears() {
+        start()
         val height = (32 * rule.density.density).toInt()
         fun statusInset(visibleHeight: Int) {
             view.dispatchApplyWindowInsets(WindowInsets.Builder()
@@ -108,10 +97,15 @@ class ReaderReturnHostTest {
                 .setInsetsIgnoringVisibility(WindowInsets.Type.statusBars(), Insets.of(0, height, 0, 0))
                 .setVisible(WindowInsets.Type.statusBars(), visibleHeight > 0).build())
         }
+        // The EPUB reader is gone; the route stays registered as a tombstone so a back
+        // stack saved by an older build still resolves. This asserts the tombstone is
+        // reachable and that returning from it leaves HOME as stationary as a reader did.
         rule.runOnIdle { statusInset(height); nav.navigate(Routes.epubViewer("return-epub")) }
-        rule.waitUntil(15_000) { rule.onAllNodesWithTag("epub-pager").fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(15_000) {
+            rule.onAllNodesWithTag("unsupported-format-page").fetchSemanticsNodes().isNotEmpty()
+        }
         rule.waitForIdle()
-        rule.onNodeWithTag("epub-reading-area").assertIsDisplayed()
+        rule.onNodeWithTag("unsupported-format-page").assertIsDisplayed()
         rule.runOnIdle { statusInset(0) }
         rule.waitForIdle()
         rule.mainClock.autoAdvance = false
@@ -123,13 +117,13 @@ class ReaderReturnHostTest {
             val header = rule.onAllNodesWithTag("home-header").fetchSemanticsNodes().singleOrNull()
             if (header != null) {
                 homeFrames++
-                assertEquals("home jumped during EPUB exit at frame $frame", height.toFloat(), header.boundsInRoot.top, 0f)
+                assertEquals("home jumped during retired-route exit at frame $frame", height.toFloat(), header.boundsInRoot.top, 0f)
             }
             // AnimatedContent may still compose the outgoing destination in its
             // first bookkeeping frame. The dock's visibility is the handoff:
-            // it must never coexist with the loaded outgoing reader.
+            // it must never coexist with the outgoing destination.
             if (rule.onAllNodesWithTag("dock-import").fetchSemanticsNodes().isNotEmpty()) {
-                rule.onNodeWithTag("epub-pager").assertDoesNotExist()
+                rule.onNodeWithTag("unsupported-format-page").assertDoesNotExist()
             }
         }
         assertTrue("must observe the actual home return", homeFrames > 0)

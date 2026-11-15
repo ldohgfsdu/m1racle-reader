@@ -241,10 +241,9 @@ class MainActivity : ComponentActivity() {
         }
         if (bringToFrontOnly) {
             val current = navController.currentBackStackEntry?.destination?.route
-            if (current == Routes.PDF_VIEWER || current == Routes.VIEWER || current == Routes.EPUB_VIEWER ||
-                current?.startsWith("pdf/") == true || current?.startsWith("viewer/") == true ||
-                current?.startsWith("epub/") == true
-            ) {
+            // Only a live PDF reader counts as "already showing the document". The retired
+            // routes are tombstones now; restoring state onto one would strand the user there.
+            if (current == Routes.PDF_VIEWER || current?.startsWith("pdf/") == true) {
                 // Already on a viewer; re-navigate with singleTop + same id restores foreground.
                 navController.navigate(route) {
                     launchSingleTop = true
