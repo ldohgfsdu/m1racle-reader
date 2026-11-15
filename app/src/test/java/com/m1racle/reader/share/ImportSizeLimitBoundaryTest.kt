@@ -194,21 +194,21 @@ class ImportSizeLimitBoundaryTest {
     }
 
     @Test
-    fun markdownAboveReadableLimitIsRejectedAtCommit() = runBlocking {
+    fun oversizedMarkdownIsRejectedBeforeAnySizeHandling() = runBlocking {
+        // Markdown is out of scope regardless of size, so the refusal must come from
+        // the format gate rather than from a size comparison. 33 MiB is deliberately
+        // far above any historical readable-text limit.
+        val streamBytes = 33L * 1024L * 1024L
         registerStub("md-limit")
         StubContentProvider.row = listOf("big.md", null)
         StubContentProvider.type = "text/plain"
         StubContentProvider.serveDescriptors = false
         val uri = stubUri("md-limit")
-        shadowOf(resolver).registerInputStream(
-            uri,
-            FakeSizedStream(DocumentRepository.MAX_MARKDOWN_BYTES.toLong() + 1),
-        )
+        shadowOf(resolver).registerInputStream(uri, FakeSizedStream(streamBytes))
         assertEquals(ImportResult.UnsupportedFormat, installRepository().importDocument(uri))
         assertEquals(
             PrepareOutcome.Unsupported,
-            importerWithFakeStream(installRepository(), DocumentRepository.MAX_MARKDOWN_BYTES.toLong() + 1)
-                .prepare(uri, intentType = null),
+            importerWithFakeStream(installRepository(), streamBytes).prepare(uri, intentType = null),
         )
     }
 

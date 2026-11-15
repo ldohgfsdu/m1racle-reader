@@ -26,8 +26,6 @@ import com.m1racle.reader.core.model.OutlineNodeSource
 import com.m1racle.reader.data.local.TextbookOutlineNodeDao
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.core.model.TextbookOutlineNodeType
-import com.m1racle.reader.packageimport.ZipPackageImporter
-import com.m1racle.reader.packageimport.rebuildMarkdownPackage
 import com.m1racle.reader.documents.DocumentOutputSave
 import android.provider.DocumentsContract
 import com.m1racle.reader.data.local.TextbookOutlineResolver
@@ -220,55 +218,37 @@ class DocumentRepository(
         }
     }
 
-    /** Original bytes where retained; older extracted packages are explicitly rebuilt as ZIPs. */
+    /** Writes the stored bytes to [target]. Refuses rows from formats no longer in scope. */
     suspend fun exportDocument(id: String, target: Uri): DocumentExportKind = withContext(Dispatchers.IO) {
         val document = documentDao.getById(id) ?: error("文档已移除")
         check(target.toString() != document.uri && target.toString() != document.sourceUri) { "请选择新的导出位置，不能覆盖源文件" }
         val targetKey = ExternalUriMetadata.canonicalExternalKey(target.scheme, target.authority,
             target.toString(), target.lastPathSegment)
         check(documentAliasDao.getByKey(DocumentAliasKeys.uriV1(targetKey)) == null) { "不能覆盖已导入文档的源文件" }
-        var temporary: File? = null
-        try {
-            val source = if (document.type == DocumentType.MARKDOWN_PACKAGE) {
-                val archive = File(packageArchiveDirectory(id), "original.zip")
-                if (archive.isFile) {
-                    check(ContentSha256.of(archive) == document.contentSha256) { "保留的原始教材包已损坏，未导出" }
-                    Uri.fromFile(archive)
-                } else {
-                    val packages = File(context.filesDir, "packages").canonicalFile
-                    val root = File(packages, id).canonicalFile
-                    require(root.parentFile == packages) { "Invalid document id" }
-                    val entry = uriToFile(document.uri) ?: error("教材包入口不可用")
-                    val rebuilt = File.createTempFile("package-export-", ".zip", context.cacheDir).also { temporary = it }
-                    rebuildMarkdownPackage(root, entry, rebuilt)
-                    Uri.fromFile(rebuilt)
-                }
-            } else Uri.parse(document.uri)
-            check(target != source) { "请选择新的导出位置，不能覆盖源文件" }
-            val resolver = context.contentResolver
-            val sourceHash = resolver.openInputStream(source)?.use(ContentSha256::of)
-                ?: error("无法读取文档")
-            val save = DocumentOutputSave(
-                openSource = { resolver.openInputStream(source) },
-                openOutput = { resolver.openOutputStream(target, "wt") },
-                openVerification = { resolver.openInputStream(target) },
-                deleteDestination = {
-                    if (target.scheme == "file") target.path?.let { File(it).delete() } == true
-                    else DocumentsContract.deleteDocument(resolver, target)
-                }, expectedSha256 = sourceHash)
-            try { save.write() }
-            catch (failure: Exception) {
-                if (save.partialOutputRemains && failure !is CancellationException)
-                    throw java.io.IOException("导出失败，部分文件未能删除，请在导出位置删除", failure)
-                throw failure
-            }
-            if (temporary == null) DocumentExportKind.ORIGINAL else DocumentExportKind.REPACKAGED
-        } finally { temporary?.delete() }
-    }
-
-    private fun packageArchiveDirectory(id: String): File {
-        val root = File(context.filesDir, "package-archives").canonicalFile
-        return File(root, id).canonicalFile.also { require(it.parentFile == root) { "Invalid document id" } }
+        // Textbook packages left the product scope with the Markdown reader. Their rows
+        // stay in the library, but exporting one would write a bare .md entry under a
+        // .zip name, so the operation is refused rather than producing a wrong file.
+        check(document.type != DocumentType.MARKDOWN_PACKAGE) { "该格式已不在支持范围，无法导出" }
+        val source = Uri.parse(document.uri)
+        check(target != source) { "请选择新的导出位置，不能覆盖源文件" }
+        val resolver = context.contentResolver
+        val sourceHash = resolver.openInputStream(source)?.use(ContentSha256::of)
+            ?: error("无法读取文档")
+        val save = DocumentOutputSave(
+            openSource = { resolver.openInputStream(source) },
+            openOutput = { resolver.openOutputStream(target, "wt") },
+            openVerification = { resolver.openInputStream(target) },
+            deleteDestination = {
+                if (target.scheme == "file") target.path?.let { File(it).delete() } == true
+                else DocumentsContract.deleteDocument(resolver, target)
+            }, expectedSha256 = sourceHash)
+        try { save.write() }
+        catch (failure: Exception) {
+            if (save.partialOutputRemains && failure !is CancellationException)
+                throw java.io.IOException("导出失败，部分文件未能删除，请在导出位置删除", failure)
+            throw failure
+        }
+        DocumentExportKind.ORIGINAL
     }
 
     internal suspend fun ensureIdentityRuntimeReady() {
@@ -324,7 +304,7 @@ class DocumentRepository(
                 if (document.type != DocumentType.MARKDOWN && !document.isPdf) return document
                 val existing = uriToFile(document.uri)
                 val library = File(context.filesDir, "library").canonicalFile
-                if (existing != null && existing.isFile && ZipPackageImporter.isUnder(existing, library) &&
+                if (existing != null && existing.isFile && FilePathSafety.isUnder(existing, library) &&
                     ContentSha256.of(existing) == prepared.contentSha256) return document
                 // The database hash describes the original identity, even if an old
                 // SAF locator has since changed. Restore that identity from verified
@@ -335,9 +315,6 @@ class DocumentRepository(
             }
             try {
                 check(prepared.stagedFile.isFile) { "Resolved import staging file is missing" }
-                if (request.documentType == DocumentType.MARKDOWN && prepared.byteCount > MAX_MARKDOWN_BYTES) {
-                    throw ResolvedImportCommitException.UnsupportedFormat(DocumentReadException.TooLarge(MAX_MARKDOWN_BYTES))
-                }
 
                 var earlyConstraint: SQLiteConstraintException? = null
                 for (attempt in 0 until MAX_IDENTITY_COMMIT_ATTEMPTS) {
@@ -496,9 +473,6 @@ class DocumentRepository(
         documentId: String,
     ): MaterializedImportPayload {
         val prepared = request.content
-        if (request.documentType == DocumentType.MARKDOWN_PACKAGE) {
-            return materializeZipPackage(prepared, documentId)
-        }
         val destinationDirectory = File(
             context.filesDir,
             "library/${prepared.contentSha256}/$documentId",
@@ -531,62 +505,6 @@ class DocumentRepository(
             destinationDirectory.deleteRecursively()
             throw error
         }
-    }
-
-    private fun materializeZipPackage(
-        prepared: PreparedContentIdentity,
-        documentId: String,
-    ): MaterializedImportPayload {
-        val destinationDirectory = File(context.filesDir, "packages/$documentId")
-        val extracted = try {
-            prepared.stagedFile.inputStream().use { stream ->
-                ZipPackageImporter.extract(stream, destinationDirectory)
-            }
-        } catch (invalid: IllegalArgumentException) {
-            destinationDirectory.deleteRecursively()
-            throw ResolvedImportCommitException.UnsupportedFormat(invalid)
-        } catch (error: Exception) {
-            destinationDirectory.deleteRecursively()
-            throw ResolvedImportCommitException.Failed(error)
-        }
-
-        val entry = extracted.entryFile
-        val archiveDirectory = packageArchiveDirectory(documentId)
-        var archiveOwned = false
-        try {
-            check(archiveDirectory.mkdirs()) { "无法保留原始教材包" }
-            archiveOwned = true
-            val archive = File(archiveDirectory, "original.zip")
-            prepared.stagedFile.copyTo(archive, overwrite = false)
-            check(ContentSha256.of(archive) == prepared.contentSha256) { "原始教材包核验失败" }
-        } catch (error: Exception) {
-            destinationDirectory.deleteRecursively()
-            if (archiveOwned) archiveDirectory.deleteRecursively()
-            throw ResolvedImportCommitException.Failed(error)
-        }
-        val title = runCatching {
-            ZipPackageImporter.extractFirstH1(entry)
-        }.getOrNull()
-        val extractedSize = entry.length().takeIf { it > 0L }
-            ?: ZipPackageImporter.packageTotalSize(extracted.packageRoot).takeIf { it > 0L }
-            ?: prepared.byteCount
-        val zipLabel = prepared.metadata.displayName
-            .removeSuffix(".zip")
-            .removeSuffix(".ZIP")
-            .trim()
-            .takeIf {
-                it.isNotEmpty() &&
-                    it != "未命名文档" &&
-                    !it.equals("shared", ignoreCase = true)
-            }
-        return MaterializedImportPayload(
-            uri = Uri.fromFile(entry).toString(),
-            displayName = zipLabel ?: entry.name.takeIf(String::isNotBlank) ?: "Markdown 教材包",
-            mimeType = "application/zip",
-            fileSize = extractedSize,
-            title = title,
-            operationOwnedPaths = listOf(destinationDirectory, archiveDirectory),
-        )
     }
 
     suspend fun deleteById(id: String) {
@@ -965,32 +883,6 @@ class DocumentRepository(
         }
     }
 
-    /**
-     * Reads the complete UTF-8 Markdown document from a SAF or app-private URI.
-     * Oversized input fails explicitly instead of silently returning partial text.
-     * Runs on [Dispatchers.IO]; never throws to callers.
-     */
-    suspend fun readDocumentText(uriString: String, expectedContentSha256: String? = null): Result<String> =
-        withContext(Dispatchers.IO) {
-            try {
-                val uri = Uri.parse(uriString)
-                val input = openUriInputStream(uri)
-                    ?: return@withContext Result.failure(DocumentReadException.NotFound)
-
-                input.use { stream ->
-                    Result.success(readUtf8TextFully(stream, expectedContentSha256 = expectedContentSha256))
-                }
-            } catch (e: DocumentReadException) {
-                Result.failure(e)
-            } catch (_: SecurityException) {
-                Result.failure(DocumentReadException.PermissionDenied)
-            } catch (_: FileNotFoundException) {
-                Result.failure(DocumentReadException.NotFound)
-            } catch (e: Exception) {
-                Result.failure(DocumentReadException.Failed(e))
-            }
-        }
-
     private fun openUriInputStream(uri: Uri): java.io.InputStream? {
         return when (uri.scheme?.lowercase(Locale.ROOT)) {
             "file" -> {
@@ -1113,7 +1005,6 @@ class DocumentRepository(
          * Full-read safety ceiling. 32 MiB is far beyond the old 200 KiB preview
          * while keeping the current full-document parser inside a bounded heap.
          */
-        const val MAX_MARKDOWN_BYTES: Int = ZipPackageImporter.MAX_MARKDOWN_BYTES
         private const val MAX_IDENTITY_COMMIT_ATTEMPTS = 3
 
         /** Progress 0f..1f from 0-based page index. */
