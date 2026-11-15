@@ -41,8 +41,8 @@
 
 违规原因（对归类为资产层而言）：资产层不应知道主题、资源和对话框。
 但其中 10 处的文件本身就是界面，问题在归类而不在依赖方向。
-真正值得下沉的只有 3 处 RadixColors：高亮与选区的颜色是渲染契约，应作为数据
-放进 Model，由 UI 读取，而不是让标注代码直接取设计色板。
+真正值得调整的只有 3 处 RadixColors：Model 保存高亮类型和颜色标识这类语义数据，
+具体的 Compose `Color` 和 Radix 色值仍由 UI 层负责映射，不把色值下沉到 Model。
 
 验证：重划后 `data/anchor` 与 `ui/annotation` 的数据类不再 import `ui.*`；
 现有标注测试（AnnotationCreationFlow、AnnotationOverlay、PdfHighlightGeometry）保持通过。

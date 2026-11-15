@@ -57,14 +57,17 @@ P0 表示必须可靠，不表示尚未实现。
 | Reader UI → PDF Engine | 175 | 正常：UI 驱动引擎 |
 | Reader UI → App Shell | 95 | 偏高：阅读器反向依赖外壳组件 |
 | App Shell → Library | 50 | 正常 |
-| **Reading Assets → App Shell** | **29** | **违规**：数据层反向依赖 UI |
+| Reading Assets → App Shell | 13（原报 29，含误归类） | 见 `docs/S3_DEPENDENCY_DEBT.md`：全部在 `ui/annotation` 界面文件，`data/anchor` 对 UI 的 import 为 0 |
 | EPUB → App Shell | 27 | 随退出消失 |
 | EPUB → Library | 19 | 随退出消失 |
 | Reader UI → Library | 15 | 偏高 |
-| **PDF Engine → Library** | **9** | **违规**：引擎依赖数据层 |
+| PDF Engine → Library | 9 | 见 `docs/S3_DEPENDENCY_DEBT.md`：8 处在 `pdf/export`（归 PDF Tools），引擎目录只剩 `pdf/PrintPageAnchors.kt:4` |
 | Library → Markdown | 10 | 随 Markdown 退出消失 |
 
-两条真正的架构违规：`Reading Assets → App Shell`（29 处）与 `PDF Engine → Library`（9 处）。它们才是"重构"要解决的，而不是文件大小。
+上面 29 和 9 的“违规”结论已被逐行复核推翻，详见 `docs/S3_DEPENDENCY_DEBT.md`。
+修正后：Reading Assets 对 App Shell 的 13 处全部是标注界面在用主题和组件，数据层为零；
+PDF Engine 对 Library 的 9 处里 8 处属于导出工具。S3 先重划归属，再决定要不要动代码，不为消掉 import 加抽象层。
+高亮颜色不把 Compose `Color` 下沉到 Model，Model 只保存颜色标识，色值留在 UI。
 
 ## 5. 批次顺序
 
@@ -82,9 +85,9 @@ P0 表示必须可靠，不表示尚未实现。
 - 退出恢复不跳页
 - 书签/标注可靠保存
 
-**S3 边界解耦**
-- 切断 `Reading Assets → App Shell`（29 处）：资产层不得 import UI
-- 切断 `PDF Engine → Library`（9 处）：引擎只接受数据快照，不查询仓库
+**S3 边界解耦**（输入为 `docs/S3_DEPENDENCY_DEBT.md`，先重划归属再改代码）
+- 标注界面从 Reading Assets 改归 Reader UI；仅 3 处高亮色值改为由 Model 提供颜色标识、UI 映射色值
+- 导出代码从 PDF Engine 改归 PDF Tools；`ChapterPackageModels` 不再直接持有 DAO 实体
 - PDF Tools 与阅读 UI 解耦：工具不得持有阅读状态
 
 **S4 物理模块化（可选）**
