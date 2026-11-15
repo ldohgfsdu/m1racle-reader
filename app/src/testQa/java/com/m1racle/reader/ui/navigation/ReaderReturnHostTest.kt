@@ -25,7 +25,6 @@ import androidx.room.Room
 import com.m1racle.reader.data.local.AppDatabase
 import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.repository.SearchRepository
-import com.m1racle.reader.data.settings.ReaderSettingsRepository
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -81,7 +80,7 @@ class ReaderReturnHostTest {
                 // Robolectric's native Skia lacks child-shader eval; device QA covers optics.
                 CompositionLocalProvider(LocalGlassCapability provides GlassCapability.BLUR_ONLY,
                     LocalViewModelStoreOwner provides object : ViewModelStoreOwner { override val viewModelStore = store }) {
-                M1racleReaderNavGraph(nav, repository, ReaderSettingsRepository(app), searchRepository = search)
+                M1racleReaderNavGraph(nav, repository, searchRepository = search)
                 }
             }
         }

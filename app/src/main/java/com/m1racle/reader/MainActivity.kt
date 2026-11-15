@@ -133,7 +133,6 @@ class MainActivity : ComponentActivity() {
                     M1racleReaderNavGraph(
                         navController = navController,
                         repository = app.documentRepository,
-                        readerSettingsRepository = app.readerSettingsRepository,
                         externalOpenCoordinator = coordinator,
                     )
 

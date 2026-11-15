@@ -310,7 +310,6 @@ dependencies {
     // artifact — no vendored sources. See docs/READER_CHROME_MATERIAL_REPORT.md.
     // io.github.kyant0:shapes arrives transitively from backdrop; no direct use.
     implementation("io.github.kyant0:backdrop:2.0.0")
-    implementation("io.github.oleksandrbalan:pagecurl:1.5.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")

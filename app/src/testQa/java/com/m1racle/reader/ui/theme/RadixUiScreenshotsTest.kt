@@ -27,7 +27,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.m1racle.reader.data.local.DocumentEntity
 import com.m1racle.reader.data.settings.ReaderSettings
-import com.m1racle.reader.ui.epub.EpubReadingSettings
 import com.m1racle.reader.ui.home.HomeContent
 import com.m1racle.reader.ui.home.HomeUiState
 import com.m1racle.reader.ui.home.homeUiState
@@ -73,8 +72,7 @@ class RadixUiScreenshotsTest {
                         when (page.value) {
                             "home" -> HomeContent(homeUiState(documents, emptySet()),
                                 false, {}, {}, {}, {}, statusTop = 0.dp, navBottom = 0.dp)
-                            "qa-settings" -> HubSettingsScreen(onNavigateHub = {}, onOpenDocumentTools = {})
-                            else -> EpubReadingSettings(ReaderSettings(), {}, {}, {}, {})
+                            else -> HubSettingsScreen(onNavigateHub = {}, onOpenDocumentTools = {})
                         }
                     }
                 }
@@ -82,7 +80,7 @@ class RadixUiScreenshotsTest {
         }
         val directory = File(System.getenv("READER_UI_EVIDENCE") ?: "build/reports/ui-radix").apply { mkdirs() }
         for (night in listOf(false, true)) {
-            for (screen in listOf("home", "qa-settings", "reading-settings")) {
+            for (screen in listOf("home", "qa-settings")) {
                 rule.runOnIdle { dark.value = night; page.value = screen }
                 rule.waitForIdle()
                 val bounds = rule.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot

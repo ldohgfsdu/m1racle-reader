@@ -51,7 +51,6 @@ import com.m1racle.reader.core.model.DocumentAnchor
 import com.m1racle.reader.data.repository.DocumentRepository
 import com.m1racle.reader.data.repository.ReadingRepository
 import com.m1racle.reader.data.repository.SearchRepository
-import com.m1racle.reader.data.settings.ReaderSettingsRepository
 import com.m1racle.reader.share.ExternalOpenCoordinator
 import com.m1racle.reader.ui.home.HomeScreen
 import com.m1racle.reader.ui.home.HomeViewModel
@@ -166,7 +165,6 @@ private fun openDocument(
 fun M1racleReaderNavGraph(
     navController: NavHostController,
     repository: DocumentRepository,
-    readerSettingsRepository: ReaderSettingsRepository,
     modifier: Modifier = Modifier,
     externalOpenCoordinator: ExternalOpenCoordinator? = null,
     readingRepository: ReadingRepository? = null,
