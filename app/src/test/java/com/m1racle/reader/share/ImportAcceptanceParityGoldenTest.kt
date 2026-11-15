@@ -53,13 +53,13 @@ import org.robolectric.annotation.GraphicsMode
  *   `ExternalDocumentImporter.prepare`) gates with the same function
  *   (plus its 200 MB source-size cap in prepare — unchanged).
  *
- * Unified semantics over the raw-name matrix below:
- *   - document extensions (.md/.markdown/.txt/.zip/.pdf, case-insensitive)
- *     accepted under every mime;
- *   - text-family mime + no extension accepted as plain text;
- *   - text-family mime + obviously non-document extension REJECTED (the old
- *     Path-B-only mojibake hole is closed);
- *   - everything else rejected identically on both paths.
+ * PDF-only admission (2026-11-15). Both entries still share
+ * DocumentType.isAllowedImport, and the verdicts are now:
+ *   - a .pdf name is accepted under every mime;
+ *   - an extensionless name is accepted only when the mime itself is PDF;
+ *   - any other extension (.md, .zip, .jpg, .epub, …) is rejected even when
+ *     the mime says application/pdf;
+ *   - both paths still agree on every cell.
  *
  * Entry-level E2E pairs keep proving: extensionless text normalizes to
  * "<segment>.txt" via the shared resolve layer and is accepted by BOTH paths;
@@ -133,52 +133,26 @@ class ImportAcceptanceParityGoldenTest {
 
     @Test
     fun golden_documentExtensionNames_acceptedByBothPathsForEveryMime() {
-        // Extension-driven acceptance ignores mime entirely on both paths today.
-        assertRow(
-            "doc.pdf",
-            expectedA = "YYYYYYYYYYYYY",
-            expectedB = "YYYYYYYYYYYYY",
-        )
-        assertRow(
-            "DOC.PDF", // case-insensitive extension match
-            expectedA = "YYYYYYYYYYYYY",
-            expectedB = "YYYYYYYYYYYYY",
-        )
-        assertRow(
-            "note.md",
-            expectedA = "YYYYYYYYYYYYY",
-            expectedB = "YYYYYYYYYYYYY",
-        )
-        assertRow(
-            "pack.zip",
-            expectedA = "YYYYYYYYYYYYY",
-            expectedB = "YYYYYYYYYYYYY",
-        )
+        // Only a .pdf name is extension-admitted, and it ignores mime.
+        assertRow("doc.pdf", expectedA = "YYYYYYYYYYYYY", expectedB = "YYYYYYYYYYYYY")
+        assertRow("DOC.PDF", expectedA = "YYYYYYYYYYYYY", expectedB = "YYYYYYYYYYYYY")
+        // Former document extensions are no longer admitted under any mime.
+        assertRow("note.md", expectedA = "NNNNNNNNNNNNN", expectedB = "NNNNNNNNNNNNN")
+        assertRow("pack.zip", expectedA = "NNNNNNNNNNNNN", expectedB = "NNNNNNNNNNNNN")
+        assertRow("book.epub", expectedA = "NNNNNNNNNNNNN", expectedB = "NNNNNNNNNNNNN")
     }
 
     @Test
     fun golden_extensionlessName_textFamilyAcceptedByFallback_bothPathsIdentical() {
-        // Unified fallback: ANY text-family mime accepts extensionless names as
-        // plain text on BOTH paths (literal text/* reading — includes text/html).
-        // Index: 0-4 pdf/xpdf/zip/zxc/zx = Y; 5-7 tmk/txm/txp = Y (fallback);
-        // 8 octet-stream = N (lost whitelist carve-out); 9 jpeg mime = N;
-        // 10 TEXT/HTML = Y (fallback); 11 msword = N; 12 null = N.
-        assertRow(
-            "README",
-            expectedA = "YYYYYYYYNNYNN",
-            expectedB = "YYYYYYYYNNYNN",
-        )
+        // No text fallback remains. An extensionless name enters only when the
+        // mime itself is PDF (indexes 0 and 1); every other mime is rejected.
+        assertRow("README", expectedA = "YYNNNNNNNNNNN", expectedB = "YYNNNNNNNNNNN")
     }
 
     @Test
     fun golden_wrongExtensionName_rejectedOnBothPaths() {
-        // The old Path-B-only mojibake hole is closed: a text-family mime with
-        // an obviously non-document extension is rejected by the single authority.
-        assertRow(
-            "photo.jpg",
-            expectedA = "YYYYYNNNNNNNN",
-            expectedB = "YYYYYNNNNNNNN",
-        )
+        // A non-pdf extension loses even to an application/pdf mime.
+        assertRow("photo.jpg", expectedA = "NNNNNNNNNNNNN", expectedB = "NNNNNNNNNNNNN")
     }
 
     @Test
@@ -198,21 +172,17 @@ class ImportAcceptanceParityGoldenTest {
 
     @Test
     fun authority_documentExtensionNames_acceptedForEveryMime() {
-        val extensions = listOf(
-            "md", "markdown", "txt", "zip", "pdf", // canonical
-            "MD", "PDF", "Zip", "mD", "TxT", // case variants
-        )
-        val prefixes = listOf("a", "教材", "my.file", "sp ace")
-        val positives = prefixes.flatMap { p -> extensions.map { e -> "$p.$e" } } +
-            listOf(
-                "a.tar.md", // compound, still endsWith .md
-                "教材第二版.TXT",
-            )
-        val allMimes: List<String?> = mimes
-        for (name in positives) {
-            for (mime in allMimes) {
-                assertTrue(
-                    "isAllowedImport($mime,'$name','$name')",
+        val pdfNames = listOf("a.pdf", "教材.PDF", "my.file.pdf", "sp ace.pdf", "a.tar.pdf")
+        for (name in pdfNames) {
+            for (mime in mimes) {
+                assertTrue("isAllowedImport($mime,'$name')", DocumentType.isAllowedImport(mime, name, name))
+            }
+        }
+        val rejected = listOf("a.md", "a.markdown", "a.txt", "a.zip", "a.epub", "a.MD", "a.Zip")
+        for (name in rejected) {
+            for (mime in mimes) {
+                assertFalse(
+                    "isAllowedImport($mime,'$name') must reject a non-pdf extension",
                     DocumentType.isAllowedImport(mime, name, name),
                 )
             }
@@ -221,27 +191,24 @@ class ImportAcceptanceParityGoldenTest {
 
     @Test
     fun authority_textFallback_matrix() {
-        // text/* + no extension → accepted as plain text.
-        assertTrue(DocumentType.isAllowedImport("text/plain", "README", "README"))
-        assertTrue(DocumentType.isAllowedImport("text/markdown", "notes123", "notes123"))
-        // Literal text/* reading: every text-family mime qualifies.
-        assertTrue(DocumentType.isAllowedImport("text/html", "page1", "page1"))
-        assertTrue(DocumentType.isAllowedImport("text/whatever-custom", "x", "x"))
+        // Text never enters, including the old "text/* + no extension" fallback.
+        assertFalse(DocumentType.isAllowedImport("text/plain", "README", "README"))
+        assertFalse(DocumentType.isAllowedImport("text/markdown", "notes123", "notes123"))
+        assertFalse(DocumentType.isAllowedImport("text/html", "page1", "page1"))
+        assertFalse(DocumentType.isAllowedImport("text/plain", "a.md", null))
+        assertFalse(DocumentType.isAllowedImport("text/plain", "a.jpg.md", null))
 
-        // text/* + document extension → accepted by the primary branch.
-        assertTrue(DocumentType.isAllowedImport("text/plain", "a.md", null))
+        // A pdf mime does not override a contradictory extension.
+        assertFalse(DocumentType.isAllowedImport("application/pdf", "book.epub", "book.epub"))
+        assertFalse(DocumentType.isAllowedImport("application/pdf", "notes.md", null))
+        assertFalse(DocumentType.isAllowedImport("application/x-pdf", "pack.zip", "pack.zip"))
+        // The path segment counts too: a pdf display name cannot hide an epub path.
+        assertFalse(DocumentType.isAllowedImport("application/pdf", "book.pdf", "book.epub"))
 
-        // text/* + obviously non-document extension → rejected (mojibake guard).
-        assertFalse(DocumentType.isAllowedImport("text/plain", "photo.jpg", "doc"))
-        assertFalse(DocumentType.isAllowedImport("text/markdown", "clip.png", null))
-        assertFalse(DocumentType.isAllowedImport("text/html", "movie.mp4", "doc"))
-        assertFalse(DocumentType.isAllowedImport("text/plain", "教材.docx", null))
-        // Denylist is case-insensitive and uses the LAST extension only.
-        assertFalse(DocumentType.isAllowedImport("text/plain", "A.JPG", null))
-        assertFalse(DocumentType.isAllowedImport("text/plain", "a.tar.gz", null))
-        assertTrue(DocumentType.isAllowedImport("text/plain", "a.jpg.md", null)) // .md wins
+        // Extensionless + pdf mime is the one non-named admission.
+        assertTrue(DocumentType.isAllowedImport("application/pdf", "README", "README"))
+        assertTrue(DocumentType.isAllowedImport("application/pdf", "scan.pdf", null))
 
-        // Non-text mimes never reach the fallback.
         assertFalse(DocumentType.isAllowedImport("application/octet-stream", "mystery", "mystery"))
         assertFalse(DocumentType.isAllowedImport("image/jpeg", "x.png", null))
         assertFalse(DocumentType.isAllowedImport(null, "README2", "README2"))
@@ -249,38 +216,21 @@ class ImportAcceptanceParityGoldenTest {
 
     @Test
     fun authority_controlGroup_denylistClosesMojibakeHole_unknownExtensionsEnterAsText() {
-        // 1) Obviously-non-document extensions are rejected even with a text mime.
-        val denylisted = listOf(
-            "a.jpg", "photo.jpeg", "教材.docx", "A.JPG", "clip.mp4",
-            "a.tar.gz", // last extension wins
-        )
-        for (name in denylisted) {
+        val named = listOf("a.jpg", "photo.jpeg", "教材.docx", "A.JPG", "clip.mp4", "a.tar.gz", "a.mdown")
+        for (name in named) {
             assertFalse(
-                "isAllowedImport must reject '$name' under text/plain",
+                "isAllowedImport must reject '$name'",
                 DocumentType.isAllowedImport("text/plain", name, name),
             )
-        }
-
-        // 2) Unknown extensions are NOT obviously non-document — the denylist is
-        // deliberately closed, so they enter as readable text (e.g. .mdown is a
-        // historic markdown alias).
-        assertTrue(DocumentType.isAllowedImport("text/plain", "a.mdown", "a.mdown"))
-        assertTrue(DocumentType.isAllowedImport("text/markdown", "notes.zipx", "notes.zipx"))
-
-        // 3) Without any text mime, extensionless/unknown names stay rejected.
-        for (name in listOf("a.mdown", "README2", "教材（第二版）")) {
             assertFalse(
-                "isAllowedImport must reject '$name' (no mime)",
-                DocumentType.isAllowedImport(null, name, name),
+                "a pdf mime must not override '$name'",
+                DocumentType.isAllowedImport("application/pdf", name, name),
             )
         }
-        // Blank names classify as extensionless at gate level; entry-level
-        // resolve guarantees a usable name, so they are unreachable in practice.
-        // A bare-dot hidden file named exactly ".md" DOES end with ".md" —
-        // accepted on both paths; pinned as current behavior, not a bug.
-        assertTrue(DocumentType.isAllowedImport("text/plain", ".md", ".md"))
-        // Denylist helper edges: extension-only dotfiles classify by their ext;
-        // blank/null and stem-less trailing dots do not count as extensions.
+        for (name in listOf("a.mdown", "README2", "教材（第二版）")) {
+            assertFalse(DocumentType.isAllowedImport(null, name, name))
+        }
+        assertFalse(DocumentType.isAllowedImport("text/plain", ".md", ".md"))
         assertTrue(DocumentType.hasNonDocumentExtension(".jpg"))
         assertFalse(DocumentType.hasNonDocumentExtension(".md"))
         assertFalse(DocumentType.hasNonDocumentExtension("noext"))
@@ -363,30 +313,20 @@ class ImportAcceptanceParityGoldenTest {
             openStreamOverride = { _ -> ByteArrayInputStream("# tiny".toByteArray()) },
         )
 
-    /**
-     * D1 correction (executable): extensionless text/plain content resolves to
-     * "<segment>.txt" on BOTH entries before gating — both accept. The gate-row
-     * divergence for raw "README"-style names never survives the shared resolve
-     * layer, so a unification batch must NOT expect an A/B flip here.
-     */
+    /** Extensionless text is no longer imported by either entry. */
     @Test
     fun d1_bothEntries_acceptExtensionlessTextViaSharedNameNormalization() = runBlocking {
         registerStub("d1a")
-        StubContentProvider.row = null // no DISPLAY_NAME/SIZE columns
+        StubContentProvider.row = null
         StubContentProvider.type = "text/plain"
         val uri = stubUri("d1a", "notes123")
 
         val pathA = installRepository().importDocument(uri)
-        val imported = (pathA as ImportResult.Success).document
-        assertEquals("notes123.txt", imported.displayName)
-        assertEquals("MARKDOWN", imported.documentType)
+        assertEquals(ImportResult.UnsupportedFormat, pathA)
+        assertEquals(0, fakeDao.upserts.size)
 
-        val pathB = importerWithTinyStream(installRepository())
-            .prepare(uri, intentType = null)
-        val preparedB = (pathB as PrepareOutcome.Success).prepared
-        assertTrue(preparedB.importRequest.content.stagedFile.name.startsWith("identity-"))
-        assertTrue(preparedB.importRequest.content.stagedFile.name.endsWith(".importing"))
-        assertEquals(DocumentType.MARKDOWN, preparedB.importRequest.documentType)
+        val pathB = importerWithTinyStream(installRepository()).prepare(uri, intentType = null)
+        assertEquals(PrepareOutcome.Unsupported, pathB)
     }
 
     /** D2 pair: text/plain + wrong (image) extension. */
@@ -418,7 +358,7 @@ class ImportAcceptanceParityGoldenTest {
         assertEquals(PrepareOutcome.Unsupported, outcome)
     }
 
-    /** D3 pair: >200 MB source over a .md name — unified in policy batch 3. */
+    /** Non-PDF is rejected at the gate, before any size check or copy. */
     @Test
     fun d3_pathA_rejectsHugeSourceAfterBatch3() = runBlocking {
         registerStub("d3a")
@@ -427,11 +367,9 @@ class ImportAcceptanceParityGoldenTest {
         StubContentProvider.type = "text/plain"
         val repo = installRepository()
 
-        // Pre-batch-3 Path A imported this without any cap; the unified source
-        // limit now rejects it exactly like the VIEW/SEND entry.
         val result = repo.importDocument(stubUri("d3a", "doc"))
 
-        assertEquals(ImportResult.SourceTooLarge, result)
+        assertEquals(ImportResult.UnsupportedFormat, result)
         assertEquals(0, fakeDao.upserts.size)
     }
 
@@ -443,27 +381,23 @@ class ImportAcceptanceParityGoldenTest {
         StubContentProvider.type = "text/plain"
         val repo = installRepository()
 
-        val outcome = importerWithTinyStream(repo)
-            .prepare(stubUri("d3b", "doc"), intentType = null)
+        val outcome = importerWithTinyStream(repo).prepare(stubUri("d3b", "doc"), intentType = null)
 
-        assertEquals(PrepareOutcome.TooLarge, outcome)
+        assertEquals(PrepareOutcome.Unsupported, outcome)
+        assertEquals(0, fakeDao.upserts.size)
     }
 
     @Test
     fun d3_pathB_boundary_exactlyMaxBytesPassesHintStageAndCopies() = runBlocking {
         registerStub("d3c")
-        StubContentProvider.row =
-            listOf("big.md", ExternalDocumentImporter.MAX_BYTES) // == cap, not >
+        StubContentProvider.row = listOf("big.md", ExternalDocumentImporter.MAX_BYTES)
         StubContentProvider.type = "text/plain"
         val repo = installRepository()
 
-        val outcome = importerWithTinyStream(repo)
-            .prepare(stubUri("d3c", "doc"), intentType = null)
+        val outcome = importerWithTinyStream(repo).prepare(stubUri("d3c", "doc"), intentType = null)
 
-        val prepared = (outcome as PrepareOutcome.Success).prepared
-        assertTrue(prepared.importRequest.content.stagedFile.isFile)
-        // Copied byte count wins as final size authority (resolveFinalSizeBytes).
-        assertEquals("# tiny".toByteArray().size.toLong(), prepared.sizeBytes)
+        assertEquals(PrepareOutcome.Unsupported, outcome)
+        assertEquals(0, fakeDao.upserts.size)
     }
 }
 
