@@ -233,10 +233,11 @@ class MainActivity : ComponentActivity() {
         documentType: com.m1racle.reader.data.local.DocumentType,
         bringToFrontOnly: Boolean,
     ) {
+        // Only PDF opens a reader. EPUB and Markdown stay in the library as historical
+        // records but are no longer readable; their routes are removed in S1b.
         val route = when (documentType) {
             com.m1racle.reader.data.local.DocumentType.PDF -> Routes.pdfViewer(documentId)
-            com.m1racle.reader.data.local.DocumentType.EPUB -> Routes.epubViewer(documentId)
-            else -> Routes.viewer(documentId)
+            else -> return
         }
         if (bringToFrontOnly) {
             val current = navController.currentBackStackEntry?.destination?.route

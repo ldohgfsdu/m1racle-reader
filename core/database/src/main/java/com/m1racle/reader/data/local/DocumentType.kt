@@ -48,19 +48,14 @@ enum class DocumentType {
          * whitelist any more (the former ExternalFileIntake.ALLOWED_MIMES path).
          */
         fun isAllowedImport(mimeType: String?, displayName: String?, pathSegment: String? = null): Boolean {
-            if (isMarkdownFileName(displayName) || isMarkdownFileName(pathSegment)) {
-                return true
-            }
-            if (isZipFileName(displayName) || isZipFileName(pathSegment) || isZipMime(mimeType)) {
-                return true
-            }
-            if (resolve(mimeType, displayName, pathSegment) == PDF) {
-                return true
-            }
-            if (resolve(mimeType, displayName, pathSegment) == EPUB) {
-                return true
-            }
-            return isTextMimeFallback(mimeType, displayName, pathSegment)
+            // Product scope 2026-11-15: M1racle Reader admits PDF only. Markdown,
+            // text, ZIP packages and EPUB no longer enter the library through either
+            // entry point. This is the single admission gate, so re-admitting a
+            // format later means editing this function and nothing else.
+            //
+            // Historical rows keep their stored documentType; nothing here rewrites
+            // or deletes existing records.
+            return resolve(mimeType, displayName, pathSegment) == PDF
         }
 
         /**

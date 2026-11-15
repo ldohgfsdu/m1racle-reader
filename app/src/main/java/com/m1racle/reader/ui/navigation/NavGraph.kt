@@ -144,9 +144,15 @@ private fun openDocument(
     document: DocumentEntity,
     anchor: DocumentAnchor? = null,
 ) {
-    // Markdown reading is out of scope: documents of that type stay listed (their rows and
-    // reading history are user data) but no longer open a reader.
-    if (document.type == DocumentType.MARKDOWN || document.type == DocumentType.MARKDOWN_PACKAGE) return
+    // Out-of-scope formats stay listed — their rows and reading history are user data —
+    // but they no longer open a reader. EPUB is disabled here first (scope step S1a);
+    // its implementation is removed only after the UI no longer references it (S1b/S1c).
+    if (document.type == DocumentType.MARKDOWN ||
+        document.type == DocumentType.MARKDOWN_PACKAGE ||
+        document.type == DocumentType.EPUB
+    ) {
+        return
+    }
     navController.popBackStack(Routes.HOME, inclusive = false)
     navController.navigate(viewerRouteFor(document, anchor)) { launchSingleTop = true }
 }
