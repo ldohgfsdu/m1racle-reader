@@ -6,8 +6,6 @@ import com.m1racle.reader.data.local.DocumentEntity
 enum class LibraryFilter {
     ALL,
     PDF,
-    MARKDOWN,
-    EPUB,
 }
 
 object LibraryFilters {
@@ -20,7 +18,5 @@ object LibraryFilters {
         when (filter) {
             LibraryFilter.ALL -> documents
             LibraryFilter.PDF -> documents.filter { it.isPdf }
-            LibraryFilter.MARKDOWN -> documents.filter { !it.isPdf && !it.isEpub }
-            LibraryFilter.EPUB -> documents.filter { it.isEpub }
         }
 }

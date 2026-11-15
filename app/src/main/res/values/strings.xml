@@ -160,8 +160,6 @@
     <string name="hub_library_title">文库</string>
     <string name="hub_filter_all">全部</string>
     <string name="hub_filter_pdf">PDF</string>
-    <string name="hub_filter_markdown">MD</string>
-    <string name="hub_filter_epub">EPUB</string>
     <string name="hub_library_empty_title">暂无文档</string>
     <string name="hub_library_empty">点击底部加号导入文档。</string>
     <string name="hub_library_filter_empty_title">没有此类文档</string>

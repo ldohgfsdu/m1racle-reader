@@ -116,11 +116,10 @@ fun LibraryScreen(
             }
             val filters = LibraryFilter.entries
             PillSegmentedControl(
+                // One label per enum entry; Markdown and EPUB are no longer offered.
                 labels = listOf(
                     stringResource(R.string.hub_filter_all),
                     stringResource(R.string.hub_filter_pdf),
-                    stringResource(R.string.hub_filter_markdown),
-                    stringResource(R.string.hub_filter_epub),
                 ),
                 selectedIndex = filters.indexOf(filter),
                 onSelect = { viewModel.setFilter(filters[it]) },

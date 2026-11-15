@@ -152,15 +152,16 @@ class HomeViewModelTest {
     // ── 文库过滤（Phase 3 纯逻辑） ─────────────────────────────────────────
 
     @Test
-    fun `library filter keeps recent order and splits by type`() {
+    fun `library filter keeps order and never hides retired-format rows from all`() {
         val docs = listOf(
             doc("md1", lastOpenedAt = 30L),
             doc("pdf1", lastOpenedAt = 20L, isPdf = true),
             doc("pkg", lastOpenedAt = 10L, documentTypeOverride = "MARKDOWN_PACKAGE"),
         )
+        // Retired formats have no filter of their own any more, but their rows are
+        // still user data and must stay visible and ordered under ALL.
         assertEquals(listOf("md1", "pdf1", "pkg"), LibraryFilters.apply(docs, LibraryFilter.ALL).map { it.id })
         assertEquals(listOf("pdf1"), LibraryFilters.apply(docs, LibraryFilter.PDF).map { it.id })
-        assertEquals(listOf("md1", "pkg"), LibraryFilters.apply(docs, LibraryFilter.MARKDOWN).map { it.id })
     }
 
 }
