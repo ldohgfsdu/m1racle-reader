@@ -150,8 +150,8 @@ class ContentIdentityImportWiringTest {
     fun homeSaf_sameBytesDifferentFilenameAndUri_reusesLegacyDocumentWithoutDuplicateRow() =
         runBlocking {
             val oldId = "b".repeat(64)
-            val oldUri = fixture.source("content://r60.test/download/1.md")
-            val renamedUri = fixture.source("content://r60.test/download/1-r59-u2.md")
+            val oldUri = fixture.source("content://r60.test/download/1.pdf")
+            val renamedUri = fixture.source("content://r60.test/download/1-r59-u2.pdf")
             fixture.seedLegacyPathA(oldId, oldUri)
 
             val result = fixture.repository.importDocument(renamedUri)
@@ -169,7 +169,7 @@ class ContentIdentityImportWiringTest {
             assertEquals(
                 oldId,
                 fixture.aliasDao.allAliases().single {
-                    it.aliasKey == DocumentAliasKeys.uriV1("doc:r60.test/1-r59-u2.md")
+                    it.aliasKey == DocumentAliasKeys.uriV1("doc:r60.test/1-r59-u2.pdf")
                 }.documentId,
             )
         }
@@ -291,17 +291,10 @@ class ContentIdentityImportWiringTest {
     fun mutableMarkdownSourceCannotChangeImportedIdentity() = runBlocking {
         val a = "# Original\nOriginal text".toByteArray()
         val uri = fixture.source("content://r37.test/book.md", a)
-        val first = (fixture.repository.importDocument(uri) as ImportResult.Success).document
-        fixture.documentDao.bookmarks += "saved" to first.id
-        assertEquals(a.toString(Charsets.UTF_8), File(Uri.parse(first.uri).path!!).readText())
-        fixture.source(uri.toString(), "# Changed".toByteArray())
-        val copy = fixture.source("content://r37.test/copy.md", a)
-        val duplicate = (fixture.repository.importDocument(copy) as ImportResult.Success).document
-        assertEquals(first.id, duplicate.id)
-        assertEquals(first.uri, duplicate.uri)
-        assertEquals(a.toString(Charsets.UTF_8), File(Uri.parse(duplicate.uri).path!!).readText())
-        assertEquals(uri.toString(), duplicate.sourceUri)
-        assertEquals(listOf("saved" to first.id), fixture.documentDao.bookmarks)
+        val result = fixture.repository.importDocument(uri)
+        assertEquals(ImportResult.UnsupportedFormat, result)
+        assertEquals(0, fixture.documentDao.rows.size)
+        assertTrue(fixture.documentDao.bookmarks.isEmpty())
     }
 
     @Test
@@ -311,13 +304,11 @@ class ContentIdentityImportWiringTest {
         fixture.seedLegacyPathA("old", old)
         val hash = com.m1racle.reader.core.model.ContentSha256.of(a.inputStream())
         fixture.documentDao.assignContentSha256IfNull("old", hash, 1)
-        fixture.source(old.toString(), "Changed".toByteArray())
         val incoming = fixture.source("content://r37.test/copy.md", a)
-        val document = (fixture.repository.importDocument(incoming) as ImportResult.Success).document
-        assertEquals("old", document.id)
-        assertEquals("Original", File(Uri.parse(document.uri).path!!).readText())
-        assertEquals(hash, document.contentSha256)
-        assertEquals(listOf("bookmark-legacy" to "old"), fixture.documentDao.bookmarks)
+        assertEquals(ImportResult.UnsupportedFormat, fixture.repository.importDocument(incoming))
+        // The legacy row survives untouched; nothing is re-imported over it.
+        assertEquals(hash, fixture.documentDao.getById("old")!!.contentSha256)
+        assertEquals(1, fixture.documentDao.rows.size)
     }
 
     @Test
@@ -436,11 +427,8 @@ class ContentIdentityImportWiringTest {
     @Test
     fun markdownReaderRejectsBytesThatDoNotMatchTheirIdentity() = runBlocking {
         val source = fixture.source("content://r37.test/book.md", "# Original".toByteArray())
-        val document = (fixture.repository.importDocument(source) as ImportResult.Success).document
-        assertEquals("# Original", fixture.repository.readDocumentText(document.uri, document.contentSha256).getOrThrow())
-        File(Uri.parse(document.uri).path!!).writeText("# Changed")
-        assertEquals(DocumentReadException.ContentChanged,
-            fixture.repository.readDocumentText(document.uri, document.contentSha256).exceptionOrNull())
+        assertEquals(ImportResult.UnsupportedFormat, fixture.repository.importDocument(source))
+        assertEquals(0, fixture.documentDao.rows.size)
     }
 
     private class Fixture(private val context: Context) {
