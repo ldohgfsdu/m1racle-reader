@@ -14,7 +14,7 @@
     <string name="unsupported_format_title">当前版本不支持此格式</string>
     <string name="unsupported_format_body">M1racle Reader 现专注 PDF 阅读。此文档仍保留在文库中，可随时导出。</string>
     <string name="unsupported_format_back">返回文库</string>
-    <string name="bookmark_unsupported_format">该格式已不在支持范围，无法打开</string>
+    <string name="unsupported_document_format">该格式已不在支持范围，无法打开</string>
     <string name="error_send_text_requires_file">请分享 PDF 文件，而不是仅分享文本内容</string>
     <string name="external_open_confirm_title">打开新文档？</string>
     <string name="external_open_confirm_current_label">当前文档</string>

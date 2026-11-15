@@ -147,14 +147,16 @@ private fun openDocument(
     navController: NavHostController,
     document: DocumentEntity,
     anchor: DocumentAnchor? = null,
+    onUnsupported: () -> Unit = {},
 ) {
     // Out-of-scope formats stay listed — their rows and reading history are user data —
-    // but they no longer open a reader. EPUB is disabled here first (scope step S1a);
-    // its implementation is removed only after the UI no longer references it (S1b/S1c).
+    // but they no longer open a reader. The callback exists because a tap that does
+    // nothing reads as a broken app; the caller shows why it was refused.
     if (document.type == DocumentType.MARKDOWN ||
         document.type == DocumentType.MARKDOWN_PACKAGE ||
         document.type == DocumentType.EPUB
     ) {
+        onUnsupported()
         return
     }
     navController.popBackStack(Routes.HOME, inclusive = false)
@@ -189,6 +191,13 @@ fun M1racleReaderNavGraph(
     )
     LaunchedEffect(documentOperations) { documentOperations.events.collect { snackbar.showSnackbar(it) } }
     val resources = androidx.compose.ui.platform.LocalResources.current
+    val navScope = rememberCoroutineScope()
+    // Shared refusal notice for every path that can select a retired-format row.
+    val notifyUnsupportedFormat: () -> Unit = {
+        navScope.launch {
+            snackbar.showSnackbar(resources.getString(R.string.unsupported_document_format))
+        }
+    }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) homeViewModel.onImportDocument(uri)
     }
@@ -203,7 +212,7 @@ fun M1racleReaderNavGraph(
         homeViewModel.events.collect { event ->
             val message = when (event) {
                 is HomeEvent.OpenDocument -> {
-                    openDocument(navController, event.document)
+                    openDocument(navController, event.document, onUnsupported = notifyUnsupportedFormat)
                     return@collect
                 }
                 HomeEvent.UnsupportedFormat -> resources.getString(R.string.error_unsupported_format)
@@ -272,7 +281,7 @@ fun M1racleReaderNavGraph(
                             onImport = launchImport,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onOpenDocument = { document ->
-                                openDocument(navController, document)
+                                openDocument(navController, document, onUnsupported = notifyUnsupportedFormat)
                             },
                             onNavigateHub = { destination ->
                                 // The home section's "view all" always opens the full library.
@@ -288,7 +297,7 @@ fun M1racleReaderNavGraph(
                             viewModel = libraryViewModel,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onOpenDocument = { document ->
-                                openDocument(navController, document)
+                                openDocument(navController, document, onUnsupported = notifyUnsupportedFormat)
                             },
                             onNavigateHub = { destination ->
                                 navController.navigateToHub(destination)
@@ -317,7 +326,7 @@ fun M1racleReaderNavGraph(
                             onOpenResult = { result ->
                                 scope.launch {
                                     repository.getDocumentById(result.documentId)?.let { document ->
-                                        openDocument(navController, document, result.anchor)
+                                        openDocument(navController, document, result.anchor, notifyUnsupportedFormat)
                                     }
                                 }
                             },
@@ -356,7 +365,7 @@ fun M1racleReaderNavGraph(
                                     if (!document.isPdf) {
                                         // Historical bookmark on a retired format. The row stays; the tap is refused
                                         // here so it never reaches a tombstone destination.
-                                        snackbar.showSnackbar(resources.getString(R.string.bookmark_unsupported_format))
+                                        snackbar.showSnackbar(resources.getString(R.string.unsupported_document_format))
                                         return@launch
                                     }
                                     val target = com.m1racle.reader.data.anchor.BookmarkTarget.decode(bookmark.anchor)
@@ -388,7 +397,7 @@ fun M1racleReaderNavGraph(
                     composable(Routes.DOCUMENT_TOOLS) {
                         com.m1racle.reader.ui.documents.DocumentToolsScreen(repository,
                             onBack = { navController.popBackStack() },
-                            onOpen = { openDocument(navController, it) })
+                            onOpen = { openDocument(navController, it, onUnsupported = notifyUnsupportedFormat) })
                     }
 
                     // Retired readers: route registered, reader gone.

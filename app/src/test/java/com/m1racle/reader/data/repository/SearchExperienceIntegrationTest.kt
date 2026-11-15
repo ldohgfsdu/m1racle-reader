@@ -122,7 +122,9 @@ class SearchExperienceIntegrationTest {
 
         val nav = source("ui/navigation/NavGraph.kt")
         val pdfViewer = source("ui/pdf/PdfViewerScreen.kt")
-        assertTrue(nav.contains("openDocument(navController, document, result.anchor)"))
+        // The call also carries the refusal callback now, so match the prefix rather than
+        // the closed argument list.
+        assertTrue(nav.contains("openDocument(navController, document, result.anchor"))
         assertTrue(pdfViewer.contains("viewModel.goToPage(target.page)"))
     }
 
