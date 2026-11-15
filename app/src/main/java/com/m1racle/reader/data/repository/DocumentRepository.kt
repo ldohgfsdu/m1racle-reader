@@ -26,9 +26,6 @@ import com.m1racle.reader.core.model.OutlineNodeSource
 import com.m1racle.reader.data.local.TextbookOutlineNodeDao
 import com.m1racle.reader.data.local.TextbookOutlineNodeEntity
 import com.m1racle.reader.core.model.TextbookOutlineNodeType
-import com.m1racle.reader.epub.EpubBook
-import com.m1racle.reader.epub.EpubException
-import com.m1racle.reader.epub.EpubPackageImporter
 import com.m1racle.reader.packageimport.ZipPackageImporter
 import com.m1racle.reader.packageimport.rebuildMarkdownPackage
 import com.m1racle.reader.documents.DocumentOutputSave
@@ -919,43 +916,6 @@ class DocumentRepository(
             )
             documentDao.getById(id)?.let { searchRepository.index(it) }
         }
-    }
-
-    /**
-     * Open an EPUB document: resolve the managed .epub copy, extract to the
-     * app-private cache (epubs/{id}, reused only with an exact content/version completion marker),
-     * parse, and persist OPF title + TOC size. Throws [EpubException].
-     */
-    suspend fun openEpubBook(id: String): EpubBook = withContext(Dispatchers.IO) {
-        val entity = documentDao.getById(id) ?: throw EpubException.Corrupt("文档不存在")
-        check(entity.isEpub) { "不是 EPUB 文档" }
-        val epubFile = uriToFile(entity.uri) ?: throw EpubException.Corrupt("找不到文件")
-        val destDir = java.io.File(context.filesDir, "epubs/$id")
-        val book = try {
-            kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
-                EpubPackageImporter.openCached(epubFile, destDir, entity.contentSha256 ?: ContentSha256.of(epubFile))
-            }
-        } catch (e: EpubException.Corrupt) {
-            // Rebuild once if an otherwise completed cache has lost required files.
-            destDir.deleteRecursively()
-            kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
-                EpubPackageImporter.openCached(epubFile, destDir, entity.contentSha256 ?: ContentSha256.of(epubFile))
-            }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (e: EpubException) {
-            throw e
-        } catch (_: Exception) {
-            throw EpubException.Corrupt("文件可能已损坏")
-        }
-        val converted = com.m1racle.reader.epub.rollbackEpubPosition(book, entity)
-        if (converted != entity) {
-            documentDao.updateEpubReadingPosition(id, converted.lastScrollIndex, converted.lastScrollOffset,
-                converted.readingProgress, converted.readingAnchor)
-        }
-        touchLastOpenedAt(id)
-        updateParseMetadata(id, book.metadata.title, book.toc.size)
-        book
     }
 
     private fun uriToFile(uriString: String): java.io.File? {

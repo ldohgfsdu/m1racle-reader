@@ -44,11 +44,13 @@ sealed class DocumentAnchor {
     /**
      * EPUB 文本锚：与排版无关的章内坐标。
      *
-     * - [spineHref]：章节文件路径（OPF 内 href，同 [com.m1racle.reader.epub.EpubChapter.href]），
-     *   是章节身份；spine 序号只作派生值，不进身份。
+     * EPUB 阅读器已于 2026-11 退出产品范围，解析器同步删除。此类型保留，用于解码
+     * 历史记录里已存的位置；不再有新数据写入，也不再参与导航。
+     *
+     * - [spineHref]：章节文件路径（OPF 内 href），是章节身份；spine 序号只作派生值，不进身份。
      * - [blockIndex]：章内块序号（解析器块序，0-based），不是全书扁平行号。
      * - [charStart]/[charEnd]：块内原文字符偏移（不是排版行）；阅读进度的 [charEnd] 为 null。
-     * - [parserVersion]：解析器块切分规则版本，见 EpubXhtmlParser.BLOCK_RULES_VERSION。
+     * - [parserVersion]：解析器块切分规则版本（原 EpubXhtmlParser.BLOCK_RULES_VERSION）。
      * - [quote]：charStart 起约 32 字原文（空白已规范化），块号失效时用于重定位。
      */
     data class EpubText(
