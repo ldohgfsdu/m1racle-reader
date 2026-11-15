@@ -135,7 +135,7 @@ MarkdownLinkRouter    -> InlineMarkdownParser
 |---|---|
 | 文件 | `markdown/DocumentListTitle.kt`（207 行） |
 | 引用位置 | `ui/home/HomeScreen.kt:58` import；`:245, 259, 268` 三处调用 `normalizeListDisplayTitle` |
-| 调用入口 | 首页/文库列表每行的标题渲染，**PDF 也走这里** |
+| 调用入口 | 首页/文库列表每行的标题渲染。**只有 EPUB / Markdown / Markdown Package 三种记录走它**；PDF 在 `resolveDocumentCardTitles:238` 走文件名独立分支，与本文件无关 |
 | 依赖 | `normalizeListDisplayTitle` 内部调用 `InlineMarkdownParser.toPlainText(extractedTitle)`，用于把 `**粗体**` 这类 inline 标记去掉 |
 | 数据风险 | 低。只影响显示文本 |
 | 分离方案 | 保留 `normalizeWhitespace` / `stripLeadingEmojiClusters` / `fileNameStem` / `normalizeListDisplayTitle`，迁到 `ui/home` 或 `core/model`；用一个约 30 行的轻量「去 inline 标记」替代 `InlineMarkdownParser.toPlainText`。`extractDocumentTitle`（从 Markdown 正文提 H1）与 `findFirstValidH1Source` 删除 |
@@ -274,14 +274,18 @@ grep -r "import com.m1racle.reader.markdown" data/anchor/ ui/annotation/
 
 每批独立提交、独立编译、独立测试。
 
-| 批 | 内容 | 预期删除 | 门禁 |
-|---|---|---|---|
-| C-1 | A1 图片链路 + A2 搜索链路 | 1,901 行（820 + 1,081） | 编译绿；文库搜索测试绿 |
-| C-2 | A3 `rebaseMarkdownAssets` + B2 类型检查 | 89 行 | PDF 编辑保存测试绿 |
-| C-3 | A4 教材包导入导出 + 6 个失败测试 | 328 行 | PDF 导出测试绿；旧包记录点击给提示 |
-| C-4 | B1 `DocumentListTitle` 迁移 | 207 行迁出，净减约 170 | 列表标题测试绿；旧记录标题正常 |
-| C-5 | A5 `markdown` 包剩余 10 文件 | 1,150 行 | `grep -r com.m1racle.reader.markdown app/src/main` 为空 |
-| C-6 | B4 文库筛选条 | 约 20 行 | 筛选条两项；布局测试更新 |
+| 批 | 内容 | 预期删除 | 门禁 | 状态 |
+|---|---|---|---|---|
+| C-4 | B1 `DocumentListTitle` 迁移 | 207 行迁出 | 列表标题测试绿；旧记录标题正常 | **已完成** |
+| C-1a | A1 图片链路 | 820 行 | 编译绿 | 待做 |
+| C-1b | A2 搜索链路 | 1,081 行 | 文库搜索测试绿 | 待做 |
+| C-1c | A5a `InlineMarkdownParser` | 717 行 | 已无消费者 | 待做 |
+| C-2 | A3 `rebaseMarkdownAssets` + B2 类型检查 | 89 行 | PDF 编辑保存测试绿 | 待做 |
+| C-3 | A4 教材包导入导出 + 6 个失败测试 | 328 行 | PDF 导出测试绿；旧包记录点击给提示 | 待做 |
+| C-5 | A5b markdown 包剩余 9 文件 | 1,150 行 | `grep -r com.m1racle.reader.markdown app/src/main` 为空 | 待做 |
+| C-6 | B4 文库筛选条 | 约 20 行 | 筛选条两项；布局测试更新 | 待做 |
+
+**顺序调整原因**：A2 计划删除 `InlineMarkdownParser`，而 `DocumentListTitle.normalizeListDisplayTitle` 依赖它。先做 C-4 解除这条依赖，后面的批次才是真正互不牵连的死代码。
 
 C 类（第 4 节）在全部批次中**一行不动**。
 

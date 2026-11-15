@@ -55,7 +55,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.m1racle.reader.R
 import com.m1racle.reader.data.local.DocumentEntity
-import com.m1racle.reader.markdown.DocumentListTitle
 
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.testTag
@@ -242,7 +241,7 @@ internal fun resolveDocumentCardTitles(document: DocumentEntity): DocumentCardTi
         )
     }
     if (document.isEpub) {
-        val displayTitle = DocumentListTitle.normalizeListDisplayTitle(
+        val displayTitle = DocumentListDisplayTitle.normalizeListDisplayTitle(
             extractedTitle = document.title,
             fileName = fullFileName,
         )
@@ -256,7 +255,7 @@ internal fun resolveDocumentCardTitles(document: DocumentEntity): DocumentCardTi
         )
     }
     if (document.isMarkdownPackage) {
-        val displayTitle = DocumentListTitle.normalizeListDisplayTitle(
+        val displayTitle = DocumentListDisplayTitle.normalizeListDisplayTitle(
             extractedTitle = document.title,
             fileName = fullFileName,
         )
@@ -265,7 +264,7 @@ internal fun resolveDocumentCardTitles(document: DocumentEntity): DocumentCardTi
             typeLabel = "Markdown 包",
         )
     }
-    val displayTitle = DocumentListTitle.normalizeListDisplayTitle(
+    val displayTitle = DocumentListDisplayTitle.normalizeListDisplayTitle(
         extractedTitle = document.title,
         fileName = fullFileName,
     )
