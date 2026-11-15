@@ -77,7 +77,7 @@ class HomeOperationsTest {
             throw IOException("provider read failed")
         }
         val vm = viewModel(resolver = resolver)
-        val file = context.cacheDir.resolve("home-source.md").apply { writeText("# Test") }
+        val file = context.cacheDir.resolve("home-source.pdf").apply { writeText("%PDF-1.4") }
         val uri = Uri.fromFile(file)
         vm.onImportDocument(uri)
         assertTrue(vm.isImporting.value)
@@ -92,6 +92,20 @@ class HomeOperationsTest {
         assertEquals(HomeEvent.ReadFailed, withTimeout(5000) { vm.events.first() })
         withTimeout(5000) { vm.isImporting.first { !it } }
         assertEquals(2, calls.get())
+    }
+
+    @Test fun `non pdf import is rejected without opening a reader or writing a row`() = runBlocking {
+        val calls = AtomicInteger()
+        val resolver = ContentIdentityResolver(db.documentDao(), context.cacheDir.resolve("home-import-md")) {
+            calls.incrementAndGet()
+            throw IOException("should not read a non-pdf")
+        }
+        val vm = viewModel(resolver = resolver)
+        val file = context.cacheDir.resolve("home-source.md").apply { writeText("# Test") }
+        vm.onImportDocument(Uri.fromFile(file))
+        assertEquals(HomeEvent.UnsupportedFormat, withTimeout(5000) { vm.events.first() })
+        assertEquals(0, calls.get())
+        assertEquals(0, db.documentDao().getAll().size)
     }
 
     @Test fun `failed removal restores optimistic row and emits failure`() = runBlocking {
