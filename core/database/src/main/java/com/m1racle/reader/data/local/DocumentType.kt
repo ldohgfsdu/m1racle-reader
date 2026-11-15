@@ -29,33 +29,32 @@ enum class DocumentType {
         }
 
         /**
-         * THE single import-acceptance authority (policy unification, import
-         * policy batch 2). Both live entries — DocumentRepository.importDocument
-         * (FAB/SAF) and ExternalOpenCoordinator / ExternalDocumentImporter.prepare
-         * (VIEW/SEND) — gate through this function and nothing else.
+         * The only import gate. Both live entries — DocumentRepository.importDocument
+         * (FAB/SAF) and ExternalDocumentImporter.prepare (VIEW/SEND) — call this and
+         * nothing else.
          *
-         * Accepted content, in order:
-         * 1. Markdown/text extension (.md/.markdown/.txt) on either name;
-         * 2. ZIP package (extension on either name or zip mime);
-         * 3. EPUB (epub mime or .epub extension via [resolve]);
-         * 4. PDF (pdf mime or .pdf extension via [resolve]);
-         * 5. Text-mime fallback ([isTextMimeFallback]): any provider mime in the
-         *    text family with no obviously-non-document extension enters as
-         *    readable text — extensionless names are normalized to ".txt"
-         *    downstream by ExternalUriMetadata.ensureExtension.
+         * PDF only. A name ending in .pdf is admitted under any MIME, because
+         * providers often mislabel real PDFs. A name ending in anything else
+         * (.epub, .md, .txt, .zip, .jpg, …) is rejected even when the MIME says
+         * application/pdf, so a contradictory extension cannot slip through.
+         * Extensionless names are admitted only when the MIME itself is PDF.
          *
-         * Everything else is rejected; there is deliberately no generic mime
-         * whitelist any more (the former ExternalFileIntake.ALLOWED_MIMES path).
+         * Markdown, plain text, ZIP packages and EPUB are not imported. Existing
+         * rows keep their stored documentType; this function does not rewrite or
+         * delete them.
          */
         fun isAllowedImport(mimeType: String?, displayName: String?, pathSegment: String? = null): Boolean {
-            // Product scope 2026-11-15: M1racle Reader admits PDF only. Markdown,
-            // text, ZIP packages and EPUB no longer enter the library through either
-            // entry point. This is the single admission gate, so re-admitting a
-            // format later means editing this function and nothing else.
-            //
-            // Historical rows keep their stored documentType; nothing here rewrites
-            // or deletes existing records.
+            if (hasNonPdfExtension(displayName) || hasNonPdfExtension(pathSegment)) return false
             return resolve(mimeType, displayName, pathSegment) == PDF
+        }
+
+        /** True when [name] has an extension and that extension is not pdf. */
+        internal fun hasNonPdfExtension(name: String?): Boolean {
+            if (name.isNullOrBlank()) return false
+            val trimmed = name.trim()
+            val dot = trimmed.lastIndexOf('.')
+            if (dot <= 0 || dot == trimmed.length - 1) return false
+            return !trimmed.endsWith(".pdf", ignoreCase = true)
         }
 
         /**
