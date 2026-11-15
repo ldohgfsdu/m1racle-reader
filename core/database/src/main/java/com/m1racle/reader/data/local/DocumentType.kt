@@ -33,11 +33,21 @@ enum class DocumentType {
          * (FAB/SAF) and ExternalDocumentImporter.prepare (VIEW/SEND) — call this and
          * nothing else.
          *
-         * PDF only. A name ending in .pdf is admitted under any MIME, because
-         * providers often mislabel real PDFs. A name ending in anything else
-         * (.epub, .md, .txt, .zip, .jpg, …) is rejected even when the MIME says
-         * application/pdf, so a contradictory extension cannot slip through.
-         * Extensionless names are admitted only when the MIME itself is PDF.
+         * PDF only:
+         * 1. A name whose extension is not .pdf (.epub, .md, .txt, .zip, .jpg, …) is
+         *    refused even when the MIME says application/pdf, so a contradictory
+         *    extension cannot slip through.
+         * 2. A name ending in .pdf is admitted under any MIME except
+         *    application/epub+zip. That MIME names another reading format, so a .pdf
+         *    name plus an EPUB MIME is two explicit claims that disagree and neither
+         *    is trusted. A generic container MIME (application/zip,
+         *    application/octet-stream) makes no claim about format, so a mislabelled
+         *    PDF still enters.
+         * 3. A name with no extension — including a trailing-dot name like "book." —
+         *    is admitted only when the MIME itself is PDF.
+         *
+         * Admission is not verification: the PDF open and parse path decides whether
+         * the bytes are readable.
          *
          * Markdown, plain text, ZIP packages and EPUB are not imported. Existing
          * rows keep their stored documentType; this function does not rewrite or
