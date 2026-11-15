@@ -5,8 +5,10 @@
 被测包：`M1racle-Reader-1.0.0-97-s1b-candidate-20261115-1110.apk`
 包名 `com.m1racle.reader`，versionCode 97，SHA-256 `e94ddf8a…bbe09`
 
-结论：**PDF 主循环未发现回归。发现 1 个体验缺陷（旧格式文档点击无任何反馈），已修复待复测。**
+结论：**PDF 主循环未发现回归。发现 1 个体验缺陷（旧格式文档点击无任何反馈），已修复并在同一设备上复测通过。**
 另有 4 项因设备侧条件限制未测完，逐项注明原因。
+
+复测包：`M1racle-Reader-1.0.0-97-s1b-candidate2-20261115-1326.apk`，SHA-256 `0adcf740…6178`，已覆盖安装到同一设备。
 
 ---
 
@@ -41,7 +43,7 @@ github                        Markdown 未读   ← 旧格式记录
 | # | 项目 | 结果 | 证据 |
 |---|---|---|---|
 | 1 | 覆盖安装、数据保留 | **通过** | `firstInstallTime` 未变；9 条文档与进度完整 |
-| 2 | 点击旧 Markdown 文档 | **不崩溃、不跳转，但无提示** | 见第 3 节 |
+| 2 | 点击旧 Markdown 文档 | **通过（修复后）** | 不跳转、不崩溃，底部提示「该格式已不在支持范围，无法打开」 |
 | 3 | 书签页 | 通过 | 全部为 PDF 书签，页码正确 |
 | 4 | 首页文档菜单 | **通过** | 只剩 重命名 / 导出文件 / 文件信息 / 从文库移除；「编辑正文」已消失 |
 | 5 | 打开 571 MB PDF | **通过** | 点击后 1.2 s 已出页，无空白 |
@@ -63,13 +65,17 @@ adb 的 `input` 不支持多点，所以用 root 直接写 `/dev/input/event8`�
 
 ---
 
-## 3. 发现的问题（已修复，待复测）
+## 3. 发现的问题（已修复，已复测通过）
 
 **旧格式文档点击后没有任何反馈。**
 
 `openDocument` 对 Markdown / EPUB 直接 `return`，既不导航也不提示。用户看到的是「点了没反应」，比明确拒绝更像故障。
 
 修复：`openDocument` 增加 `onUnsupported` 回调，5 个调用点（首页事件、首页列表、文库列表、搜索结果、PDF 工具）统一传入同一个 snackbar 提示「该格式已不在支持范围，无法打开」。书签页原本那条提示复用同一资源，资源名从 `bookmark_unsupported_format` 改为 `unsupported_document_format`。
+
+复测：修复版覆盖安装后，在文库点击 `github, Markdown, 未读` 行，底部立即出现该提示，未跳转阅读器，logcat 无 FATAL。证据 `35-md-tap-fixed.png`。
+
+顺带修正一处测试：`SearchExperienceIntegrationTest` 用源码形态断言 `openDocument(navController, document, result.anchor)`，签名加参数后失配，改为匹配前缀。修复后 QA 回到 1,236 用例 / 6 失败。
 
 ---
 
@@ -105,7 +111,8 @@ git diff github/master..HEAD -- app/src/main/java/com/m1racle/reader/ui/pdf \
 | 文件 | 内容 |
 |---|---|
 | `01-home.png` | 覆盖安装后首页，旧进度完整 |
-| `02-markdown-tap.png` / `03-markdown-toast.png` | 点击旧 Markdown 文档：无跳转、无提示 |
+| `02-markdown-tap.png` / `03-markdown-toast.png` | 修复前：点击旧 Markdown 文档无跳转、无提示 |
+| `35-md-tap-fixed.png` | 修复后：同样的点击，底部出现「该格式已不在支持范围，无法打开」 |
 | `05-pdf-open.png` | 书签跳转打开 PDF |
 | `07-chrome.png` | 滚动后页码 70/384 |
 | `09-toc.png` | 目录 72 项，当前项高亮 |
