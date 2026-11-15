@@ -2,7 +2,7 @@ package com.m1racle.reader.ui.navigation
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import com.m1racle.reader.ui.epub.EpubQaHostActivity
+import com.m1racle.reader.qa.QaHostActivity
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
@@ -45,7 +45,7 @@ import org.robolectric.annotation.*
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class ReaderReturnHostTest {
-    @get:Rule val rule = createAndroidComposeRule<EpubQaHostActivity>()
+    @get:Rule val rule = createAndroidComposeRule<QaHostActivity>()
     private lateinit var nav: NavHostController
     private lateinit var db: AppDatabase
     private lateinit var view: View

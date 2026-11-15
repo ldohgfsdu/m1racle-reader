@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.m1racle.reader.M1racleReaderApplication
+import com.m1racle.reader.qa.QaHostActivity
 import com.m1racle.reader.data.settings.EpubFontFamily
 import com.m1racle.reader.data.settings.ReaderSettings
 import com.m1racle.reader.data.anchor.AnchorCodec
@@ -32,7 +33,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class EpubNativeFontInstrumentedTest {
-    @get:Rule val rule = createAndroidComposeRule<EpubQaHostActivity>()
+    @get:Rule val rule = createAndroidComposeRule<QaHostActivity>()
     private val app = ApplicationProvider.getApplicationContext<M1racleReaderApplication>()
     private lateinit var original: ReaderSettings
     private lateinit var book: EpubBook

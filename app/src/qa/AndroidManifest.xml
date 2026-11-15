@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
-        <activity
-            android:name=".ui.viewer.MarkdownScrollBenchmarkActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.M1racleReader" />
-        <activity android:name=".ui.epub.EpubQaHostActivity" android:exported="false"
+        <activity android:name=".qa.QaHostActivity" android:exported="false"
             android:theme="@style/Theme.M1racleReader" />
         <provider
             android:name=".ui.pdf.H1QaPdfFixtureProvider"
@@ -45,11 +39,6 @@
         <activity
             android:name=".ui.pdf.PdfSafSplitSetupActivity"
             android:exported="true"
-            android:theme="@style/Theme.M1racleReader" />
-        <activity
-            android:name=".ui.viewer.components.MarkdownTableQaActivity"
-            android:exported="true"
-            android:screenOrientation="portrait"
             android:theme="@style/Theme.M1racleReader" />
         <activity
             android:name=".ui.home.DockGlassHarnessActivity"
