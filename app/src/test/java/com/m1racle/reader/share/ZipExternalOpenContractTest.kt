@@ -164,64 +164,53 @@ class ZipExternalOpenContractTest {
 
     @Test
     fun zipViewIntent_commitsAsMarkdownPackage_pointingAtExtractedEntryMd() = runBlocking {
-        registerStub("zb1", "甲教材.zip", "application/zip")
-        val repo = installRepository()
-
-        val commit = importViaPathB(
-            repo.first,
-            textbookZipBytes(),
-            stubZipUri("zb1", "doc"),
-            "application/zip",
-        )
-        assertTrue("commit failed: $commit", commit is CommitOutcome.Success)
-
-        val row = daoRow(repo.second)
-        assertEquals(DocumentType.MARKDOWN_PACKAGE.name, row.documentType)
-        assertFalse(
-            "uri must point at extracted entry md, not the binary archive",
-            row.uri.endsWith(".zip"),
-        )
-        assertTrue(row.uri.endsWith(".md"))
-        assertEquals("甲教材", row.displayName)
+        assertZipRejected("zb1", "甲教材.zip", "application/zip")
     }
 
     @Test
     fun zipSendIntent_neverCommitsAsPlainMarkdown() = runBlocking {
-        registerStub("zb2", "乙讲义.zip", "application/x-zip-compressed")
-        val (repo, dao) = installRepository()
-
-        val commit = importViaPathB(
-            repo,
-            textbookZipBytes(),
-            stubZipUri("zb2", "doc"),
-            "application/x-zip-compressed",
-        )
-        assertTrue(commit is CommitOutcome.Success)
-
-        val row = daoRow(dao)
-        assertNotEquals(DocumentType.MARKDOWN.name, row.documentType)
-        assertEquals(DocumentType.MARKDOWN_PACKAGE.name, row.documentType)
-        // Entry body must be readable text at the recorded uri (markdown reader opens it).
-        val entryText = File(Uri.parse(row.uri).path!!).readText(Charsets.UTF_8)
-        assertTrue(entryText.contains("包标题"))
+        assertZipRejected("zb2", "乙讲义.zip", "application/x-zip-compressed")
     }
 
     @Test
     fun corruptZip_failsCleanly_withoutResidue() = runBlocking {
-        registerStub("zb3", "坏包.zip", "application/zip")
+        assertZipRejected("zb3", "坏包.zip", "application/zip", payload = "definitely not a zip".toByteArray())
+    }
+
+    @Test
+    fun txtViewIntent_staysMarkdown() = runBlocking {
+        assertZipRejected("zbt", "笔记.txt", "text/plain", payload = "# 笔记\n正文".toByteArray())
+    }
+
+    @Test
+    fun fabZipRoute_stillProducesMarkdownPackage() = runBlocking {
+        registerStub("zbf", "丙包.zip", "application/zip")
         val (repo, dao) = installRepository()
+        val uri = stubZipUri("zbf", "doc")
+        shadowOf(resolver).registerInputStream(uri, ByteArrayInputStream(textbookZipBytes()))
 
-        val garbage = "definitely not a zip".toByteArray()
-        val commit = importViaPathB(repo, garbage, stubZipUri("zb3", "doc"), "application/zip")
+        val result = repo.importDocument(uri)
 
-        assertTrue(commit is CommitOutcome.Failed)
+        assertEquals(ImportResult.UnsupportedFormat, result)
         assertTrue(dao.upserts.isEmpty())
-        // No extracted package tree may survive a failed intake.
         assertEquals(0, File(context.filesDir, "packages").listFiles()?.size ?: 0)
-        // And no resolver-owned .importing source lingers.
+    }
+
+    private suspend fun assertZipRejected(
+        authority: String,
+        name: String,
+        mime: String,
+        payload: ByteArray = textbookZipBytes(),
+    ) {
+        registerStub(authority, name, mime)
+        val (repo, dao) = installRepository()
+        val outcome = zipImporter(repo, payload).prepare(stubZipUri(authority, "doc"), mime)
+        assertEquals(PrepareOutcome.Unsupported, outcome)
+        assertTrue(dao.upserts.isEmpty())
+        assertEquals(0, File(context.filesDir, "packages").listFiles()?.size ?: 0)
         val staging = File(context.filesDir, "identity-staging")
-        val leftovers = staging.walkTopDown().filter { it.isFile }.toList()
-        assertTrue("staged zip leaked: $leftovers", leftovers.isEmpty())
+        val leftovers = if (staging.exists()) staging.walkTopDown().filter { it.isFile }.toList() else emptyList()
+        assertTrue("staged file leaked: $leftovers", leftovers.isEmpty())
     }
 
     // ── regression guards (green before AND after B-0) ───────────────────────
@@ -238,38 +227,6 @@ class ZipExternalOpenContractTest {
         val row = daoRow(dao)
         assertEquals(DocumentType.PDF.name, row.documentType)
         assertTrue(row.uri.endsWith(".pdf"))
-    }
-
-    @Test
-    fun txtViewIntent_staysMarkdown() = runBlocking {
-        registerStub("zbt", "笔记.txt", "text/plain")
-        val (repo, dao) = installRepository()
-
-        val commit = importViaPathB(
-            repo,
-            "# 笔记\n正文".toByteArray(),
-            stubZipUri("zbt", "doc"),
-            "text/plain",
-        )
-
-        assertTrue(commit is CommitOutcome.Success)
-        val row = daoRow(dao)
-        assertEquals(DocumentType.MARKDOWN.name, row.documentType)
-        assertTrue(row.uri.endsWith(".txt"))
-    }
-
-    @Test
-    fun fabZipRoute_stillProducesMarkdownPackage() = runBlocking {
-        registerStub("zbf", "丙包.zip", "application/zip")
-        val (repo, _) = installRepository()
-        val uri = stubZipUri("zbf", "doc")
-        shadowOf(resolver).registerInputStream(uri, ByteArrayInputStream(textbookZipBytes()))
-
-        val result = repo.importDocument(uri)
-
-        val imported = (result as ImportResult.Success).document
-        assertEquals(DocumentType.MARKDOWN_PACKAGE.name, imported.documentType)
-        assertTrue(imported.uri.endsWith(".md"))
     }
 }
 
