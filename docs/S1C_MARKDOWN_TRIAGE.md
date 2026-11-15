@@ -282,18 +282,31 @@ grep -r "import com.m1racle.reader.markdown" data/anchor/ ui/annotation/
 
 每批独立提交、独立编译、独立测试。
 
-| 批 | 内容 | 预期删除 | 门禁 | 状态 |
+| 批 | 内容 | 删除行数 | 提交 | 状态 |
 |---|---|---|---|---|
-| C-4 | B1 `DocumentListTitle` 迁移 | 207 行迁出 | 列表标题测试绿；旧记录标题正常 | **已完成** |
-| C-1a | A1 图片链路 | 820 行 | 编译绿 | 待做 |
-| C-1b | A2 搜索链路 | 1,081 行 | 文库搜索测试绿 | 待做 |
-| C-1c | A5a `InlineMarkdownParser` | 717 行 | 已无消费者 | 待做 |
-| C-2 | A3 `rebaseMarkdownAssets` + B2 类型检查 | 89 行 | PDF 编辑保存测试绿 | 待做 |
-| C-3 | A4 教材包导入导出 + 6 个失败测试 | 328 行 | PDF 导出测试绿；旧包记录点击给提示 | 待做 |
-| C-5 | A5b markdown 包剩余 9 文件 | 1,150 行 | `grep -r com.m1racle.reader.markdown app/src/main` 为空 | 待做 |
-| C-6 | B4 文库筛选条 | 约 20 行 | 筛选条两项；布局测试更新 | 待做 |
+| C-4 | B1 `DocumentListTitle` 迁移 | 363 删 / 270 增 | `e2952b8` | 完成 |
+| C-1a | A1 图片链路 | 1,607 | `5dc8462` | 完成 |
+| C-1b | A2 搜索链路 | 1,689 | `623c22a` | 完成 |
+| C-2 | A3 `rebaseMarkdownAssets` + B2 | 367 删 / 144 增 | `ce07595` | 完成 |
+| C-5 | A5 markdown 包本体 | 3,244 | `791e96a` | 完成 |
+| C-3 | A4 教材包导入导出 | 1,043 删 / 55 增 | `486904a` | 完成 |
+| C-6 | B4 文库筛选条 | 10 删 / 4 增 | `a35e4ac` | 完成 |
 
 **顺序调整原因**：A2 计划删除 `InlineMarkdownParser`，而 `DocumentListTitle.normalizeListDisplayTitle` 依赖它。先做 C-4 解除这条依赖，后面的批次才是真正互不牵连的死代码。
+
+### 6.1 执行结果
+
+```
+主代码   45,921 行 → 32,303 行（150 文件）
+QA       1376 用例 / 6 失败 → 992 用例 / 0 失败 / 0 跳过
+Release  1194 用例 / 6 失败 → 860 用例 / 0 失败 / 0 跳过
+```
+
+那 6 个 `MarkdownPackageExportTest` 失败随 C-3 一起关闭，是 S1 阶段第一次全绿。
+
+执行过程中发现两处与清单不符，均已处理并记录：
+1. `InlineMarkdownParser` 不能按原计划在 C-1c 单独删除——它经 `MarkdownParser` 被 `DocumentRepository` 使用，必须先做 C-2。
+2. FQN 统计漏了同包引用（见 0.1）与顶层函数引用：`MarkdownAssetResolverSecurityTest`（同包）与 `readDocumentText`（只引用顶层函数 `readUtf8TextFully`）都是删到一半才暴露。每批都补了裸名交叉校验。
 
 C 类（第 4 节）在全部批次中**一行不动**。
 
