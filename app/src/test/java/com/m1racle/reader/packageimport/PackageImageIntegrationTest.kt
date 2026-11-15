@@ -59,25 +59,6 @@ class PackageImageIntegrationTest {
     }
 
     @Test
-    fun fileEntrypointUri_loadsPackageImage() {
-        val pkg = tmp.newFolder("packages", "pkg2")
-        File(pkg, "package-manifest.json").writeText("{}")
-        val entry = File(pkg, "index.md").also { it.writeText("# T\n") }
-        File(pkg, "assets").mkdirs()
-        val img = File(pkg, "assets/figure.png").also { it.writeBytes(minimalPng()) }
-
-        val entryUri = "file://${entry.absolutePath}"
-        val resolved = com.m1racle.reader.image.LocalImageLoader.resolveRelativeImage(
-            entryUri,
-            "./assets/figure.png",
-        )
-        assertNotNull(resolved)
-        assertEquals(img.canonicalPath, resolved!!.canonicalPath)
-        val (w, h) = readPngSize(resolved.readBytes())
-        assertTrue(w > 0 && h > 0)
-    }
-
-    @Test
     fun zipExtract_keepsAssetsAndMetadata() {
         val baos = ByteArrayOutputStream()
         ZipOutputStream(baos).use { zos ->

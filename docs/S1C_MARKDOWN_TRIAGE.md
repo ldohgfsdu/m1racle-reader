@@ -18,7 +18,15 @@
 
 `ui/annotation/SelectionModel`、`AnnotationOverlay`、`data/repository/SearchRepository` 命中的都是后者。按裸名统计会得出「PDF 标注依赖 Markdown 解析器」的错误结论，进而删掉 PDF 还在用的类型。
 
-本报告全部按 FQN 统计。同名误判只有一处残留：`search/SearchMatch.kt:18` 的 KDoc 注释里写了一次 `com.m1racle.reader.markdown.MarkdownBlock.ListBlock`，那是文档链接，不是代码依赖。
+本报告的主统计按 FQN 进行。同名误判只有一处残留：`search/SearchMatch.kt:18` 的 KDoc 注释里写了一次 `com.m1racle.reader.markdown.MarkdownBlock.ListBlock`，那是文档链接，不是代码依赖。
+
+### 0.1 FQN 统计的盲区（执行中发现的）
+
+FQN import 只能看到**跨包**依赖。**同包引用不需要 import**，因此在 FQN 统计里不可见。
+
+实例：`app/src/test/java/com/m1racle/reader/markdown/MarkdownAssetResolverSecurityTest.kt` 与 `MarkdownAssetResolver` 同包，直接按简单名调用，FQN 统计完全没有列出它。它测的是路径穿越、符号链接越界、URI 双重解码，22 个用例。C-1a 删除 `MarkdownAssetResolver` 时才暴露出来。
+
+因此执行每个批次时必须再做一次「裸名 grep + 排除同名不同类型」的交叉校验，不能只依赖 FQN 清单。本报告的 A/B/C 分类结论不受影响（那 22 个用例本来就在 A1 的删除范围内），但**清单的完整性需要这一道补充检查**。
 
 ---
 
