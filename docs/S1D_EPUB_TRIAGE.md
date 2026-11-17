@@ -196,11 +196,15 @@ $env:ANDROID_HOME="D:\03_M1racle Reader\.build-tools\sdk"
 
 | 批 | 内容 | 预估 | 状态 |
 |---|---|---|---|
-| S1d-0 | `core:database` 两条过期测试对齐 PDF-only | 2 文件 / 20 用例 | **已完成**，见 §1.3 |
-| D-1 | 阅读字体导入下线 | −218 行文件 −2 入口 | 待授权 |
-| D-2 | EPUB 设置枚举下线 | −14 行 | 待授权 |
-| D-3 | 导入门禁 EPUB 分支下线 | −9 行 + 1 测试 | 待授权 |
-| D-4 | 入口声明与文案 | −8 行 + 1 测试 | 待授权 |
+| S1d-0 | `core:database` 两条过期测试对齐 PDF-only | 2 文件 / 20 用例 | 已完成 `5ee57df` |
+| D-1 | 阅读字体导入下线 | −218 行文件 −2 入口 | 已完成 `2208b16` |
+| D-2 | EPUB 设置枚举下线 | −14 行 | 已完成（与 D-1 合并提交） |
+| D-3 | 导入门禁 EPUB 分支下线 | −9 行 + 1 测试 | 已完成 `ce676fa` |
+| D-4 | 入口声明与文案 | −8 行 + 1 测试 | 已完成 `d150480` |
+
+**D-1 与 D-2 合并的原因**：`updateEpubFontFamily` 是唯一同时清理 `KEY_IMPORTED_FONT` 的写入方，单独先删 `importedFontId` 会让中间那个提交编译不过。合并后仍是「删功能 + 删它的设置」一件事。
+
+**编译状态：未执行。** 本机提交内存余量 511 MB，Gradle 守护进程连配置阶段都进不去（`hs_err_pid23828.log`）。四个提交都只做了静态核对：`grep` 九个被删符号的引用计数全为 0；`resolve()` 的返回值域收敛为 PDF/MARKDOWN 后，`ImportAcceptanceParityGoldenTest` 的既有断言仍然成立。真机与模拟器均未验证。
 
 门禁（每批都要过）：
 
@@ -209,6 +213,25 @@ $env:ANDROID_HOME="D:\03_M1racle Reader\.build-tools\sdk"
 3. `git diff --stat` 的删除行数与本文件预估偏差 > 30% 时，先解释再提交；
 4. 本机内存不足时，`:app` 测试标 `pending`，不得写成「已验证」；
 5. 不碰 C 类任何一行；越界即为该批失败。
+
+### 7.1 执行结果
+
+```
+c9223e9..d150480   18 files changed, 256 insertions(+), 374 deletions(-)
+（其中 docs/S1D_EPUB_TRIAGE.md 新增 220 行，代码净变化 -338 行）
+EPUB 引用   140 行 → 82 行，且剩余全部属于 B 类（历史行显示、导航 tombstone）
+            与 C 类（锚点编解码、EPUB_TEXT、documentType 列）
+```
+
+被删除的运行时行为（用户可见）：
+
+| 位置 | 之前 | 之后 |
+|---|---|---|
+| 设置页「阅读」 | 「阅读字体」可导入 TTF/OTF | 只剩「阅读显示」 |
+| PDF 阅读器设置面板底部 | 多一个「阅读字体」行 | 无 |
+| 系统「打开方式」 | 列出 Reader 处理 `.epub` | 不再列出 |
+| 文件工具扫描 | 扫 PDF/MD/TXT/EPUB，非 PDF 点了报错 | 只扫 PDF |
+| 关于页 | 「支持 Markdown、PDF 与 EPUB。」 | 「支持 PDF。」 |
 
 ---
 
