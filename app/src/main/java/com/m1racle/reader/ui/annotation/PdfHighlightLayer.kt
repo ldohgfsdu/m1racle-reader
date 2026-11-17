@@ -63,6 +63,24 @@ import kotlin.math.roundToInt
  * Releasing a long press keeps the selection and exposes copy/highlight/note actions.
  * [onSelectCompleted] is called only when the user explicitly chooses highlight.
  */
+/**
+ * Selection gesture thresholds that are not the platform defaults.
+ *
+ * [ARM_SLOP_DP] is deliberately stricter than `ViewConfiguration.touchSlop` (8dp).
+ * The arm window competes with the viewport's own scroll detector: a slow scroll
+ * drifts a few dp before the container claims the stream, and arming at the plain
+ * slop turns that drift into a selection. A stationary long press never leaves
+ * this box, so the stricter value costs nothing for the intended gesture.
+ *
+ * [LIFT_DEAD_ZONE_DP] is the movement a held finger must accumulate before the
+ * selection is allowed to follow it. Without it, sensor jitter re-picks the word
+ * on every pointer event while the finger is still.
+ */
+object PdfSelectionGestureTuning {
+    const val ARM_SLOP_DP = 4f
+    const val LIFT_DEAD_ZONE_DP = 6f
+}
+
 @Composable
 fun PdfHighlightLayer(
     pageIndex: Int,
@@ -203,7 +221,14 @@ fun PdfHighlightLayer(
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             // Pointer positions are page-local, before the viewport's zoom transform.
-            val gestureTouchSlop = viewConfiguration.touchSlop * currentActionMetrics.inverseScale
+            // Arm window is a separate, stricter box; see PdfSelectionGestureTuning.
+            val armTouchSlop =
+                with(density) { PdfSelectionGestureTuning.ARM_SLOP_DP.dp.toPx() } *
+                    currentActionMetrics.inverseScale
+            // A held finger must clear this before the selection follows it.
+            val liftDeadZone =
+                with(density) { PdfSelectionGestureTuning.LIFT_DEAD_ZONE_DP.dp.toPx() } *
+                    currentActionMetrics.inverseScale
             val page = currentTextPage
             val widthPx = size.width.toFloat()
             val heightPx = size.height.toFloat()
@@ -281,7 +306,7 @@ fun PdfHighlightLayer(
                             break
                         }
                         if (!moved &&
-                            (change.position - down.position).getDistance() > gestureTouchSlop
+                            (change.position - down.position).getDistance() > liftDeadZone
                         ) {
                             moved = true
                         }
@@ -339,7 +364,7 @@ fun PdfHighlightLayer(
                     val event = awaitPointerEvent()
                     val change = event.changes.firstOrNull { it.id == down.id }
                     if (change == null || event.changes.count { it.pressed } > 1 ||
-                        (change.position - down.position).getDistance() > gestureTouchSlop
+                        (change.position - down.position).getDistance() > armTouchSlop
                     ) {
                         cancelled = true
                     } else if (!change.pressed) {
@@ -463,22 +488,27 @@ fun PdfHighlightLayer(
                     val owner = ownerPage ?: break
                     val selection = active ?: break
                     if (!moved &&
-                        (change.position - down.position).getDistance() > gestureTouchSlop
+                        (change.position - down.position).getDistance() > liftDeadZone
                     ) {
                         moved = true
                     }
-                    val hit = owner.hit(
-                        change.position.x / widthPx,
-                        change.position.y / heightPx,
-                        tolerance = -1f,
-                        prefer = selection.focus,
-                    )
-                    if (hit != null) {
-                        active = selection.copy(focus = hit)
-                        selectionSession.setSelection(pageIndex, active!!)
-                        if (moved) loupeHit = hit
+                    // A held finger that never clears the dead zone keeps the word it
+                    // picked. Without this gate every pointer event re-hit-tests at the
+                    // raw position, so sensor jitter walked the focus one glyph at a time.
+                    if (moved) {
+                        val hit = owner.hit(
+                            change.position.x / widthPx,
+                            change.position.y / heightPx,
+                            tolerance = -1f,
+                            prefer = selection.focus,
+                        )
+                        if (hit != null) {
+                            active = selection.copy(focus = hit)
+                            selectionSession.setSelection(pageIndex, active!!)
+                            loupeHit = hit
+                        }
+                        loupeFocus = change.position
                     }
-                    if (moved) loupeFocus = change.position
                     if (!change.pressed) {
                         change.consume()
                         keepSelection(active!!, owner)
