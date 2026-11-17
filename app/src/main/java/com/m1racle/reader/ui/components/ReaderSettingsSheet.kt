@@ -64,7 +64,6 @@ fun ReaderSettingsSheet(
                 .padding(bottom = 16.dp),
         ) {
             ReaderDisplaySettings(settings, onFontScale, onLineHeightScale, onPaddingLevel, onReset)
-            com.m1racle.reader.ui.components.ReaderFontPicker()
         }
     }
 }

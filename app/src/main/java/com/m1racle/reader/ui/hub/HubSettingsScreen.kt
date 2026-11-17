@@ -20,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Tune
@@ -178,10 +177,6 @@ private fun SettingsSections(
     onCompareMaterials: () -> Unit,
 ) {
     SettingsSection("阅读") {
-        com.m1racle.reader.ui.components.ReaderFontPicker(entry = { name, open ->
-            SettingsRow(Icons.Outlined.FontDownload, "阅读字体", name ?: "默认字体", onClick = open)
-        })
-        SettingsDivider()
         SettingsRow(
             Icons.Outlined.Tune,
             "阅读显示",
