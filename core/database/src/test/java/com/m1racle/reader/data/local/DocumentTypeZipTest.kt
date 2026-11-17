@@ -1,20 +1,23 @@
 package com.m1racle.reader.data.local
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DocumentTypeZipTest {
 
     @Test
-    fun zipImportAllowed() {
-        assertTrue(DocumentType.isAllowedImport("application/zip", "book.zip", null))
-        assertTrue(DocumentType.isAllowedImport(null, "教材包.zip", null))
+    fun zipImportRefusedButZipNameStillRecognised() {
+        assertFalse(DocumentType.isAllowedImport("application/zip", "book.zip", null))
+        assertFalse(DocumentType.isAllowedImport(null, "教材包.zip", null))
+        // Name classification is still used to recognise a shared ZIP and refuse it
+        // with the right message; only admission is PDF-only.
         assertTrue(DocumentType.isZipFileName("demo.ZIP"))
     }
 
     @Test
-    fun markdownAndPdfStillAllowed() {
-        assertTrue(DocumentType.isAllowedImport("text/markdown", "a.md", null))
+    fun markdownRefusedPdfAllowed() {
+        assertFalse(DocumentType.isAllowedImport("text/markdown", "a.md", null))
         assertTrue(DocumentType.isAllowedImport("application/pdf", "a.pdf", null))
     }
 }

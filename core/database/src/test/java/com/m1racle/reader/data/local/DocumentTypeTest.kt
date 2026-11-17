@@ -60,10 +60,12 @@ class DocumentTypeTest {
     }
 
     @Test
-    fun isAllowedImport_acceptsMarkdownAndPdf() {
-        assertTrue(DocumentType.isAllowedImport("text/markdown", "a.md"))
+    fun isAllowedImport_acceptsPdfOnly() {
         assertTrue(DocumentType.isAllowedImport("application/pdf", "a.pdf"))
-        assertTrue(DocumentType.isAllowedImport(null, "a.markdown"))
+        assertTrue(DocumentType.isAllowedImport("application/x-pdf", "scan.pdf"))
+        assertTrue(DocumentType.isAllowedImport("application/octet-stream", "book.PDF"))
+        assertFalse(DocumentType.isAllowedImport("text/markdown", "a.md"))
+        assertFalse(DocumentType.isAllowedImport(null, "a.markdown"))
         assertFalse(DocumentType.isAllowedImport("image/jpeg", "photo.jpg"))
         assertFalse(DocumentType.isAllowedImport(null, "data.bin"))
     }
@@ -85,9 +87,9 @@ class DocumentTypeTest {
     }
 
     @Test
-    fun isAllowedImport_acceptsEpub_rejectsOtherEbooks() {
-        assertTrue(DocumentType.isAllowedImport("application/epub+zip", "b.epub"))
-        assertTrue(DocumentType.isAllowedImport(null, "b.epub"))
+    fun isAllowedImport_refusesEpubAndOtherEbooks() {
+        assertFalse(DocumentType.isAllowedImport("application/epub+zip", "b.epub"))
+        assertFalse(DocumentType.isAllowedImport(null, "b.epub"))
         assertFalse(DocumentType.isAllowedImport(null, "b.mobi"))
         assertFalse(DocumentType.isAllowedImport(null, "b.azw3"))
     }
