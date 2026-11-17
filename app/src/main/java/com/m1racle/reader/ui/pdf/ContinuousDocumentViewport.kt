@@ -1132,6 +1132,20 @@ internal fun ContinuousDocumentViewport(
         currentOnPageJumpConsumed(request.id)
     }
 
+    // Wheel and trackpad input. This viewport drives its own scroll state, so
+    // Modifier.verticalScroll's built-in wheel handling never applies here.
+    val wheelScrollModifier = pdfMouseWheelModifier { deltaY ->
+        layoutAnchor = null
+        cancelFling()
+        update(
+            documentState.copy(
+                scrollY = documentState.scrollY - deltaY,
+                gestureActive = false,
+            ),
+        )
+        true
+    }
+
     SubcomposeLayout(
         modifier = modifier
             .clipToBounds()
@@ -1159,6 +1173,7 @@ internal fun ContinuousDocumentViewport(
                 viewportSize = it
                 onViewportWidthPx(it.width)
             }
+            .then(wheelScrollModifier)
             // Stable V2 root detector: only document identity is a key.
             .pointerInput(documentId) {
                 if (isDebuggable) {
