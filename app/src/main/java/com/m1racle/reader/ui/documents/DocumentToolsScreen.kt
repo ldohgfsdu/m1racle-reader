@@ -147,7 +147,7 @@ fun DocumentToolsScreen(repository: DocumentRepository, onBack: () -> Unit, onOp
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 Text("发现本机文档", style = MaterialTheme.typography.titleMedium)
-                Text("扫描 PDF、Markdown、文本和 EPUB 文件。")
+                Text("扫描本机 PDF 文件。")
                 Button(onClick = {
                     if (Environment.isExternalStorageManager()) model.scan()
                     else permission.launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}")))

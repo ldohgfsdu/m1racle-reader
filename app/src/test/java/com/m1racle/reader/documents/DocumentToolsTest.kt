@@ -85,7 +85,7 @@ class DocumentToolsTest {
         root.resolve("picture.png").writeText("image")
         root.resolve("Android/data").mkdirs(); root.resolve("Android/data/private.pdf").writeText("private")
         root.resolve(".hidden").mkdir(); root.resolve(".hidden/secret.md").writeText("secret")
-        assertEquals(setOf("a.PDF", "b.epub"), DocumentDiscovery.scan(root).map { it.name }.toSet())
+        assertEquals(setOf("a.PDF"), DocumentDiscovery.scan(root).map { it.name }.toSet())
     }
 
     @Test fun mergeRejectsInputCountBeforeReadingSources() = runBlocking {

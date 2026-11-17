@@ -11,7 +11,7 @@ object DocumentDiscovery {
         val base = root.canonicalFile
         val found = mutableListOf<File>()
         val visited = mutableSetOf<String>()
-        val formats = setOf("pdf", "md", "markdown", "txt", "epub")
+        val formats = setOf("pdf")
         base.walkTopDown().onEnter { dir ->
             val canonical = dir.canonicalFile
             canonical.toPath().startsWith(base.toPath()) && dir.name != "Android" && !dir.name.startsWith('.') && visited.add(canonical.path)

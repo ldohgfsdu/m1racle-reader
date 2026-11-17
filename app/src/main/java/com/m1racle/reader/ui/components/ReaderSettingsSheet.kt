@@ -68,7 +68,7 @@ fun ReaderSettingsSheet(
     }
 }
 
-/** Display choices shared by the sheet and EPUB's anchored menu. The host owns scrolling/insets. */
+/** Display choices shared by the reader sheet and the settings page. The host owns scrolling/insets. */
 @Composable
 fun ReaderDisplaySettings(
     settings: ReaderSettings,

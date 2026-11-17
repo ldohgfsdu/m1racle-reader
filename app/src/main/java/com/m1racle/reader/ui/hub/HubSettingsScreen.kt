@@ -161,7 +161,7 @@ fun HubSettingsScreen(
         SettingsInformation(
             "关于 Reader",
             "M1racle Reader\n版本 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）\n\n" +
-                "支持 Markdown、PDF 与 EPUB。",
+                "支持 PDF。",
         ) { about = false }
     }
     saveError?.let { SettingsInformation("设置未保存", it) { saveError = null } }

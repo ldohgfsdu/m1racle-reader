@@ -28,7 +28,7 @@ import com.m1racle.reader.R
  *    bookmark row are user data and stay; only the reader is gone.
  *
  * Deliberately has no reader state, no session, no repository: it must keep
- * compiling after ui/epub is deleted.
+ * still compiling after the Markdown and EPUB readers were deleted.
  */
 @Composable
 internal fun UnsupportedDocumentScreen(
