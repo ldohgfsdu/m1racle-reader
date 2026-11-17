@@ -11,13 +11,12 @@ enum class DocumentType {
     PDF,
     /** ZIP textbook package (entry Markdown under packages/). Navigates as Markdown. */
     MARKDOWN_PACKAGE,
-    /** Local reflowable EPUB (limited reading). Navigates to the EPUB reader. */
+    /** Historical only: the EPUB reader was retired. Stored rows keep this value. */
     EPUB,
     ;
 
     companion object {
         const val MIME_PDF = "application/pdf"
-        const val MIME_EPUB = "application/epub+zip"
 
         fun fromStorage(value: String?): DocumentType {
             return when (value?.uppercase(Locale.ROOT)) {
@@ -97,7 +96,7 @@ enum class DocumentType {
             "rar", "7z", "tar", "gz", "bz2", "xz", "iso", "dmg", "apk", "exe", "msi", "bin",
             // office suites
             "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
-            // third-party ebook containers (EPUB is supported; the rest are rejected)
+            // third-party ebook containers (no ebook format is read any more)
             "mobi", "azw3",
         )
 
@@ -112,25 +111,22 @@ enum class DocumentType {
 
         /**
          * Resolve type from SAF mime and/or file name.
-         * PDF only when mime or extension clearly indicates PDF;
-         * EPUB only when mime or extension clearly indicates EPUB.
-         * Non-PDF never becomes PDF by accident.
+         *
+         * PDF only when mime or extension clearly indicates PDF. Everything else
+         * resolves to [MARKDOWN], and the admission gate then refuses it: the
+         * return value is a classification, never an admission. Historical EPUB
+         * and Markdown rows never travel through here — their type comes from
+         * [fromStorage].
          */
         fun resolve(mimeType: String?, displayName: String?, pathSegment: String? = null): DocumentType {
             val mime = mimeType?.lowercase(Locale.ROOT)?.trim().orEmpty()
             if (mime == MIME_PDF || mime == "application/x-pdf") {
                 return PDF
             }
-            if (mime == MIME_EPUB) {
-                return EPUB
-            }
             if (hasPdfExtension(displayName) || hasPdfExtension(pathSegment)) {
                 // Provider MIME is frequently generic or wrong. A concrete .pdf
                 // display/path name is stronger file identity than text/plain.
                 return PDF
-            }
-            if (isEpubFileName(displayName) || isEpubFileName(pathSegment)) {
-                return EPUB
             }
             return MARKDOWN
         }
@@ -158,11 +154,6 @@ enum class DocumentType {
         fun hasPdfExtension(name: String?): Boolean {
             if (name.isNullOrBlank()) return false
             return name.lowercase(Locale.ROOT).endsWith(".pdf")
-        }
-
-        fun isEpubFileName(name: String?): Boolean {
-            if (name.isNullOrBlank()) return false
-            return name.lowercase(Locale.ROOT).endsWith(".epub")
         }
     }
 }

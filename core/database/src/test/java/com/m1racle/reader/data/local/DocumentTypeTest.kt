@@ -71,19 +71,12 @@ class DocumentTypeTest {
     }
 
     @Test
-    fun resolve_epubMimeAndExtension_isEpub() {
-        assertEquals(
-            DocumentType.EPUB,
-            DocumentType.resolve("application/epub+zip", "book.bin"),
-        )
-        assertEquals(
-            DocumentType.EPUB,
-            DocumentType.resolve("application/octet-stream", "book.EPUB"),
-        )
-        assertEquals(
-            DocumentType.EPUB,
-            DocumentType.resolve(null, "book.epub"),
-        )
+    fun resolve_epubIsClassifiedAsNonPdf() {
+        // The EPUB reader is retired. A shared .epub must classify as something the
+        // gate refuses, never as a type that implies a reader exists for it.
+        assertEquals(DocumentType.MARKDOWN, DocumentType.resolve("application/epub+zip", "book.bin"))
+        assertEquals(DocumentType.MARKDOWN, DocumentType.resolve(null, "book.epub"))
+        assertEquals(DocumentType.MARKDOWN, DocumentType.resolve("application/octet-stream", "book.EPUB"))
     }
 
     @Test
