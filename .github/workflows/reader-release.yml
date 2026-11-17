@@ -1,17 +1,6 @@
 name: Reader signed release
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - ".github/workflows/reader-release.yml"
-      - "tools/release_gate.py"
-      - "tools/publish_reader_release.sh"
-      - "tools/tests/test_release_gate.py"
-      - "app/version.properties"
-      - "docs/releases/**"
-  push:
-    branches: [master]
   workflow_dispatch:
     inputs:
       publish:

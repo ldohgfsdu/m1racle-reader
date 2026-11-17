@@ -1,16 +1,6 @@
 name: Reader QA emulator baseline
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "app/src/main/**"
-      - "app/build.gradle.kts"
-      - "tools/reader_qa_baseline.py"
-      - "tools/tests/test_reader_qa_baseline.py"
-      - ".github/workflows/reader-qa-emulator.yml"
-  schedule:
-    - cron: "23 3 * * 1"
   workflow_dispatch:
 
 permissions:
