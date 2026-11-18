@@ -504,14 +504,14 @@ fun PdfHighlightLayer(
                         )
                         if (hit != null) {
                             active = selection.copy(focus = hit)
-                            selectionSession.setSelection(pageIndex, active!!)
+                            selectionSession.setSelection(pageIndex, active)
                             loupeHit = hit
                         }
                         loupeFocus = change.position
                     }
                     if (!change.pressed) {
                         change.consume()
-                        keepSelection(active!!, owner)
+                        keepSelection(active, owner)
                         kept = true
                         break
                     }

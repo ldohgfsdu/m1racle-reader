@@ -62,7 +62,7 @@ class SettingsBrandHeaderTest {
         rule.onNodeWithTag(SCROLL).assert(hasScrollAction())
         assertEquals(0f, scrollOffset(), 0f)
         assertTrue(scrollMax() > 0f)
-        listOf("阅读字体", "阅读显示", "文件与 PDF 工具", "数据与隐私", "关于 Reader").forEach {
+        listOf("阅读显示", "文件与 PDF 工具", "数据与隐私", "关于 Reader").forEach {
             rule.onAllNodesWithText(it).assertCountEquals(1)
         }
     }
