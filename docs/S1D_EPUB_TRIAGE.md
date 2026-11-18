@@ -204,7 +204,7 @@ $env:ANDROID_HOME="D:\03_M1racle Reader\.build-tools\sdk"
 
 **D-1 与 D-2 合并的原因**：`updateEpubFontFamily` 是唯一同时清理 `KEY_IMPORTED_FONT` 的写入方，单独先删 `importedFontId` 会让中间那个提交编译不过。合并后仍是「删功能 + 删它的设置」一件事。
 
-**编译状态：未执行。** 本机提交内存余量 511 MB，Gradle 守护进程连配置阶段都进不去（`hs_err_pid23828.log`）。四个提交都只做了静态核对：`grep` 九个被删符号的引用计数全为 0；`resolve()` 的返回值域收敛为 PDF/MARKDOWN 后，`ImportAcceptanceParityGoldenTest` 的既有断言仍然成立。真机与模拟器均未验证。
+**编译状态（2026-11-18 更新）：已通过。** `:app:compileQaKotlin` 与 `:app:assembleRelease` 成功，全套 2431 用例零失败（app QA 995 / app Release 863 / core:database 57 / core:pdf 465 / pdf-tool 51），产物为 1.0.0 / 98。前一轮记录的「提交内存 511 MB、Gradle 起不来」是当时的真实阻塞，现已解除。
 
 门禁（每批都要过）：
 

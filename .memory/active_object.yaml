@@ -1,25 +1,25 @@
-id: READER_PDF_SELECTION_ACROBAT_20261113
+id: READER_PDF_SELECTION_SENSITIVITY_20261118
 priority: P0
 status: ready_with_limitations
 scope:
-  - Solid 25dp PDF selection handles attached to text boundaries; fixed 44dp targets
-  - Boundary-calibrated variable-width and crossing drags; screen-sized zoom touch slop
-  - Native day/night/zoom rendering and signed compressed Release 97
+  - EPUB retiral finished (font import, settings enums, admission classification, manifest/scan/copy)
+  - PDF long-press selection arm window 4dp and lift dead zone 6dp
+  - Mouse wheel scrolling in the continuous viewport
+  - Signed compressed Release 98
 constraints:
-  - Preserve prior WIP, old worktrees and Release 96 artifact
+  - Preserve prior WIP, old worktrees and Release 96/97 artifacts
   - Never clear or uninstall com.m1racle.reader
-  - User explicitly authorized committing and pushing verified Release 97 source
   - Push only to github/chore/deps-prune-20261108 without rewriting history
 verification:
-  delivered_release: 97
-  source_manifest: output/pdf-selection-acrobat-20261113/selection-candidate-5-sha256.json
-  source_check: output/pdf-selection-acrobat-20261113/source-final-verification.json
-  automated_results: output/pdf-selection-acrobat-20261113/verification-summary.json
-  artifact_results: output/pdf-selection-acrobat-20261113/apk-97-verification.json
-  emulator_results: output/pdf-selection-acrobat-20261113/emulator-97-smoke.json
+  delivered_release: 98
+  apk_sha256: BD5794EFAFFBD49C11ABD3FF52A08B0E5005DA96EC5D957E60AAA3CB4A082085
+  automated_results: app QA 995 / app Release 863 / core:database 57 / core:pdf 465 / pdf-tool 51 = 2431, 0 failures, 0 skipped
+  signing: 2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1
   physical_phone: disconnected
   pending:
-    - Same user PDF and Adobe comparison
-    - Physical touch, copied content, IME, scrolling and performance acceptance
+    - Device install and smoke (adb devices empty this round)
+    - Selection feel on device after the threshold change
+    - Mouse wheel behaviour outside the continuous viewport
+    - lint, Macrobenchmark and Baseline Profile generation
 state_source: docs/CURRENT_STATUS.md
-evidence: docs/PDF_SELECTION_ACROBAT_20261113.md
+evidence: docs/RELEASE_98_20261118.md
