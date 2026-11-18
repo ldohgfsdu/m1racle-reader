@@ -1,12 +1,12 @@
 # M1racle Reader
 
-现行范围以 `docs/PRD.md` 与[全清单授权与验收](docs/FULL_BACKLOG_20261009.md)为准；2026-10-24 授权的当前页 Markdown 编辑已接入 Note 编辑引擎。当前版本与验证状态只看 `docs/CURRENT_STATUS.md`。
+现行范围以 `docs/PRODUCT_SCOPE_20261115.md` 为准（只读 PDF；Markdown、EPUB 与教材包已退出）。当前版本与验证状态只看 `docs/CURRENT_STATUS.md`。
 
-Android 本地优先文档阅读器：Markdown、PDF 与有限 EPUB。
+Android 本地优先 PDF 阅读器。
 
 ## Scope
 
-本地 Markdown、PDF 与有限 EPUB 阅读，当前页 Markdown 编辑及有限 PDF 正文编辑。保留文档标题与标注搜索；云同步、账号和文档正文全文索引不在范围内。早期“Markdown 编辑不做”的说明已由后续明确授权取代。
+本地 PDF 阅读、书签、高亮与批注，PDF 拆分与章节导出。Markdown、EPUB 与 ZIP 教材包已退役；PDF 正文编辑冻结。保留文档标题与标注搜索；书内全文搜索尚未实现，云同步与账号不在范围内。
 
 - No INTERNET permission
 - No ads / analytics / accounts / cloud sync
