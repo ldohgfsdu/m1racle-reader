@@ -11,15 +11,16 @@ constraints:
   - Never clear or uninstall com.m1racle.reader
   - Push only to github/chore/deps-prune-20261108 without rewriting history
 verification:
-  delivered_release: 99
-  apk_sha256: 16CBC7DA8CA60FCD628985BFFA93DAC3082701DAD61E687575B396F5BBFE2F6E
+  delivered_release: 100
+  apk_sha256: 60FA31E02B5EAEBC8E0E1C7DB13134655C40FE2A506D0666E30B0A007A7273CD
   automated_results: app QA 996 / app Release 864 / core:database 58 / core:pdf 465 / pdf-tool 51 = 2434, 0 failures, 0 skipped
   signing: 2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1
-  physical_phone: disconnected
+  physical_phone: verified 2026-11-19 (25098PN5AC, Android 16)
   pending:
-    - Device install and smoke (adb devices empty this round)
+    - Multi-module suite rerun after this change
+    - Encrypted PDF and in-document search remain unimplemented
     - Selection feel on device after the threshold change
     - Mouse wheel behaviour outside the continuous viewport
     - lint, Macrobenchmark and Baseline Profile generation
 state_source: docs/CURRENT_STATUS.md
-evidence: docs/RELEASE_99_20261118.md
+evidence: docs/RELEASE_100_20261119.md
