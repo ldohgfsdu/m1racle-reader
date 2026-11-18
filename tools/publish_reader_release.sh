@@ -25,8 +25,15 @@ printf '%s' "$KEYSTORE_B64" | base64 --decode > "$keystore"
 [[ -s "$keystore" ]] || die "Keystore is empty"
 export M1RACLE_RELEASE_STORE_FILE="$keystore"
 jvm="-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
-./gradlew :app:verifyMarkdownEditorBundle :app:testQaUnitTest :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=$jvm"
-./gradlew :app:lintRelease --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=$jvm"
+# Same task set as scripts/reader-script-contracts.ps1 Full mode. The retired
+# :app:verifyMarkdownEditorBundle used to sit in this line and no longer exists.
+./gradlew :app:testQaUnitTest :app:testReleaseUnitTest \
+  :core:model:testReleaseUnitTest :core:database:testReleaseUnitTest \
+  :core:pdf:testReleaseUnitTest :pdf-tool:testDebugUnitTest \
+  --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=$jvm"
+./gradlew :app:lintRelease :core:model:lintRelease :core:database:lintRelease \
+  :core:pdf:lintRelease :pdf-tool:lintRelease \
+  --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=$jvm"
 ./gradlew :app:assembleRelease --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=$jvm"
 source_apk=app/build/outputs/apk/release/app-release.apk
 [[ -s "$source_apk" ]] || die "Fresh signed APK missing"

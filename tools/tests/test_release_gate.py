@@ -37,7 +37,7 @@ class ReleaseGateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             (root / "app").mkdir()
-            (root / "app/version.properties").write_text("versionCode=97\nversionName=1.0.0\n")
+            (root / "app/version.properties").write_text("versionCode=97\nversionName=1.0.0\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "Refusing to replace"):
                 release_ready(root)
 
@@ -45,11 +45,11 @@ class ReleaseGateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             (root / "app").mkdir()
-            (root / "app/version.properties").write_text("versionCode=98\nversionName=1.0.1\n")
+            (root / "app/version.properties").write_text("versionCode=98\nversionName=1.0.1\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "Missing authored"):
                 release_ready(root)
             (root / "docs/releases").mkdir(parents=True)
-            (root / "docs/releases/v1.0.1.md").write_text("## 新增\n无\n")
+            (root / "docs/releases/v1.0.1.md").write_text("## 新增\n无\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "missing heading"):
                 release_ready(root)
 

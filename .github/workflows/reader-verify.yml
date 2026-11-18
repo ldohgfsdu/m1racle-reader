@@ -84,8 +84,10 @@ jobs:
           chmod +x gradlew
       # CI runner has more memory than the constrained local Windows setup.
       # The 1024 MiB metaspace limit avoids the historic lintAnalyzeRelease OOM.
-      - name: Verify Markdown bundle and run QA/Release unit suites
-        run: ./gradlew :app:testQaUnitTest :app:testReleaseUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
+      # Mirrors scripts/reader-script-contracts.ps1 Full mode: the standalone
+      # core:database, core:pdf and pdf-tool suites are part of the gate.
+      - name: Run all unit suites
+        run: ./gradlew :app:testQaUnitTest :app:testReleaseUnitTest :core:model:testReleaseUnitTest :core:database:testReleaseUnitTest :core:pdf:testReleaseUnitTest :pdf-tool:testDebugUnitTest --no-daemon --max-workers=1 --console=plain "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=256m -XX:+UseSerialGC -Dfile.encoding=UTF-8"
       - name: Preserve unit-test evidence on pass or failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -96,6 +98,10 @@ jobs:
           path: |
             app/build/test-results/testQaUnitTest/
             app/build/test-results/testReleaseUnitTest/
+            core/model/build/test-results/testReleaseUnitTest/
+            core/database/build/test-results/testReleaseUnitTest/
+            core/pdf/build/test-results/testReleaseUnitTest/
+            pdf-tool/build/test-results/testDebugUnitTest/
             app/build/reports/tests/
             core/pdf/build/test-results/
             core/pdf/build/reports/
