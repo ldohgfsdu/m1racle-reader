@@ -296,81 +296,90 @@ class DocumentRepository(
             request.content.close()
             throw error
         }
-        identityCommitMutex.withLock {
-            val prepared = request.content
-            var payload: MaterializedImportPayload? = null
-            var payloadOwnedByCommittedDocument = false
-            suspend fun freezeManagedDocument(document: DocumentEntity): DocumentEntity {
-                if (document.type != DocumentType.MARKDOWN && !document.isPdf) return document
-                val existing = uriToFile(document.uri)
-                val library = File(context.filesDir, "library").canonicalFile
-                if (existing != null && existing.isFile && FilePathSafety.isUnder(existing, library) &&
-                    ContentSha256.of(existing) == prepared.contentSha256) return document
-                // The database hash describes the original identity, even if an old
-                // SAF locator has since changed. Restore that identity from verified
-                // staging rather than exposing the locator's new bytes to its assets.
-                val frozen = payload ?: materializeImportPayload(request, "snapshot-${prepared.stagedFile.name}").also { payload = it }
-                return document.copy(uri = frozen.uri, fileSize = frozen.fileSize,
-                    sourceUri = document.sourceUri ?: document.uri)
-            }
-            try {
-                check(prepared.stagedFile.isFile) { "Resolved import staging file is missing" }
-
-                var earlyConstraint: SQLiteConstraintException? = null
-                for (attempt in 0 until MAX_IDENTITY_COMMIT_ATTEMPTS) {
-                    try {
-                        val firstDecision = importTransactionRunner.run {
-                            reuseOrEnrichResolvedImport(request, System.currentTimeMillis(), ::freezeManagedDocument)
-                        }
-                        if (firstDecision != null) {
-                            payloadOwnedByCommittedDocument = payload != null && firstDecision.document.uri == payload?.uri
-                            return@withLock firstDecision
-                        }
-                        earlyConstraint = null
-                        break
-                    } catch (conflict: SQLiteConstraintException) {
-                        earlyConstraint = conflict
-                    }
+        // A cancellation can land while this call is still waiting for the mutex.
+        // The staging file exists from before that wait, so ownership has to be
+        // cleaned up on the way out even if the body never ran.
+        var enteredCommit = false
+        try {
+            return@withContext identityCommitMutex.withLock {
+                enteredCommit = true
+                val prepared = request.content
+                var payload: MaterializedImportPayload? = null
+                var payloadOwnedByCommittedDocument = false
+                suspend fun freezeManagedDocument(document: DocumentEntity): DocumentEntity {
+                    if (document.type != DocumentType.MARKDOWN && !document.isPdf) return document
+                    val existing = uriToFile(document.uri)
+                    val library = File(context.filesDir, "library").canonicalFile
+                    if (existing != null && existing.isFile && FilePathSafety.isUnder(existing, library) &&
+                        ContentSha256.of(existing) == prepared.contentSha256) return document
+                    // The database hash describes the original identity, even if an old
+                    // SAF locator has since changed. Restore that identity from verified
+                    // staging rather than exposing the locator's new bytes to its assets.
+                    val frozen = payload ?: materializeImportPayload(request, "snapshot-${prepared.stagedFile.name}").also { payload = it }
+                    return document.copy(uri = frozen.uri, fileSize = frozen.fileSize,
+                        sourceUri = document.sourceUri ?: document.uri)
                 }
-                if (earlyConstraint != null) throw earlyConstraint
+                try {
+                    check(prepared.stagedFile.isFile) { "Resolved import staging file is missing" }
 
-                // New ids are minted only here, after a fresh transactional miss.
-                val newDocumentId = UUID.randomUUID().toString()
-                payload?.deleteOperationOwnedFiles()
-                payload = materializeImportPayload(request, newDocumentId)
-
-                var lastConstraint: SQLiteConstraintException? = null
-                repeat(MAX_IDENTITY_COMMIT_ATTEMPTS) {
-                    try {
-                        val committed = importTransactionRunner.run {
-                            reuseOrEnrichResolvedImport(
-                                request = request,
-                                now = System.currentTimeMillis(),
-                                freezeManagedDocument = ::freezeManagedDocument,
-                            ) ?: insertResolvedImport(
-                                request = request,
-                                documentId = newDocumentId,
-                                payload = requireNotNull(payload),
-                                now = System.currentTimeMillis(),
-                            )
+                    var earlyConstraint: SQLiteConstraintException? = null
+                    for (attempt in 0 until MAX_IDENTITY_COMMIT_ATTEMPTS) {
+                        try {
+                            val firstDecision = importTransactionRunner.run {
+                                reuseOrEnrichResolvedImport(request, System.currentTimeMillis(), ::freezeManagedDocument)
+                            }
+                            if (firstDecision != null) {
+                                payloadOwnedByCommittedDocument = payload != null && firstDecision.document.uri == payload?.uri
+                                return@withLock firstDecision
+                            }
+                            earlyConstraint = null
+                            break
+                        } catch (conflict: SQLiteConstraintException) {
+                            earlyConstraint = conflict
                         }
-                        if (committed.document.id == newDocumentId || committed.document.uri == payload?.uri) {
-                            payloadOwnedByCommittedDocument = true
-                        }
-                        return@withLock committed
-                    } catch (conflict: SQLiteConstraintException) {
-                        // ABORT rolls back the whole attempt. Requery/re-evaluate
-                        // in a fresh transaction; a same-hash winner is reused.
-                        lastConstraint = conflict
                     }
-                }
-                throw requireNotNull(lastConstraint)
-            } finally {
-                prepared.close()
-                if (!payloadOwnedByCommittedDocument) {
+                    if (earlyConstraint != null) throw earlyConstraint
+
+                    // New ids are minted only here, after a fresh transactional miss.
+                    val newDocumentId = UUID.randomUUID().toString()
                     payload?.deleteOperationOwnedFiles()
+                    payload = materializeImportPayload(request, newDocumentId)
+
+                    var lastConstraint: SQLiteConstraintException? = null
+                    repeat(MAX_IDENTITY_COMMIT_ATTEMPTS) {
+                        try {
+                            val committed = importTransactionRunner.run {
+                                reuseOrEnrichResolvedImport(
+                                    request = request,
+                                    now = System.currentTimeMillis(),
+                                    freezeManagedDocument = ::freezeManagedDocument,
+                                ) ?: insertResolvedImport(
+                                    request = request,
+                                    documentId = newDocumentId,
+                                    payload = requireNotNull(payload),
+                                    now = System.currentTimeMillis(),
+                                )
+                            }
+                            if (committed.document.id == newDocumentId || committed.document.uri == payload?.uri) {
+                                payloadOwnedByCommittedDocument = true
+                            }
+                            return@withLock committed
+                        } catch (conflict: SQLiteConstraintException) {
+                            // ABORT rolls back the whole attempt. Requery/re-evaluate
+                            // in a fresh transaction; a same-hash winner is reused.
+                            lastConstraint = conflict
+                        }
+                    }
+                    throw requireNotNull(lastConstraint)
+                } finally {
+                    prepared.close()
+                    if (!payloadOwnedByCommittedDocument) {
+                        payload?.deleteOperationOwnedFiles()
+                    }
                 }
             }
+        } finally {
+            if (!enteredCommit) request.content.close()
         }
     }
 
@@ -913,23 +922,17 @@ class DocumentRepository(
                 return@withContext ImportResult.UnsupportedFormat
             }
 
-            val fileNameFromUri = if (uri.scheme.equals("file", ignoreCase = true)) {
-                uri.path?.let { File(it).name }
-            } else {
-                null
-            }
-            val isZip = DocumentType.isZipFileName(resolved.displayName) ||
-                DocumentType.isZipFileName(provider.lastPathSegment) ||
-                DocumentType.isZipFileName(fileNameFromUri) ||
-                DocumentType.isZipMime(resolved.mimeType)
-            val documentType = if (isZip) {
-                DocumentType.MARKDOWN_PACKAGE
-            } else {
-                DocumentType.resolve(
-                    resolved.mimeType,
-                    resolved.displayName,
-                    provider.lastPathSegment,
-                )
+            // The gate above is the only authority for admission, and the stored
+            // type must follow it. A .pdf name whose provider reports application/zip
+            // passed the gate as PDF and used to be written as MARKDOWN_PACKAGE here,
+            // which no reader can open.
+            val documentType = DocumentType.resolve(
+                resolved.mimeType,
+                resolved.displayName,
+                provider.lastPathSegment,
+            )
+            check(documentType == DocumentType.PDF) {
+                "import gate admitted a non-PDF type: $documentType"
             }
             val canonicalExternalKey = ExternalUriMetadata.canonicalExternalKey(
                 scheme = provider.scheme,

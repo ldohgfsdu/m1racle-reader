@@ -215,6 +215,25 @@ class ZipExternalOpenContractTest {
 
     // ── regression guards (green before AND after B-0) ───────────────────────
 
+    /**
+     * A provider that reports application/zip for a file named .pdf used to pass
+     * the gate as PDF and then be stored as the retired MARKDOWN_PACKAGE type,
+     * because the importer reclassified on the container MIME. The stored type
+     * must follow the gate.
+     */
+    @Test
+    fun pdfNameWithZipMime_storesPdf_notMarkdownPackage() = runBlocking {
+        registerStub("zbz", "伪装.pdf", "application/zip")
+        val (repo, dao) = installRepository()
+
+        val minimalPdf = "%PDF-1.4\n%%EOF".toByteArray()
+        val commit = importViaPathB(repo, minimalPdf, stubZipUri("zbz", "doc"), "application/zip")
+
+        assertTrue(commit is CommitOutcome.Success)
+        val row = daoRow(dao)
+        assertEquals(DocumentType.PDF.name, row.documentType)
+    }
+
     @Test
     fun pdfViewIntent_staysPdf() = runBlocking {
         registerStub("zbp", "样张.pdf", "application/pdf")

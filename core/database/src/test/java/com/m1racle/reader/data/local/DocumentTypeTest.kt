@@ -91,6 +91,16 @@ class DocumentTypeTest {
     }
 
     @Test
+    fun zipMimeWithPdfNameIsAValidMislabelledPdf() {
+        // Providers frequently report application/zip for documents they hand out
+        // as downloads. A .pdf name wins the classification, and the gate admits it.
+        assertEquals(DocumentType.PDF, DocumentType.resolve("application/zip", "book.pdf"))
+        assertTrue(DocumentType.isAllowedImport("application/zip", "book.pdf"))
+        // The container MIME alone never admits anything.
+        assertFalse(DocumentType.isAllowedImport("application/zip", "book.zip"))
+    }
+
+    @Test
     fun isAllowedImport_refusesEpubAndOtherEbooks() {
         assertFalse(DocumentType.isAllowedImport("application/epub+zip", "b.epub"))
         assertFalse(DocumentType.isAllowedImport(null, "b.epub"))

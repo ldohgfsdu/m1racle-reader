@@ -80,17 +80,16 @@ open class ExternalDocumentImporter(
                 return@withContext PrepareOutcome.Unsupported
             }
 
-            val isZipPackage = DocumentType.isZipFileName(resolved.displayName) ||
-                DocumentType.isZipFileName(provider.lastPathSegment) ||
-                DocumentType.isZipMime(resolved.mimeType)
-            val documentType = if (isZipPackage) {
-                DocumentType.MARKDOWN_PACKAGE
-            } else {
-                DocumentType.resolve(
-                    resolved.mimeType,
-                    resolved.displayName,
-                    provider.lastPathSegment,
-                )
+            // Same authority as repository.importDocument: the gate decided PDF,
+            // so the stored type is PDF. The retired ZIP branch here used to reclassify
+            // a .pdf file whenever the provider reported application/zip.
+            val documentType = DocumentType.resolve(
+                resolved.mimeType,
+                resolved.displayName,
+                provider.lastPathSegment,
+            )
+            check(documentType == DocumentType.PDF) {
+                "external import gate admitted a non-PDF type: $documentType"
             }
             val canonicalExternalKey = ExternalUriMetadata.canonicalExternalKey(
                 scheme = provider.scheme,
