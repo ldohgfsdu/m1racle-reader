@@ -11,9 +11,9 @@ constraints:
   - Never clear or uninstall com.m1racle.reader
   - Push only to github/chore/deps-prune-20261108 without rewriting history
 verification:
-  delivered_release: 98
-  apk_sha256: BD5794EFAFFBD49C11ABD3FF52A08B0E5005DA96EC5D957E60AAA3CB4A082085
-  automated_results: app QA 995 / app Release 863 / core:database 57 / core:pdf 465 / pdf-tool 51 = 2431, 0 failures, 0 skipped
+  delivered_release: 99
+  apk_sha256: 16CBC7DA8CA60FCD628985BFFA93DAC3082701DAD61E687575B396F5BBFE2F6E
+  automated_results: app QA 996 / app Release 864 / core:database 58 / core:pdf 465 / pdf-tool 51 = 2434, 0 failures, 0 skipped
   signing: 2d9daba0f92c1d19d290dd58657391a71c16c3008e8a2b90065ba7e8602bf9d1
   physical_phone: disconnected
   pending:
@@ -22,4 +22,4 @@ verification:
     - Mouse wheel behaviour outside the continuous viewport
     - lint, Macrobenchmark and Baseline Profile generation
 state_source: docs/CURRENT_STATUS.md
-evidence: docs/RELEASE_98_20261118.md
+evidence: docs/RELEASE_99_20261118.md
