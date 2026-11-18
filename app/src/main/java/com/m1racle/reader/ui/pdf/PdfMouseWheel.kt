@@ -27,9 +27,9 @@ object PdfWheelTuning {
  * also stops the event from travelling further up the tree.
  */
 @Composable
-fun pdfMouseWheelModifier(onScroll: (Float) -> Boolean): Modifier {
+fun Modifier.pdfMouseWheel(onScroll: (Float) -> Boolean): Modifier {
     val currentOnScroll by rememberUpdatedState(onScroll)
-    return Modifier.pointerInput(Unit) {
+    return this.pointerInput(Unit) {
         awaitPointerEventScope {
             while (true) {
                 val event = awaitPointerEvent()

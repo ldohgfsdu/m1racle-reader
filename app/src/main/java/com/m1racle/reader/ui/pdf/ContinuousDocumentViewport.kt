@@ -1134,7 +1134,7 @@ internal fun ContinuousDocumentViewport(
 
     // Wheel and trackpad input. This viewport drives its own scroll state, so
     // Modifier.verticalScroll's built-in wheel handling never applies here.
-    val wheelScrollModifier = pdfMouseWheelModifier { deltaY ->
+    val wheelScrollModifier = Modifier.pdfMouseWheel { deltaY ->
         layoutAnchor = null
         cancelFling()
         update(
