@@ -80,6 +80,17 @@ class DocumentTypeTest {
     }
 
     @Test
+    fun epubMimeIsRefusedByTheGateEvenWhenTheNameSaysPdf() {
+        // Classification and admission are different questions. A .pdf name wins the
+        // classification, but two explicit and contradictory claims are not trusted,
+        // so the gate refuses the pair before resolve() is even consulted.
+        assertEquals(DocumentType.PDF, DocumentType.resolve("application/epub+zip", "book.pdf"))
+        assertFalse(DocumentType.isAllowedImport("application/epub+zip", "book.pdf"))
+        assertFalse(DocumentType.isAllowedImport("application/epub+zip", "book.epub"))
+        assertTrue(DocumentType.isAllowedImport("application/octet-stream", "book.pdf"))
+    }
+
+    @Test
     fun isAllowedImport_refusesEpubAndOtherEbooks() {
         assertFalse(DocumentType.isAllowedImport("application/epub+zip", "b.epub"))
         assertFalse(DocumentType.isAllowedImport(null, "b.epub"))

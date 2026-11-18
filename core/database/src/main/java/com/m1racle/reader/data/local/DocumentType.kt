@@ -18,6 +18,13 @@ enum class DocumentType {
     companion object {
         const val MIME_PDF = "application/pdf"
 
+        /**
+         * The MIME of a retired reading format. It is not a type this app can open,
+         * but it still carries a claim: a file announced as EPUB is not a PDF even
+         * when its name says `.pdf`. See [isAllowedImport] rule 2.
+         */
+        const val MIME_EPUB = "application/epub+zip"
+
         fun fromStorage(value: String?): DocumentType {
             return when (value?.uppercase(Locale.ROOT)) {
                 PDF.name -> PDF
@@ -53,8 +60,20 @@ enum class DocumentType {
          * delete them.
          */
         fun isAllowedImport(mimeType: String?, displayName: String?, pathSegment: String? = null): Boolean {
+            if (isRetiredEbookMime(mimeType)) return false
             if (hasNonPdfExtension(displayName) || hasNonPdfExtension(pathSegment)) return false
             return resolve(mimeType, displayName, pathSegment) == PDF
+        }
+
+        /**
+         * Rule 2 of [isAllowedImport], kept separate from [resolve] on purpose:
+         * resolve() answers "which type is this", and after the EPUB retirement no
+         * answer of its can be EPUB. Refusing a contradictory EPUB claim is an
+         * admission rule, so it lives in the gate.
+         */
+        internal fun isRetiredEbookMime(mimeType: String?): Boolean {
+            val mime = mimeType?.lowercase(Locale.ROOT)?.trim().orEmpty()
+            return mime == MIME_EPUB
         }
 
         /** True when [name] has an extension and that extension is not pdf. */
@@ -113,10 +132,11 @@ enum class DocumentType {
          * Resolve type from SAF mime and/or file name.
          *
          * PDF only when mime or extension clearly indicates PDF. Everything else
-         * resolves to [MARKDOWN], and the admission gate then refuses it: the
-         * return value is a classification, never an admission. Historical EPUB
-         * and Markdown rows never travel through here — their type comes from
-         * [fromStorage].
+         * resolves to [MARKDOWN]. The return value is a classification, never an
+         * admission: [isAllowedImport] applies the extra rules, including refusing
+         * a `.pdf` name announced under an EPUB MIME — that pair resolves to PDF
+         * here and is still refused there. Historical EPUB and Markdown rows never
+         * travel through this function; their type comes from [fromStorage].
          */
         fun resolve(mimeType: String?, displayName: String?, pathSegment: String? = null): DocumentType {
             val mime = mimeType?.lowercase(Locale.ROOT)?.trim().orEmpty()
