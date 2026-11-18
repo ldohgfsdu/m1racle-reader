@@ -64,22 +64,29 @@ import kotlin.math.roundToInt
  * [onSelectCompleted] is called only when the user explicitly chooses highlight.
  */
 /**
- * Selection gesture thresholds that are not the platform defaults.
+ * The two selection thresholds that are not platform values.
  *
- * [ARM_SLOP_DP] is deliberately stricter than `ViewConfiguration.touchSlop` (8dp).
- * The arm window competes with the viewport's own scroll detector: a slow scroll
- * drifts a few dp before the container claims the stream, and arming at the plain
- * slop turns that drift into a selection. A stationary long press never leaves
- * this box, so the stricter value costs nothing for the intended gesture.
+ * The arm window itself uses `ViewConfiguration.touchSlop` and the platform
+ * long-press timeout, plus the same cancel set as AOSP's
+ * `awaitLongPressOrCancellation` (release, second pointer, slop, out of bounds,
+ * consumed by another handler). Only these two numbers are ours:
  *
- * [LIFT_DEAD_ZONE_DP] is the movement a held finger must accumulate before the
- * selection is allowed to follow it. Without it, sensor jitter re-picks the word
- * on every pointer event while the finger is still.
+ * [ARM_STILL_MS] — the finger must have been still this long before the deadline.
+ * The platform rule alone arms a selection on a slow drift that never clears the
+ * slop, which is the exact behaviour this layer was reported for.
+ *
+ * [LIFT_DEAD_ZONE_DP] — movement a held finger must accumulate before the
+ * selection follows it, so sensor jitter does not re-pick the word from under a
+ * stationary finger.
  */
 object PdfSelectionGestureTuning {
-    const val ARM_SLOP_DP = 4f
     const val LIFT_DEAD_ZONE_DP = 6f
+    const val ARM_STILL_MS = 120L
 }
+
+/** Movement below this is sensor noise, not intent. */
+private const val STILL_EPSILON_PX = 1f
+
 
 @Composable
 fun PdfHighlightLayer(
@@ -221,10 +228,6 @@ fun PdfHighlightLayer(
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             // Pointer positions are page-local, before the viewport's zoom transform.
-            // Arm window is a separate, stricter box; see PdfSelectionGestureTuning.
-            val armTouchSlop =
-                with(density) { PdfSelectionGestureTuning.ARM_SLOP_DP.dp.toPx() } *
-                    currentActionMetrics.inverseScale
             // A held finger must clear this before the selection follows it.
             val liftDeadZone =
                 with(density) { PdfSelectionGestureTuning.LIFT_DEAD_ZONE_DP.dp.toPx() } *
@@ -357,23 +360,44 @@ fun PdfHighlightLayer(
                 return@awaitEachGesture
             }
 
+            // Cancel conditions mirror AOSP's awaitLongPressOrCancellation, which is
+            // what Compose's own SelectionContainer relies on: release, a second
+            // pointer, movement past the platform slop, a pointer out of bounds, and
+            // — the one the hand-rolled version dropped — the event being consumed by
+            // someone else (the viewport's scroll gesture).
             var cancelled = false
-            val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                var released: androidx.compose.ui.input.pointer.PointerInputChange? = null
+            var released: androidx.compose.ui.input.pointer.PointerInputChange? = null
+            var lastMotionUptime = down.uptimeMillis
+            val armDeadline = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis
+            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                 while (released == null && !cancelled) {
                     val event = awaitPointerEvent()
                     val change = event.changes.firstOrNull { it.id == down.id }
-                    if (change == null || event.changes.count { it.pressed } > 1 ||
-                        (change.position - down.position).getDistance() > armTouchSlop
+                    if (change == null || event.changes.count { it.pressed } > 1) {
+                        cancelled = true
+                        break
+                    }
+                    val travel = (change.position - down.position).getDistance()
+                    val outOfBounds = change.position.x < 0f || change.position.y < 0f ||
+                        change.position.x > size.width || change.position.y > size.height
+                    if (travel > viewConfiguration.touchSlop || outOfBounds ||
+                        event.changes.any { it.isConsumed }
                     ) {
                         cancelled = true
-                    } else if (!change.pressed) {
-                        released = change
+                        break
                     }
+                    if (travel > STILL_EPSILON_PX) lastMotionUptime = change.uptimeMillis
+                    if (!change.pressed) released = change
                 }
-                released
             }
             if (cancelled) return@awaitEachGesture
+            // One deliberate deviation from the platform rule, because a reader that
+            // arms on a slow drift is the bug this layer was reported for: the finger
+            // has to have been still for ARM_STILL_MS before the deadline.
+            if (released == null && armDeadline - lastMotionUptime < PdfSelectionGestureTuning.ARM_STILL_MS) {
+                return@awaitEachGesture
+            }
+            val up = released
 
             if (up != null) {
                 val pos = up.position
